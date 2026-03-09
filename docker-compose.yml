@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # Loki - 日志聚合系统
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+      - "9096:9096"
+    volumes:
+      - ./configs/loki:/etc/loki
+      - loki-data:/data/loki
+    command: -config.file=/etc/loki/config.yaml
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Grafana - 可视化平台
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning
+      - ./configs/grafana/dashboards:/var/lib/grafana/dashboards
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+
+  # Wazuh Indexer (OpenSearch)
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.x
+    container_name: wazuh-indexer
+    ports:
+      - "9200:9200"
+    environment:
+      - DISCOVERY_TYPE=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - wazuh-indexer-data:/var/lib/opensearch
+      - ./configs/wazuh/indexer:/wazuh-config-mount
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Wazuh Server
+  wazuh-server:
+    image: wazuh/wazuh-manager:4.x
+    container_name: wazuh-server
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "55000:55000"
+    depends_on:
+      - wazuh-indexer
+    volumes:
+      - ./configs/wazuh/server:/var/ossec/etc
+      - wazuh-server-data:/var/ossec/data
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Wazuh Dashboard
+  wazuh-dashboard:
+    image: wazuh/wazuh-dashboard:4.x
+    container_name: wazuh-dashboard
+    ports:
+      - "55002:443"
+    depends_on:
+      - wazuh-indexer
+      - wazuh-server
+    environment:
+      - INDEXER_URL=https://wazuh-indexer:9200
+      - WAZUH_API_URL=https://wazuh-server:55000
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # AI Analyzer - AI分析服务
+  ai-analyzer:
+    build:
+      context: ./services/ai-analyzer
+      dockerfile: Dockerfile
+    container_name: ai-analyzer
+    ports:
+      - "8000:8000"
+    environment:
+      - LOKI_URL=http://loki:3100
+      - WAZUH_URL=https://wazuh-server:55000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./services/ai-analyzer:/app
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+      - wazuh-server
+
+  # Alert Engine - 告警引擎
+  alert-engine:
+    build:
+      context: ./services/alert-engine
+      dockerfile: Dockerfile
+    container_name: alert-engine
+    ports:
+      - "8001:8001"
+    environment:
+      - LOKI_URL=http://loki:3100
+      - WAZUH_URL=https://wazuh-server:55000
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+    volumes:
+      - ./configs/alert:/app/config
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+      - wazuh-server
+
+  # Log Collector - 日志采集增强服务
+  log-collector:
+    build:
+      context: ./services/log-collector
+      dockerfile: Dockerfile
+    container_name: log-collector
+    ports:
+      - "8002:8002"
+    environment:
+      - LOKI_URL=http://loki:3100
+    volumes:
+      - /var/log:/host/logs:ro
+    restart: unless-stopped
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+
+  # Prometheus - 指标收集
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Node Exporter - 主机指标导出器
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # Redis - 缓存和消息队列
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  # PostgreSQL - 关系型数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=aisoc
+      - POSTGRES_USER=aisoc
+      - POSTGRES_PASSWORD=aisoc123
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+volumes:
+  loki-data:
+  grafana-data:
+  wazuh-indexer-data:
+  wazuh-server-data:
+  prometheus-data:
+  redis-data:
+  postgres-data:
+
+networks:
+  monitoring:
+    driver: bridge
