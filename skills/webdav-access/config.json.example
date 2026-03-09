@@ -1,0 +1,25 @@
+{
+  "name": "webdav-access",
+  "version": "1.0.0",
+  "description": "AI-miniSOC WebDAV文件共享访问技能",
+  "main": "main.handle_webdav_command",
+  "author": "xiejava",
+  "license": "MIT",
+  "dependencies": {
+    "requests": ">=2.20.0"
+  },
+  "keywords": ["webdav", "nas", "文件共享", "上传", "下载", "安全运营"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xiejava1018/AI-miniSOC.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiejava1018/AI-miniSOC/issues"
+  },
+  "homepage": "https://github.com/xiejava1018/AI-miniSOC",
+  "config": {
+    "server": "https://your-nas-server:5006/aisoc_sharedoc",
+    "username": "your_username",
+    "password": "your_password_here"
+  }
+}
