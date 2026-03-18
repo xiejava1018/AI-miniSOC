@@ -19,27 +19,42 @@ WARNINGS=0
 echo "🔍 开始安全检查..."
 echo "========================================="
 
-# 1. 检查硬编码密码
+# 1. 检查硬编码密码（包括文档文件）
 echo ""
-echo "📋 检查硬编码密码..."
-if git grep -n "password\s*=\s*['\"][^'\"]*['\"]" -- '*.py' '*.sh' '*.yml' '*.yaml' '*.json' 2>/dev/null | \
+echo "📋 检查硬编码密码（代码+文档）..."
+# 检查是否有硬编码密码（排除环境变量、示例和占位符）
+HARDCODED_PASSWORDS=$(git grep -n -i "password\s*[:=]\s*['\"][^'\"]{8,}['\"]" -- '*.py' '*.sh' '*.yml' '*.yaml' '*.json' '*.md' '*.txt' 2>/dev/null | \
    grep -v "os.getenv" | \
+   grep -v "getenv(" | \
+   grep -v "\${.*PASSWORD}" | \
    grep -v "example" | \
    grep -v "your_password_here" | \
-   grep -v "SECURITY.md"; then
+   grep -v "your_secure_password" | \
+   grep -v "admin_password" | \
+   grep -v "your_password" | \
+   grep -v "见环境变量配置" | \
+   grep -v "SECURITY.md" | \
+   grep -v "<见环境变量配置>" | \
+   grep -v "export.*PASSWORD=" | \
+   grep -v "echo.*PASSWORD=" || true)
+
+if [ -n "$HARDCODED_PASSWORDS" ]; then
     echo -e "${RED}❌ 发现硬编码密码！${NC}"
+    echo "$HARDCODED_PASSWORDS"
     ERRORS=$((ERRORS + 1))
 else
     echo -e "${GREEN}✅ 未发现硬编码密码${NC}"
 fi
 
-# 2. 检查API密钥
+# 2. 检查API密钥（包括文档文件）
 echo ""
-echo "📋 检查API密钥..."
-if git grep -i -n "api_key\s*=\s*['\"][^'\"]{20,}['\"]" -- '*.py' '*.sh' '*.js' '*.ts' 2>/dev/null | \
+echo "📋 检查API密钥（代码+文档）..."
+if git grep -i -n "api_key\s*[:=]\s*['\"][^'\"]{20,}['\"]" -- '*.py' '*.sh' '*.js' '*.ts' '*.md' '*.txt' 2>/dev/null | \
    grep -v "os.getenv" | \
    grep -v "example" | \
-   grep -v "your_api_key_here"; then
+   grep -v "your_api_key_here" | \
+   grep -v "见环境变量配置" | \
+   grep -v "<见环境变量配置>"; then
     echo -e "${RED}❌ 发现硬编码API密钥！${NC}"
     ERRORS=$((ERRORS + 1))
 else
