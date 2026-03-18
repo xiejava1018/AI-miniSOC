@@ -1,80 +1,130 @@
-# Network Scan - 内网资产扫描
+# Network Asset Scanner
 
-自动扫描内网资产并同步到 Supabase + 飞书（双源同步）。
+自动扫描内网资产并同步到 PostgreSQL + 飞书（双源同步）。
 
 ## 功能
 
-- 🌐 自动扫描内网在线主机
-- 📦 同步到 Supabase（主数据源）
-- 📋 同步到飞书多维表格（展示/备份）
-- 🔄 状态自动更新（在线/离线/新发现）
-- 🛡️ 去重逻辑（避免重复创建）
+- **主机发现** - nmap 快速扫描内网在线设备
+- **端口扫描** - 识别开放端口和服务
+- **设备识别** - 自动识别设备类型（Proxmox/Windows/Linux/NAS等）
+- **双源同步** - PostgreSQL(主) + 飞书(展示)
 
-## 快速开始
+## 使用方法
 
-### 1. 安装依赖
-
-```bash
-pip install requests
-# 需要 nmap: apt install nmap
-```
-
-### 2. 配置
+### 1. 配置环境
 
 ```bash
-cd skills/network-scan
+cd /path/to/network-scan
 cp .env.example .env
 # 编辑 .env 填入你的配置
 ```
 
-### 3. 配置 Supabase
-
-1. 创建 Supabase 项目
-2. 创建 `soc_assets` 表：
-   - `id` (int8, 主键, 自增)
-   - `asset_ip` (text, 唯一)
-   - `asset_description` (text)
-   - `asset_status` (text)
-   - `status_updated_at` (timestamp)
-3. 获取 API URL 和 anon public key
-
-### 4. 配置飞书多维表格
-
-1. 在飞书开放平台创建应用
-2. 开通多维表格权限
-3. 创建多维表格，设置字段：
-   - `资产IP` (文本，唯一)
-   - `资产说明` (文本)
-   - `资产状态` (文本：在线/离线/新发现/已删除)
-   - `状态更新时间` (日期时间)
-
-### 5. 运行
+### 2. 运行扫描
 
 ```bash
 python3 network_scan_unified.py
 ```
 
-## 环境变量
+## 配置说明 (.env)
 
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| NETWORK | 扫描网段 | 192.168.0.0/24 |
-| SUPABASE_URL | Supabase 项目 URL | https://xxx.supabase.co |
-| SUPABASE_KEY | Supabase anon public key | eyJxxx |
-| FEISHU_APP_TOKEN | 飞书多维表格 App Token | YBxxx |
-| FEISHU_TABLE_ID | 飞书多维表格 Table ID | tblxxx |
-| FEISHU_APP_ID | 飞书应用 App ID | cli_xxx |
-| FEISHU_APP_SECRET | 飞书应用 App Secret | xxx |
+```bash
+# 网络配置
+NETWORK=192.168.0.0/24
 
-## 数据流向
+# PostgreSQL 配置
+PGHOST=localhost
+PGPORT=5432
+PGUSER=postgres
+PGPASSWORD=your_password_here
+PGDATABASE=postgres
+
+# 飞书多维表格配置
+FEISHU_APP_TOKEN=your_app_token_here
+FEISHU_TABLE_ID=your_table_id_here
+FEISHU_APP_ID=your_app_id_here
+FEISHU_APP_SECRET=your_app_secret_here
+```
+
+## 数据源
+
+### PostgreSQL（主数据源）
+
+表 `soc_assets`:
+- id (TEXT, PK)
+- asset_ip (TEXT, UNIQUE)
+- asset_description (TEXT)
+- asset_status (TEXT) - 在线/离线/新发现
+- status_updated_at (TIMESTAMP)
+- created_at (TIMESTAMP)
+
+表 `soc_asset_ports`:
+- id (SERIAL, PK)
+- asset_ip (TEXT)
+- port (INTEGER)
+- protocol (TEXT)
+- service (TEXT)
+- version (TEXT)
+- scanned_at (TIMESTAMP)
+
+### 飞书多维表格（展示/备份）
+
+字段:
+- 资产IP (文本)
+- 资产说明 (文本)
+- 资产状态 (文本) - 在线/离线/新发现/已删除
+- 状态更新时间 (日期时间)
+
+## 同步流程
 
 ```
-nmap 扫描 → Supabase（主数据源）→ 飞书（展示/备份）
+nmap扫描 → PostgreSQL(主) → 飞书(展示)
 ```
 
-## 状态说明
+1. 快速扫描网段在线主机
+2. 详细扫描端口和服务
+3. 识别设备类型
+4. 更新 PostgreSQL
+5. 同步到飞书
 
-- 🆕 新发现：首次扫描到的 IP
-- ✅ 在线：本次扫描仍然在线
-- ❌ 离线：之前在线，本次未扫描到
-- 🗑️ 已删除：手动标记删除
+## 设备识别
+
+自动识别以下设备类型：
+- Router (路由器)
+- Windows PC
+- Linux Server
+- Proxmox (虚拟化)
+- NAS (存储)
+- Web Server
+- Database Server
+- Camera (摄像头)
+- Printer (打印机)
+- IoT (智能设备)
+
+## 状态标记
+
+| 状态 | 含义 |
+|------|------|
+| 新发现 | 首次扫描到的IP |
+| 在线 | 本次扫描在线 |
+| 离线 | 之前在线本次未扫描到 |
+| 已删除 | 手动标记删除 |
+
+## 时间戳格式
+
+飞书 DateTime 字段需要**毫秒级时间戳**（13位）
+
+```python
+timestamp = int(time.time() * 1000)  # ✅ 正确
+timestamp = int(time.time())          # ❌ 错误
+```
+
+## 目录结构
+
+```
+network-scan/
+├── network_scan_unified.py   # 主扫描脚本
+├── network_scan.py            # 旧版仅飞书
+├── .env.example               # 配置模板
+├── SKILL.md                  # 技能说明
+└── README.md                  # 本文件
+```
