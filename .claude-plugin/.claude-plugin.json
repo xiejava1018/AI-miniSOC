@@ -1,0 +1,8 @@
+{
+  "name": "ai-minisoc-webdav",
+  "version": "1.0.0",
+  "description": "AI-miniSOC WebDAV文件访问插件",
+  "author": "xiejava",
+  "license": "MIT",
+  "skills": ["webdav"]
+}

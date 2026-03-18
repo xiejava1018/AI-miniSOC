@@ -14,6 +14,9 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+venv/
+env/
+.venv/
 
 # IDE
 .idea/
@@ -27,3 +30,14 @@ Thumbs.db
 
 # Logs
 *.log
+
+# 备份文件
+*.backup
+*.bak
+*~
+*.local
+
+# 敏感文件 - 安全原则：绝不提交用户名、密码、Token等凭证信息！
+# SEURITY WARNING: Never commit credentials (usernames, passwords, tokens, API keys)
+# 所有敏感配置必须使用环境变量或密钥管理系统
+# All sensitive config must use environment variables or secret management systems

@@ -1,0 +1,1409 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStart": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "🎯 总览概览",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "grafana",
+        "uid": "-- Grafana --"
+      },
+      "description": "Wazuh Agent连接状态总览",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection",
+          "type": "root"
+        }
+      ],
+      "title": "Agent状态统计",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "活跃Agent数量",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 6,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection.active",
+          "type": "root"
+        }
+      ],
+      "title": "🟢 在线Agent",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "离线Agent数量",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 10,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection.disconnected",
+          "type": "root"
+        }
+      ],
+      "title": "🔴 离线Agent",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "Agent总数",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 14,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection.total",
+          "type": "root"
+        }
+      ],
+      "title": "📊 Agent总数",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "从未连接的Agent数量",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 18,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection.never_connected",
+          "type": "root"
+        }
+      ],
+      "title": "⚪ 未连接Agent",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "Agent连接状态分布",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 5
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.connection",
+          "type": "root"
+        }
+      ],
+      "title": "Agent状态分布",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 200,
+      "panels": [],
+      "title": "💻 操作系统分布",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "操作系统类型分布",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-os-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.affected_items",
+          "type": "root"
+        }
+      ],
+      "title": "操作系统类型分布",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "按操作系统统计的Agent数量",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 10
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-os-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.affected_items",
+          "type": "root"
+        }
+      ],
+      "title": "操作系统统计",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 300,
+      "panels": [],
+      "title": "🖥️ Agent列表",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "所有Agent列表及状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "active": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "🟢 active"
+                      },
+                      "disconnected": {
+                        "color": "red",
+                        "index": 1,
+                        "text": "🔴 disconnected"
+                      },
+                      "never_connected": {
+                        "color": "gray",
+                        "index": 2,
+                        "text": "⚪ never_connected"
+                      },
+                      "pending": {
+                        "color": "yellow",
+                        "index": 3,
+                        "text": "🟡 pending"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "name"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 250
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ip"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "os"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "status"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-list",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.affected_items",
+          "type": "root"
+        }
+      ],
+      "title": "Agent列表",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 400,
+      "panels": [],
+      "title": "📈 24小时告警趋势",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "24小时告警和事件趋势",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "manager-stats",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.affected_items",
+          "type": "root"
+        }
+      ],
+      "title": "24小时告警趋势",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "firewall": true,
+              "hour": false,
+              "syscheck": true
+            },
+            "indexByName": {
+              "alerts": 2,
+              "events": 3,
+              "hour": 1,
+              "totalAlerts": 0
+            },
+            "renameByName": {
+              "alerts": "告警规则触发数",
+              "events": "事件总数",
+              "hour": "小时",
+              "totalAlerts": "总告警数"
+            }
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 500,
+      "panels": [],
+      "title": "⚙️ 系统状态",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "API代理服务健康状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "healthy": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "✅ 健康"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 43
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "health",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.status",
+          "type": "root"
+        }
+      ],
+      "title": "API代理状态",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "JWT Token状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "true": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "✅ 有效"
+                },
+                "false": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "❌ 无效"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 43
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "token-info",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.time_remaining",
+          "type": "root"
+        }
+      ],
+      "title": "Token剩余时间 (秒)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "Wazuh服务器URL",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 43
+      },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "health",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.wazuh_url",
+          "type": "root"
+        }
+      ],
+      "title": "Wazuh服务器地址",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "配置同步状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 47
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "agents-status-summary",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.configuration",
+          "type": "root"
+        }
+      ],
+      "title": "Agent配置同步状态",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "集群状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "no": {
+                  "color": "gray",
+                  "index": 0,
+                  "text": "未启用"
+                },
+                "yes": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "已启用"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 47
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "cluster-status",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.enabled",
+          "type": "root"
+        }
+      ],
+      "title": "集群启用状态",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "infinity",
+        "uid": "fffhc15p7nthca"
+      },
+      "description": "集群运行状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "no": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "未运行"
+                },
+                "yes": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "运行中"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 47
+      },
+      "id": 16,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "infinity",
+            "uid": "fffhc15p7nthca"
+          },
+          "editorMode": "code",
+          "expression": "object",
+          "format": "table",
+          "query": "cluster-status",
+          "rawQuery": "true",
+          "refId": "A",
+          "root_selector": "$.data.running",
+          "type": "root"
+        }
+      ],
+      "title": "集群运行状态",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": [
+    "wazuh",
+    "security",
+    "soc",
+    "threat-monitoring"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Wazuh 威胁监测仪表板",
+  "uid": "wazuh-threat-monitoring",
+  "version": 1,
+  "weekStart": ""
+}

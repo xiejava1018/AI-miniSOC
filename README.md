@@ -114,10 +114,29 @@ docker-compose up -d
 - [x] 日志采集 (Wazuh + Loki)
 - [x] 可视化 (Grafana)
 - [x] 健康检查工具 (ops-health-check)
-- ] AI分析引擎
-- ] 告警通知系统
-- ] 用户认证
-- ] 前端界面
+- [x] WebDAV文件共享技能
+- [ ] AI分析引擎
+- [ ] 告警通知系统
+- [ ] 用户认证
+- [ ] 前端界面
+
+## Claude Code技能
+
+AI-miniSOC包含以下Claude Code技能：
+
+### 已实现
+
+- **webdav-access** - WebDAV文件共享访问技能
+  - 支持文件上传/下载/删除
+  - 支持目录操作
+  - 自然语言命令接口
+  - 详见: [skills/webdav-access/](skills/webdav-access/)
+
+### 开发中
+
+- **log-query** - 日志查询技能
+- **threat-analysis** - 威胁分析技能
+- **report-gen** - 报告生成技能
 
 ## 开发路线图
 

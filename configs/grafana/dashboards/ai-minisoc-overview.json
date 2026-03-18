@@ -1,0 +1,896 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "AI-miniSOC 安全态势总览",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "今日告警总数",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "无告警"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "query": {
+              "bool": {
+                "filter": [
+                  {
+                    "range": {
+                      "@timestamp": {
+                        "gte": "now/d"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "count"
+            }
+          ],
+          "bucketAggs": []
+        }
+      ],
+      "title": "📊 今日告警",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "高危级别告警",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now/d"
+                    }
+                  }
+                },
+                {
+                  "term": {
+                    "rule.level": "12"
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "count"
+            }
+          ]
+        }
+      ],
+      "title": "🔴 高危告警",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "在线Agent数量",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "term": {
+                    "agent.status": "active"
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "cardinality",
+              "id": "cardinality",
+              "field": "agent.id"
+            }
+          ]
+        }
+      ],
+      "title": "💻 在线主机",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "过去7天告警趋势",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "insertNulls": false,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now-7d/d"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "id": "2",
+              "field": "@timestamp",
+              "interval": "1h",
+              "min_doc_count": 0
+            }
+          ]
+        }
+      ],
+      "title": "📈 告警趋势 (7天)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "按规则类型统计",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value", "percent"]
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now-7d/d"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "terms",
+              "id": "3",
+              "field": "rule.groups",
+              "size": 10
+            }
+          ]
+        }
+      ],
+      "title": "🎯 威胁类型分布",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "Top 10 威胁规则",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "orange",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Count"
+          }
+        ]
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now-7d/d"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "count",
+              "id": "count"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "terms",
+              "id": "3",
+              "field": "rule.description",
+              "size": 10
+            }
+          ]
+        }
+      ],
+      "title": "🔥 Top 10 威胁规则",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "rule.description": "规则描述",
+              "count": "触发次数"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "Agent主机状态",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-text"
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "active": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "在线"
+                },
+                "disconnected": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "离线"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Agent Name"
+          }
+        ]
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now-1h"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "max",
+              "id": "max",
+              "field": "agent.status"
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "terms",
+              "id": "3",
+              "field": "agent.name",
+              "size": 20
+            }
+          ]
+        }
+      ],
+      "title": "🖥️ Agent主机状态",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "agent.name": "主机名",
+              "max": "状态"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "opensearch",
+        "uid": "${opensearch_ds}"
+      },
+      "description": "最近告警列表",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "row-index"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "inspect": false
+          },
+          "mappings": []
+        }
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Time"
+          }
+        ]
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "opensearch",
+            "uid": "${opensearch_ds}"
+          },
+          "query": {
+            "bool": {
+              "filter": [
+                {
+                  "range": {
+                    "@timestamp": {
+                      "gte": "now-24h"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "refId": "A",
+          "timeField": "@timestamp",
+          "metrics": [
+            {
+              "type": "top_metrics",
+              "id": "top_metrics",
+              "fields": [
+                {"field": "rule.description", "size": 1},
+                {"field": "agent.name", "size": 1},
+                {"field": "rule.level", "size": 1},
+                {"field": "full_log", "size": 1}
+              ]
+            }
+          ],
+          "bucketAggs": [
+            {
+              "type": "terms",
+              "id": "3",
+              "field": "_id",
+              "size": 20
+            }
+          ]
+        }
+      ],
+      "title": "📋 最近告警列表 (24小时)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {},
+            "renameByName": {
+              "rule.description": "规则描述",
+              "agent.name": "主机",
+              "rule.level": "级别",
+              "full_log": "日志内容",
+              "@timestamp": "时间"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["security", "wazuh", "soc"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {
+          "type": "opensearch",
+          "uid": "${opensearch_ds}"
+        },
+        "definition": "opensearch",
+        "hide": 0,
+        "includeAll": false,
+        "label": "OpenSearch数据源",
+        "multi": false,
+        "name": "opensearch_ds",
+        "options": [],
+        "query": {
+          "query": "opensearch",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "AI-miniSOC 安全态势总览",
+  "uid": "ai-minisoc-overview",
+  "version": 1,
+  "weekStart": ""
+}
