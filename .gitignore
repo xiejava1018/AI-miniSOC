@@ -45,5 +45,8 @@ Thumbs.db
 # 工作日志 - 绝不提交到git或github
 work_logs/
 
+# Git工作树 - 隔离开发空间
+.worktrees/
+
 # 开发日志中的敏感信息（旧路径，保留以防万一）
 docs/development-log-*.md
