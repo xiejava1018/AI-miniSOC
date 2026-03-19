@@ -7,12 +7,16 @@ from .asset import Asset
 from .incident import Incident
 from .ai_analysis import AIAnalysis
 from .asset_incident import AssetIncident
-from .user import User, UserSession
-from .role import Role, RoleMenu
+from .user import User, UserStatus
+from .user_session import UserSession
+from .role import Role, RoleCode
+from .role_menu import RoleMenu
 from .menu import Menu
 from .system_config import SystemConfig
-from .password import PasswordHistory, PasswordResetToken
-from .audit import AuditLog, RateLimit
+from .password_history import PasswordHistory
+from .password_reset_token import PasswordResetToken
+from .audit_log import AuditLog
+from .rate_limit import RateLimit
 
 __all__ = [
     "Base",
@@ -21,8 +25,10 @@ __all__ = [
     "AIAnalysis",
     "AssetIncident",
     "User",
+    "UserStatus",
     "UserSession",
     "Role",
+    "RoleCode",
     "RoleMenu",
     "Menu",
     "SystemConfig",

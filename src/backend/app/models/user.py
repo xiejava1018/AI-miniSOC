@@ -2,10 +2,19 @@
 用户模型
 """
 
+from enum import Enum
 from sqlalchemy import Column, String, Integer, BigInteger, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
+
+
+class UserStatus(str, Enum):
+    """用户状态枚举"""
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    LOCKED = "locked"
+    PENDING = "pending"
 
 
 class User(Base):
@@ -17,7 +26,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     email = Column(String(100), unique=True)
     full_name = Column(String(100))
-    status = Column(String(20), default='active')
+    status = Column(String(20), default=UserStatus.ACTIVE)
     role_id = Column(BigInteger, ForeignKey('soc_roles.id'), nullable=False)
     last_login_at = Column(DateTime(timezone=True))
     password_changed_at = Column(DateTime(timezone=True))
@@ -31,32 +40,28 @@ class User(Base):
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     password_history = relationship("PasswordHistory", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user")
-    rate_limits = relationship("RateLimit", back_populates="user")
-    system_configs = relationship("SystemConfig", back_populates="updated_by_user")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
+
+    @property
+    def is_admin(self) -> bool:
+        """判断是否为管理员"""
+        return self.role and self.role.code == "admin"
+
+    @property
+    def is_locked(self) -> bool:
+        """判断账户是否被锁定"""
+        from datetime import datetime
+        if self.status == UserStatus.LOCKED:
+            return True
+        if self.locked_until and self.locked_until > datetime.now(self.locked_until.tzinfo):
+            return True
+        return False
+
+    def has_menu_access(self, menu_path: str) -> bool:
+        """检查用户是否有指定菜单的访问权限"""
+        if not self.role or not self.role.menus:
+            return False
+        return any(menu.path == menu_path for menu in self.role.menus)
 
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, status={self.status})>"
-
-
-class UserSession(Base):
-    """用户会话表"""
-    __tablename__ = "soc_user_sessions"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('soc_users.id', ondelete='CASCADE'), nullable=False)
-    token_hash = Column(String(64), nullable=False)
-    refresh_token_hash = Column(String(64))
-    ip_address = Column(String(45))
-    user_agent = Column(String)
-    login_at = Column(DateTime(timezone=True), server_default=func.now())
-    logout_at = Column(DateTime(timezone=True))
-    last_activity_at = Column(DateTime(timezone=True), server_default=func.now())
-    is_active = Column(Boolean, default=True)
-
-    # 关系
-    user = relationship("User", back_populates="sessions")
-    audit_logs = relationship("AuditLog", back_populates="session")
-
-    def __repr__(self):
-        return f"<UserSession(id={self.id}, user_id={self.user_id}, is_active={self.is_active})>"

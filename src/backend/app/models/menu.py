@@ -26,6 +26,24 @@ class Menu(Base):
     parent = relationship("Menu", remote_side=[id], back_populates="children")
     children = relationship("Menu", back_populates="parent", cascade="all, delete-orphan")
     role_menus = relationship("RoleMenu", back_populates="menu")
+    roles = relationship("Role", secondary="soc_role_menus", back_populates="menus")
+
+    def to_dict(self, include_children: bool = False):
+        """转换为字典格式"""
+        data = {
+            "id": self.id,
+            "parent_id": self.parent_id,
+            "name": self.name,
+            "path": self.path,
+            "icon": self.icon,
+            "sort_order": self.sort_order,
+            "is_visible": self.is_visible,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+        if include_children and self.children:
+            data["children"] = [child.to_dict(include_children=False) for child in sorted(self.children, key=lambda x: x.sort_order)]
+        return data
 
     def __repr__(self):
         return f"<Menu(id={self.id}, name={self.name}, path={self.path})>"

@@ -2,10 +2,20 @@
 角色模型
 """
 
+from enum import Enum
 from sqlalchemy import Column, String, Text, BigInteger, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
+
+
+class RoleCode(str, Enum):
+    """角色代码枚举"""
+    ADMIN = "admin"
+    SECURITY_ANALYST = "security_analyst"
+    OPERATOR = "operator"
+    AUDITOR = "auditor"
+    VIEWER = "viewer"
 
 
 class Role(Base):
@@ -22,22 +32,7 @@ class Role(Base):
 
     # 关系
     users = relationship("User", back_populates="role")
-    role_menus = relationship("RoleMenu", back_populates="role", cascade="all, delete-orphan")
+    menus = relationship("Menu", secondary="soc_role_menus", back_populates="roles")
 
     def __repr__(self):
         return f"<Role(id={self.id}, name={self.name}, code={self.code})>"
-
-
-class RoleMenu(Base):
-    """角色菜单关联表"""
-    __tablename__ = "soc_role_menus"
-
-    role_id = Column(BigInteger, ForeignKey('soc_roles.id', ondelete='CASCADE'), primary_key=True)
-    menu_id = Column(BigInteger, ForeignKey('soc_menus.id', ondelete='CASCADE'), primary_key=True)
-
-    # 关系
-    role = relationship("Role", back_populates="role_menus")
-    menu = relationship("Menu", back_populates="role_menus")
-
-    def __repr__(self):
-        return f"<RoleMenu(role_id={self.role_id}, menu_id={self.menu_id})>"
