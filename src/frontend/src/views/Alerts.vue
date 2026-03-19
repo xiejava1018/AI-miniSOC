@@ -17,6 +17,8 @@
 <style scoped>
 .alerts-page {
   padding: 20px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .page-header {

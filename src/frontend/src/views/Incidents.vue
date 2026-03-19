@@ -107,6 +107,8 @@ function editIncident(incident: any) {
 <style scoped>
 .incidents-page {
   padding: 20px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .page-header {

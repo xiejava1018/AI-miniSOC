@@ -13,6 +13,7 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '0.0.0.0',
+    allowedHosts: ['aisoc.doai8.dpdns.org', 'localhost', '.localhost'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
