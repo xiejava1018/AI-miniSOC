@@ -179,3 +179,23 @@ def test_update_user_duplicate_email(db_session: Session, sample_users: list[Use
 
     with pytest.raises(ValueError, match="邮箱已被使用"):
         service.update_user(user1.id, update_data, updater_id=1)
+
+
+def test_delete_user_success(db_session: Session, sample_users: list[User]):
+    """测试成功删除用户"""
+    service = UserService(db_session)
+    user = sample_users[0]
+    user_id = user.id
+
+    result = service.delete_user(user_id, deleter_id=1)
+
+    assert result is True
+    assert service.get_user_by_id(user_id) is None
+
+
+def test_delete_user_not_found(db_session: Session):
+    """测试删除不存在的用户"""
+    service = UserService(db_session)
+
+    with pytest.raises(ValueError, match="用户不存在"):
+        service.delete_user(99999, deleter_id=1)

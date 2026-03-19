@@ -202,3 +202,44 @@ class UserService:
         )
 
         return user
+
+    def delete_user(self, user_id: int, deleter_id: int) -> bool:
+        """
+        删除用户
+
+        Args:
+            user_id: 用户ID
+            deleter_id: 删除者ID
+
+        Returns:
+            是否删除成功
+
+        Raises:
+            ValueError: 用户不存在或不能删除最后一个管理员
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("用户不存在")
+
+        # 检查是否为最后一个管理员
+        if user.is_admin:
+            admin_count = self.db.query(User).join(User.role).filter(
+                Role.code == "admin"
+            ).count()
+            if admin_count <= 1:
+                raise ValueError("不能删除最后一个管理员")
+
+        # 记录审计日志
+        username = user.username
+        self.audit.log_action(
+            user_id=deleter_id,
+            action="delete_user",
+            resource_type="user",
+            resource_id=user.id,
+            details=f"删除用户: {username}"
+        )
+
+        self.db.delete(user)
+        self.db.commit()
+
+        return True
