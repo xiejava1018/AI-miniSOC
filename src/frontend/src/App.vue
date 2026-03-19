@@ -97,7 +97,7 @@
                   <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </div>
-              <span class="user-name">管理员</span>
+              <span class="user-name">{{ authStore.userDisplayName || '未登录' }}</span>
             </div>
           </div>
         </div>
@@ -118,11 +118,13 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRoute } from 'vue-router'
-import { HomeFilled, Monitor, Warning, Bell, User, DataAnalysis } from '@element-plus/icons-vue'
+import { HomeFilled, Monitor, Warning, Bell, User, UserFilled, Document, DataAnalysis, Setting } from '@element-plus/icons-vue'
 import { useThemeStore } from '@/stores/theme'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 
 // Sidebar collapse state
 const sidebarCollapsed = ref(false)
@@ -142,20 +144,35 @@ interface MenuItem {
   path: string
   label: string
   icon: any
+  requiresPermission?: string
 }
 
-const menuItems: MenuItem[] = [
+// 所有菜单项（包括需要权限的）
+const allMenuItems: MenuItem[] = [
   { path: '/dashboard', label: '概览仪表板', icon: markRaw(DataAnalysis) },
   { path: '/assets', label: '资产管理', icon: markRaw(Monitor) },
   { path: '/incidents', label: '事件管理', icon: markRaw(Warning) },
   { path: '/alerts', label: '告警中心', icon: markRaw(Bell) },
+  { path: '/system/users', label: '用户管理', icon: markRaw(User), requiresPermission: 'system-users' },
+  { path: '/system/roles', label: '角色管理', icon: markRaw(UserFilled), requiresPermission: 'system-roles' },
+  { path: '/system/audit', label: '审计日志', icon: markRaw(Document), requiresPermission: 'system-audit' },
 ]
+
+// 根据权限过滤菜单项
+const menuItems = computed(() => {
+  return allMenuItems.filter(item => {
+    // 如果没有权限要求，显示
+    if (!item.requiresPermission) return true
+    // 如果有权限要求，检查用户是否有该权限
+    return authStore.hasPermission(item.requiresPermission)
+  })
+})
 
 const currentTime = ref('')
 let timeInterval: ReturnType<typeof setInterval> | null = null
 
 const currentPageTitle = computed(() => {
-  const item = menuItems.find(item => item.path === route.path)
+  const item = allMenuItems.find(item => item.path === route.path)
   return item?.label || 'AI-miniSOC'
 })
 
