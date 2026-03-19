@@ -32,9 +32,13 @@ class Settings(BaseSettings):
     GLM_API_BASE: str = "https://open.bigmodel.cn/api/paas/v4/"
 
     # JWT配置
-    JWT_SECRET_KEY: str
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 1440
+    SECRET_KEY: str  # 用于JWT签名和配置加密
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7天
+
+    # 加密配置
+    ENCRYPTION_KEY: str  # 用于敏感配置加密（Fernet）
 
     # 后端配置
     BACKEND_HOST: str = "0.0.0.0"
