@@ -6,6 +6,8 @@
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet
 import re
+import secrets
+import string
 
 from app.core.config import settings
 
@@ -152,3 +154,18 @@ def is_strong_password(password: str) -> bool:
 
 # Alias for consistency (spec uses 'hash_password' name)
 hash_password = get_password_hash
+
+
+def generate_random_password(length: int = 12) -> str:
+    """
+    生成随机密码
+
+    Args:
+        length: 密码长度，默认12位
+
+    Returns:
+        随机密码字符串，包含大小写字母、数字和特殊字符
+    """
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return password

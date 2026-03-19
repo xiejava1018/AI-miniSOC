@@ -10,17 +10,8 @@ from datetime import datetime, timedelta
 from app.models.user import User, UserStatus
 from app.models.role import Role
 from app.schemas.user import UserCreate, UserUpdate
-from app.core.security import hash_password
+from app.core.security import hash_password, generate_random_password
 from app.services.audit_service import AuditService
-
-# Import generate_random_password - will be implemented in Task 9
-# For now, we'll use a placeholder
-def generate_random_password(length: int = 12) -> str:
-    """临时占位函数，将在Task 9中实现"""
-    import secrets
-    import string
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
 class UserService:
