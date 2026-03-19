@@ -228,3 +228,46 @@ def test_reset_password_not_found(db_session: Session):
 
     with pytest.raises(ValueError, match="用户不存在"):
         service.reset_password(99999, admin_id=1)
+
+
+def test_lock_user(db_session: Session, sample_users: list[User]):
+    """测试锁定用户"""
+    service = UserService(db_session)
+    user = sample_users[0]
+
+    locked_user = service.lock_user(
+        user.id,
+        admin_id=1,
+        locked=True,
+        reason="多次登录失败"
+    )
+
+    assert locked_user.status == UserStatus.LOCKED
+    assert locked_user.locked_until is not None
+
+
+def test_unlock_user(db_session: Session, sample_users: list[User]):
+    """测试解锁用户"""
+    service = UserService(db_session)
+    user = sample_users[0]
+
+    # 先锁定
+    service.lock_user(user.id, admin_id=1, locked=True)
+
+    # 再解锁
+    unlocked_user = service.lock_user(
+        user.id,
+        admin_id=1,
+        locked=False
+    )
+
+    assert unlocked_user.status == UserStatus.ACTIVE
+    assert unlocked_user.locked_until is None
+
+
+def test_lock_user_not_found(db_session: Session):
+    """测试锁定不存在的用户"""
+    service = UserService(db_session)
+
+    with pytest.raises(ValueError, match="用户不存在"):
+        service.lock_user(99999, admin_id=1, locked=True)

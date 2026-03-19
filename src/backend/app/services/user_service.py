@@ -296,3 +296,54 @@ class UserService:
         )
 
         return new_password
+
+    def lock_user(
+        self,
+        user_id: int,
+        admin_id: int,
+        locked: bool,
+        reason: Optional[str] = None
+    ) -> User:
+        """
+        锁定或解锁用户
+
+        Args:
+            user_id: 用户ID
+            admin_id: 管理员ID
+            locked: 是否锁定
+            reason: 锁定原因
+
+        Returns:
+            更新后的用户
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("用户不存在")
+
+        if locked:
+            user.status = UserStatus.LOCKED
+            # 默认锁定7天
+            user.locked_until = datetime.now() + timedelta(days=7)
+        else:
+            user.status = UserStatus.ACTIVE
+            user.locked_until = None
+            user.failed_login_attempts = 0
+
+        self.db.commit()
+        self.db.refresh(user)
+
+        # 记录审计日志
+        action = "lock_user" if locked else "unlock_user"
+        details = f"{'锁定' if locked else '解锁'}用户: {user.username}"
+        if reason:
+            details += f", 原因: {reason}"
+
+        self.audit.log_action(
+            user_id=admin_id,
+            action=action,
+            resource_type="user",
+            resource_id=user.id,
+            details=details
+        )
+
+        return user
