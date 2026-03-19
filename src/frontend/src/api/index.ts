@@ -1,5 +1,28 @@
 import apiClient from './client'
 
+// 认证 API
+export const authApi = {
+  // 用户登录
+  login: (data: { username: string; password: string }) =>
+    apiClient.post('/auth/login', data),
+
+  // 用户登出
+  logout: () =>
+    apiClient.post('/auth/logout'),
+
+  // 刷新令牌
+  refresh: (data: { refresh_token: string }) =>
+    apiClient.post('/auth/refresh', data),
+
+  // 修改密码
+  changePassword: (data: { old_password: string; new_password: string; confirm_password: string }) =>
+    apiClient.post('/auth/change-password', data),
+
+  // 获取当前用户信息
+  me: () =>
+    apiClient.get('/auth/me')
+}
+
 // 资产管理 API
 export const assetsApi = {
   // 获取资产列表
