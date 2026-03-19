@@ -12,10 +12,8 @@ from app.models.base import Base
 class RoleCode(str, Enum):
     """角色代码枚举"""
     ADMIN = "admin"
-    SECURITY_ANALYST = "security_analyst"
-    OPERATOR = "operator"
-    AUDITOR = "auditor"
-    VIEWER = "viewer"
+    USER = "user"
+    READONLY = "readonly"
 
 
 class Role(Base):

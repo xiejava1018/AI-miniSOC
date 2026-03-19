@@ -23,5 +23,8 @@ class SystemConfig(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # 关系
+    updated_by_user = relationship("User", foreign_keys=[updated_by])
+
     def __repr__(self):
         return f"<SystemConfig(id={self.id}, category={self.category}, key={self.key})>"

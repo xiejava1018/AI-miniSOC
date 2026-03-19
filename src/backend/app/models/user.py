@@ -12,9 +12,8 @@ from app.models.base import Base
 class UserStatus(str, Enum):
     """用户状态枚举"""
     ACTIVE = "active"
-    INACTIVE = "inactive"
     LOCKED = "locked"
-    PENDING = "pending"
+    DISABLED = "disabled"
 
 
 class User(Base):
@@ -39,7 +38,7 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     password_history = relationship("PasswordHistory", back_populates="user", cascade="all, delete-orphan")
-    audit_logs = relationship("AuditLog", back_populates="user")
+    audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")
 
     @property

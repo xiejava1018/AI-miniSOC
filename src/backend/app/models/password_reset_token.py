@@ -13,7 +13,7 @@ class PasswordResetToken(Base):
     __tablename__ = "soc_password_reset_tokens"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('soc_users.id'), nullable=False)
+    user_id = Column(BigInteger, ForeignKey('soc_users.id', ondelete='CASCADE'), nullable=False)
     token_hash = Column(String(64), unique=True, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used_at = Column(DateTime(timezone=True))
