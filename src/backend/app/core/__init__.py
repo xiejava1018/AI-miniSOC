@@ -3,5 +3,6 @@
 """
 
 from .config import settings
+from .audit import AuditService
 
-__all__ = ["settings"]
+__all__ = ["settings", "AuditService"]
