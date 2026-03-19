@@ -1,0 +1,60 @@
+"""
+审计和限流模型
+"""
+
+from sqlalchemy import Column, String, Text, BigInteger, DateTime, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.models.base import Base
+
+
+class AuditLog(Base):
+    """审计日志表"""
+    __tablename__ = "soc_audit_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey('soc_users.id'))
+    username = Column(String(50), nullable=False)
+    action = Column(String(50), nullable=False)
+    resource_type = Column(String(50))
+    resource_id = Column(BigInteger)
+    resource_name = Column(String(200))
+    old_values = Column(JSONB)
+    new_values = Column(JSONB)
+    ip_address = Column(String(45))
+    user_agent = Column(Text)
+    session_id = Column(BigInteger, ForeignKey('soc_user_sessions.id'))
+    request_id = Column(String(36))
+    status = Column(String(20), default='success')
+    error_message = Column(Text)
+    log_hash = Column(String(64))
+    prev_log_hash = Column(String(64))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # 关系
+    user = relationship("User", back_populates="audit_logs")
+    session = relationship("UserSession", back_populates="audit_logs")
+
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, username={self.username}, action={self.action})>"
+
+
+class RateLimit(Base):
+    """API限流表"""
+    __tablename__ = "soc_rate_limits"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey('soc_users.id'))
+    ip_address = Column(String(45), nullable=False)
+    endpoint = Column(String(200), nullable=False)
+    request_count = Column(Integer, default=1)
+    window_start = Column(DateTime(timezone=True), server_default=func.now())
+    blocked_until = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # 关系
+    user = relationship("User", back_populates="rate_limits")
+
+    def __repr__(self):
+        return f"<RateLimit(id={self.id}, ip_address={self.ip_address}, endpoint={self.endpoint})>"
