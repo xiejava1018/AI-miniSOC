@@ -51,34 +51,41 @@
 
 ```sql
 CREATE TABLE soc_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
     full_name VARCHAR(100),
     status VARCHAR(20) DEFAULT 'active', -- active, locked, disabled
-    role_id UUID NOT NULL REFERENCES soc_roles(id),
+    role_id BIGINT NOT NULL REFERENCES soc_roles(id),
     last_login_at TIMESTAMP,
     password_changed_at TIMESTAMP,
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT check_status CHECK (status IN ('active', 'locked', 'disabled'))
 );
 
 CREATE INDEX idx_users_username ON soc_users(username);
 CREATE INDEX idx_users_role ON soc_users(role_id);
+CREATE INDEX idx_users_email ON soc_users(email);
 ```
 
 #### 角色表 (soc_roles)
 
 ```sql
 CREATE TABLE soc_roles (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
     code VARCHAR(50) UNIQUE NOT NULL,
     description TEXT,
     is_system BOOLEAN DEFAULT false, -- 系统内置角色不可删除
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT check_role_code CHECK (code IN ('admin', 'user', 'readonly'))
 );
 ```
 
@@ -86,8 +93,8 @@ CREATE TABLE soc_roles (
 
 ```sql
 CREATE TABLE soc_menus (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    parent_id UUID REFERENCES soc_menus(id), -- 支持多级菜单
+    id BIGSERIAL PRIMARY KEY,
+    parent_id BIGINT REFERENCES soc_menus(id), -- 支持多级菜单
     name VARCHAR(50) NOT NULL,
     path VARCHAR(200) NOT NULL,
     icon VARCHAR(50),
@@ -104,8 +111,8 @@ CREATE INDEX idx_menus_parent ON soc_menus(parent_id);
 
 ```sql
 CREATE TABLE soc_role_menus (
-    role_id UUID NOT NULL REFERENCES soc_roles(id) ON DELETE CASCADE,
-    menu_id UUID NOT NULL REFERENCES soc_menus(id) ON DELETE CASCADE,
+    role_id BIGINT NOT NULL REFERENCES soc_roles(id) ON DELETE CASCADE,
+    menu_id BIGINT NOT NULL REFERENCES soc_menus(id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, menu_id)
 );
 ```
@@ -114,14 +121,14 @@ CREATE TABLE soc_role_menus (
 
 ```sql
 CREATE TABLE soc_system_config (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id BIGSERIAL PRIMARY KEY,
     category VARCHAR(50) NOT NULL, -- basic, security, notification, api
     key VARCHAR(100) NOT NULL,
     value TEXT,
     value_type VARCHAR(20) DEFAULT 'string', -- string, number, boolean, json
     is_encrypted BOOLEAN DEFAULT false,
     description TEXT,
-    updated_by UUID REFERENCES soc_users(id),
+    updated_by BIGINT REFERENCES soc_users(id),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(category, key)
 );
@@ -129,23 +136,95 @@ CREATE TABLE soc_system_config (
 CREATE INDEX idx_config_category ON soc_system_config(category);
 ```
 
+#### 用户会话表 (soc_user_sessions)
+
+```sql
+CREATE TABLE soc_user_sessions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES soc_users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL,
+    refresh_token_hash VARCHAR(64),
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    logout_at TIMESTAMP,
+    last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT true
+);
+
+CREATE INDEX idx_sessions_user ON soc_user_sessions(user_id);
+CREATE INDEX idx_sessions_token ON soc_user_sessions(token_hash);
+CREATE INDEX idx_sessions_active ON soc_user_sessions(is_active, last_activity_at);
+```
+
+#### 密码历史表 (soc_password_history)
+
+```sql
+CREATE TABLE soc_password_history (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES soc_users(id) ON DELETE CASCADE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_password_history_user ON soc_password_history(user_id, created_at DESC);
+```
+
+#### 密码重置令牌表 (soc_password_reset_tokens)
+
+```sql
+CREATE TABLE soc_password_reset_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES soc_users(id),
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_reset_tokens_user ON soc_password_reset_tokens(user_id);
+CREATE INDEX idx_reset_tokens_hash ON soc_password_reset_tokens(token_hash);
+CREATE INDEX idx_reset_tokens_expires ON soc_password_reset_tokens(expires_at);
+```
+
+#### API限流表 (soc_rate_limits)
+
+```sql
+CREATE TABLE soc_rate_limits (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES soc_users(id), -- NULL表示未认证用户
+    ip_address VARCHAR(45) NOT NULL,
+    endpoint VARCHAR(200) NOT NULL,
+    request_count INTEGER DEFAULT 1,
+    window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    blocked_until TIMESTAMP
+);
+
+CREATE INDEX idx_rate_limits_user ON soc_rate_limits(user_id, window_start);
+CREATE INDEX idx_rate_limits_ip ON soc_rate_limits(ip_address, window_start);
+```
+
 #### 审计日志表 (soc_audit_logs)
 
 ```sql
 CREATE TABLE soc_audit_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES soc_users(id),
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT REFERENCES soc_users(id),
     username VARCHAR(50) NOT NULL, -- 冗余，防止用户删除后无法追溯
     action VARCHAR(50) NOT NULL, -- LOGIN, LOGOUT, CREATE, UPDATE, DELETE, EXPORT, IMPORT
     resource_type VARCHAR(50), -- User, Role, Menu, Config, Asset, Incident, Alert
-    resource_id UUID,
+    resource_id BIGINT,
     resource_name VARCHAR(200), -- 冗余资源名称
     old_values JSONB, -- 变更前值
     new_values JSONB, -- 变更后值
     ip_address VARCHAR(45),
     user_agent TEXT,
+    session_id BIGINT REFERENCES soc_user_sessions(id),
+    request_id VARCHAR(36), -- UUID用于关联请求
     status VARCHAR(20) DEFAULT 'success', -- success, failure
     error_message TEXT,
+    log_hash VARCHAR(64), -- SHA256哈希，用于防篡改
+    prev_log_hash VARCHAR(64), -- 前一条日志的哈希，形成哈希链
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -153,6 +232,45 @@ CREATE INDEX idx_audit_user ON soc_audit_logs(user_id);
 CREATE INDEX idx_audit_action ON soc_audit_logs(action);
 CREATE INDEX idx_audit_resource ON soc_audit_logs(resource_type, resource_id);
 CREATE INDEX idx_audit_created ON soc_audit_logs(created_at);
+CREATE INDEX idx_audit_request ON soc_audit_logs(request_id);
+
+-- 哈希链索引，用于验证日志完整性
+CREATE INDEX idx_audit_hash_chain ON soc_audit_logs(prev_log_hash, log_hash);
+```
+
+#### 审计日志完整性触发器
+
+```sql
+CREATE OR REPLACE FUNCTION calculate_audit_log_hash()
+RETURNS TRIGGER AS $$
+DECLARE
+  log_data TEXT;
+  prev_hash VARCHAR(64);
+BEGIN
+  -- 获取前一条日志的哈希
+  SELECT log_hash INTO prev_hash
+  FROM soc_audit_logs
+  WHERE id < NEW.id
+  ORDER BY id DESC
+  LIMIT 1;
+
+  -- 计算当前日志哈希
+  log_data := NEW.user_id::TEXT || NEW.username || NEW.action ||
+              COALESCE(NEW.resource_type, '') || COALESCE(NEW.resource_id::TEXT, '') ||
+              COALESCE(NEW.old_values::TEXT, '') || COALESCE(NEW.new_values::TEXT, '') ||
+              NEW.created_at::TEXT || COALESCE(prev_hash, '');
+
+  NEW.log_hash := encode(digest(log_data, 'sha256'), 'hex');
+  NEW.prev_log_hash := prev_hash;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_log_hash_trigger
+  BEFORE INSERT ON soc_audit_logs
+  FOR EACH ROW
+  EXECUTE FUNCTION calculate_audit_log_hash();
 ```
 
 ---
@@ -633,9 +751,9 @@ export const useAuthStore = defineStore('auth', () => {
 
 - Access Token 有效期：2小时
 - Refresh Token 有效期：7天
-- Token 存储位置：localStorage（可选：httpOnly cookie）
-- 支持Token黑名单（Redis实现）
-- 登出时将token加入黑名单
+- Token 存储位置：**推荐 httpOnly cookies**（安全选项，防止XSS攻击）
+- 支持 Token 黑名单（Redis实现，需要添加Redis到基础设施）
+- 登出时将 token 加入黑名单
 
 ### 9.3 敏感配置加密
 
@@ -707,7 +825,8 @@ VALUES ('00000000-0000-0000-0000-000000000003', '只读用户', 'readonly', '只
 
 ```
 用户名: admin
-密码: admin123 (首次登录后强制修改)
+密码: 系统首次启动时自动生成随机强密码（显示在控制台/日志中）
+      首次登录后强制修改密码
 角色: 管理员
 ```
 
@@ -786,11 +905,18 @@ INSERT INTO soc_system_config (category, key, value, value_type, description) VA
 2. 角色管理CRUD
 3. 菜单权限分配
 4. 前端管理页面
+5. **密码重置功能**（邮件重置链接）
+6. **会话管理**（查看/撤销用户会话）
+7. **双因素认证（2FA）**（TOTP - 基于时间的一次性密码）
+8. 密码历史记录（防止重复使用旧密码）
 
 **交付物**：
 - 用户管理功能
 - 角色管理功能
 - 动态菜单加载
+- 密码重置流程
+- 会话管理界面
+- 2FA启用和验证
 
 ### 阶段3：系统配置（优先级：中）
 
@@ -834,6 +960,8 @@ INSERT INTO soc_system_config (category, key, value, value_type, description) VA
 - PyJWT 2.8+
 - bcrypt 4.1+ (密码加密)
 - cryptography 41+ (配置加密)
+- Redis 7+ (Token黑名单、会话缓存、API限流)
+- pyotp 2.9+ (2FA TOTP生成)
 
 ### 前端
 
@@ -846,20 +974,70 @@ INSERT INTO soc_system_config (category, key, value, value_type, description) VA
 ### 数据库
 
 - PostgreSQL 16+
+- Redis 7+ (缓存和会话管理)
 
 ---
 
-## 14. 后续扩展方向
+## 14. 性能和可扩展性要求
+
+### 14.1 性能指标
+
+**API响应时间**：
+- 认证接口（登录/登出）：< 500ms (95th percentile)
+- 用户/角色管理接口：< 200ms (95th percentile)
+- 配置管理接口：< 300ms (95th percentile)
+- 审计日志查询：< 2秒 (100万条记录)
+
+**并发能力**：
+- 支持 100 并发用户
+- 支持 1000 TPS (每秒事务数)
+- 数据库连接池：20-50连接
+
+**数据库性能**：
+- 审计日志表分区（按月分区）
+- 关键字段建立索引
+- 定期清理过期数据
+
+### 14.2 可扩展性设计
+
+**水平扩展**：
+- 无状态API服务（支持多实例部署）
+- Redis集群（用于会话共享）
+- 数据库读写分离（主从复制）
+
+**数据归档策略**：
+- 审计日志：90天在线，1年归档
+- 会话记录：30天后自动清理
+- 密码重置令牌：24小时过期清理
+
+### 14.3 监控指标
+
+**关键指标监控**：
+- API响应时间和错误率
+- 数据库连接池使用率
+- Redis内存使用率
+- 活跃会话数
+- 登录失败率
+
+**告警规则**：
+- API错误率 > 5%
+- 数据库连接池使用率 > 80%
+- 某IP登录失败次数 > 10次/分钟
+- 系统配置变更告警
+
+---
+
+## 15. 后续扩展方向
 
 1. **OAuth2/LDAP集成** - 支持企业SSO
 2. **多租户支持** - 数据隔离
 3. **细粒度权限** - 按钮级别权限控制
 4. **数据权限** - 行级数据权限控制
-5. **审计日志增强** - 支持日志归档、检索、分析
-6. **MFA支持** - 多因素认证
+5. **审计日志增强** - 支持日志归档、检索、分析、AI异常检测
+6. **用户行为分析** - UEBA（用户和实体行为分析）
 
 ---
 
-**文档版本**: v1.0
+**文档版本**: v1.1
 **最后更新**: 2026-03-19
-**状态**: 待审核
+**状态**: 已修订，待最终审核
