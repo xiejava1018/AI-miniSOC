@@ -199,3 +199,32 @@ def test_delete_user_not_found(db_session: Session):
 
     with pytest.raises(ValueError, match="用户不存在"):
         service.delete_user(99999, deleter_id=1)
+
+
+def test_reset_password_with_custom(db_session: Session, sample_users: list[User]):
+    """测试重置为自定义密码"""
+    service = UserService(db_session)
+    user = sample_users[0]
+
+    new_password = service.reset_password(user.id, admin_id=1, new_password="NewPass123")
+
+    assert new_password == "NewPass123"
+
+
+def test_reset_password_auto_generate(db_session: Session, sample_users: list[User]):
+    """测试自动生成密码"""
+    service = UserService(db_session)
+    user = sample_users[0]
+
+    new_password = service.reset_password(user.id, admin_id=1)
+
+    assert new_password is not None
+    assert len(new_password) >= 6
+
+
+def test_reset_password_not_found(db_session: Session):
+    """测试重置不存在的用户密码"""
+    service = UserService(db_session)
+
+    with pytest.raises(ValueError, match="用户不存在"):
+        service.reset_password(99999, admin_id=1)

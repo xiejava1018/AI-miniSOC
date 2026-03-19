@@ -13,6 +13,15 @@ from app.schemas.user import UserCreate, UserUpdate
 from app.core.security import hash_password
 from app.services.audit_service import AuditService
 
+# Import generate_random_password - will be implemented in Task 9
+# For now, we'll use a placeholder
+def generate_random_password(length: int = 12) -> str:
+    """临时占位函数，将在Task 9中实现"""
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
 
 class UserService:
     """用户业务逻辑类"""
@@ -243,3 +252,47 @@ class UserService:
         self.db.commit()
 
         return True
+
+    def reset_password(
+        self,
+        user_id: int,
+        admin_id: int,
+        new_password: Optional[str] = None
+    ) -> str:
+        """
+        重置用户密码
+
+        Args:
+            user_id: 用户ID
+            admin_id: 管理员ID
+            new_password: 新密码（None则自动生成）
+
+        Returns:
+            新密码
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("用户不存在")
+
+        # 生成随机密码（如果未提供）
+        if not new_password:
+            new_password = generate_random_password()
+
+        # 更新密码
+        user.password_hash = hash_password(new_password)
+        user.password_changed_at = datetime.now()
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
+        self.db.commit()
+
+        # 记录审计日志
+        self.audit.log_action(
+            user_id=admin_id,
+            action="reset_password",
+            resource_type="user",
+            resource_id=user.id,
+            details=f"重置用户密码: {user.username}"
+        )
+
+        return new_password
