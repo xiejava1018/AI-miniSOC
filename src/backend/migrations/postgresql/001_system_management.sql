@@ -1,289 +1,454 @@
--- src/backend/migrations/postgresql/001_system_management.sql
--- 系统管理模块数据库表
--- 版本: 1.0
--- 日期: 2026-03-19
+-- ============================================================================
+-- AI-miniSOC System Management Module Database Migration
+-- Version: 001
+-- Description: Create tables for RBAC, user management, and audit logging
+-- ============================================================================
 
--- 启用UUID扩展（如果需要）
+-- Enable required PostgreSQL extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- ============================================
--- 1. 角色表 (soc_roles)
--- ============================================
+-- ============================================================================
+-- Table: soc_roles
+-- Description: Role definitions for RBAC
+-- ============================================================================
 CREATE TABLE soc_roles (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
-    code VARCHAR(50) UNIQUE NOT NULL,
+    role_name VARCHAR(50) NOT NULL UNIQUE,
+    role_code VARCHAR(20) NOT NULL UNIQUE,
     description TEXT,
-    is_system BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT check_role_code CHECK (code IN ('admin', 'user', 'readonly'))
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_roles_code ON soc_roles(code);
+COMMENT ON TABLE soc_roles IS 'Role definitions for role-based access control';
+COMMENT ON COLUMN soc_roles.is_system IS 'System roles cannot be deleted';
 
--- ============================================
--- 2. 菜单表 (soc_menus)
--- ============================================
+-- Indexes for soc_roles
+CREATE INDEX idx_soc_roles_role_code ON soc_roles(role_code);
+CREATE INDEX idx_soc_roles_is_active ON soc_roles(is_active);
+
+-- ============================================================================
+-- Table: soc_menus
+-- Description: Menu/navigation structure with parent-child relationships
+-- ============================================================================
 CREATE TABLE soc_menus (
     id BIGSERIAL PRIMARY KEY,
-    parent_id BIGINT REFERENCES soc_menus(id),
-    name VARCHAR(50) NOT NULL,
-    path VARCHAR(200) NOT NULL,
+    menu_name VARCHAR(100) NOT NULL,
+    menu_code VARCHAR(50) NOT NULL UNIQUE,
+    parent_id BIGINT REFERENCES soc_menus(id) ON DELETE CASCADE,
+    menu_type VARCHAR(20) NOT NULL CHECK (menu_type IN ('directory', 'menu', 'button')),
     icon VARCHAR(50),
-    sort_order INTEGER DEFAULT 0,
-    is_visible BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    path VARCHAR(200),
+    component VARCHAR(200),
+    permission VARCHAR(100),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_visible BOOLEAN NOT NULL DEFAULT TRUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_menus_parent ON soc_menus(parent_id);
-CREATE INDEX idx_menus_path ON soc_menus(path);
+COMMENT ON TABLE soc_menus IS 'Menu and navigation structure with hierarchical support';
+COMMENT ON COLUMN soc_menus.parent_id IS 'Parent menu ID for hierarchical structure';
+COMMENT ON COLUMN soc_menus.menu_type IS 'Type: directory (group), menu (page), button (action)';
 
--- ============================================
--- 3. 用户表 (soc_users)
--- ============================================
+-- Indexes for soc_menus
+CREATE INDEX idx_soc_menus_parent_id ON soc_menus(parent_id);
+CREATE INDEX idx_soc_menus_menu_code ON soc_menus(menu_code);
+CREATE INDEX idx_soc_menus_sort_order ON soc_menus(sort_order);
+CREATE INDEX idx_soc_menus_is_active ON soc_menus(is_active);
+
+-- ============================================================================
+-- Table: soc_users
+-- Description: User accounts with authentication and profile information
+-- ============================================================================
 CREATE TABLE soc_users (
     id BIGSERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    email VARCHAR(100) UNIQUE,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    hashed_password VARCHAR(255) NOT NULL,
     full_name VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'active',
-    role_id BIGINT NOT NULL REFERENCES soc_roles(id),
-    last_login_at TIMESTAMP,
-    password_changed_at TIMESTAMP,
-    failed_login_attempts INTEGER DEFAULT 0,
-    locked_until TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT check_status CHECK (status IN ('active', 'locked', 'disabled'))
+    phone VARCHAR(20),
+    avatar_url VARCHAR(500),
+    role_id BIGINT NOT NULL REFERENCES soc_roles(id) ON DELETE RESTRICT,
+    department VARCHAR(100),
+    position VARCHAR(100),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    last_login_ip INET,
+    password_changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_username ON soc_users(username);
-CREATE INDEX idx_users_role ON soc_users(role_id);
-CREATE INDEX idx_users_email ON soc_users(email);
-CREATE INDEX idx_users_status ON soc_users(status);
+COMMENT ON TABLE soc_users IS 'User accounts with authentication and profile information';
+COMMENT ON COLUMN soc_users.hashed_password IS 'Bcrypt hash of user password';
+COMMENT ON COLUMN soc_users.failed_login_attempts IS 'Counter for account lockout after failed attempts';
+COMMENT ON COLUMN soc_users.must_change_password IS 'Force password change on next login';
 
--- ============================================
--- 4. 角色菜单关联表 (soc_role_menus)
--- ============================================
+-- Indexes for soc_users
+CREATE INDEX idx_soc_users_username ON soc_users(username);
+CREATE INDEX idx_soc_users_email ON soc_users(email);
+CREATE INDEX idx_soc_users_role_id ON soc_users(role_id);
+CREATE INDEX idx_soc_users_is_active ON soc_users(is_active);
+CREATE INDEX idx_soc_users_is_locked ON soc_users(is_locked);
+
+-- ============================================================================
+-- Table: soc_role_menus
+-- Description: Many-to-many relationship between roles and menus
+-- ============================================================================
 CREATE TABLE soc_role_menus (
+    id BIGSERIAL PRIMARY KEY,
     role_id BIGINT NOT NULL REFERENCES soc_roles(id) ON DELETE CASCADE,
     menu_id BIGINT NOT NULL REFERENCES soc_menus(id) ON DELETE CASCADE,
-    PRIMARY KEY (role_id, menu_id)
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(role_id, menu_id)
 );
 
-CREATE INDEX idx_role_menus_role ON soc_role_menus(role_id);
-CREATE INDEX idx_role_menus_menu ON soc_role_menus(menu_id);
+COMMENT ON TABLE soc_role_menus IS 'Role-menu permissions for RBAC';
 
--- ============================================
--- 5. 系统配置表 (soc_system_config)
--- ============================================
+-- Indexes for soc_role_menus
+CREATE INDEX idx_soc_role_menus_role_id ON soc_role_menus(role_id);
+CREATE INDEX idx_soc_role_menus_menu_id ON soc_role_menus(menu_id);
+
+-- ============================================================================
+-- Table: soc_system_config
+-- Description: System configuration key-value store
+-- ============================================================================
 CREATE TABLE soc_system_config (
     id BIGSERIAL PRIMARY KEY,
-    category VARCHAR(50) NOT NULL,
-    key VARCHAR(100) NOT NULL,
-    value TEXT,
-    value_type VARCHAR(20) DEFAULT 'string',
-    is_encrypted BOOLEAN DEFAULT false,
+    config_key VARCHAR(100) NOT NULL UNIQUE,
+    config_value TEXT,
+    config_type VARCHAR(20) NOT NULL DEFAULT 'string' CHECK (config_type IN ('string', 'integer', 'boolean', 'json')),
     description TEXT,
-    updated_by BIGINT REFERENCES soc_users(id),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(category, key)
+    is_encrypted BOOLEAN NOT NULL DEFAULT FALSE,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_config_category ON soc_system_config(category);
+COMMENT ON TABLE soc_system_config IS 'System configuration key-value store';
+COMMENT ON COLUMN soc_system_config.is_encrypted IS 'Whether the value is encrypted (PGP)';
+COMMENT ON COLUMN soc_system_config.is_public IS 'Whether non-admin users can read this config';
 
--- ============================================
--- 6. 用户会话表 (soc_user_sessions)
--- ============================================
+-- Indexes for soc_system_config
+CREATE INDEX idx_soc_system_config_config_key ON soc_system_config(config_key);
+
+-- ============================================================================
+-- Table: soc_user_sessions
+-- Description: User session tracking for JWT tokens
+-- ============================================================================
 CREATE TABLE soc_user_sessions (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES soc_users(id) ON DELETE CASCADE,
-    token_hash VARCHAR(64) NOT NULL,
-    refresh_token_hash VARCHAR(64),
-    ip_address VARCHAR(45),
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    refresh_token_hash VARCHAR(255),
+    ip_address INET,
     user_agent TEXT,
-    login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    logout_at TIMESTAMP,
-    last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active BOOLEAN DEFAULT true
+    device_type VARCHAR(50),
+    browser VARCHAR(50),
+    os VARCHAR(50),
+    location VARCHAR(200),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    last_activity_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_sessions_user ON soc_user_sessions(user_id);
-CREATE INDEX idx_sessions_token ON soc_user_sessions(token_hash);
-CREATE INDEX idx_sessions_active ON soc_user_sessions(is_active, last_activity_at);
+COMMENT ON TABLE soc_user_sessions IS 'User session tracking for JWT token management';
+COMMENT ON COLUMN soc_user_sessions.token_hash IS 'SHA-256 hash of JWT token for security';
 
--- ============================================
--- 7. 密码历史表 (soc_password_history)
--- ============================================
+-- Indexes for soc_user_sessions
+CREATE INDEX idx_soc_user_sessions_user_id ON soc_user_sessions(user_id);
+CREATE INDEX idx_soc_user_sessions_token_hash ON soc_user_sessions(token_hash);
+CREATE INDEX idx_soc_user_sessions_is_active ON soc_user_sessions(is_active);
+CREATE INDEX idx_soc_user_sessions_expires_at ON soc_user_sessions(expires_at);
+
+-- ============================================================================
+-- Table: soc_password_history
+-- Description: Password history to prevent reuse
+-- ============================================================================
 CREATE TABLE soc_password_history (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES soc_users(id) ON DELETE CASCADE,
-    password_hash VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    hashed_password VARCHAR(255) NOT NULL,
+    changed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    changed_by BIGINT REFERENCES soc_users(id) ON DELETE SET NULL
 );
 
-CREATE INDEX idx_password_history_user ON soc_password_history(user_id, created_at DESC);
+COMMENT ON TABLE soc_password_history IS 'Password history for preventing password reuse';
 
--- ============================================
--- 8. 密码重置令牌表 (soc_password_reset_tokens)
--- ============================================
+-- Indexes for soc_password_history
+CREATE INDEX idx_soc_password_history_user_id ON soc_password_history(user_id);
+CREATE INDEX idx_soc_password_history_changed_at ON soc_password_history(changed_at);
+
+-- ============================================================================
+-- Table: soc_password_reset_tokens
+-- Description: Password reset token storage
+-- ============================================================================
 CREATE TABLE soc_password_reset_tokens (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT NOT NULL REFERENCES soc_users(id),
-    token_hash VARCHAR(64) NOT NULL UNIQUE,
-    expires_at TIMESTAMP NOT NULL,
-    used_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    user_id BIGINT NOT NULL REFERENCES soc_users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_reset_tokens_user ON soc_password_reset_tokens(user_id);
-CREATE INDEX idx_reset_tokens_hash ON soc_password_reset_tokens(token_hash);
-CREATE INDEX idx_reset_tokens_expires ON soc_password_reset_tokens(expires_at);
+COMMENT ON TABLE soc_password_reset_tokens IS 'Password reset tokens for self-service password reset';
 
--- ============================================
--- 9. API限流表 (soc_rate_limits)
--- ============================================
+-- Indexes for soc_password_reset_tokens
+CREATE INDEX idx_soc_password_reset_tokens_user_id ON soc_password_reset_tokens(user_id);
+CREATE INDEX idx_soc_password_reset_tokens_token_hash ON soc_password_reset_tokens(token_hash);
+CREATE INDEX idx_soc_password_reset_tokens_expires_at ON soc_password_reset_tokens(expires_at);
+
+-- ============================================================================
+-- Table: soc_rate_limits
+-- Description: API rate limiting
+-- ============================================================================
 CREATE TABLE soc_rate_limits (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES soc_users(id),
-    ip_address VARCHAR(45) NOT NULL,
+    identifier VARCHAR(255) NOT NULL,
+    identifier_type VARCHAR(20) NOT NULL CHECK (identifier_type IN ('ip', 'user_id', 'api_key')),
     endpoint VARCHAR(200) NOT NULL,
-    request_count INTEGER DEFAULT 1,
-    window_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    blocked_until TIMESTAMP
+    request_count INTEGER NOT NULL DEFAULT 1,
+    window_start TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    blocked_until TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_rate_limits_user ON soc_rate_limits(user_id, window_start);
-CREATE INDEX idx_rate_limits_ip ON soc_rate_limits(ip_address, window_start);
+COMMENT ON TABLE soc_rate_limits IS 'API rate limiting for DDoS protection';
 
--- ============================================
--- 10. 审计日志表 (soc_audit_logs)
--- ============================================
+-- Indexes for soc_rate_limits
+CREATE INDEX idx_soc_rate_limits_identifier ON soc_rate_limits(identifier);
+CREATE INDEX idx_soc_rate_limits_endpoint ON soc_rate_limits(endpoint);
+CREATE INDEX idx_soc_rate_limits_window_start ON soc_rate_limits(window_start);
+CREATE INDEX idx_soc_rate_limits_blocked_until ON soc_rate_limits(blocked_until);
+
+-- Create unique index for rate limit tracking
+CREATE UNIQUE INDEX idx_soc_rate_limits_unique ON soc_rate_limits(identifier, identifier_type, endpoint, window_start);
+
+-- ============================================================================
+-- Table: soc_audit_logs
+-- Description: Comprehensive audit logging with tamper-proof hash chain
+-- ============================================================================
 CREATE TABLE soc_audit_logs (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES soc_users(id),
-    username VARCHAR(50) NOT NULL,
+    previous_log_hash VARCHAR(64),
+    log_hash VARCHAR(64) NOT NULL UNIQUE,
+    user_id BIGINT REFERENCES soc_users(id) ON DELETE SET NULL,
+    username VARCHAR(50),
     action VARCHAR(50) NOT NULL,
-    resource_type VARCHAR(50),
-    resource_id BIGINT,
-    resource_name VARCHAR(200),
+    resource_type VARCHAR(50) NOT NULL,
+    resource_id VARCHAR(100),
+    ip_address INET,
+    user_agent TEXT,
+    request_method VARCHAR(10),
+    request_path VARCHAR(500),
+    request_params TEXT,
+    response_status INTEGER,
     old_values JSONB,
     new_values JSONB,
-    ip_address VARCHAR(45),
-    user_agent TEXT,
-    session_id BIGINT REFERENCES soc_user_sessions(id),
-    request_id VARCHAR(36),
-    status VARCHAR(20) DEFAULT 'success',
-    error_message TEXT,
-    log_hash VARCHAR(64),
-    prev_log_hash VARCHAR(64),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    changes JSONB,
+    severity VARCHAR(20) NOT NULL DEFAULT 'info' CHECK (severity IN ('debug', 'info', 'warning', 'error', 'critical')),
+    outcome VARCHAR(20) NOT NULL DEFAULT 'success' CHECK (outcome IN ('success', 'failure', 'partial')),
+    session_id VARCHAR(100),
+    correlation_id VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_user ON soc_audit_logs(user_id);
-CREATE INDEX idx_audit_action ON soc_audit_logs(action);
-CREATE INDEX idx_audit_resource ON soc_audit_logs(resource_type, resource_id);
-CREATE INDEX idx_audit_created ON soc_audit_logs(created_at);
-CREATE INDEX idx_audit_request ON soc_audit_logs(request_id);
-CREATE INDEX idx_audit_hash_chain ON soc_audit_logs(prev_log_hash, log_hash);
+COMMENT ON TABLE soc_audit_logs IS 'Comprehensive audit log with tamper-proof hash chain';
+COMMENT ON COLUMN soc_audit_logs.previous_log_hash IS 'Hash of previous log entry for chain verification';
+COMMENT ON COLUMN soc_audit_logs.log_hash IS 'SHA-256 hash of this entry plus previous hash';
 
--- ============================================
--- 11. 审计日志哈希链触发器
--- ============================================
+-- Indexes for soc_audit_logs
+CREATE INDEX idx_soc_audit_logs_user_id ON soc_audit_logs(user_id);
+CREATE INDEX idx_soc_audit_logs_username ON soc_audit_logs(username);
+CREATE INDEX idx_soc_audit_logs_action ON soc_audit_logs(action);
+CREATE INDEX idx_soc_audit_logs_resource_type ON soc_audit_logs(resource_type);
+CREATE INDEX idx_soc_audit_logs_resource_id ON soc_audit_logs(resource_id);
+CREATE INDEX idx_soc_audit_logs_severity ON soc_audit_logs(severity);
+CREATE INDEX idx_soc_audit_logs_outcome ON soc_audit_logs(outcome);
+CREATE INDEX idx_soc_audit_logs_created_at ON soc_audit_logs(created_at);
+CREATE INDEX idx_soc_audit_logs_correlation_id ON soc_audit_logs(correlation_id);
+
+-- Composite indexes for common queries
+CREATE INDEX idx_soc_audit_logs_user_action ON soc_audit_logs(user_id, action, created_at DESC);
+CREATE INDEX idx_soc_audit_logs_resource_action ON soc_audit_logs(resource_type, resource_id, created_at DESC);
+
+-- ============================================================================
+-- Trigger Function: calculate_audit_log_hash
+-- Description: Creates a hash chain for tamper-proof audit logs
+-- ============================================================================
 CREATE OR REPLACE FUNCTION calculate_audit_log_hash()
 RETURNS TRIGGER AS $$
 DECLARE
-  log_data TEXT;
-  prev_hash VARCHAR(64);
+    data_to_hash TEXT;
+    calculated_hash VARCHAR(64);
 BEGIN
-  SELECT log_hash INTO prev_hash
-  FROM soc_audit_logs
-  WHERE id < NEW.id
-  ORDER BY id DESC
-  LIMIT 1;
+    -- Concatenate all relevant data for hashing
+    data_to_hash := COALESCE(NEW.previous_log_hash, '') ||
+                    COALESCE(NEW.user_id::TEXT, '') ||
+                    COALESCE(NEW.username, '') ||
+                    NEW.action ||
+                    NEW.resource_type ||
+                    COALESCE(NEW.resource_id, '') ||
+                    COALESCE(NEW.ip_address::TEXT, '') ||
+                    COALESCE(NEW.request_method, '') ||
+                    COALESCE(NEW.request_path, '') ||
+                    COALESCE(NEW.response_status::TEXT, '') ||
+                    COALESCE(NEW.old_values::TEXT, '') ||
+                    COALESCE(NEW.new_values::TEXT, '') ||
+                    NEW.severity ||
+                    NEW.outcome ||
+                    COALESCE(NEW.session_id, '') ||
+                    COALESCE(NEW.correlation_id, '') ||
+                    NEW.created_at::TEXT;
 
-  log_data := NEW.user_id::TEXT || NEW.username || NEW.action ||
-              COALESCE(NEW.resource_type, '') || COALESCE(NEW.resource_id::TEXT, '') ||
-              COALESCE(NEW.old_values::TEXT, '') || COALESCE(NEW.new_values::TEXT, '') ||
-              NEW.created_at::TEXT || COALESCE(prev_hash, '');
+    -- Calculate SHA-256 hash
+    calculated_hash := encode(digest(data_to_hash, 'sha256'), 'hex');
 
-  NEW.log_hash := encode(digest(log_data, 'sha256'), 'hex');
-  NEW.prev_log_hash := prev_hash;
+    -- Set the log hash
+    NEW.log_hash := calculated_hash;
 
-  RETURN NEW;
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER audit_log_hash_trigger
-  BEFORE INSERT ON soc_audit_logs
-  FOR EACH ROW
-  EXECUTE FUNCTION calculate_audit_log_hash();
+COMMENT ON FUNCTION calculate_audit_log_hash() IS 'Calculates SHA-256 hash for audit log chain integrity';
 
--- ============================================
--- 12. 初始化默认数据
--- ============================================
+-- Create trigger for audit logs
+CREATE TRIGGER trigger_calculate_audit_log_hash
+    BEFORE INSERT ON soc_audit_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_audit_log_hash();
 
--- 插入默认角色
-INSERT INTO soc_roles (id, name, code, description, is_system) VALUES
-  (1, '管理员', 'admin', '系统管理员，拥有所有权限', true),
-  (2, '普通用户', 'user', '普通用户，可使用业务功能', true),
-  (3, '只读用户', 'readonly', '只读用户，仅可查看数据', true);
+-- ============================================================================
+-- Function: Update updated_at timestamp
+-- Description: Automatically update updated_at column on row modification
+-- ============================================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- 插入默认菜单
-INSERT INTO soc_menus (id, parent_id, name, path, icon, sort_order) VALUES
-  -- 业务菜单
-  (1, NULL, '概览仪表板', '/dashboard', 'DataAnalysis', 1),
-  (2, NULL, '资产管理', '/assets', 'Monitor', 2),
-  (3, NULL, '事件管理', '/incidents', 'Warning', 3),
-  (4, NULL, '告警中心', '/alerts', 'Bell', 4),
-  -- 系统管理（父菜单）
-  (10, NULL, '系统管理', NULL, 'Setting', 5);
+-- Create triggers for updated_at on all relevant tables
+CREATE TRIGGER trigger_soc_roles_updated_at BEFORE UPDATE ON soc_roles
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 系统管理子菜单
-INSERT INTO soc_menus (id, parent_id, name, path, icon, sort_order) VALUES
-  (11, 10, '用户管理', '/system/users', 'User', 1),
-  (12, 10, '角色管理', '/system/roles', 'Lock', 2),
-  (13, 10, '菜单管理', '/system/menus', 'Menu', 3),
-  (14, 10, '系统配置', '/system/config', 'Setting', 4),
-  (15, 10, '审计日志', '/system/audit', 'Document', 5);
+CREATE TRIGGER trigger_soc_menus_updated_at BEFORE UPDATE ON soc_menus
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 分配菜单权限
--- 管理员拥有所有菜单
+CREATE TRIGGER trigger_soc_users_updated_at BEFORE UPDATE ON soc_users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_soc_system_config_updated_at BEFORE UPDATE ON soc_system_config
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trigger_soc_rate_limits_updated_at BEFORE UPDATE ON soc_rate_limits
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- Insert Default Data
+-- ============================================================================
+
+-- Insert default roles
+INSERT INTO soc_roles (role_name, role_code, description, is_system) VALUES
+('系统管理员', 'admin', '拥有系统所有权限的超级管理员', TRUE),
+('普通用户', 'user', '具有业务操作权限的普通用户', TRUE),
+('只读用户', 'readonly', '仅具有查看权限的用户', TRUE);
+
+-- Insert default menu structure
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order) VALUES
+-- Level 1 menus
+('仪表板', 'dashboard', NULL, 'menu', 'Dashboard', '/dashboard', 'Dashboard.vue', 1),
+('资产管理', 'assets', NULL, 'menu', 'Assets', '/assets', 'Assets.vue', 2),
+('事件管理', 'incidents', NULL, 'menu', 'AlertTriangle', '/incidents', 'Incidents.vue', 3),
+('告警管理', 'alerts', NULL, 'menu', 'Bell', '/alerts', 'Alerts.vue', 4),
+('系统管理', 'system', NULL, 'directory', 'Settings', '/system', NULL, 5);
+
+-- Get the ID of system management directory
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order)
+SELECT '用户管理', 'system-users', id, 'menu', 'Users', '/system/users', 'system/Users.vue', 1
+FROM soc_menus WHERE menu_code = 'system';
+
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order)
+SELECT '角色管理', 'system-roles', id, 'menu', 'Shield', '/system/roles', 'system/Roles.vue', 2
+FROM soc_menus WHERE menu_code = 'system';
+
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order)
+SELECT '菜单管理', 'system-menus', id, 'menu', 'Menu', '/system/menus', 'system/Menus.vue', 3
+FROM soc_menus WHERE menu_code = 'system';
+
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order)
+SELECT '审计日志', 'system-audit', id, 'menu', 'FileText', '/system/audit', 'system/AuditLogs.vue', 4
+FROM soc_menus WHERE menu_code = 'system';
+
+INSERT INTO soc_menus (menu_name, menu_code, parent_id, menu_type, icon, path, component, sort_order)
+SELECT '系统配置', 'system-config', id, 'menu', 'Settings', '/system/config', 'system/Config.vue', 5
+FROM soc_menus WHERE menu_code = 'system';
+
+-- Assign all menus to admin role
 INSERT INTO soc_role_menus (role_id, menu_id)
-SELECT 1, id FROM soc_menus;
+SELECT r.id, m.id
+FROM soc_roles r
+CROSS JOIN soc_menus m
+WHERE r.role_code = 'admin';
 
--- 普通用户拥有业务菜单（不含系统管理）
+-- Assign business menus to user role (exclude system management)
 INSERT INTO soc_role_menus (role_id, menu_id)
-SELECT 2, id FROM soc_menus WHERE id NOT BETWEEN 10 AND 15;
+SELECT r.id, m.id
+FROM soc_roles r
+CROSS JOIN soc_menus m
+WHERE r.role_code = 'user'
+  AND m.menu_code NOT IN ('system', 'system-users', 'system-roles', 'system-menus', 'system-audit', 'system-config');
 
--- 只读用户拥有业务菜单（不含系统管理）
+-- Assign business menus to readonly role (exclude system management)
 INSERT INTO soc_role_menus (role_id, menu_id)
-SELECT 3, id FROM soc_menus WHERE id NOT BETWEEN 10 AND 15;
+SELECT r.id, m.id
+FROM soc_roles r
+CROSS JOIN soc_menus m
+WHERE r.role_code = 'readonly'
+  AND m.menu_code NOT IN ('system', 'system-users', 'system-roles', 'system-menus', 'system-audit', 'system-config');
 
--- 插入默认配置
-INSERT INTO soc_system_config (category, key, value, value_type, description) VALUES
-  -- 基础配置
-  ('basic', 'system_name', 'AI-miniSOC', 'string', '系统名称'),
-  ('basic', 'theme', 'dark', 'string', '默认主题'),
-  ('basic', 'timezone', 'Asia/Shanghai', 'string', '时区'),
-  ('basic', 'language', 'zh-CN', 'string', '语言'),
+-- Insert default system configurations
+INSERT INTO soc_system_config (config_key, config_value, config_type, description, is_public) VALUES
+('system.name', 'AI-miniSOC', 'string', '系统名称', TRUE),
+('system.version', '1.0.0', 'string', '系统版本', TRUE),
+('system.logo_url', '/logo.png', 'string', '系统Logo URL', TRUE),
+('security.password_min_length', '8', 'integer', '密码最小长度', FALSE),
+('security.password_max_length', '128', 'integer', '密码最大长度', FALSE),
+('security.password_require_uppercase', 'true', 'boolean', '密码是否需要大写字母', FALSE),
+('security.password_require_lowercase', 'true', 'boolean', '密码是否需要小写字母', FALSE),
+('security.password_require_number', 'true', 'boolean', '密码是否需要数字', FALSE),
+('security.password_require_special', 'true', 'boolean', '密码是否需要特殊字符', FALSE),
+('security.password_history_count', '5', 'integer', '记录历史密码数量（防止重复使用）', FALSE),
+('security.password_expire_days', '90', 'integer', '密码过期天数（0表示永不过期）', FALSE),
+('security.session_timeout_minutes', '60', 'integer', '会话超时时间（分钟）', FALSE),
+('security.max_failed_login_attempts', '5', 'integer', '最大失败登录次数', FALSE),
+('security.account_lockout_minutes', '30', 'integer', '账户锁定时长（分钟）', FALSE),
+('security.jwt_secret', 'CHANGE_ME_IN_PRODUCTION', 'string', 'JWT签名密钥（生产环境必须修改）', FALSE),
+('security.jwt_access_token_expire_minutes', '30', 'integer', 'JWT访问令牌过期时间（分钟）', FALSE),
+('security.jwt_refresh_token_expire_days', '7', 'integer', 'JWT刷新令牌过期时间（天）', FALSE),
+('rate_limit.enabled', 'true', 'boolean', '是否启用速率限制', FALSE),
+('rate_limit.requests_per_minute', '60', 'integer', '每分钟请求限制', FALSE),
+('rate_limit.requests_per_hour', '1000', 'integer', '每小时请求限制', FALSE),
+('audit_log.retention_days', '90', 'integer', '审计日志保留天数', FALSE),
+('audit_log.hash_chain_enabled', 'true', 'boolean', '是否启用审计日志哈希链', FALSE);
 
-  -- 安全策略
-  ('security', 'password_min_length', '8', 'number', '密码最小长度'),
-  ('security', 'password_require_special', 'true', 'boolean', '需要特殊字符'),
-  ('security', 'password_expire_days', '90', 'number', '密码过期天数'),
-  ('security', 'login_max_attempts', '5', 'number', '最大登录尝试次数'),
-  ('security', 'login_lockout_minutes', '30', 'number', '锁定时长（分钟）'),
-  ('security', 'session_timeout_minutes', '120', 'number', '会话超时（分钟）');
-
--- ============================================
--- 13. 创建默认管理员账户的SQL脚本（需要在应用层生成密码哈希）
--- ============================================
--- 注意：默认管理员账户需要在应用层创建，因为密码需要bcrypt加密
--- 使用 init_db.py 脚本创建管理员账户
+-- ============================================================================
+-- Migration complete
+-- ============================================================================
