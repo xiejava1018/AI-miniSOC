@@ -56,3 +56,28 @@ class TestUserService:
 
         assert all(u.role_id == 1 for u in users)
         assert all(u.status == UserStatus.ACTIVE for u in users)
+
+    def test_get_user_by_id(self, db_session: Session, sample_users: list[User]):
+        """测试根据ID获取用户"""
+        service = UserService(db_session)
+        user = sample_users[0]
+
+        found = service.get_user_by_id(user.id)
+        assert found is not None
+        assert found.id == user.id
+        assert found.username == user.username
+
+    def test_get_user_by_id_not_found(self, db_session: Session):
+        """测试获取不存在的用户"""
+        service = UserService(db_session)
+        found = service.get_user_by_id(99999)
+        assert found is None
+
+    def test_get_user_by_username(self, db_session: Session, sample_users: list[User]):
+        """测试根据用户名获取用户"""
+        service = UserService(db_session)
+        user = sample_users[0]
+
+        found = service.get_user_by_username(user.username)
+        assert found is not None
+        assert found.username == user.username
