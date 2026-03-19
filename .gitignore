@@ -41,3 +41,6 @@ Thumbs.db
 # SEURITY WARNING: Never commit credentials (usernames, passwords, tokens, API keys)
 # 所有敏感配置必须使用环境变量或密钥管理系统
 # All sensitive config must use environment variables or secret management systems
+
+# 开发日志中的敏感信息
+docs/development-log-*.md
