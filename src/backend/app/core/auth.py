@@ -9,9 +9,13 @@ from typing import Optional, Union
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import and_
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.schemas.user import UserResponse
+from app.models.user import User
+from app.database import get_db
 
 
 # OAuth2密码模式的token URL（用于FastAPI文档UI）
@@ -119,7 +123,8 @@ def verify_token(token: str, token_type: str = "access") -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
 ) -> UserResponse:
     """
     FastAPI依赖：从JWT令牌中获取当前用户
@@ -131,6 +136,7 @@ async def get_current_user(
 
     Args:
         credentials: HTTP Bearer认证凭据
+        db: 数据库会话
 
     Returns:
         UserResponse: 当前用户信息
@@ -138,7 +144,6 @@ async def get_current_user(
     Raises:
         HTTPException: 认证失败时抛出401错误
     """
-    # TODO: 实现完整的用户查询逻辑
     # 1. 验证token
     token = credentials.credentials
     payload = verify_token(token, "access")
@@ -152,27 +157,63 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. 从数据库查询用户（需要User模型）
-    # from app.models.user import User
-    # from app.database import get_db
-    # user = db.query(User).filter(User.id == user_id).first()
-    # if user is None:
-    #     raise HTTPException(status_code=404, detail="用户不存在")
+    # 3. 从数据库查询用户
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    # 4. 返回用户响应（临时实现，返回模拟数据）
-    # 实际使用时需要从数据库查询并转换为UserResponse
+    # 4. 检查用户状态
+    from app.models.user import UserStatus
+    if user.status == UserStatus.DISABLED:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账户已被禁用",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if user.is_locked:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="账户已被锁定",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 5. 验证token是否在会话表中存在且激活
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    from app.models.user_session import UserSession
+    session = db.query(UserSession).filter(
+        and_(
+            UserSession.token_hash == token_hash,
+            UserSession.user_id == user.id,
+            UserSession.is_active == True
+        )
+    ).first()
+
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="会话已失效，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 6. 返回用户响应
     return UserResponse(
-        id=int(user_id),
-        username=payload.get("username", "unknown"),
-        email=payload.get("email"),
-        full_name=payload.get("full_name"),
-        role_id=payload.get("role_id"),
-        role_name=payload.get("role_name"),
-        is_active=payload.get("is_active", True),
-        is_locked=payload.get("is_locked", False),
-        last_login=payload.get("last_login"),
-        created_at=payload.get("created_at", datetime.utcnow().isoformat()),
-        updated_at=payload.get("updated_at", datetime.utcnow().isoformat())
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        full_name=user.full_name,
+        role_id=user.role_id,
+        role_name=user.role.code if user.role else None,
+        is_active=(user.status == UserStatus.ACTIVE),
+        is_locked=user.is_locked,
+        last_login=user.last_login_at.isoformat() if user.last_login_at else None,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        updated_at=user.updated_at.isoformat() if user.updated_at else None
     )
 
 
