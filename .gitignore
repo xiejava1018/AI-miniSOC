@@ -42,5 +42,8 @@ Thumbs.db
 # 所有敏感配置必须使用环境变量或密钥管理系统
 # All sensitive config must use environment variables or secret management systems
 
-# 开发日志中的敏感信息
+# 工作日志 - 绝不提交到git或github
+work_logs/
+
+# 开发日志中的敏感信息（旧路径，保留以防万一）
 docs/development-log-*.md
