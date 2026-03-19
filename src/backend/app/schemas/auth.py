@@ -31,7 +31,7 @@ class UserMeResponse(BaseModel):
     """当前用户信息响应"""
     id: int = Field(..., description="用户ID")
     username: str = Field(..., description="用户名")
-    email: Optional[str] = Field(None, description="邮箱")
+    email: Optional[EmailStr] = Field(None, description="邮箱")
     full_name: Optional[str] = Field(None, description="全名")
     is_active: bool = Field(..., description="是否激活")
     role_id: Optional[int] = Field(None, description="角色ID")
