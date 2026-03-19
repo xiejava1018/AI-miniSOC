@@ -151,3 +151,54 @@ class UserService:
         )
 
         return user
+
+    def update_user(
+        self,
+        user_id: int,
+        user_data: UserUpdate,
+        updater_id: int
+    ) -> User:
+        """
+        更新用户
+
+        Args:
+            user_id: 用户ID
+            user_data: 更新数据
+            updater_id: 更新者ID
+
+        Returns:
+            更新后的用户
+
+        Raises:
+            ValueError: 用户不存在或邮箱已被使用
+        """
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("用户不存在")
+
+        # 检查邮箱唯一性
+        if user_data.email and user_data.email != user.email:
+            existing = self.db.query(User).filter(
+                and_(User.email == user_data.email, User.id != user_id)
+            ).first()
+            if existing:
+                raise ValueError("邮箱已被使用")
+
+        # 更新字段
+        update_data_dict = user_data.model_dump(exclude_unset=True)
+        for field, value in update_data_dict.items():
+            setattr(user, field, value)
+
+        self.db.commit()
+        self.db.refresh(user)
+
+        # 记录审计日志
+        self.audit.log_action(
+            user_id=updater_id,
+            action="update_user",
+            resource_type="user",
+            resource_id=user.id,
+            details=f"更新用户: {user.username}"
+        )
+
+        return user

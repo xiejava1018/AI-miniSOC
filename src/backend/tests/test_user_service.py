@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.services.user_service import UserService
 from app.models.user import User, UserStatus
 from app.models.role import Role
-from app.schemas.user import UserCreate
+from app.schemas.user import UserCreate, UserUpdate
 
 
 class TestUserService:
@@ -143,3 +143,39 @@ def test_create_user_duplicate_email(db_session: Session, sample_role: Role):
 
     with pytest.raises(ValueError, match="邮箱已被使用"):
         service.create_user(user_data2, creator_id=1)
+
+
+def test_update_user_success(db_session: Session, sample_users: list[User]):
+    """测试成功更新用户"""
+    service = UserService(db_session)
+    user = sample_users[0]
+
+    update_data = UserUpdate(
+        email="newemail@example.com",
+        full_name="新姓名"
+    )
+
+    updated = service.update_user(user.id, update_data, updater_id=1)
+
+    assert updated.email == "newemail@example.com"
+    assert updated.full_name == "新姓名"
+
+
+def test_update_user_not_found(db_session: Session):
+    """测试更新不存在的用户"""
+    service = UserService(db_session)
+    update_data = UserUpdate(email="test@example.com")
+
+    with pytest.raises(ValueError, match="用户不存在"):
+        service.update_user(99999, update_data, updater_id=1)
+
+
+def test_update_user_duplicate_email(db_session: Session, sample_users: list[User]):
+    """测试更新为已存在的邮箱"""
+    service = UserService(db_session)
+    user1, user2 = sample_users[0], sample_users[1]
+
+    update_data = UserUpdate(email=user2.email)
+
+    with pytest.raises(ValueError, match="邮箱已被使用"):
+        service.update_user(user1.id, update_data, updater_id=1)
