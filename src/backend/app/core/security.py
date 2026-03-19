@@ -148,3 +148,7 @@ def is_strong_password(password: str) -> bool:
     """
     is_valid, _ = validate_password_strength(password)
     return is_valid
+
+
+# Alias for consistency (spec uses 'hash_password' name)
+hash_password = get_password_hash
