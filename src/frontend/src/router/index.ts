@@ -8,6 +8,15 @@ const routes: RouteRecordRaw[] = [
     redirect: '/dashboard'
   },
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/auth/Login.vue'),
+    meta: {
+      title: '登录 - AI-miniSOC',
+      requiresAuth: false
+    }
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/Dashboard.vue'),
