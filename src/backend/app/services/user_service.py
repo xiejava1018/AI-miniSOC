@@ -100,3 +100,54 @@ class UserService:
             用户对象或None
         """
         return self.db.query(User).filter(User.username == username).first()
+
+    def create_user(self, user_data: UserCreate, creator_id: int) -> User:
+        """
+        创建用户
+
+        Args:
+            user_data: 用户创建数据
+            creator_id: 创建者ID
+
+        Returns:
+            创建的用户
+
+        Raises:
+            ValueError: 用户名或邮箱已存在
+        """
+        # 检查用户名唯一性
+        if self.get_user_by_username(user_data.username):
+            raise ValueError("用户名已存在")
+
+        # 检查邮箱唯一性
+        if user_data.email:
+            existing = self.db.query(User).filter(User.email == user_data.email).first()
+            if existing:
+                raise ValueError("邮箱已被使用")
+
+        # 创建用户
+        user = User(
+            username=user_data.username,
+            password_hash=hash_password(user_data.password),
+            email=user_data.email,
+            full_name=user_data.full_name,
+            phone=getattr(user_data, 'phone', None),
+            department=getattr(user_data, 'department', None),
+            role_id=user_data.role_id,
+            status=UserStatus.ACTIVE
+        )
+
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+
+        # 记录审计日志
+        self.audit.log_action(
+            user_id=creator_id,
+            action="create_user",
+            resource_type="user",
+            resource_id=user.id,
+            details=f"创建用户: {user.username}"
+        )
+
+        return user

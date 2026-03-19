@@ -65,3 +65,26 @@ def sample_users(db_session: Session) -> list[User]:
         db_session.refresh(user)
 
     return users
+
+
+@pytest.fixture
+def sample_role(db_session: Session):
+    """
+    创建示例角色用于测试
+
+    Args:
+        db_session: 数据库会话
+
+    Returns:
+        创建的角色对象
+    """
+    from app.models.role import Role
+    role = Role(
+        name="测试角色",
+        code="test_role",
+        description="用于测试的角色"
+    )
+    db_session.add(role)
+    db_session.commit()
+    db_session.refresh(role)
+    return role
