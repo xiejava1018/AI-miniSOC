@@ -5,6 +5,7 @@
 import pytest
 from sqlalchemy.orm import Session
 from typing import Generator
+from fastapi.testclient import TestClient
 
 from app.core.database import Base, get_db
 from app.models.user import User, UserStatus
@@ -34,6 +35,106 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
         # 清理测试表
         Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def client(db_session: Session) -> TestClient:
+    """
+    创建测试客户端
+
+    Args:
+        db_session: 数据库会话
+
+    Returns:
+        TestClient: FastAPI测试客户端
+    """
+    from fastapi.testclient import TestClient
+
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def test_user(db_session: Session) -> User:
+    """
+    创建测试用户
+
+    Args:
+        db_session: 数据库会话
+
+    Returns:
+        创建的测试用户
+    """
+    from app.core.security import get_password_hash
+
+    user = User(
+        username="testuser",
+        password_hash=get_password_hash("testpass123"),
+        email="test@example.com",
+        full_name="Test User",
+        role_id=1,
+        status=UserStatus.ACTIVE,
+        is_locked=False
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def admin_user(db_session: Session) -> User:
+    """
+    创建管理员用户
+
+    Args:
+        db_session: 数据库会话
+
+    Returns:
+        创建的管理员用户
+    """
+    from app.core.security import get_password_hash
+
+    user = User(
+        username="admin",
+        password_hash=get_password_hash("admin123"),
+        email="admin@example.com",
+        full_name="Admin User",
+        role_id=1,
+        status=UserStatus.ACTIVE,
+        is_locked=False,
+        is_superuser=True
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def auth_token(test_user: User) -> str:
+    """
+    生成测试用的认证令牌
+
+    Args:
+        test_user: 测试用户
+
+    Returns:
+        JWT令牌
+    """
+    from app.core.auth import create_access_token
+
+    return create_access_token(data={"sub": test_user.username})
 
 
 @pytest.fixture
