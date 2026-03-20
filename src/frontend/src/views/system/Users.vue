@@ -16,6 +16,7 @@
           v-if="isAdmin"
           type="primary"
           @click="showCreateDialog"
+          data-testid="add-user-button"
         >
           <el-icon><Plus /></el-icon>
           添加用户
@@ -33,6 +34,7 @@
             clearable
             style="width: 250px"
             @clear="handleSearch"
+            data-testid="user-search-input"
           />
         </el-form-item>
         <el-form-item label="角色">
@@ -65,7 +67,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">
+          <el-button type="primary" @click="handleSearch" data-testid="search-button">
             查询
           </el-button>
           <el-button @click="handleReset">重置</el-button>

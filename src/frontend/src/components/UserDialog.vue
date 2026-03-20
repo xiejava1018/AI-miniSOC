@@ -16,6 +16,7 @@
           v-model="formData.username"
           :disabled="mode === 'edit'"
           placeholder="请输入用户名（3-50字符）"
+          data-testid="username-input"
         />
       </el-form-item>
 
@@ -25,6 +26,7 @@
           type="password"
           placeholder="请输入密码（至少6位）"
           show-password
+          data-testid="password-input"
         />
       </el-form-item>
 
@@ -79,6 +81,7 @@
         type="primary"
         @click="handleSubmit"
         :loading="submitting"
+        data-testid="submit-user-button"
       >
         确定
       </el-button>
