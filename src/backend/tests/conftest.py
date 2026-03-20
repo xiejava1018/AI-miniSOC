@@ -169,6 +169,22 @@ def sample_users(db_session: Session) -> list[User]:
 
 
 @pytest.fixture
+def admin_token(admin_user: User) -> str:
+    """
+    生成管理员用的认证令牌
+
+    Args:
+        admin_user: 管理员用户
+
+    Returns:
+        JWT令牌
+    """
+    from app.core.security import create_access_token
+
+    return create_access_token(data={"sub": admin_user.username})
+
+
+@pytest.fixture
 def sample_role(db_session: Session):
     """
     创建示例角色用于测试
