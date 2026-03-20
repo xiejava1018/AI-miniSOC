@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
     // 每个测试前回到登录页
-    await page.goto('http://192.168.0.42:5173/login');
+    await page.goto('http://192.168.0.128:5173/login');
   });
 
   test('should display login page', async ({ page }) => {
@@ -50,7 +50,7 @@ test.describe('Authentication Flow', () => {
 
   test('should redirect to login when not authenticated', async ({ page }) => {
     // 尝试访问需要认证的页面
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 应该重定向到登录页
     await expect(page).toHaveURL(/\/login/);

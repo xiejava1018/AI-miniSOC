@@ -15,7 +15,7 @@ test.describe('Security and Permission Validation', () => {
       for (const route of protectedRoutes) {
         // 清除存储以确保未认证状态
         await page.context().clearCookies();
-        await page.goto(`http://192.168.0.42:5173${route}`);
+        await page.goto(`http://192.168.0.128:5173${route}`);
 
         // 应该重定向到登录页
         await expect(page).toHaveURL(/\/login/, { timeout: 5000 });
@@ -27,7 +27,7 @@ test.describe('Security and Permission Validation', () => {
 
     test('should redirect to login after session expires', async ({ page }) => {
       // 首先登录
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
@@ -41,7 +41,7 @@ test.describe('Security and Permission Validation', () => {
       });
 
       // 尝试访问受保护的页面
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
 
       // 应该重定向到登录页
       await expect(page).toHaveURL(/\/login/);
@@ -60,7 +60,7 @@ test.describe('Security and Permission Validation', () => {
       ];
 
       for (const endpoint of apiEndpoints) {
-        const response = await request.get(`http://192.168.0.42:5173${endpoint}`);
+        const response = await request.get(`http://192.168.0.128:5173${endpoint}`);
 
         // 应该返回401或403
         expect([401, 403]).toContain(response.status());
@@ -71,14 +71,14 @@ test.describe('Security and Permission Validation', () => {
   test.describe('Role-Based Access Control', () => {
     test('should prevent non-admin users from accessing admin features', async ({ page }) => {
       // 登录为非管理员用户（假设已创建testuser）
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('testuser');
       await page.getByTestId('password-input').fill('testuser123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
       // 尝试访问用户管理页面
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
 
       // 应该显示权限不足消息
       await expect(page.locator('.el-message--error')).toBeVisible();
@@ -90,14 +90,14 @@ test.describe('Security and Permission Validation', () => {
 
     test('should hide admin-only features from non-admin users', async ({ page }) => {
       // 登录为查看者角色
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('viewer');
       await page.getByTestId('password-input').fill('viewer123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
       // 导航到dashboard
-      await page.goto('http://192.168.0.42:5173/dashboard');
+      await page.goto('http://192.168.0.128:5173/dashboard');
 
       // 验证管理员菜单项不可见
       await expect(page.getByRole('link', { name: /用户管理/ })).not.toBeVisible();
@@ -111,7 +111,7 @@ test.describe('Security and Permission Validation', () => {
 
     test('should allow admin users to access all features', async ({ page }) => {
       // 登录为管理员
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
@@ -123,7 +123,7 @@ test.describe('Security and Permission Validation', () => {
       await expect(page.getByRole('link', { name: /系统设置/ })).toBeVisible();
 
       // 验证可以访问用户管理
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await expect(page.getByTestId('user-list-container')).toBeVisible();
       await expect(page.getByTestId('add-user-button')).toBeVisible();
     });
@@ -132,14 +132,14 @@ test.describe('Security and Permission Validation', () => {
   test.describe('Data Validation and Business Rules', () => {
     test('should prevent duplicate username creation', async ({ page }) => {
       // 登录为管理员
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
       // 尝试创建已存在的用户名
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await page.getByTestId('add-user-button').click();
 
       await page.getByTestId('username-input').fill('admin');
@@ -158,14 +158,14 @@ test.describe('Security and Permission Validation', () => {
 
     test('should prevent deletion of the last admin user', async ({ page }) => {
       // 登录为管理员
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
       // 获取当前管理员用户数量
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
 
       // 找到admin用户
       const userRows = page.getByTestId('user-row');
@@ -193,13 +193,13 @@ test.describe('Security and Permission Validation', () => {
     });
 
     test('should validate password strength requirements', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await page.getByTestId('add-user-button').click();
 
       // 测试弱密码
@@ -215,13 +215,13 @@ test.describe('Security and Permission Validation', () => {
     });
 
     test('should validate email format', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await page.getByTestId('add-user-button').click();
 
       await page.getByTestId('username-input').fill('invalidemail');
@@ -238,7 +238,7 @@ test.describe('Security and Permission Validation', () => {
 
   test.describe('CSRF and XSS Protection', () => {
     test('should include CSRF token in form submissions', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
@@ -255,13 +255,13 @@ test.describe('Security and Permission Validation', () => {
     });
 
     test('should escape HTML in user input to prevent XSS', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await page.getByTestId('add-user-button').click();
 
       // 尝试输入XSS payload
@@ -281,7 +281,7 @@ test.describe('Security and Permission Validation', () => {
 
   test.describe('Session Security', () => {
     test('should logout and invalidate session', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
@@ -295,31 +295,31 @@ test.describe('Security and Permission Validation', () => {
       await expect(page).toHaveURL(/\/login/);
 
       // 尝试访问受保护页面
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
 
       // 应该再次重定向到登录页
       await expect(page).toHaveURL(/\/login/);
     });
 
     test('should maintain session across page navigation', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
       await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
 
       // 导航到多个页面
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await expect(page.getByTestId('user-list-container')).toBeVisible();
 
-      await page.goto('http://192.168.0.42:5173/logs/query');
+      await page.goto('http://192.168.0.128:5173/logs/query');
       await expect(page.getByTestId('log-query-container')).toBeVisible();
 
-      await page.goto('http://192.168.0.42:5173/dashboard');
+      await page.goto('http://192.168.0.128:5173/dashboard');
       await expect(page.getByTestId('dashboard-container')).toBeVisible();
 
       // 验证仍然保持登录状态
-      await page.goto('http://192.168.0.42:5173/system/users');
+      await page.goto('http://192.168.0.128:5173/system/users');
       await expect(page.getByTestId('user-list-container')).toBeVisible();
       await expect(page).not.toHaveURL(/\/login/);
     });
@@ -327,7 +327,7 @@ test.describe('Security and Permission Validation', () => {
 
   test.describe('Password Security', () => {
     test('should not expose password in URL or logs', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
       await page.getByTestId('login-button').click();
@@ -338,13 +338,13 @@ test.describe('Security and Permission Validation', () => {
       expect(url).not.toContain('admin123');
 
       // 验证密码输入框的类型为password
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       const passwordInputType = await page.getByTestId('password-input').getAttribute('type');
       expect(passwordInputType).toBe('password');
     });
 
     test('should mask password in input field', async ({ page }) => {
-      await page.goto('http://192.168.0.42:5173/login');
+      await page.goto('http://192.168.0.128:5173/login');
       await page.getByTestId('username-input').fill('admin');
       await page.getByTestId('password-input').fill('admin123');
 

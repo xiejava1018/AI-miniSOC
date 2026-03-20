@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('User Management', () => {
   test.beforeEach(async ({ page }) => {
     // 登录为管理员
-    await page.goto('http://192.168.0.42:5173/login');
+    await page.goto('http://192.168.0.128:5173/login');
     await page.getByTestId('username-input').fill('admin');
     await page.getByTestId('password-input').fill('admin123');
     await page.getByTestId('login-button').click();
@@ -12,7 +12,7 @@ test.describe('User Management', () => {
 
   test('should display user list page', async ({ page }) => {
     // 导航到用户管理页面
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 验证页面标题
     await expect(page.locator('h1')).toContainText('用户管理');
@@ -22,7 +22,7 @@ test.describe('User Management', () => {
   });
 
   test('should display list of users', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 等待用户列表加载
     await expect(page.getByTestId('user-list-container')).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('User Management', () => {
   });
 
   test('should search users by username', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 使用搜索框
     await page.getByTestId('user-search-input').fill('admin');
@@ -58,7 +58,7 @@ test.describe('User Management', () => {
   });
 
   test('should create a new user successfully', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 点击添加用户按钮
     await page.getByTestId('add-user-button').click();
@@ -94,7 +94,7 @@ test.describe('User Management', () => {
   });
 
   test('should edit existing user', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 找到第一个非admin用户
     const userRows = page.getByTestId('user-row');
@@ -123,7 +123,7 @@ test.describe('User Management', () => {
   });
 
   test('should delete user successfully', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 首先创建一个测试用户
     await page.getByTestId('add-user-button').click();
@@ -169,7 +169,7 @@ test.describe('User Management', () => {
   });
 
   test('should lock and unlock user', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 创建一个测试用户
     await page.getByTestId('add-user-button').click();
@@ -215,7 +215,7 @@ test.describe('User Management', () => {
   });
 
   test('should reset user password', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 创建一个测试用户
     await page.getByTestId('add-user-button').click();
@@ -264,7 +264,7 @@ test.describe('User Management', () => {
   });
 
   test('should filter users by role', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 使用角色筛选器
     await page.getByTestId('role-filter-select').click();
@@ -289,7 +289,7 @@ test.describe('User Management', () => {
   });
 
   test('should show validation errors when creating user with invalid data', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 点击添加用户按钮
     await page.getByTestId('add-user-button').click();
@@ -306,7 +306,7 @@ test.describe('User Management', () => {
   });
 
   test('should show error when passwords do not match', async ({ page }) => {
-    await page.goto('http://192.168.0.42:5173/system/users');
+    await page.goto('http://192.168.0.128:5173/system/users');
 
     // 点击添加用户按钮
     await page.getByTestId('add-user-button').click();

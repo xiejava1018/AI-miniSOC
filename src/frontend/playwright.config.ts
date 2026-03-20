@@ -3,12 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright E2E Testing Configuration
  *
- * Configured for AI-miniSOC E2E testing platform (192.168.0.42)
+ * Configured for AI-miniSOC local E2E testing (192.168.0.128)
  *
- * All test services run on 192.168.0.42:
- * - Frontend: http://192.168.0.42:5173
- * - API: http://192.168.0.42:8000
- * - Database: postgresql://192.168.0.42:5432/AI-miniSOC-testdb
+ * Test platform runs on local machine:
+ * - Frontend: http://192.168.0.128:5173
+ * - API: http://192.168.0.128:8000
+ * - Database: postgresql://192.168.0.42:5432/AI-miniSOC-testdb (remote)
  */
 export default defineConfig({
   // Test directory
@@ -38,8 +38,8 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Base URL for tests (E2E testing platform frontend server)
-        baseURL: 'http://192.168.0.42:5173',
+        // Base URL for tests (local E2E testing platform)
+        baseURL: 'http://192.168.0.128:5173',
         // Trace on first retry
         trace: 'on-first-retry',
         // Screenshot only on failure
@@ -49,7 +49,7 @@ export default defineConfig({
         // Launch options for host resolvable rules
         launchOptions: {
           args: [
-            '--host-resolver-rules=MAP localhost 127.0.0.1,MAP 192.168.0.42 192.168.0.42'
+            '--host-resolver-rules=MAP localhost 127.0.0.1,MAP 192.168.0.128 192.168.0.128'
           ]
         }
       },
@@ -57,10 +57,9 @@ export default defineConfig({
   ],
 
   /*
-   * WebServer configuration is commented out for E2E testing platform.
+   * WebServer configuration is commented out for local E2E testing.
    *
-   * All servers (frontend, API, database) run on 192.168.0.42 and need
-   * to be started manually before running tests.
+   * Servers run on 192.168.0.128 (local machine) with remote database on 192.168.0.42.
    *
    * If you need to run tests with local servers, uncomment and configure below:
    */

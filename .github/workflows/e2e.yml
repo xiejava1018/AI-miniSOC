@@ -53,8 +53,8 @@ jobs:
           TEST_DATABASE_USER: 'postgres'
           TEST_DATABASE_PASSWORD: 'PostgreSQL@2026'
           TEST_DATABASE_NAME: 'AI-miniSOC-testdb'
-          TEST_API_BASE_URL: 'http://192.168.0.42:8000'
-          TEST_FRONTEND_URL: 'http://192.168.0.42:5173'
+          TEST_API_BASE_URL: 'http://192.168.0.128:8000'
+          TEST_FRONTEND_URL: 'http://192.168.0.128:5173'
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
