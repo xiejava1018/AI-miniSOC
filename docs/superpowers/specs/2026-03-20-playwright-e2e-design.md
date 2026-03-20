@@ -297,9 +297,98 @@ test.afterEach(async ({ page }, testInfo) => {
 - **数据错误** - 违反约束、数据冲突
 - **UI错误** - 元素未找到、操作失败
 
-## 9. CI/CD集成
+## 9. CI/CD集成（混合模式）
 
-### GitHub Actions配置
+### 架构说明
+
+采用**混合模式**部署GitHub Actions：
+
+```
+┌─────────────────────────────────────────┐
+│         GitHub Actions                    │
+└────────┬────────────────────┬───────────┘
+         │                    │
+    ┌────▼─────┐        ┌───▼──────────────┐
+    │ Frontend  │        │   E2E Tests      │
+    │ Tests     │        │   (Self-hosted)  │
+    │ (GitHub)  │        │   (内网服务器)    │
+    └───────────┘        └───┬──────────────┘
+                                │
+                    ┌───────────▼──────────┐
+                    │  内网服务器          │
+                    │  192.168.0.30       │
+                    │  - PostgreSQL      │
+                    │  - FastAPI         │
+                    │  - Playwright       │
+                    └──────────────────────┘
+```
+
+**分配策略：**
+- **前端单元测试** → GitHub-hosted runners（快速反馈）
+- **E2E测试** → Self-hosted runner（访问内网资源）
+
+### 9.1 前端单元测试（GitHub-hosted）
+
+```yaml
+# .github/workflows/unit-tests.yml
+name: Unit Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./src/frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: ./src/frontend
+        run: npm test
+```
+
+### 9.2 E2E测试（Self-hosted Runner）
+
+**9.2.1 配置Self-hosted Runner**
+
+在内网服务器（192.168.0.30）上安装Actions Runner：
+
+```bash
+# 1. 创建runner目录
+sudo mkdir -p /opt/actions-runner
+cd /opt/actions-runner
+
+# 2. 下载Actions Runner
+curl -o actions-runner-linux-x64-2.311.0.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.311.0/actions-runner-linux-x64-2.311.0.tar.gz
+tar xzf ./actions-runner-linux-x64-2.311.0.tar.gz
+
+# 3. 配置runner
+./config.sh --url https://github.com/<your-org>/<your-repo> \
+  --token <RUNNER_TOKEN> \
+  --name "AI-miniSOC E2E Runner"
+
+# 4. 安装依赖
+cd src/frontend
+npm install -D @playwright/test playwright
+npx playwright install --with-deps chromium
+
+# 5. 启动runner
+cd /opt/actions-runner
+./run.sh
+```
+
+**9.2.2 GitHub Actions配置**
 
 ```yaml
 # .github/workflows/e2e.yml
@@ -311,69 +400,44 @@ on:
   pull_request:
     branches: [main]
 
+# 指定使用self-hosted runner
 jobs:
   e2e:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_DB: ai_minisoc_test
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Backend
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install Python dependencies
-        working-directory: ./src/backend
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          pip install -r requirements.txt
-
-      # Setup Frontend
+      # 确保使用正确的Node版本
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ./src/frontend/package-lock.json
 
-      - name: Install frontend dependencies
+      # 安装依赖（如果还没安装）
+      - name: Install dependencies
         working-directory: ./src/frontend
         run: npm ci
 
-      - name: Install Playwright
-        working-directory: ./src/frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Initialize test database
-        working-directory: ./src/backend
+      # 确保数据库是最新的
+      - name: Reset test database
         run: |
-          psql ${{ secrets.TEST_DATABASE_URL }} -f migrations/postgresql/001_system_management.sql
-          psql ${{ secrets.TEST_DATABASE_URL }} -f ../frontend/tests/setup/test-seed.sql
+          psql postgresql://testuser:testpass@192.168.0.30:5432/ai_minisoc_test \
+            -c "DROP SCHEMA PUBLIC CASCADE"
+          psql postgresql://testuser:testpass@192.168.0.30:5432/ai_minisoc_test \
+            -f src/backend/migrations/postgresql/001_system_management.sql
 
+      # 运行E2E测试
       - name: Run E2E tests
         working-directory: ./src/frontend
         run: npm run test:e2e
         env:
-          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          TEST_DATABASE_URL: postgresql://testuser:testpass@192.168.0.30:5432/ai_minisoc_test
+          TEST_API_BASE_URL: http://192.168.0.30:8000
+          TEST_FRONTEND_URL: http://192.168.0.30:5173
 
+      # 上传测试报告
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -385,9 +449,9 @@ jobs:
 
 ### 触发条件
 
-- **push到main分支** - 运行完整E2E测试
-- **Pull Request** - 运行完整E2E测试
-- **其他分支** - 本地运行，不自动触发
+- **push到main分支** - 运行所有测试（单元测试 + E2E）
+- **Pull Request** - 运行所有测试
+- **其他分支** - 仅运行单元测试（快速反馈）
 
 ## 10. 测试用例示例
 
