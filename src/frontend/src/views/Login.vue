@@ -7,7 +7,7 @@
 
       <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" />
+          <el-input v-model="form.username" placeholder="请输入用户名" data-testid="username-input" />
         </el-form-item>
 
         <el-form-item label="密码" prop="password">
@@ -16,11 +16,12 @@
             type="password"
             placeholder="请输入密码"
             show-password
+            data-testid="password-input"
           />
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%">
+          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%" data-testid="login-button">
             登录
           </el-button>
         </el-form-item>
