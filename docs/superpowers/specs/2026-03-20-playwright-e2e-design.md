@@ -91,12 +91,44 @@ TEST_FRONTEND_URL=http://localhost:5173
 - 每个测试前插入基础测试数据
 - 测试间相互独立，可并行运行
 
+### 数据库初始化策略
+
+使用现有的数据库迁移文件初始化测试数据库：
+
+```bash
+# 从项目根目录执行
+psql $TEST_DATABASE_URL -f src/backend/migrations/postgresql/001_system_management.sql
+```
+
 ### 测试数据种子
 
-- 1个管理员用户（admin/admin123）
-- 3个普通用户
-- 2个角色（admin、user）
-- 1个示例部门
+基于实际数据库schema (`soc_roles`, `soc_users`, `soc_user_roles`)：
+
+**SQL种子文件 (tests/setup/test-seed.sql):**
+```sql
+-- 插入测试角色
+INSERT INTO soc_roles (id, name, code, description, is_system) VALUES
+(1, '管理员', 'admin', '系统管理员，拥有所有权限', true),
+(2, '普通用户', 'user', '普通用户角色', false)
+ON CONFLICT (code) DO NOTHING;
+
+-- 插入管理员用户
+INSERT INTO soc_users (id, username, password_hash, email, full_name, role_id, status, is_superuser)
+VALUES (1, 'admin', '$2b$12$...', 'admin@example.com', '系统管理员', 1, 'active', true)
+ON CONFLICT (username) DO NOTHING;
+
+-- 插入测试用户
+INSERT INTO soc_users (username, password_hash, email, full_name, role_id, status)
+VALUES
+('testuser1', '$2b$12$...', 'test1@example.com', '测试用户1', 2, 'active'),
+('testuser2', '$2b$12$...', 'test2@example.com', '测试用户2', 2, 'active'),
+('testuser3', '$2b$12$...', 'test3@example.com', '测试用户3', 2, 'active');
+```
+
+**注意事项：**
+- 密码使用bcrypt hash（`$2b$12$...`占位符，实际测试时使用固定hash）
+- 所有测试用户密码统一为：`Test123456!`
+- 管理员账号：`admin` / `admin123`
 
 ## 6. Playwright配置
 
@@ -117,6 +149,11 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
+  reporter: [
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
+  ],
+
   projects: [
     {
       name: 'chromium',
@@ -124,12 +161,21 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  // 同时启动前端和后端服务器
+  webServer: [
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
+    {
+      command: 'cd ../backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000',
+      url: 'http://localhost:8000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
+  ],
 });
 ```
 
@@ -172,6 +218,16 @@ export const test = base.extend<{
 
 ### Page Objects模式
 
+由于使用Element Plus组件，推荐使用`data-testid`属性提高测试稳定性：
+
+**方式1：添加data-testid（推荐）**
+```vue
+<!-- Login.vue 需要修改 -->
+<el-input v-model="form.username" data-testid="username-input" />
+<el-input v-model="form.password" type="password" data-testid="password-input" />
+<el-button type="primary" @click="handleLogin" data-testid="login-button">登录</el-button>
+```
+
 ```typescript
 // tests/helpers/pages/LoginPage.ts
 export class LoginPage {
@@ -182,9 +238,33 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.usernameInput = page.locator('input[name="username"]');
-    this.passwordInput = page.locator('input[type="password"]');
-    this.loginButton = page.locator('button[type="submit"]');
+    this.usernameInput = page.getByTestId('username-input');
+    this.passwordInput = page.getByTestId('password-input');
+    this.loginButton = page.getByTestId('login-button');
+  }
+
+  async login(username: string, password: string) {
+    await this.usernameInput.fill(username);
+    await this.passwordInput.fill(password);
+    await this.loginButton.click();
+  }
+}
+```
+
+**方式2：使用Element Plus选择器（无需修改代码）**
+```typescript
+// 如果不能修改组件，使用Element Plus内部类名
+export class LoginPage {
+  readonly page: Page;
+  readonly usernameInput: Locator;
+  readonly passwordInput: Locator;
+  readonly loginButton: Locator;
+
+  constructor(page: Page) {
+    this.page = page;
+    this.usernameInput = page.locator('.el-input__inner').first();
+    this.passwordInput = page.locator('.el-input__inner[type="password"]');
+    this.loginButton = page.locator('.el-button--primary');
   }
 
   async login(username: string, password: string) {
@@ -251,11 +331,30 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      # Setup Backend
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        working-directory: ./src/backend
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      # Setup Frontend
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ./src/frontend/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         working-directory: ./src/frontend
         run: npm ci
 
@@ -263,11 +362,25 @@ jobs:
         working-directory: ./src/frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Initialize test database
+        working-directory: ./src/backend
+        run: |
+          psql ${{ secrets.TEST_DATABASE_URL }} -f migrations/postgresql/001_system_management.sql
+          psql ${{ secrets.TEST_DATABASE_URL }} -f ../frontend/tests/setup/test-seed.sql
+
       - name: Run E2E tests
         working-directory: ./src/frontend
         run: npm run test:e2e
         env:
-          TEST_DATABASE_URL: postgresql://testuser:testpass@localhost:5432/ai_minisoc_test
+          TEST_DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: src/frontend/playwright-report/
+          retention-days: 30
 ```
 
 ### 触发条件
@@ -280,26 +393,32 @@ jobs:
 
 ### 01-auth.spec.ts
 
+**注意：** 需要先在Login.vue中添加`data-testid`属性
+
 ```typescript
 import { test, expect } from '@playwright/test';
 
 test.describe('Authentication', () => {
   test('should login successfully with valid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button[type="submit"]');
 
-    await expect(page).toHaveURL('/dashboard');
-    await expect(page.locator('text=欢迎')).toBeVisible();
+    // 使用data-testid选择器
+    await page.getByTestId('username-input').fill('admin');
+    await page.getByTestId('password-input').fill('admin123');
+    await page.getByTestId('login-button').click();
+
+    // 验证跳转到dashboard
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 
   test('should show error with invalid credentials', async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[type="password"]', 'wrongpassword');
-    await page.click('button[type="submit"]');
 
+    await page.getByTestId('username-input').fill('admin');
+    await page.getByTestId('password-input').fill('wrongpassword');
+    await page.getByTestId('login-button').click();
+
+    // Element Plus错误消息
     await expect(page.locator('.el-message--error')).toBeVisible();
   });
 });
@@ -314,39 +433,52 @@ test.describe('User Management', () => {
   test.beforeEach(async ({ page }) => {
     // 登录为管理员
     await page.goto('/login');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[type="password"]', 'admin123');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/dashboard');
+    await page.getByTestId('username-input').fill('admin');
+    await page.getByTestId('password-input').fill('admin123');
+    await page.getByTestId('login-button').click();
+    await expect(page).toHaveURL(/\/dashboard/);
+  });
+
+  test('should display user list', async ({ page }) => {
+    await page.goto('/system/users');
+
+    // 验证表格存在
+    await expect(page.locator('.el-table')).toBeVisible();
+
+    // 验证管理员用户存在
+    await expect(page.locator('text=admin')).toBeVisible();
   });
 
   test('should create a new user', async ({ page }) => {
     await page.goto('/system/users');
-    await page.click('button:has-text("添加用户")');
+    await page.getByRole('button', { name: '添加用户' }).click();
 
     // 填写表单
-    await page.fill('input[name="username"]', 'newuser');
-    await page.fill('input[type="password"]', 'Test123456');
-    await page.fill('input[name="email"]', 'new@example.com');
-    await page.fill('input[name="full_name"]', '新用户');
-    await page.selectOption('select[name="role_id"]', '2');
+    await page.getByTestId('username-input').fill('newuser');
+    await page.getByTestId('password-input').fill('Test123456!');
+    await page.getByTestId('email-input').fill('new@example.com');
+    await page.getByTestId('full-name-input').fill('新用户');
 
-    await page.click('button:has-text("确定")');
+    // 选择角色
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: '普通用户' }).click();
+
+    // 提交
+    await page.getByRole('button', { name: '确定' }).click();
 
     // 验证成功消息
     await expect(page.locator('.el-message--success')).toBeVisible();
-    await expect(page.locator('text=newuser')).toBeVisible();
   });
 
   test('should delete a user', async ({ page }) => {
     await page.goto('/system/users');
 
-    // 找到测试用户并删除
-    const userRow = page.locator('text=deletable_user').first();
+    // 找到测试用户行
+    const userRow = page.locator('.el-table-row').filter({ hasText: 'testuser1' });
     await userRow.locator('button:has-text("删除")').click();
 
-    // 确认删除
-    await page.click('button:has-text("确定")');
+    // 确认删除对话框
+    await page.getByRole('button', { name: '确定' }).click();
 
     // 验证成功消息
     await expect(page.locator('.el-message--success')).toBeVisible();
@@ -380,17 +512,20 @@ test.describe('User Management', () => {
 
 - ✅ 所有E2E测试在本地通过
 - ✅ 所有E2E测试在CI/CD中通过
-- ✅ 测试运行时间 < 5分钟
+- ✅ 测试运行时间 < 10分钟（冷启动）
 - ✅ 失败测试有清晰的截图和日志
 - ✅ 覆盖关键用户流程（登录、用户CRUD、权限）
+- ✅ 测试数据与实际schema匹配
 
 ## 14. 注意事项
 
 1. **测试隔离** - 每个测试必须独立，不依赖其他测试
 2. **数据清理** - 每次测试后清理数据，避免污染
-3. **异步等待** - 使用waitForSelector而不是固定sleep
-4. **选择器稳定** - 使用data-testid而不是CSS类名
+3. **异步等待** - 使用`await expect(locator).toBeVisible()`而不是固定sleep
+4. **选择器稳定** - 优先使用`data-testid`，其次是Role和Text
 5. **错误信息** - 失败时提供清晰的错误信息
+6. **路由验证** - 使用实际的路由路径（/login, /dashboard, /system/users）
+7. **Element Plus** - 注意组件的异步加载和交互
 
 ## 15. 后续优化
 
@@ -398,3 +533,94 @@ test.describe('User Management', () => {
 - 增加性能监控
 - 集成Allure测试报告
 - 添加API响应时间验证
+
+## 16. 本地开发指南
+
+### 16.1 首次运行设置
+
+```bash
+# 1. 创建测试数据库
+docker run -d --name test-db \
+  -p 5433:5432 \
+  -e POSTGRES_DB=ai_minisoc_test \
+  -e POSTGRES_USER=testuser \
+  -e POSTGRES_PASSWORD=testpass \
+  postgres:16
+
+# 2. 初始化数据库schema
+psql postgresql://testuser:testpass@localhost:5433/ai_minisoc_test \
+  -f src/backend/migrations/postgresql/001_system_management.sql
+
+# 3. 安装Playwright
+cd src/frontend
+npm install -D @playwright/test playwright
+npx playwright install --with-deps chromium
+```
+
+### 16.2 运行测试
+
+```bash
+# 运行所有E2E测试
+npm run test:e2e
+
+# 运行特定测试文件
+npm run test:e2e -- tests/e2e/01-auth.spec.ts
+
+# 使用UI模式运行
+npm run test:e2e:ui
+
+# 调试模式
+npm run test:e2e:debug
+
+# 查看测试报告
+npm run test:e2e:report
+```
+
+### 16.3 添加data-testid属性
+
+为提高测试稳定性，需要在关键组件上添加`data-testid`属性：
+
+```vue
+<!-- Login.vue -->
+<el-input v-model="form.username" data-testid="username-input" />
+<el-input v-model="form.password" type="password" data-testid="password-input" />
+<el-button type="primary" @click="handleLogin" data-testid="login-button">
+  登录
+</el-button>
+
+<!-- Users.vue - 对话框按钮 -->
+<el-button type="primary" @click="showCreateDialog" data-testid="add-user-button">
+  添加用户
+</el-button>
+
+<!-- UserDialog.vue -->
+<el-input v-model="formData.username" data-testid="username-input" />
+<el-input v-model="formData.password" type="password" data-testid="password-input" />
+```
+
+### 16.4 常见问题
+
+**问题1：后端连接失败**
+```bash
+# 检查后端是否运行
+curl http://localhost:8000/docs
+
+# 手动启动后端
+cd src/backend
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+**问题2：数据库连接失败**
+```bash
+# 检查数据库是否运行
+docker ps | grep test-db
+
+# 重启数据库
+docker start test-db
+```
+
+**问题3：测试超时**
+```bash
+# 增加超时时间
+TEST_TIMEOUT=60000 npm run test:e2e
+```
