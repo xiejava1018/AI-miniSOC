@@ -1,5 +1,30 @@
 import apiClient from './client'
 
+// 通用API调用函数
+export async function apiCall<T>(
+  url: string,
+  options?: RequestInit
+): Promise<T> {
+  const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  const token = localStorage.getItem('token')
+
+  const response = await fetch(`${baseURL}${url}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options?.headers
+    }
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Network error' }))
+    throw new Error(error.detail || `HTTP ${response.status}`)
+  }
+
+  return response.json()
+}
+
 // 资产管理 API
 export const assetsApi = {
   // 获取资产列表

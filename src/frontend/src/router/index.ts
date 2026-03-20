@@ -42,6 +42,24 @@ const routes: RouteRecordRaw[] = [
     name: 'Alerts',
     component: () => import('@/views/Alerts.vue'),
     meta: { title: '告警管理' }
+  },
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { title: '登录' }
+  },
+  {
+    path: '/system',
+    meta: { title: '系统管理', requiresAuth: true },
+    children: [
+      {
+        path: 'users',
+        name: 'SystemUsers',
+        component: () => import('@/views/system/Users.vue'),
+        meta: { title: '用户管理', requiresAuth: true }
+      }
+    ]
   }
 ]
 
