@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -72,7 +73,18 @@ const router = createRouter({
 router.beforeEach((to, _from, next) => {
   // 设置页面标题
   document.title = `${to.meta.title || 'AI-miniSOC'} - AI-miniSOC`
-  next()
+
+  // 检查是否需要认证
+  const authStore = useAuthStore()
+  const requiresAuth = to.meta.requiresAuth || to.matched.some(record => record.meta.requiresAuth)
+
+  if (requiresAuth && !authStore.isAuthenticated) {
+    // 未认证用户访问受保护路由，重定向到登录页
+    next({ name: 'Login', query: { redirect: to.fullPath } })
+  } else {
+    // 已认证或公开路由，正常放行
+    next()
+  }
 })
 
 export default router
