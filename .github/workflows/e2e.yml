@@ -34,15 +34,12 @@ jobs:
 
       - name: Reset test database
         run: |
-          echo "Resetting test database..."
-          # Add database reset commands here
-          # Example: mysql -u root -p$DB_PASSWORD test_db < scripts/reset-test-db.sql
+          echo "Resetting test database on 192.168.0.42..."
+          cd src/frontend
+          export PGPASSWORD='PostgreSQL@2026'
+          psql -h 192.168.0.42 -U postgres -d AI-miniSOC-testdb -f tests/setup/test-seed.sql
         env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_TEST_NAME }}
+          PGPASSWORD: 'PostgreSQL@2026'
         continue-on-error: true
 
       - name: Run E2E tests
@@ -51,10 +48,13 @@ jobs:
           npm run test:e2e
         env:
           CI: true
-          BASE_URL: http://localhost:5173
-          # Add test environment variables
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+          TEST_DATABASE_HOST: '192.168.0.42'
+          TEST_DATABASE_PORT: '5432'
+          TEST_DATABASE_USER: 'postgres'
+          TEST_DATABASE_PASSWORD: 'PostgreSQL@2026'
+          TEST_DATABASE_NAME: 'AI-miniSOC-testdb'
+          TEST_API_BASE_URL: 'http://192.168.0.42:8000'
+          TEST_FRONTEND_URL: 'http://192.168.0.42:5173'
 
       - name: Upload test report
         uses: actions/upload-artifact@v4
