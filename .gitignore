@@ -50,3 +50,7 @@ work_logs/
 
 # 开发日志中的敏感信息（旧路径，保留以防万一）
 docs/development-log-*.md
+
+# 测试结果 - Playwright E2E测试
+test-results/
+playwright-report/
