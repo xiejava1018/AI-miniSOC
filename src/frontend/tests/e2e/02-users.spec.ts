@@ -27,8 +27,8 @@ test.describe('User Management', () => {
     // 等待用户列表加载
     await expect(page.getByTestId('user-list-container')).toBeVisible();
 
-    // 验证用户列表不为空
-    const userRows = page.getByTestId('user-row');
+    // 验证用户列表不为空 - 使用CSS class选择器
+    const userRows = page.locator('.user-row');
     await expect(userRows.first()).toBeVisible();
 
     // 验证至少有默认管理员用户
@@ -45,7 +45,7 @@ test.describe('User Management', () => {
     await page.waitForTimeout(500);
 
     // 验证搜索结果
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const count = await userRows.count();
 
     expect(count).toBeGreaterThan(0);
@@ -97,7 +97,7 @@ test.describe('User Management', () => {
     await page.goto('http://192.168.0.128:5173/system/users');
 
     // 找到第一个非admin用户
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const firstRow = userRows.first();
 
     // 点击编辑按钮
@@ -146,7 +146,7 @@ test.describe('User Management', () => {
     await expect(page.getByTestId('user-list-container')).toBeVisible();
 
     // 找到刚创建的用户并删除
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const count = await userRows.count();
 
     for (let i = 0; i < count; i++) {
@@ -189,7 +189,7 @@ test.describe('User Management', () => {
     await expect(page.getByTestId('user-list-container')).toBeVisible();
 
     // 找到用户并锁定
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const count = await userRows.count();
 
     for (let i = 0; i < count; i++) {
@@ -235,7 +235,7 @@ test.describe('User Management', () => {
     await expect(page.getByTestId('user-list-container')).toBeVisible();
 
     // 找到用户并重置密码
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const count = await userRows.count();
 
     for (let i = 0; i < count; i++) {
@@ -276,7 +276,7 @@ test.describe('User Management', () => {
     await page.waitForTimeout(500);
 
     // 验证结果
-    const userRows = page.getByTestId('user-row');
+    const userRows = page.locator('.user-row');
     const count = await userRows.count();
 
     expect(count).toBeGreaterThan(0);

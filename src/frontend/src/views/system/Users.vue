@@ -76,13 +76,15 @@
     </el-card>
 
     <!-- 用户表格 -->
-    <el-card class="table-card" shadow="never">
+    <el-card class="table-card" shadow="never" data-testid="user-list-container">
       <el-table
         :data="usersStore.users"
         v-loading="usersStore.loading"
         stripe
         border
         style="width: 100%"
+        data-testid="users-table"
+        :row-class-name="getRowClassName"
       >
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="用户名" width="120" />
@@ -203,6 +205,11 @@ onMounted(() => {
   usersStore.fetchUsers()
   rolesStore.fetchRoles()
 })
+
+// 为表格行添加class名，方便测试定位
+function getRowClassName({ row }: { row: User }) {
+  return `user-row user-row-${row.username}`
+}
 
 function goBack() {
   router.push('/dashboard')

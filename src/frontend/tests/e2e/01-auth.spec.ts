@@ -65,11 +65,12 @@ test.describe('Authentication Flow', () => {
     // 尝试访问需要认证的页面
     await page.goto('http://192.168.0.128:5173/system/users');
 
-    // 应该重定向到登录页或显示登录提示
-    // 注意：由于前端路由可能不会自动重定向，我们验证页面内容
+    // 验证：应该重定向到登录页或显示登录页面元素
     const url = page.url();
-    const isLoginPage = url.includes('/login') || await page.getByText('登录').isVisible();
+    const hasLoginHeading = await page.locator('.login-card h2').isVisible().catch(() => false);
+    const hasLoginButton = await page.getByRole('button', { name: '登录' }).isVisible().catch(() => false);
 
-    expect(isLoginPage || url.includes('/system/users')).toBeTruthy();
+    // 如果URL包含/login，或者能看到登录页面的标题或按钮，就认为测试通过
+    expect(url.includes('/login') || hasLoginHeading || hasLoginButton).toBeTruthy();
   });
 });
