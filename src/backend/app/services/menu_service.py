@@ -48,7 +48,7 @@ class MenuService:
         Returns:
             扁平化的菜单列表，带parent_name
         """
-        menus = self.db.query(Menu).order_by(Menu.sort_order).all()
+        menus = self.get_all_menus()
         options = []
 
         for menu in menus:
@@ -65,3 +65,87 @@ class MenuService:
             })
 
         return options
+
+    def get_all_menus(self) -> List[Menu]:
+        """获取所有菜单（平铺）"""
+        return self.db.query(Menu).order_by(Menu.sort_order).all()
+
+    def get_menu_by_id(self, menu_id: int) -> Menu:
+        """根据ID获取菜单"""
+        menu = self.db.query(Menu).filter(Menu.id == menu_id).first()
+        if not menu:
+            raise ValueError("菜单不存在")
+        return menu
+
+    def create_menu(self, menu_data) -> Menu:
+        """
+        创建菜单
+
+        Args:
+            menu_data: MenuCreate schema
+
+        Returns:
+            创建的菜单对象
+        """
+        menu = Menu(
+            name=menu_data.name,
+            path=menu_data.path,
+            icon=menu_data.icon,
+            parent_id=menu_data.parent_id,
+            sort_order=menu_data.sort_order,
+            is_visible=menu_data.is_visible
+        )
+        self.db.add(menu)
+        self.db.commit()
+        self.db.refresh(menu)
+        return menu
+
+    def update_menu(self, menu_id: int, menu_data) -> Menu:
+        """
+        更新菜单
+
+        Args:
+            menu_id: 菜单ID
+            menu_data: MenuUpdate schema
+
+        Returns:
+            更新后的菜单
+
+        Raises:
+            ValueError: 菜单不存在或防止循环引用
+        """
+        menu = self.get_menu_by_id(menu_id)
+
+        # 防止循环引用
+        if menu_data.parent_id:
+            if menu_data.parent_id == menu_id:
+                raise ValueError("不能将自己设为父菜单")
+
+        # 更新字段
+        update_data = menu_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(menu, field, value)
+
+        self.db.commit()
+        self.db.refresh(menu)
+        return menu
+
+    def delete_menu(self, menu_id: int) -> None:
+        """
+        删除菜单
+
+        Args:
+            menu_id: 菜单ID
+
+        Raises:
+            ValueError: 菜单不存在或有子菜单
+        """
+        menu = self.get_menu_by_id(menu_id)
+
+        # 检查是否有子菜单
+        child_count = self.db.query(Menu).filter(Menu.parent_id == menu_id).count()
+        if child_count > 0:
+            raise ValueError(f"该菜单有 {child_count} 个子菜单，无法删除")
+
+        self.db.delete(menu)
+        self.db.commit()
