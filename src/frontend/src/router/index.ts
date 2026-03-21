@@ -59,6 +59,12 @@ const routes: RouteRecordRaw[] = [
         name: 'SystemUsers',
         component: () => import('@/views/system/Users.vue'),
         meta: { title: '用户管理', requiresAuth: true }
+      },
+      {
+        path: 'roles',
+        name: 'SystemRoles',
+        component: () => import('@/views/system/Roles.vue'),
+        meta: { title: '角色管理', requiresAuth: true }
       }
     ]
   }
