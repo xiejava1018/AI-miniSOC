@@ -54,4 +54,3 @@ docs/development-log-*.md
 # E2E Test Results
 test-results/
 playwright-report/
-

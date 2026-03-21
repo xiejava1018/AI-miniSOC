@@ -16,6 +16,7 @@
           v-if="isAdmin"
           type="primary"
           @click="showCreateDialog"
+          data-testid="add-user-button"
         >
           <el-icon><Plus /></el-icon>
           添加用户
@@ -33,6 +34,7 @@
             clearable
             style="width: 250px"
             @clear="handleSearch"
+            data-testid="user-search-input"
           />
         </el-form-item>
         <el-form-item label="角色">
@@ -65,7 +67,7 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="handleSearch">
+          <el-button type="primary" @click="handleSearch" data-testid="search-button">
             查询
           </el-button>
           <el-button @click="handleReset">重置</el-button>
@@ -74,13 +76,15 @@
     </el-card>
 
     <!-- 用户表格 -->
-    <el-card class="table-card" shadow="never">
+    <el-card class="table-card" shadow="never" data-testid="user-list-container">
       <el-table
         :data="usersStore.users"
         v-loading="usersStore.loading"
         stripe
         border
         style="width: 100%"
+        data-testid="users-table"
+        :row-class-name="getRowClassName"
       >
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="username" label="用户名" width="120" />
@@ -105,6 +109,7 @@
               link
               type="primary"
               @click="viewUser(row)"
+              :data-testid="`view-user-${row.username}`"
             >
               查看
             </el-button>
@@ -113,6 +118,7 @@
               link
               type="primary"
               @click="editUser(row)"
+              :data-testid="`edit-user-${row.username}`"
             >
               编辑
             </el-button>
@@ -121,6 +127,7 @@
               link
               type="warning"
               @click="resetPassword(row)"
+              :data-testid="`reset-password-${row.username}`"
             >
               重置密码
             </el-button>
@@ -129,6 +136,7 @@
               link
               :type="row.is_locked ? 'success' : 'warning'"
               @click="toggleLock(row)"
+              :data-testid="`${row.is_locked ? 'unlock' : 'lock'}-user-${row.username}`"
             >
               {{ row.is_locked ? '解锁' : '锁定' }}
             </el-button>
@@ -137,6 +145,7 @@
               link
               type="danger"
               @click="deleteUser(row)"
+              :data-testid="`delete-user-${row.username}`"
             >
               删除
             </el-button>
@@ -196,6 +205,11 @@ onMounted(() => {
   usersStore.fetchUsers()
   rolesStore.fetchRoles()
 })
+
+// 为表格行添加class名，方便测试定位
+function getRowClassName({ row }: { row: User }) {
+  return `user-row user-row-${row.username}`
+}
 
 function goBack() {
   router.push('/dashboard')

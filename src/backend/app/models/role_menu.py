@@ -14,9 +14,5 @@ class RoleMenu(Base):
     role_id = Column(BigInteger, ForeignKey('soc_roles.id', ondelete='CASCADE'), primary_key=True)
     menu_id = Column(BigInteger, ForeignKey('soc_menus.id', ondelete='CASCADE'), primary_key=True)
 
-    # 关系
-    role = relationship("Role", back_populates="menus")
-    menu = relationship("Menu", back_populates="role_menus")
-
     def __repr__(self):
         return f"<RoleMenu(role_id={self.role_id}, menu_id={self.menu_id})>"

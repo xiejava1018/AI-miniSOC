@@ -241,6 +241,15 @@ const userName = computed(() => {
 </script>
 
 <style scoped>
+/* Login Layout - 独立全屏布局 */
+.login-layout {
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
 .soc-container {
   display: flex;
   height: 100vh;

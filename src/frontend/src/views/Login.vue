@@ -7,7 +7,12 @@
 
       <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" />
+          <el-input
+            v-model="form.username"
+            placeholder="请输入用户名"
+            class="username-input"
+            data-testid="username-input"
+          />
         </el-form-item>
 
         <el-form-item label="密码" prop="password">
@@ -16,11 +21,13 @@
             type="password"
             placeholder="请输入密码"
             show-password
+            class="password-input"
+            data-testid="password-input"
           />
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%">
+          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%" class="login-button" data-testid="login-button">
             登录
           </el-button>
         </el-form-item>
@@ -35,8 +42,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+import { login } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
@@ -66,33 +72,25 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: form.username,
-          password: form.password
-        })
+      const response = await login({
+        username: form.username,
+        password: form.password
       })
 
-      const data = await response.json()
+      // 保存token和用户信息到store
+      authStore.setAuth(response.access_token, response.user)
 
-      if (response.ok) {
-        // 保存token和用户信息到store
-        authStore.setAuth(data.access_token, data.user)
-        localStorage.setItem('refresh_token', data.refresh_token)
+      // 保存refresh token到localStorage
+      localStorage.setItem('refresh_token', response.refresh_token)
 
-        ElMessage.success('登录成功')
+      ElMessage.success('登录成功')
 
-        // 跳转到目标页面或dashboard
-        const redirect = (route.query.redirect as string) || '/dashboard'
-        router.push(redirect)
-      } else {
-        ElMessage.error(data.detail || '登录失败')
-      }
+      // 跳转到目标页面或dashboard
+      const redirect = (route.query.redirect as string) || '/dashboard'
+      router.push(redirect)
     } catch (error: any) {
       console.error('登录失败:', error)
-      ElMessage.error(error.message || '登录失败，请检查网络连接')
+      ElMessage.error(error.message || '登录失败，请检查用户名和密码')
     } finally {
       loading.value = false
     }
