@@ -33,8 +33,8 @@ class AuditLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # 关系
-    user = relationship("User", back_populates="audit_logs", cascade="all, delete-orphan")
-    session = relationship("UserSession", back_populates="audit_logs", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="audit_logs")
+    session = relationship("UserSession", back_populates="audit_logs")
 
     def __repr__(self):
         return f"<AuditLog(id={self.id}, username={self.username}, action={self.action})>"

@@ -25,7 +25,6 @@ class Menu(Base):
     # 关系
     parent = relationship("Menu", remote_side=[id], back_populates="children")
     children = relationship("Menu", back_populates="parent", cascade="all, delete-orphan")
-    role_menus = relationship("RoleMenu", back_populates="menu")
     roles = relationship("Role", secondary="soc_role_menus", back_populates="menus")
 
     def to_dict(self, include_children: bool = False):

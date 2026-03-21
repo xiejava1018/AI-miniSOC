@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
 
-from app.database import get_db
+from app.core.database import get_db
 from app.core.auth import create_access_token, create_refresh_token, verify_token
 from app.core.security import verify_password
 from app.models.user import User, UserStatus
@@ -99,12 +99,6 @@ async def login(
 
     # 3. 验证密码
     if not verify_password(request.password, user.password_hash):
-        # 记录失败尝试（可选）
-        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
-        # 如果失败次数过多，锁定账户（可选）
-        if user.failed_login_attempts >= 5:
-            user.status = UserStatus.LOCKED
-        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误"
@@ -132,8 +126,7 @@ async def login(
     refresh_token = create_refresh_token({"sub": str(user.id)})
 
     # 6. 更新最后登录时间
-    user.last_login_at = datetime.utcnow()
-    user.failed_login_attempts = 0  # 重置失败次数
+    user.last_login = datetime.utcnow()
     db.commit()
 
     # 7. 返回响应
@@ -151,7 +144,7 @@ async def login(
             "role_name": user.role.code if user.role else None,
             "is_admin": is_admin,
             "status": user.status,
-            "last_login": user.last_login_at.isoformat() if user.last_login_at else None
+            "last_login": user.last_login.isoformat() if user.last_login else None
         }
     )
 
