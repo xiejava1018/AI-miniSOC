@@ -1,5 +1,15 @@
 <template>
-  <div class="soc-container">
+  <!-- 登录页面使用独立布局 -->
+  <div v-if="route.path === '/login'" class="login-layout">
+    <router-view v-slot="{ Component }">
+      <transition name="page" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </router-view>
+  </div>
+
+  <!-- 其他页面使用主布局 -->
+  <div v-else class="soc-container">
     <!-- Animated Background -->
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
@@ -185,6 +195,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* Login Layout - 独立全屏布局 */
+.login-layout {
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
 .soc-container {
   display: flex;
   height: 100vh;

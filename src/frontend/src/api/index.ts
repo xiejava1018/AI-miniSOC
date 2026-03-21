@@ -1,5 +1,8 @@
 import apiClient from './client'
 
+// 导出认证相关API
+export * from './auth'
+
 // 通用API调用函数
 export async function apiCall<T>(
   url: string,
