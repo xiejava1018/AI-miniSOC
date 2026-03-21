@@ -25,7 +25,7 @@ DROP TABLE IF EXISTS soc_users CASCADE;
 CREATE TABLE soc_users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
-    hashed_password VARCHAR(255) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
     full_name VARCHAR(100),
     role_id INTEGER REFERENCES soc_roles(id),
@@ -82,11 +82,11 @@ INSERT INTO soc_roles (name, code, description, is_system) VALUES
 
 -- 9. 插入管理员用户 (密码: admin123)
 -- 密码使用bcrypt hash (cost=12)
-INSERT INTO soc_users (id, username, hashed_password, email, full_name, role_id, status, is_superuser)
+INSERT INTO soc_users (id, username, password_hash, email, full_name, role_id, status, is_superuser)
 VALUES (1, 'admin', '$2b$12$9bUors.SDcFEiQAK2yVlD.xg/CtlWFY0cyJvx1bbtvM8VTnqbHHzG', 'admin@example.com', '系统管理员', 1, 'active', true);
 
 -- 10. 插入测试用户 (密码: Test123456!)
-INSERT INTO soc_users (username, hashed_password, email, full_name, role_id, status) VALUES
+INSERT INTO soc_users (username, password_hash, email, full_name, role_id, status) VALUES
 ('testuser', '$2b$12$7e9eBjYYJacdsFWa6kuQpOX5i14v.TuTV3qz628IndRF5rHEzaRf.', 'test@example.com', '测试用户', 2, 'active'),
 ('testuser2', '$2b$12$7e9eBjYYJacdsFWa6kuQpOX5i14v.TuTV3qz628IndRF5rHEzaRf.', 'test2@example.com', '测试用户2', 2, 'active'),
 ('deletable_user', '$2b$12$7e9eBjYYJacdsFWa6kuQpOX5i14v.TuTV3qz628IndRF5rHEzaRf.', 'deletable@example.com', '可删除用户', 2, 'active'),

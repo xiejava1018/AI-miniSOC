@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('User Management', () => {
   test.beforeEach(async ({ page }) => {
-    // 登录为管理员
+    // 登录为管理员 - 使用getByRole代替getByTestId
     await page.goto('http://192.168.0.128:5173/login');
-    await page.getByTestId('username-input').fill('admin');
-    await page.getByTestId('password-input').fill('admin123');
-    await page.getByTestId('login-button').click();
+    await page.getByRole('textbox', { name: /用户名/ }).fill('admin');
+    await page.getByRole('textbox', { name: /密码/ }).fill('admin123');
+    await page.getByRole('button', { name: '登录' }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 5000 });
   });
 
