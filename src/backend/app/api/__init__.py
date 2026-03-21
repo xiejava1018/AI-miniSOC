@@ -3,7 +3,7 @@ API 路由汇总
 """
 
 from fastapi import APIRouter
-from app.api import auth, users, assets, incidents, alerts, ai, menus
+from app.api import auth, users, assets, incidents, alerts, ai, menus, roles
 
 api_router = APIRouter()
 
@@ -15,3 +15,4 @@ api_router.include_router(incidents.router, prefix="/incidents", tags=["事件�
 api_router.include_router(alerts.router, prefix="/alerts", tags=["告警管理"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI分析"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
+api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
