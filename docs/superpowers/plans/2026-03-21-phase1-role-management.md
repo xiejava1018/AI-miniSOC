@@ -67,6 +67,193 @@ src/frontend/tests/
 
 ---
 
+## Task 0: 实现基础菜单API（Phase 1前置依赖）
+
+**Files:**
+- Create: `src/backend/app/api/menus.py`
+- Create: `src/backend/app/schemas/menu.py`
+- Create: `src/backend/app/services/menu_service.py`
+- Modify: `src/backend/app/api/__init__.py` (注册menus路由)
+
+**背景**: 角色管理需要菜单选择器，必须先提供基础菜单API端点。完整菜单管理功能在Phase 2实现。
+
+- [ ] **Step 1: 创建schemas/menu.py**
+
+```python
+# src/backend/app/schemas/menu.py
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+
+class MenuBase(BaseModel):
+    """菜单基础schema"""
+    name: str = Field(max_length=50, description="菜单名称")
+    path: str = Field(max_length=200, description="菜单路径")
+    icon: Optional[str] = Field(None, max_length=50, description="菜单图标")
+    sort_order: int = Field(0, description="排序")
+    is_visible: bool = Field(True, description="是否可见")
+
+
+class MenuResponse(MenuBase):
+    """菜单响应schema"""
+    id: int
+    parent_id: Optional[int]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MenuTreeResponse(MenuResponse):
+    """菜单树响应schema"""
+    children: List['MenuTreeResponse'] = []
+
+    class Config:
+        from_attributes = True
+
+
+# 重建模型以支持递归类型
+MenuTreeResponse.model_rebuild()
+```
+
+- [ ] **Step 2: 创建services/menu_service.py（简化版）**
+
+```python
+# src/backend/app/services/menu_service.py
+from typing import List, Optional
+from sqlalchemy.orm import Session
+
+from app.models.menu import Menu
+
+
+class MenuService:
+    """菜单服务层"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_menu_tree(self) -> List[Menu]:
+        """
+        获取菜单树
+
+        Returns:
+            树形结构的菜单列表
+        """
+        menus = self.db.query(Menu).filter(Menu.is_visible == True).all()
+        return self._build_tree(menus)
+
+    def _build_tree(self, menus: List[Menu]) -> List[Menu]:
+        """构建树形结构"""
+        menu_dict = {menu.id: menu for menu in menus}
+        root_menus = []
+
+        for menu in menus:
+            if menu.parent_id is None:
+                root_menus.append(menu)
+            else:
+                parent = menu_dict.get(menu.parent_id)
+                if parent and hasattr(parent, 'children'):
+                    parent.children.append(menu)
+
+        # 排序
+        for menu in root_menus:
+            if hasattr(menu, 'children'):
+                menu.children.sort(key=lambda x: x.sort_order or 0)
+
+        return sorted(root_menus, key=lambda x: x.sort_order or 0)
+
+    def get_menu_options(self) -> List[dict]:
+        """
+        获取菜单选项（用于下拉选择）
+
+        Returns:
+            扁平化的菜单列表，带parent_name
+        """
+        menus = self.db.query(Menu).order_by(Menu.sort_order).all()
+        options = []
+
+        for menu in menus:
+            parent_name = ""
+            if menu.parent_id:
+                parent = self.db.query(Menu).filter(Menu.id == menu.parent_id).first()
+                if parent:
+                    parent_name = f"{parent.name} / "
+
+            options.append({
+                "id": menu.id,
+                "name": f"{parent_name}{menu.name}",
+                "path": menu.path
+            })
+
+        return options
+```
+
+- [ ] **Step 3: 创建api/menus.py（仅2个端点）**
+
+```python
+# src/backend/app/api/menus.py
+from typing import List
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.auth import get_current_user
+from app.schemas.user import UserResponse as UserResponseSchema
+from app.schemas.menu import MenuTreeResponse
+from app.services.menu_service import MenuService
+
+
+router = APIRouter(prefix="/menus", tags=["菜单管理"])
+
+
+@router.get("/tree", response_model=List[MenuTreeResponse])
+async def get_menu_tree(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取菜单树（所有用户可访问）"""
+    service = MenuService(db)
+    menus = service.get_menu_tree()
+    return [MenuTreeResponse.model_validate(m) for m in menus]
+
+
+@router.get("/options")
+async def get_menu_options(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取菜单选项（用于父菜单选择）"""
+    service = MenuService(db)
+    return service.get_menu_options()
+```
+
+- [ ] **Step 4: 在app/api/__init__.py注册menus路由**
+
+```python
+# 在api_router定义后添加
+from app.api import menus
+api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
+```
+
+- [ ] **Step 5: 提交基础菜单API**
+
+```bash
+git add src/backend/app/schemas/menu.py src/backend/app/services/menu_service.py src/backend/app/api/menus.py src/backend/app/api/__init__.py
+git commit -m "feat: add basic menu API endpoints for Phase 1
+
+Add minimal menu API endpoints required by role management:
+- GET /api/v1/menus/tree - get menu tree structure
+- GET /api/v1/menus/options - get menu options for dropdown
+
+Full menu management CRUD will be implemented in Phase 2.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+```
+
+---
+
 ## Task 1: 更新角色Pydantic Schemas
 
 **Files:**
