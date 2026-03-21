@@ -1,5 +1,15 @@
 <template>
-  <div class="soc-container">
+  <!-- 登录页面使用独立布局 -->
+  <div v-if="route.path === '/login'" class="login-layout">
+    <router-view v-slot="{ Component }">
+      <transition name="page" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </router-view>
+  </div>
+
+  <!-- 其他页面使用主布局 -->
+  <div v-else class="soc-container">
     <!-- Animated Background -->
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
@@ -90,14 +100,14 @@
               <el-icon><Bell /></el-icon>
               <span class="badge">3</span>
             </button>
-            <div class="user-profile">
+            <div class="user-profile" @click="handleLogout" title="点击退出登录">
               <div class="user-avatar">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
                 </svg>
               </div>
-              <span class="user-name">管理员</span>
+              <span class="user-name">{{ userName }}</span>
             </div>
           </div>
         </div>
@@ -117,12 +127,16 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, markRaw } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { HomeFilled, Monitor, Warning, Bell, User, DataAnalysis } from '@element-plus/icons-vue'
 import { useThemeStore } from '@/stores/theme'
+import { useAuthStore } from '@/stores/auth'
+import { ElMessageBox } from 'element-plus'
 
 const route = useRoute()
+const router = useRouter()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 
 // Sidebar collapse state
 const sidebarCollapsed = ref(false)
@@ -182,9 +196,67 @@ onUnmounted(() => {
     clearInterval(timeInterval)
   }
 })
+
+// Logout function
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要退出登录吗？',
+      '退出登录',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    // Call backend logout API
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authStore.token}`
+        }
+      })
+    } catch (error) {
+      console.error('Logout API call failed:', error)
+    }
+
+    // Clear auth state regardless of API result
+    authStore.clearAuth()
+
+    // Redirect to login
+    router.push('/login')
+  } catch {
+    // User cancelled
+  }
+}
+
+// Get current user name
+const userName = computed(() => {
+  return authStore.user?.full_name || authStore.user?.username || '管理员'
+})
 </script>
 
 <style scoped>
+.soc-container {
+  display: flex;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Login Layout - 独立全屏布局 */
+.login-layout {
+  width: 100vw;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+}
+
 .soc-container {
   display: flex;
   height: 100vh;

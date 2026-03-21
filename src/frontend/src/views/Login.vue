@@ -31,11 +31,16 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
 const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
@@ -61,12 +66,33 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      // TODO: 实现实际的登录逻辑
-      // 临时模拟登录成功
-      router.push('/dashboard')
-      ElMessage.success('登录成功')
-    } catch (error) {
-      ElMessage.error('登录失败')
+      const response = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: form.username,
+          password: form.password
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        // 保存token和用户信息到store
+        authStore.setAuth(data.access_token, data.user)
+        localStorage.setItem('refresh_token', data.refresh_token)
+
+        ElMessage.success('登录成功')
+
+        // 跳转到目标页面或dashboard
+        const redirect = (route.query.redirect as string) || '/dashboard'
+        router.push(redirect)
+      } else {
+        ElMessage.error(data.detail || '登录失败')
+      }
+    } catch (error: any) {
+      console.error('登录失败:', error)
+      ElMessage.error(error.message || '登录失败，请检查网络连接')
     } finally {
       loading.value = false
     }

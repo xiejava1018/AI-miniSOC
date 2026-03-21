@@ -16,7 +16,7 @@ export default defineConfig({
     allowedHosts: ['aisoc.doai8.dpdns.org', 'localhost', '.localhost'],
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
         rewrite: (path) => path
       }
