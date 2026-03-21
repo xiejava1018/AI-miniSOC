@@ -107,6 +107,7 @@
               link
               type="primary"
               @click="viewUser(row)"
+              :data-testid="`view-user-${row.username}`"
             >
               查看
             </el-button>
@@ -115,6 +116,7 @@
               link
               type="primary"
               @click="editUser(row)"
+              :data-testid="`edit-user-${row.username}`"
             >
               编辑
             </el-button>
@@ -123,6 +125,7 @@
               link
               type="warning"
               @click="resetPassword(row)"
+              :data-testid="`reset-password-${row.username}`"
             >
               重置密码
             </el-button>
@@ -131,6 +134,7 @@
               link
               :type="row.is_locked ? 'success' : 'warning'"
               @click="toggleLock(row)"
+              :data-testid="`${row.is_locked ? 'unlock' : 'lock'}-user-${row.username}`"
             >
               {{ row.is_locked ? '解锁' : '锁定' }}
             </el-button>
@@ -139,6 +143,7 @@
               link
               type="danger"
               @click="deleteUser(row)"
+              :data-testid="`delete-user-${row.username}`"
             >
               删除
             </el-button>

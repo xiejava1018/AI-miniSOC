@@ -16,7 +16,7 @@
           v-model="formData.username"
           :disabled="mode === 'edit'"
           placeholder="请输入用户名（3-50字符）"
-          data-testid="username-input"
+          data-testid="dialog-username-input"
         />
       </el-form-item>
 
@@ -26,7 +26,7 @@
           type="password"
           placeholder="请输入密码（至少6位）"
           show-password
-          data-testid="password-input"
+          data-testid="dialog-password-input"
         />
       </el-form-item>
 
@@ -35,6 +35,7 @@
           v-model="formData.email"
           type="email"
           placeholder="请输入邮箱"
+          data-testid="dialog-email-input"
         />
       </el-form-item>
 
@@ -42,6 +43,7 @@
         <el-input
           v-model="formData.full_name"
           placeholder="请输入姓名"
+          data-testid="dialog-fullname-input"
         />
       </el-form-item>
 
@@ -64,6 +66,7 @@
           v-model="formData.role_id"
           placeholder="请选择角色"
           style="width: 100%"
+          data-testid="dialog-role-select"
         >
           <el-option
             v-for="role in roles"
@@ -76,12 +79,12 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="handleCancel">取消</el-button>
+      <el-button @click="handleCancel" data-testid="dialog-cancel-button">取消</el-button>
       <el-button
         type="primary"
         @click="handleSubmit"
         :loading="submitting"
-        data-testid="submit-user-button"
+        data-testid="dialog-submit-button"
       >
         确定
       </el-button>

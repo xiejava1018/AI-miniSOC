@@ -7,7 +7,12 @@
 
       <el-form :model="form" :rules="rules" ref="formRef" label-width="80px">
         <el-form-item label="用户名" prop="username">
-          <el-input v-model="form.username" placeholder="请输入用户名" data-testid="username-input" />
+          <el-input
+            v-model="form.username"
+            placeholder="请输入用户名"
+            class="username-input"
+            data-testid="username-input"
+          />
         </el-form-item>
 
         <el-form-item label="密码" prop="password">
@@ -16,12 +21,13 @@
             type="password"
             placeholder="请输入密码"
             show-password
+            class="password-input"
             data-testid="password-input"
           />
         </el-form-item>
 
         <el-form-item>
-          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%" data-testid="login-button">
+          <el-button type="primary" @click="handleLogin" :loading="loading" style="width: 100%" class="login-button" data-testid="login-button">
             登录
           </el-button>
         </el-form-item>
@@ -32,11 +38,15 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
+import { login } from '@/api/auth'
 
 const router = useRouter()
+const route = useRoute()
+const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
@@ -62,12 +72,25 @@ async function handleLogin() {
 
     loading.value = true
     try {
-      // TODO: 实现实际的登录逻辑
-      // 临时模拟登录成功
-      router.push('/dashboard')
+      const response = await login({
+        username: form.username,
+        password: form.password
+      })
+
+      // 保存token和用户信息到store
+      authStore.setAuth(response.access_token, response.user)
+
+      // 保存refresh token到localStorage
+      localStorage.setItem('refresh_token', response.refresh_token)
+
       ElMessage.success('登录成功')
-    } catch (error) {
-      ElMessage.error('登录失败')
+
+      // 跳转到目标页面或dashboard
+      const redirect = (route.query.redirect as string) || '/dashboard'
+      router.push(redirect)
+    } catch (error: any) {
+      console.error('登录失败:', error)
+      ElMessage.error(error.message || '登录失败，请检查用户名和密码')
     } finally {
       loading.value = false
     }
