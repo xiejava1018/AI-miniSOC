@@ -67,57 +67,64 @@ src/frontend/tests/
 
 ---
 
-## Task 1: 创建角色Pydantic Schemas
+## Task 1: 更新角色Pydantic Schemas
 
 **Files:**
-- Create: `src/backend/app/schemas/role.py`
+- Modify: `src/backend/app/schemas/role.py`
 
-- [ ] **Step 1: 创建schemas/role.py文件并定义基础schema**
+**背景**: 现有schema包含`is_active`字段，需要添加`code`、`menu_ids`、`is_system`、`user_count`字段以支持角色管理功能
+
+- [ ] **Step 1: 更新schemas/role.py，添加新字段和schema**
+
+在现有文件基础上添加以下内容：
 
 ```python
-# src/backend/app/schemas/role.py
-from pydantic import BaseModel, Field
-from typing import Optional, List
+# 在文件开头添加导入
 from datetime import datetime
+from typing import List
 
-class RoleBase(BaseModel):
-    """角色基础schema"""
-    name: str = Field(max_length=50, description="角色名称")
-    description: Optional[str] = Field(None, description="角色描述")
-
+# 更新 RoleCreate，添加 code 和 menu_ids 字段
 class RoleCreate(RoleBase):
-    """创建角色schema"""
-    code: str = Field(max_length=50, description="角色代码")
+    """创建角色"""
+    code: str = Field(..., min_length=2, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$', description="角色代码")
     menu_ids: List[int] = Field(default_factory=list, description="关联的菜单ID列表")
+    is_active: bool = Field(default=True, description="是否激活")  # 保留现有字段
 
+# 更新 RoleUpdate，添加 menu_ids 字段
 class RoleUpdate(BaseModel):
-    """更新角色schema"""
-    name: Optional[str] = Field(None, max_length=50)
-    description: Optional[str] = None
-    menu_ids: Optional[List[int]] = None
+    """更新角色"""
+    name: Optional[str] = Field(None, min_length=2, max_length=50, description="角色名称")
+    description: Optional[str] = Field(None, max_length=500, description="描述")
+    menu_ids: Optional[List[int]] = Field(None, description="菜单ID列表")
+    is_active: Optional[bool] = Field(None, description="是否激活")  # 保留现有字段
+    # 注意: 不包含 code 字段，因为系统角色不能修改代码
 
+# 更新 RoleResponse，添加 is_system 和 user_count 字段
 class RoleResponse(RoleBase):
-    """角色响应schema"""
-    id: int
-    code: str
-    is_system: bool
-    user_count: int = 0
-    created_at: datetime
-    updated_at: datetime
+    """角色响应"""
+    id: int = Field(..., description="角色ID")
+    code: str = Field(..., description="角色代码")  # 添加
+    is_active: bool = Field(..., description="是否激活")  # 保留现有字段
+    is_system: bool = Field(..., description="是否系统角色")  # 新增
+    user_count: int = Field(default=0, description="用户数量")  # 新增
+    created_at: datetime = Field(..., description="创建时间")  # 修改为datetime类型
+    updated_at: datetime = Field(..., description="更新时间")  # 修改为datetime类型
 
     class Config:
         from_attributes = True
 
+# 新增 RoleListResponse
 class RoleListResponse(BaseModel):
     """角色列表响应"""
-    total: int
-    items: List[RoleResponse]
-    page: int
-    page_size: int
+    total: int = Field(..., description="总数")
+    items: List[RoleResponse] = Field(..., description="角色列表")
+    page: int = Field(..., description="页码")
+    page_size: int = Field(..., description="每页数量")
 
+# 更新 RoleMenusRequest 为更通用的名称
 class RoleMenusRequest(BaseModel):
     """菜单权限分配请求"""
-    menu_ids: List[int]
+    menu_ids: List[int] = Field(..., description="菜单ID列表")
 ```
 
 - [ ] **Step 2: 运行Python语法检查**
@@ -385,7 +392,8 @@ def require_admin() -> Callable:
             ...
     """
     async def _check_admin(current_user: UserResponse = Depends(get_current_user)):
-        if not current_user.is_admin:
+        # 修复: 使用 role_name 而不是 is_admin
+        if current_user.role_name != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="需要管理员权限"
@@ -410,6 +418,15 @@ def require_menu_permission(menu_path: str) -> Callable:
             ...
     """
     async def _check_permission(current_user: UserResponse = Depends(get_current_user)):
+        if not current_user.has_menu_access(menu_path):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权限访问"
+            )
+        return current_user
+
+    return _check_permission
+```
         if not current_user.has_menu_access(menu_path):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -673,24 +690,58 @@ async def get_role_users(
         )
 ```
 
-- [ ] **Step 2: 修改api/__init__.py注册路由**
+- [ ] **Step 2: 修改api/__init__.py注册角色路由**
 
-Run: `cat >> /home/xiejava/AIproject/AI-miniSOC/src/backend/app/api/__init__.py << 'EOF'
+在 `src/backend/app/api/__init__.py` 中添加：
 
-from app.api.roles import router as roles_router
-EOF`
-
-- [ ] **Step 3: 修改main.py注册路由**
-
-Run: `grep -n "app.include_router" /home/xiejava/AIproject/AI-miniSOC/src/backend/main.py`
-
-Expected: 找到其他路由注册的地方
-
-- [ ] **Step 4: 添加角色路由注册**
-
-在main.py的路由注册部分添加：
 ```python
-app.include_router(roles_router, prefix="/api/v1")
+# 在文件开头的import部分添加
+from app.api import roles
+
+# 在 api_router.include_router 调用列表中添加
+api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
+```
+
+完整的文件应该是：
+```python
+"""
+API 路由汇总
+"""
+
+from fastapi import APIRouter
+from app.api import auth, users, assets, incidents, alerts, ai, roles
+
+api_router = APIRouter()
+
+# 注册各个模块的路由
+api_router.include_router(auth.router, tags=["认证"])
+api_router.include_router(users.router, prefix="/users", tags=["用户管理"])
+api_router.include_router(assets.router, prefix="/assets", tags=["资产管理"])
+api_router.include_router(incidents.router, prefix="/incidents", tags=["事件管理"])
+api_router.include_router(alerts.router, prefix="/alerts", tags=["告警管理"])
+api_router.include_router(ai.router, prefix="/ai", tags=["AI分析"])
+api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])  # 新增
+```
+
+- [ ] **Step 3: 验证路由注册**
+
+Run:
+```bash
+cd /home/xiejava/AIproject/AI-miniSOC/src/backend && python -c "from app.api import api_router; routes = [r.path for r in api_router.routes if hasattr(r, 'path')]; print('Registered routes:', routes)"
+```
+
+Expected: 输出包含 `/api/v1/roles`
+
+- [ ] **Step 4: 提交路由注册**
+
+```bash
+git add src/backend/app/api/__init__.py
+git commit -m "feat: register roles router in api_router
+
+Add roles router to centralized API router registration.
+All role endpoints now accessible at /api/v1/roles/*
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 5: 运行Python语法检查**
