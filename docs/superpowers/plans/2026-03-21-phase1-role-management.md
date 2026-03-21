@@ -427,15 +427,6 @@ def require_menu_permission(menu_path: str) -> Callable:
 
     return _check_permission
 ```
-        if not current_user.has_menu_access(menu_path):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="无权限访问"
-            )
-        return current_user
-
-    return _check_permission
-```
 
 - [ ] **Step 2: 运行Python语法检查**
 
@@ -1132,6 +1123,67 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 
 ---
 
+## Task 8b: 前端 - 创建菜单API客户端
+
+**Files:**
+- Create: `src/frontend/src/api/menu.ts`
+
+**背景**: Roles.vue的菜单权限对话框需要获取菜单树数据
+
+- [ ] **Step 1: 创建api/menu.ts**
+
+```typescript
+// src/frontend/src/api/menu.ts
+import axios from 'axios'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
+export interface Menu {
+  id: number
+  parent_id?: number
+  name: string
+  path: string
+  icon: string
+  sort_order: number
+  is_visible: boolean
+}
+
+export const menuApi = {
+  async getMenus(): Promise<Menu[]> {
+    const response = await axios.get<Menu[]>(`${API_BASE}/menus`)
+    return response.data
+  },
+
+  async getMenuTree(): Promise<Menu[]> {
+    const response = await axios.get<Menu[]>(`${API_BASE}/menus/tree`)
+    return response.data
+  },
+
+  async getMenuOptions(): Promise<any[]> {
+    const response = await axios.get(`${API_BASE}/menus/options`)
+    return response.data
+  }
+}
+```
+
+- [ ] **Step 2: 提交Menu API客户端**
+
+```bash
+git add src/frontend/src/api/menu.ts
+git commit -m "feat: add menu API client
+
+Add axios-based API client for menu operations:
+- getMenus - get flat menu list
+- getMenuTree - get hierarchical menu tree
+- getMenuOptions - get parent menu options for dropdown
+
+Required by Roles.vue menu permission dialog.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+```
+
+---
+
 ## Task 9: 前端 - 创建角色Store
 
 **Files:**
@@ -1271,6 +1323,8 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 import { ref, onMounted, computed } from 'vue'
 import { useRolesStore } from '@/stores/roles'
 import { useAuthStore } from '@/stores/auth'
+import { roleApi } from '@/api/role'
+import { menuApi } from '@/api/menu'  // 添加菜单API导入
 import type { Role, RoleCreate, RoleUpdate } from '@/types/role'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Lock } from '@element-plus/icons-vue'
@@ -1385,8 +1439,12 @@ async function handleDelete(role: Role) {
 async function openMenusDialog(role: Role) {
   currentRole.value = role
 
-  // 获取角色菜单
-  const response = await rolesStore.assignMenus // 临时使用，实际需要调用getRoleMenus
+  // 获取菜单树
+  const tree = await menuApi.getMenuTree()
+  menuTree.value = tree
+
+  // 获取角色已有的菜单
+  const response = await roleApi.getRoleMenus(role.id)
   checkedMenuIds.value = response.menu_ids || []
 
   menusDialogVisible.value = true
