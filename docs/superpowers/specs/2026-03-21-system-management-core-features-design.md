@@ -375,6 +375,7 @@ export const useRolesStore = defineStore('roles', () => {
 |------|------|------|------|
 | GET | `/api/v1/menus/` | 菜单列表（平铺） | 所有用户 |
 | GET | `/api/v1/menus/tree` | 菜单树 | 所有用户 |
+| GET | `/api/v1/menus/check-access` | 检查菜单访问权限 | 所有用户 |
 | POST | `/api/v1/menus/` | 创建菜单 | admin |
 | GET | `/api/v1/menus/{id}` | 菜单详情 | admin |
 | PUT | `/api/v1/menus/{id}` | 更新菜单 | admin |
@@ -386,7 +387,8 @@ export const useRolesStore = defineStore('roles', () => {
 # app/schemas/menu.py
 class MenuBase(BaseModel):
     name: str = Field(max_length=50)
-    path: Optional[str] = Field(None, max_length=200)
+    # 注意: 父级菜单的path设为空字符串""，不使用None
+    path: str = Field(max_length=200)
     icon: Optional[str] = Field(None, max_length=50)
     sort_order: int = 0
     is_visible: bool = True
@@ -483,6 +485,15 @@ class MenuService:
 
         db.delete(menu)
         db.commit()
+
+    def check_menu_access(self, user_id: int, path: str) -> bool:
+        """检查用户是否有访问指定菜单的权限"""
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.role:
+            return False
+
+        # 检查用户角色的菜单权限
+        return user.has_menu_access(path)
 ```
 
 ### 3.2 前端实现
@@ -825,6 +836,7 @@ function checkMenuPermission(menus: MenuItem[], path: string): boolean {
 from functools import wraps
 from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
+from fastapi import Request
 import json
 import uuid
 
@@ -836,16 +848,41 @@ def audit_log(action: str, resource_type: str):
     @audit_log("CREATE", "User")
     async def create_user(...):
         ...
+
+    注意: 被装饰的函数需要接收 request: Request 参数
     """
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # 从kwargs中提取db、current_user
+            # 从kwargs中提取db、current_user、request
             db: Session = kwargs.get('db')
             current_user = kwargs.get('current_user')
+            request: Request = kwargs.get('request')
+
+            # 提取客户端信息
+            ip_address = None
+            user_agent = None
+            if request:
+                ip_address = request.client.host if request.client else None
+                user_agent = request.headers.get('user-agent')
 
             # 生成请求ID
             request_id = str(uuid.uuid4())
+
+            # 对于更新操作，捕获变更前的数据
+            old_values = None
+            if action in ['UPDATE', 'DELETE'] and 'id' in kwargs:
+                resource_id = kwargs.get('id')
+                if resource_id and resource_type == 'User':
+                    old_obj = db.query(User).filter(User.id == resource_id).first()
+                    if old_obj:
+                        old_values = {
+                            'username': old_obj.username,
+                            'email': old_obj.email,
+                            'full_name': old_obj.full_name,
+                            'status': old_obj.status,
+                            'role_id': old_obj.role_id
+                        }
 
             # 记录开始
             log = AuditLog(
@@ -854,6 +891,9 @@ def audit_log(action: str, resource_type: str):
                 action=action,
                 resource_type=resource_type,
                 request_id=request_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                old_values=json.dumps(old_values) if old_values else None,
                 status='success'
             )
 
@@ -864,6 +904,17 @@ def audit_log(action: str, resource_type: str):
                 if hasattr(result, 'id'):
                     log.resource_id = result.id
                     log.resource_name = getattr(result, 'username', None) or getattr(result, 'name', None)
+
+                # 对于更新操作，捕获变更后的数据
+                if action == 'UPDATE' and result:
+                    new_values = {
+                        'username': result.username,
+                        'email': result.email,
+                        'full_name': result.full_name,
+                        'status': result.status,
+                        'role_id': result.role_id
+                    }
+                    log.new_values = json.dumps(new_values)
 
                 db.add(log)
                 db.commit()
@@ -1127,9 +1178,9 @@ INSERT INTO soc_menus (name, path, icon, sort_order, is_visible) VALUES
 ('告警管理', '/alerts', 'Bell', 4, true)
 ON CONFLICT (path) DO NOTHING;
 
--- 系统管理（父菜单）
+-- 系统管理（父菜单 - 使用空字符串作为path）
 INSERT INTO soc_menus (name, path, icon, sort_order, is_visible) VALUES
-('系统管理', NULL, 'Setting', 5, true)
+('系统管理', '', 'Setting', 5, true)
 ON CONFLICT (name, path) DO NOTHING;
 
 -- 系统管理子菜单
