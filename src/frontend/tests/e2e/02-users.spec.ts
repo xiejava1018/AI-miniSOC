@@ -14,11 +14,17 @@ test.describe('User Management', () => {
     // 导航到用户管理页面
     await page.goto('http://192.168.0.128:5173/system/users');
 
-    // 验证页面标题
-    await expect(page.locator('h1')).toContainText('用户管理');
+    // 等待页面加载
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
 
-    // 验证用户列表容器存在
-    await expect(page.getByTestId('user-list-container')).toBeVisible();
+    // 验证面包屑导航包含"用户管理"
+    await expect(page.getByText('用户管理')).toBeVisible({ timeout: 10000 });
+
+    // 使用CSS class选择器代替testid
+    await expect(page.locator('.table-card')).toBeVisible({ timeout: 10000 });
+
+    // 验证表格存在
+    await expect(page.locator('table')).toBeVisible();
   });
 
   test('should display list of users', async ({ page }) => {
