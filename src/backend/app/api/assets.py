@@ -103,10 +103,12 @@ async def get_asset(asset_id: str, db: Session = Depends(get_db)):
 @router.post("/", response_model=AssetResponse, status_code=201)
 async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
     """创建资产"""
-    # 检查IP是否已存在
-    existing = db.query(Asset).filter(Asset.asset_ip == asset_data.asset_ip).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="该IP地址已存在")
+    # 可选：检查IP是否已存在，如果存在则返回已存在的资产（而不是阻止创建）
+    # 这里我们允许创建重复IP的资产，因为不同资产可能使用相同IP（比如内网IP复用）
+    # 如果需要严格唯一性，可以取消注释以下代码：
+    # existing = db.query(Asset).filter(Asset.asset_ip == asset_data.asset_ip).first()
+    # if existing:
+    #     raise HTTPException(status_code=400, detail="该IP地址已存在")
 
     # 创建资产
     asset = Asset(**asset_data.model_dump())

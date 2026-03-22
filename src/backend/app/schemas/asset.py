@@ -2,14 +2,16 @@
 资产 Schema
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
+import uuid
 
 
 class AssetBase(BaseModel):
     """资产基础模型"""
     name: Optional[str] = None
+    network_segment: str = "default"
     asset_ip: str
     asset_type: str = "other"
     criticality: str = "medium"
@@ -29,6 +31,7 @@ class AssetCreate(AssetBase):
 class AssetUpdate(BaseModel):
     """更新资产"""
     name: Optional[str] = None
+    network_segment: Optional[str] = None
     asset_type: Optional[str] = None
     criticality: Optional[str] = None
     owner: Optional[str] = None
@@ -40,38 +43,22 @@ class AssetUpdate(BaseModel):
 
 class AssetResponse(AssetBase):
     """资产响应"""
-    id: str = Field(..., alias="id")
+    id: str
     created_at: datetime
     updated_at: datetime
     status_updated_at: Optional[datetime] = None
     parent_id: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-        # UUID 自动转换为字符串
-        populate_by_name = True
+    model_config = {
+        "from_attributes": True
+    }
 
+    @field_validator('id', mode='before')
     @classmethod
-    def from_orm(cls, obj):
-        """从 ORM 模型创建"""
-        data = {
-            "id": str(obj.id),
-            "name": obj.name,
-            "asset_ip": obj.asset_ip,
-            "asset_type": obj.asset_type,
-            "criticality": obj.criticality,
-            "owner": obj.owner,
-            "business_unit": obj.business_unit,
-            "asset_description": obj.asset_description,
-            "mac_address": str(obj.mac_address) if obj.mac_address else None,
-            "wazuh_agent_id": obj.wazuh_agent_id,
-            "asset_status": obj.asset_status,
-            "created_at": obj.created_at,
-            "updated_at": obj.updated_at,
-            "status_updated_at": obj.status_updated_at,
-            "parent_id": obj.parent_id,
-        }
-        return cls(**data)
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
 
 
 class AssetListResponse(BaseModel):

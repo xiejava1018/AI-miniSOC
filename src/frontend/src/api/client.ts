@@ -19,6 +19,7 @@ class ApiClient {
   }
 
   async post<T>(url: string, data?: any): Promise<T> {
+    console.log('POST request:', `${this.baseURL}${url}`, data)
     const response = await fetch(`${this.baseURL}${url}`, {
       method: 'POST',
       headers: {
@@ -27,7 +28,9 @@ class ApiClient {
       body: data ? JSON.stringify(data) : undefined
     })
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const errorText = await response.text()
+      console.error('POST error:', response.status, errorText)
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
     }
     return response.json()
   }

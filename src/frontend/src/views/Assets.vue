@@ -2,11 +2,6 @@
   <div class="assets-page">
     <!-- Page Header -->
     <div class="page-header">
-      <div class="header-info">
-        <h1 class="page-title">资产管理</h1>
-        <p class="page-description">管理和监控所有网络资产</p>
-      </div>
-
       <div class="header-actions">
         <button class="action-btn secondary" @click="syncAssets">
           <svg viewBox="0 0 24 24" fill="none">
@@ -29,37 +24,80 @@
       </div>
     </div>
 
-    <!-- Filters -->
-    <div class="filters-bar">
-      <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="none">
-          <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
-          <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="搜索资产名称、IP地址..."
-          class="search-input"
-        />
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <!-- 视图切换 -->
+      <div class="view-toggle">
+        <button
+          class="view-btn"
+          :class="{ active: viewMode === 'card' }"
+          @click="viewMode = 'card'"
+          title="卡片视图"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </button>
+        <button
+          class="view-btn"
+          :class="{ active: viewMode === 'list' }"
+          @click="viewMode = 'list'"
+          title="列表视图"
+        >
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
 
+      <!-- 筛选条件 -->
       <div class="filter-group">
-        <select v-model="filterType" class="filter-select">
+        <select v-model="filterType" class="filter-select" @change="handleSearch">
           <option value="">全部类型</option>
           <option value="server">服务器</option>
           <option value="workstation">工作站</option>
           <option value="router">路由器</option>
           <option value="switch">交换机</option>
+          <option value="other">其他</option>
         </select>
 
-        <select v-model="filterCriticality" class="filter-select">
+        <select v-model="filterCriticality" class="filter-select" @change="handleSearch">
           <option value="">全部重要性</option>
           <option value="critical">关键</option>
           <option value="high">高</option>
           <option value="medium">中</option>
           <option value="low">低</option>
         </select>
+
+        <select v-model="filterStatus" class="filter-select" @change="handleSearch">
+          <option value="">全部状态</option>
+          <option value="在线">在线</option>
+          <option value="离线">离线</option>
+          <option value="新发现">新发现</option>
+        </select>
+      </div>
+
+      <!-- 搜索框和搜索按钮 -->
+      <div class="search-group">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+            <path d="M21 21L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索资产名称、IP地址..."
+            class="search-input"
+            @keyup.enter="handleSearch"
+          />
+        </div>
+        <button class="search-btn" @click="handleSearch">
+          搜索
+        </button>
       </div>
     </div>
 
@@ -79,9 +117,10 @@
         <p>点击"添加资产"按钮创建第一个资产</p>
       </div>
 
-      <div v-else class="assets-grid">
+      <!-- 卡片视图 -->
+      <div v-else-if="viewMode === 'card'" class="assets-grid">
         <div
-          v-for="(asset, index) in filteredAssets"
+          v-for="(asset, index) in loadedAssets"
           :key="asset.id"
           class="asset-card"
           :style="{ animationDelay: `${index * 50}ms` }"
@@ -178,15 +217,101 @@
             </div>
           </div>
         </div>
+
+        <!-- 无限滚动 sentinel -->
+        <div ref="sentinelRef" class="scroll-sentinel"></div>
+      </div>
+
+      <!-- 列表视图 -->
+      <div v-else class="assets-list">
+        <table class="list-table">
+          <thead>
+            <tr>
+              <th>状态</th>
+              <th>资产名称</th>
+              <th>IP地址</th>
+              <th>类型</th>
+              <th>重要性</th>
+              <th>负责人</th>
+              <th>描述</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="asset in paginatedAssets" :key="asset.id">
+              <td>
+                <span class="status-badge" :class="getStatusClass(asset.asset_status)">
+                  {{ asset.asset_status || '在线' }}
+                </span>
+              </td>
+              <td class="name-cell">{{ asset.name || '-' }}</td>
+              <td class="ip-cell">{{ asset.asset_ip }}</td>
+              <td>
+                <span class="type-badge" :class="`type-${asset.asset_type}`">
+                  {{ getTypeLabel(asset.asset_type) }}
+                </span>
+              </td>
+              <td>
+                <span class="criticality-badge" :class="`criticality-${asset.criticality}`">
+                  {{ getCriticalityLabel(asset.criticality) }}
+                </span>
+              </td>
+              <td>{{ asset.owner || '-' }}</td>
+              <td class="desc-cell">{{ asset.asset_description || '-' }}</td>
+              <td>
+                <div class="table-actions">
+                  <button class="action-icon" @click="viewAsset(asset)" title="查看">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" stroke="currentColor" stroke-width="2"/>
+                      <path d="M3 12C5.4 7.6 8.4 5.4 12 5.4C15.6 5.4 18.6 7.6 21 12C18.6 16.4 15.6 18.6 12 18.6C8.4 18.6 5.4 16.4 3 12Z" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </button>
+                  <button class="action-icon" @click="editAsset(asset)" title="编辑">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M11 4H4C3.46957 4 2.96086 4.21071 2.58579 4.58579C2.21071 4.96086 2 5.46957 2 6V20C2 20.5304 2.21071 21.0391 2.58579 21.4142C2.96086 21.7893 3.46957 22 4 22H18C18.5304 22 19.0391 21.7893 19.4142 21.4142C19.7893 21.0391 20 20.5304 20 20V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M18.5 2.50001C18.8978 2.10219 19.4374 1.87869 20 1.87869C20.5626 1.87869 21.1022 2.10219 21.5 2.50001C21.8978 2.89784 22.1213 3.4374 22.1213 4.00001C22.1213 4.56262 21.8978 5.10219 21.5 5.50001L12 15L8 16L9 12L18.5 2.50001Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                  <button class="action-icon danger" @click="deleteAsset(asset)" title="删除">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- 列表分页 -->
+        <div class="pagination">
+          <div class="pagination-info">
+            共 {{ filteredAssets.length }} 条，第 {{ currentPage }}/{{ totalPages }} 页
+          </div>
+          <div class="pagination-controls">
+            <button class="page-btn" :disabled="currentPage === 1" @click="currentPage = 1">首页</button>
+            <button class="page-btn" :disabled="currentPage === 1" @click="currentPage--">上一页</button>
+            <button class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">下一页</button>
+            <button class="page-btn" :disabled="currentPage === totalPages" @click="currentPage = totalPages">末页</button>
+          </div>
+          <div class="pagination-size">
+            <select v-model="pageSize" @change="currentPage = 1">
+              <option :value="10">10条/页</option>
+              <option :value="20">20条/页</option>
+              <option :value="50">50条/页</option>
+              <option :value="100">100条/页</option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Create/Edit Dialog -->
-    <div v-if="showCreateDialog" class="dialog-overlay" @click.self="showCreateDialog = false">
+    <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeDialog">
       <div class="dialog">
         <div class="dialog-header">
-          <h2>添加资产</h2>
-          <button class="dialog-close" @click="showCreateDialog = false">
+          <h2>{{ isEditMode ? '编辑资产' : '添加资产' }}</h2>
+          <button class="dialog-close" @click="closeDialog">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
@@ -202,6 +327,17 @@
           <div class="form-group">
             <label>IP地址</label>
             <input v-model="assetForm.asset_ip" type="text" class="form-input" placeholder="例如: 192.168.0.100" />
+          </div>
+
+          <div class="form-group">
+            <label>网络区域</label>
+            <select v-model="assetForm.network_segment" class="form-input">
+              <option value="default">默认区域</option>
+              <option value="internal">内网</option>
+              <option value="dmz">DMZ</option>
+              <option value="external">外网</option>
+              <option value="guest">访客网络</option>
+            </select>
           </div>
 
           <div class="form-row">
@@ -234,8 +370,10 @@
         </div>
 
         <div class="dialog-footer">
-          <button class="action-btn secondary" @click="showCreateDialog = false">取消</button>
-          <button class="action-btn primary" @click="handleCreate">确定</button>
+          <button class="action-btn secondary" @click="closeDialog">取消</button>
+          <button class="action-btn primary" @click="isEditMode ? handleUpdate() : handleCreate()">
+            {{ isEditMode ? '保存' : '确定' }}
+          </button>
         </div>
       </div>
     </div>
@@ -243,9 +381,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAssetStore } from '@/stores/assets'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const assetStore = useAssetStore()
@@ -253,35 +392,151 @@ const assetStore = useAssetStore()
 const loading = ref(false)
 const assets = ref<any[]>([])
 const showCreateDialog = ref(false)
+const isEditMode = ref(false)
+const editingAssetId = ref<string | null>(null)
 const searchQuery = ref('')
 const filterType = ref('')
 const filterCriticality = ref('')
+const filterStatus = ref('')
+const viewMode = ref<'card' | 'list'>('card')
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+// 卡片视图按需加载（无限滚动）
+const cardDisplayCount = ref(12)
+const loadedAssets = computed(() => {
+  return filteredAssets.value.slice(0, cardDisplayCount.value)
+})
+
+const hasMoreCards = computed(() => {
+  return cardDisplayCount.value < filteredAssets.value.length
+})
+
+function loadMoreCards() {
+  cardDisplayCount.value += 12
+}
+
+// 无限滚动 - 使用 Intersection Observer
+let observer: IntersectionObserver | null = null
+const sentinelRef = ref<HTMLElement | null>(null)
+
+function setupIntersectionObserver() {
+  if (observer) {
+    observer.disconnect()
+  }
+
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && hasMoreCards.value && viewMode.value === 'card') {
+        loadMoreCards()
+      }
+    },
+    {
+      rootMargin: '100px'
+    }
+  )
+
+  // 等待 DOM 更新后观察 sentinel 元素
+  nextTick(() => {
+    if (sentinelRef.value) {
+      observer?.observe(sentinelRef.value)
+    }
+  })
+}
+
+onMounted(async () => {
+  await loadAssets()
+  setupIntersectionObserver()
+})
+
+// 清理 observer
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect()
+  }
+})
 
 const assetForm = ref({
   name: '',
+  network_segment: 'default',
   asset_ip: '',
   asset_type: 'server',
   criticality: 'medium',
   owner: ''
 })
 
+// 列表视图分页
+const paginatedAssets = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredAssets.value.slice(start, end)
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredAssets.value.length / pageSize.value) || 1
+})
+
 const filteredAssets = computed(() => {
   return assets.value.filter(asset => {
+    const searchLower = searchQuery.value.toLowerCase()
     const matchesSearch =
       !searchQuery.value ||
-      asset.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      asset.asset_ip.includes(searchQuery.value)
+      (asset.name && asset.name.toLowerCase().includes(searchLower)) ||
+      asset.asset_ip.includes(searchQuery.value) ||
+      (asset.asset_description && asset.asset_description.toLowerCase().includes(searchLower))
 
     const matchesType = !filterType.value || asset.asset_type === filterType.value
     const matchesCriticality =
       !filterCriticality.value || asset.criticality === filterCriticality.value
+    const matchesStatus =
+      !filterStatus.value || asset.asset_status === filterStatus.value
 
-    return matchesSearch && matchesType && matchesCriticality
+    return matchesSearch && matchesType && matchesCriticality && matchesStatus
   })
 })
 
+function handleSearch() {
+  // 搜索时重置分页
+  currentPage.value = 1
+  cardDisplayCount.value = 12
+  // 搜索功能 - 由于是前端筛选，这里只需要触发重新计算
+  // 如果后续需要后端搜索，可以在这里调用 API
+  console.log('搜索条件:', {
+    searchQuery: searchQuery.value,
+    filterType: filterType.value,
+    filterCriticality: filterCriticality.value,
+    filterStatus: filterStatus.value
+  })
+}
+
+// 无限滚动处理
+function handleScroll() {
+  // 只在卡片视图时启用无限滚动
+  if (viewMode.value !== 'card') return
+
+  const scrollTop = window.scrollY || document.documentElement.scrollTop
+  const scrollHeight = document.documentElement.scrollHeight
+  const clientHeight = document.documentElement.clientHeight
+
+  // 当滚动到距离底部100px时加载更多
+  if (scrollTop + clientHeight >= scrollHeight - 100) {
+    if (hasMoreCards.value) {
+      loadMoreCards()
+    }
+  }
+}
+
 onMounted(async () => {
   await loadAssets()
+  // 添加滚动监听（卡片视图无限滚动）
+  window.addEventListener('scroll', handleScroll)
+})
+
+// 移除滚动监听
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
 })
 
 async function loadAssets() {
@@ -315,19 +570,77 @@ function getCriticalityLabel(criticality: string) {
   return labels[criticality] || criticality
 }
 
+function getStatusClass(status: string) {
+  if (status === '在线' || status === 'online') return 'online'
+  if (status === '离线' || status === 'offline') return 'offline'
+  if (status === '新发现' || status === 'new') return 'new'
+  return 'online'
+}
+
 function viewAsset(asset: any) {
   router.push(`/assets/${asset.id}`)
 }
 
 function editAsset(asset: any) {
-  console.log('编辑资产:', asset)
-  // TODO: 实现编辑功能
+  isEditMode.value = true
+  editingAssetId.value = asset.id
+  assetForm.value = {
+    name: asset.name || '',
+    network_segment: asset.network_segment || 'default',
+    asset_ip: asset.asset_ip || '',
+    asset_type: asset.asset_type || 'server',
+    criticality: asset.criticality || 'medium',
+    owner: asset.owner || ''
+  }
+  showCreateDialog.value = true
 }
 
 async function deleteAsset(asset: any) {
-  if (confirm(`确定要删除资产 "${asset.name}" 吗?`)) {
-    console.log('删除资产:', asset)
-    // TODO: 实现删除功能
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除资产 "${asset.name}" 吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    await assetStore.deleteAsset(asset.id)
+    ElMessage.success('资产删除成功')
+    await loadAssets()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除资产失败:', error)
+      ElMessage.error(error.message || '删除资产失败')
+    }
+  }
+}
+
+function closeDialog() {
+  showCreateDialog.value = false
+  isEditMode.value = false
+  editingAssetId.value = null
+  assetForm.value = {
+    name: '',
+    network_segment: 'default',
+    asset_ip: '',
+    asset_type: 'server',
+    criticality: 'medium',
+    owner: ''
+  }
+}
+
+async function handleUpdate() {
+  if (!editingAssetId.value) return
+  try {
+    await assetStore.updateAsset(editingAssetId.value, assetForm.value)
+    ElMessage.success('资产更新成功')
+    closeDialog()
+    await loadAssets()
+  } catch (error: any) {
+    console.error('更新资产失败:', error)
+    ElMessage.error(error.response?.data?.detail || error.message || '更新资产失败')
   }
 }
 
@@ -346,17 +659,12 @@ async function syncAssets() {
 async function handleCreate() {
   try {
     await assetStore.createAsset(assetForm.value)
-    showCreateDialog.value = false
-    assetForm.value = {
-      name: '',
-      asset_ip: '',
-      asset_type: 'server',
-      criticality: 'medium',
-      owner: ''
-    }
+    ElMessage.success('资产创建成功')
+    closeDialog()
     await loadAssets()
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建资产失败:', error)
+    ElMessage.error(error.response?.data?.detail || error.message || '创建资产失败')
   }
 }
 </script>
@@ -373,25 +681,9 @@ async function handleCreate() {
 /* Page Header */
 .page-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.header-info {
-  flex: 1;
-}
-
-.page-title {
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 8px 0;
-}
-
-.page-description {
-  font-size: 14px;
-  color: var(--text-muted);
-  margin: 0;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .header-actions {
@@ -439,15 +731,82 @@ async function handleCreate() {
   background: rgba(0, 212, 255, 0.05);
 }
 
-/* Filters */
-.filters-bar {
+/* Toolbar */
+.toolbar {
   display: flex;
   gap: 16px;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.view-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.view-btn:hover {
+  color: var(--text-primary);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.view-btn.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 212, 255, 0.15);
+}
+
+.filter-group {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-select {
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+
+.search-group {
+  display: flex;
+  gap: 8px;
+  flex: 1;
 }
 
 .search-box {
   flex: 1;
+  min-width: 200px;
   position: relative;
   display: flex;
   align-items: center;
@@ -473,6 +832,24 @@ async function handleCreate() {
   transition: all var(--transition-fast);
 }
 
+.search-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.search-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--accent-cyan-dim);
+}
+
 .search-input:focus {
   outline: none;
   border-color: var(--accent-cyan);
@@ -483,25 +860,49 @@ async function handleCreate() {
   color: var(--text-muted);
 }
 
-.filter-group {
+/* View Toggle Bar */
+.view-bar {
   display: flex;
-  gap: 12px;
+  justify-content: flex-end;
+  margin-bottom: 20px;
 }
 
-.filter-select {
-  padding: 10px 14px;
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
   border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14px;
+  border: 1px solid var(--border-color);
+}
+
+.view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
-.filter-select:focus {
-  outline: none;
-  border-color: var(--accent-cyan);
+.view-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.view-btn:hover {
+  color: var(--text-primary);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.view-btn.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 212, 255, 0.15);
 }
 
 /* Table Container */
@@ -566,6 +967,208 @@ async function handleCreate() {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 20px;
+}
+
+/* 无限滚动 sentinel */
+.scroll-sentinel {
+  height: 1px;
+  grid-column: 1 / -1;
+}
+
+/* 分页样式 */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border-color);
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.page-btn {
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.page-btn:hover:not(:disabled) {
+  border-color: var(--accent-cyan);
+  background: rgba(0, 212, 255, 0.1);
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-size select {
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pagination-size select:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+}
+
+/* Assets List */
+.assets-list {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.list-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.list-table th,
+.list-table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.list-table th {
+  background: var(--bg-tertiary);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.list-table tr:hover {
+  background: rgba(0, 212, 255, 0.03);
+}
+
+.list-table tr:last-child td {
+  border-bottom: none;
+}
+
+.name-cell {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.ip-cell {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--accent-cyan);
+}
+
+.desc-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-badge.online {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-success);
+}
+
+.status-badge.offline {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-muted);
+}
+
+.status-badge.new {
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent-cyan);
+}
+
+.type-badge,
+.criticality-badge {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.type-badge.type-server {
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--accent-cyan);
+}
+
+.type-badge.type-workstation {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-purple);
+}
+
+.type-badge.type-router {
+  background: rgba(255, 193, 7, 0.15);
+  color: var(--status-warning);
+}
+
+.type-badge.type-switch {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-success);
+}
+
+.type-badge.type-other {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-muted);
+}
+
+.criticality-badge.criticality-critical {
+  background: rgba(255, 42, 109, 0.15);
+  color: var(--status-critical);
+}
+
+.criticality-badge.criticality-high {
+  background: rgba(255, 107, 53, 0.15);
+  color: var(--status-high);
+}
+
+.criticality-badge.criticality-medium {
+  background: rgba(255, 193, 7, 0.15);
+  color: var(--status-warning);
+}
+
+.criticality-badge.criticality-low {
+  background: rgba(107, 114, 128, 0.15);
+  color: var(--text-muted);
 }
 
 .asset-card {

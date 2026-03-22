@@ -2,7 +2,7 @@
 资产模型
 """
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, MACADDR
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -12,9 +12,13 @@ from app.models.base import Base
 class Asset(Base):
     """资产表"""
     __tablename__ = "soc_assets"
+    __table_args__ = (
+        UniqueConstraint('network_segment', 'asset_ip', name='uq_network_segment_ip'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    asset_ip = Column(Text, nullable=False, unique=True)
+    network_segment = Column(String(50), nullable=False, default="default")
+    asset_ip = Column(Text, nullable=False)
     asset_description = Column(Text)
     asset_status = Column(String)
     status_updated_at = Column(DateTime(timezone=True))
@@ -29,8 +33,8 @@ class Asset(Base):
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))
 
-    # 关系
-    incidents = relationship("AssetIncident", back_populates="asset")
+    # 关系 - 暂时注释掉，因为soc_asset_incidents表不存在
+    # incidents = relationship("AssetIncident", back_populates="asset")
 
     def __repr__(self):
         return f"<Asset(id={self.id}, name={self.name}, ip={self.asset_ip})>"

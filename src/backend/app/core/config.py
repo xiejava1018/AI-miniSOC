@@ -45,7 +45,10 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
     BACKEND_CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:5173",
-        "http://192.168.0.42:5173"
+        "http://localhost:5174",
+        "http://192.168.0.42:5173",
+        "http://192.168.0.128:5173",
+        "http://192.168.0.128:5173"
     ]
 
     @field_validator('BACKEND_CORS_ORIGINS', mode='before')

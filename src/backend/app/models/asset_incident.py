@@ -15,9 +15,9 @@ class AssetIncident(Base):
     asset_id = Column(UUID(as_uuid=True), ForeignKey("soc_assets.id", ondelete="CASCADE"), primary_key=True)
     incident_id = Column(UUID(as_uuid=True), ForeignKey("soc_incidents.id", ondelete="CASCADE"), primary_key=True)
 
-    # 关系
-    asset = relationship("Asset", back_populates="incidents")
-    incident = relationship("Incident", back_populates="assets")
+    # 关系 - 暂时注释掉
+    # asset = relationship("Asset", back_populates="incidents")
+    # incident = relationship("Incident", back_populates="assets")
 
     def __repr__(self):
         return f"<AssetIncident(asset_id={self.asset_id}, incident_id={self.incident_id})>"
