@@ -17,7 +17,7 @@ from app.schemas.role import (
 from app.services.role_service import RoleService
 
 
-router = APIRouter(prefix="/roles", tags=["角色管理"])
+router = APIRouter(tags=["角色管理"])
 
 
 @router.get("", response_model=RoleListResponse)

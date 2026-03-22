@@ -30,12 +30,12 @@ class RoleUpdate(BaseModel):
 class RoleResponse(RoleBase):
     """角色响应"""
     id: int = Field(..., description="角色ID")
-    code: str = Field(..., description="角色代码")  # 添加
-    is_active: bool = Field(..., description="是否激活")  # 保留现有字段
-    is_system: bool = Field(..., description="是否系统角色")  # 新增
-    user_count: int = Field(default=0, description="用户数量")  # 新增
-    created_at: datetime = Field(..., description="创建时间")  # 修改为datetime类型
-    updated_at: datetime = Field(..., description="更新时间")  # 修改为datetime类型
+    code: str = Field(..., description="角色代码")
+    is_active: bool = Field(default=True, description="是否激活")  # 设置默认值
+    is_system: bool = Field(..., description="是否系统角色")
+    user_count: int = Field(default=0, description="用户数量")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
 
     class Config:
         from_attributes = True

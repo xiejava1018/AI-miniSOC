@@ -38,18 +38,42 @@
       </div>
 
       <nav class="sidebar-nav">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isActive(item.path) }"
-          :title="sidebarCollapsed ? item.label : ''"
-        >
-          <component :is="item.icon" class="nav-icon" />
-          <span class="nav-label" v-show="!sidebarCollapsed">{{ item.label }}</span>
-          <div class="nav-indicator"></div>
-        </router-link>
+        <template v-for="item in menuItems" :key="item.path">
+          <!-- 有子菜单的情况 -->
+          <div v-if="item.children && item.children.length > 0" class="nav-group">
+            <div class="nav-item nav-group-header" :title="sidebarCollapsed ? item.label : ''">
+              <component :is="item.icon" class="nav-icon" />
+              <span class="nav-label" v-show="!sidebarCollapsed">{{ item.label }}</span>
+            </div>
+            <div class="nav-group-children" v-show="!sidebarCollapsed">
+              <router-link
+                v-for="child in item.children"
+                :key="child.path"
+                :to="child.path"
+                class="nav-item nav-child"
+                :class="{ active: isActive(child.path) }"
+                :title="child.label"
+              >
+                <component :is="child.icon" class="nav-icon" />
+                <span class="nav-label">{{ child.label }}</span>
+                <div class="nav-indicator"></div>
+              </router-link>
+            </div>
+          </div>
+
+          <!-- 无子菜单的情况 -->
+          <router-link
+            v-else
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: isActive(item.path) }"
+            :title="sidebarCollapsed ? item.label : ''"
+          >
+            <component :is="item.icon" class="nav-icon" />
+            <span class="nav-label" v-show="!sidebarCollapsed">{{ item.label }}</span>
+            <div class="nav-indicator"></div>
+          </router-link>
+        </template>
       </nav>
 
       <div class="sidebar-footer" v-show="!sidebarCollapsed">
@@ -128,15 +152,17 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, markRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeFilled, Monitor, Warning, Bell, User, DataAnalysis } from '@element-plus/icons-vue'
+import { HomeFilled, Monitor, Warning, Bell, User, DataAnalysis, Setting, Lock, User as UserIcon, Menu as MenuIcon, Document } from '@element-plus/icons-vue'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import { useMenusStore } from '@/stores/menus'
 import { ElMessageBox } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+const menusStore = useMenusStore()
 
 // Sidebar collapse state
 const sidebarCollapsed = ref(false)
@@ -156,21 +182,65 @@ interface MenuItem {
   path: string
   label: string
   icon: any
+  children?: MenuItem[]
 }
 
-const menuItems: MenuItem[] = [
-  { path: '/dashboard', label: '概览仪表板', icon: markRaw(DataAnalysis) },
-  { path: '/assets', label: '资产管理', icon: markRaw(Monitor) },
-  { path: '/incidents', label: '事件管理', icon: markRaw(Warning) },
-  { path: '/alerts', label: '告警中心', icon: markRaw(Bell) },
-]
+// 图标映射
+const iconMap: Record<string, any> = {
+  'DataAnalysis': markRaw(DataAnalysis),
+  'Monitor': markRaw(Monitor),
+  'Warning': markRaw(Warning),
+  'Bell': markRaw(Bell),
+  'Setting': markRaw(Setting),
+  'Lock': markRaw(Lock),
+  'User': markRaw(UserIcon),
+  'Menu': markRaw(MenuIcon),
+  'Document': markRaw(Document),
+}
+
+// 从后端加载的菜单
+const menuItems = computed<MenuItem[]>(() => {
+  if (!menusStore.menuTree || menusStore.menuTree.length === 0) {
+    return []
+  }
+
+  return menusStore.menuTree.map(menu => {
+    const item: MenuItem = {
+      path: menu.path || '#',
+      label: menu.name,
+      icon: iconMap[menu.icon] || markRaw(DataAnalysis)
+    }
+
+    // 如果有子菜单，递归处理
+    if (menu.children && menu.children.length > 0) {
+      item.children = menu.children.map(child => ({
+        path: child.path,
+        label: child.name,
+        icon: iconMap[child.icon] || markRaw(Document)
+      }))
+    }
+
+    return item
+  })
+})
 
 const currentTime = ref('')
 let timeInterval: ReturnType<typeof setInterval> | null = null
 
 const currentPageTitle = computed(() => {
-  const item = menuItems.find(item => item.path === route.path)
-  return item?.label || 'AI-miniSOC'
+  // 递归查找当前路径对应的菜单
+  const findMenuItem = (items: MenuItem[], path: string): string | null => {
+    for (const item of items) {
+      if (item.path === path) return item.label
+      if (item.children) {
+        const found = findMenuItem(item.children, path)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  return findMenuItem(menuItems.value, route.path) || 'AI-miniSOC'
 })
 
 const isActive = (path: string) => {
@@ -186,9 +256,14 @@ const updateTime = () => {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   updateTime()
   timeInterval = setInterval(updateTime, 1000)
+
+  // 加载菜单树
+  if (authStore.isAuthenticated) {
+    await menusStore.fetchMenuTree()
+  }
 })
 
 onUnmounted(() => {
@@ -433,6 +508,32 @@ const userName = computed(() => {
 
 .sidebar.collapsed .sidebar-nav {
   padding: 20px 8px;
+}
+
+/* Menu Group */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group-header {
+  cursor: default;
+  background: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.nav-group-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 16px;
+  margin-top: 2px;
+}
+
+.nav-child {
+  font-size: 13px;
+  padding: 10px 12px;
 }
 
 .nav-item {

@@ -23,6 +23,11 @@ class MenuService:
 
     def _build_tree(self, menus: List[Menu]) -> List[Menu]:
         """构建树形结构"""
+        # 先清空所有菜单的children列表，避免重复添加
+        for menu in menus:
+            if hasattr(menu, 'children'):
+                menu.children.clear()
+
         menu_dict = {menu.id: menu for menu in menus}
         root_menus = []
 
@@ -31,7 +36,7 @@ class MenuService:
                 root_menus.append(menu)
             else:
                 parent = menu_dict.get(menu.parent_id)
-                if parent and hasattr(parent, 'children'):
+                if parent:
                     parent.children.append(menu)
 
         # 排序

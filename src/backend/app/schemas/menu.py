@@ -13,6 +13,21 @@ class MenuBase(BaseModel):
     is_visible: bool = Field(True, description="是否可见")
 
 
+class MenuCreate(MenuBase):
+    """创建菜单schema"""
+    parent_id: Optional[int] = Field(None, description="父菜单ID")
+
+
+class MenuUpdate(BaseModel):
+    """更新菜单schema"""
+    name: Optional[str] = Field(None, max_length=50, description="菜单名称")
+    path: Optional[str] = Field(None, max_length=200, description="菜单路径")
+    icon: Optional[str] = Field(None, max_length=50, description="菜单图标")
+    parent_id: Optional[int] = Field(None, description="父菜单ID")
+    sort_order: Optional[int] = Field(None, description="排序")
+    is_visible: Optional[bool] = Field(None, description="是否可见")
+
+
 class MenuResponse(MenuBase):
     """菜单响应schema"""
     id: int

@@ -1,5 +1,5 @@
 # src/backend/app/api/menus.py
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ from app.schemas.menu import (
 from app.services.menu_service import MenuService
 
 
-router = APIRouter(prefix="/menus", tags=["菜单管理"])
+router = APIRouter(tags=["菜单管理"])
 
 
 @router.get("/tree", response_model=List[MenuTreeResponse])
