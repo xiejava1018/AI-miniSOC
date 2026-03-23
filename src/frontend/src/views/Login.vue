@@ -42,11 +42,13 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { useMenusStore } from '@/stores/menus'
 import { login } from '@/api/auth'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const menusStore = useMenusStore()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
 
@@ -82,6 +84,14 @@ async function handleLogin() {
 
       // 保存refresh token到localStorage
       localStorage.setItem('refresh_token', response.refresh_token)
+
+      // 加载菜单树
+      try {
+        await menusStore.fetchMenuTree()
+      } catch (menuError) {
+        console.error('加载菜单失败:', menuError)
+        // 菜单加载失败不影响登录流程
+      }
 
       ElMessage.success('登录成功')
 

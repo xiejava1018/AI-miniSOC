@@ -161,6 +161,7 @@ async def get_current_user(
 
     # 4. 返回用户响应（临时实现，返回模拟数据）
     # 实际使用时需要从数据库查询并转换为UserResponse
+    is_admin = payload.get("is_admin", payload.get("role_name") == "admin")
     return UserResponse(
         id=int(user_id),
         username=payload.get("username", "unknown"),
@@ -168,11 +169,11 @@ async def get_current_user(
         full_name=payload.get("full_name"),
         role_id=payload.get("role_id"),
         role_name=payload.get("role_name"),
-        is_active=payload.get("is_active", True),
-        is_locked=payload.get("is_locked", False),
+        is_admin=is_admin,
+        status=payload.get("status", "active"),
         last_login=payload.get("last_login"),
-        created_at=payload.get("created_at", datetime.utcnow().isoformat()),
-        updated_at=payload.get("updated_at", datetime.utcnow().isoformat())
+        created_at=payload.get("created_at", datetime.utcnow()),
+        updated_at=payload.get("updated_at", datetime.utcnow())
     )
 
 
