@@ -11,7 +11,9 @@ export interface Asset {
   owner?: string
   business_unit?: string
   asset_status?: string
-  description?: string
+  asset_description?: string
+  mac_address?: string
+  network_segment?: string
   wazuh_agent_id?: string
   created_at: string
   updated_at: string

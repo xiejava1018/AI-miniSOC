@@ -11,7 +11,9 @@ class ApiClient {
 
   async get<T>(url: string, params?: Record<string, any>): Promise<T> {
     const queryString = params ? new URLSearchParams(params).toString() : ''
-    const response = await fetch(`${this.baseURL}${url}${queryString ? `?${queryString}` : ''}`)
+    // 确保URL末尾有斜杠以避免307重定向
+    const normalizedUrl = url.endsWith('/') ? url : `${url}/`
+    const response = await fetch(`${this.baseURL}${normalizedUrl}${queryString ? `?${queryString}` : ''}`)
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
@@ -20,7 +22,9 @@ class ApiClient {
 
   async post<T>(url: string, data?: any): Promise<T> {
     console.log('POST request:', `${this.baseURL}${url}`, data)
-    const response = await fetch(`${this.baseURL}${url}`, {
+    // 确保URL末尾有斜杠以避免307重定向
+    const normalizedUrl = url.endsWith('/') ? url : `${url}/`
+    const response = await fetch(`${this.baseURL}${normalizedUrl}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -36,7 +40,9 @@ class ApiClient {
   }
 
   async put<T>(url: string, data?: any): Promise<T> {
-    const response = await fetch(`${this.baseURL}${url}`, {
+    // 确保URL末尾有斜杠以避免307重定向
+    const normalizedUrl = url.endsWith('/') ? url : `${url}/`
+    const response = await fetch(`${this.baseURL}${normalizedUrl}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -50,7 +56,9 @@ class ApiClient {
   }
 
   async delete<T>(url: string): Promise<T> {
-    const response = await fetch(`${this.baseURL}${url}`, {
+    // 确保URL末尾有斜杠以避免307重定向
+    const normalizedUrl = url.endsWith('/') ? url : `${url}/`
+    const response = await fetch(`${this.baseURL}${normalizedUrl}`, {
       method: 'DELETE'
     })
     if (!response.ok) {
