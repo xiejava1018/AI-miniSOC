@@ -41,11 +41,25 @@
         <template v-for="item in menuItems" :key="item.path">
           <!-- 有子菜单的情况 -->
           <div v-if="item.children && item.children.length > 0" class="nav-group">
-            <div class="nav-item nav-group-header" :title="sidebarCollapsed ? item.label : ''">
+            <div
+              class="nav-item nav-group-header"
+              :class="{ expanded: isMenuExpanded(item.path) }"
+              :title="sidebarCollapsed ? item.label : ''"
+              @click="toggleMenuExpansion(item.path)"
+            >
               <component :is="item.icon" class="nav-icon" />
               <span class="nav-label" v-show="!sidebarCollapsed">{{ item.label }}</span>
+              <svg
+                class="nav-arrow"
+                :class="{ expanded: isMenuExpanded(item.path) }"
+                v-show="!sidebarCollapsed"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
             </div>
-            <div class="nav-group-children" v-show="!sidebarCollapsed">
+            <div class="nav-group-children" v-show="isMenuExpanded(item.path) && !sidebarCollapsed">
               <router-link
                 v-for="child in item.children"
                 :key="child.path"
@@ -150,7 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, markRaw } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch, markRaw } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { HomeFilled, Monitor, Warning, Bell, User, DataAnalysis, Setting, Lock, User as UserIcon, Menu as MenuIcon, Document } from '@element-plus/icons-vue'
 import { useThemeStore } from '@/stores/theme'
@@ -176,6 +190,30 @@ if (savedSidebarState !== null) {
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem('sidebarCollapsed', String(sidebarCollapsed.value))
+}
+
+// Menu expansion state
+const expandedMenus = ref<Set<string>>(new Set())
+
+// Load expanded menus from localStorage
+const savedExpandedMenus = localStorage.getItem('expandedMenus')
+if (savedExpandedMenus) {
+  expandedMenus.value = new Set(JSON.parse(savedExpandedMenus))
+}
+
+// Toggle menu expansion
+const toggleMenuExpansion = (menuPath: string) => {
+  if (expandedMenus.value.has(menuPath)) {
+    expandedMenus.value.delete(menuPath)
+  } else {
+    expandedMenus.value.add(menuPath)
+  }
+  localStorage.setItem('expandedMenus', JSON.stringify([...expandedMenus.value]))
+}
+
+// Check if menu is expanded
+const isMenuExpanded = (menuPath: string) => {
+  return expandedMenus.value.has(menuPath)
 }
 
 interface MenuItem {
@@ -207,7 +245,7 @@ const menuItems = computed<MenuItem[]>(() => {
   return menusStore.menuTree.map(menu => {
     const item: MenuItem = {
       path: menu.path || '#',
-      label: menu.name,
+      label: menu.title || menu.name,
       icon: iconMap[menu.icon] || markRaw(DataAnalysis)
     }
 
@@ -215,7 +253,7 @@ const menuItems = computed<MenuItem[]>(() => {
     if (menu.children && menu.children.length > 0) {
       item.children = menu.children.map(child => ({
         path: child.path,
-        label: child.name,
+        label: child.title || child.name,
         icon: iconMap[child.icon] || markRaw(Document)
       }))
     }
@@ -261,10 +299,64 @@ onMounted(async () => {
   timeInterval = setInterval(updateTime, 1000)
 
   // 加载菜单树
-  if (authStore.isAuthenticated) {
-    await menusStore.fetchMenuTree()
-  }
+  await loadMenuTree()
+
+  // 自动展开当前活动菜单的父菜单
+  autoExpandCurrentMenu()
 })
+
+// 自动展开当前活动菜单的父菜单
+const autoExpandCurrentMenu = () => {
+  const findParentPath = (items: MenuItem[], currentPath: string): string | null => {
+    for (const item of items) {
+      if (item.children) {
+        for (const child of item.children) {
+          if (child.path === currentPath) {
+            return item.path
+          }
+        }
+        const found = findParentPath(item.children, currentPath)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const parentPath = findParentPath(menuItems.value, route.path)
+  if (parentPath) {
+    expandedMenus.value.add(parentPath)
+    localStorage.setItem('expandedMenus', JSON.stringify([...expandedMenus.value]))
+  }
+}
+
+// 监听认证状态变化，自动加载菜单
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuthenticated) => {
+    if (isAuthenticated) {
+      await loadMenuTree()
+    }
+  }
+)
+
+// 监听路由变化，自动展开对应的父菜单
+watch(
+  () => route.path,
+  () => {
+    autoExpandCurrentMenu()
+  }
+)
+
+// 加载菜单树的函数
+async function loadMenuTree() {
+  if (authStore.isAuthenticated && (!menusStore.menuTree || menusStore.menuTree.length === 0)) {
+    try {
+      await menusStore.fetchMenuTree()
+    } catch (error) {
+      console.error('加载菜单失败:', error)
+    }
+  }
+}
 
 onUnmounted(() => {
   if (timeInterval) {
@@ -518,9 +610,34 @@ const userName = computed(() => {
 }
 
 .nav-group-header {
-  cursor: default;
+  cursor: pointer;
   background: var(--bg-tertiary);
   font-weight: 600;
+  user-select: none;
+  position: relative;
+}
+
+.nav-group-header:hover {
+  color: var(--text-primary);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.nav-group-header.expanded {
+  color: var(--accent-cyan);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.nav-arrow {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  transition: transform var(--transition-base);
+  opacity: 0.6;
+}
+
+.nav-arrow.expanded {
+  transform: rotate(180deg);
+  opacity: 1;
 }
 
 .nav-group-children {
@@ -529,6 +646,8 @@ const userName = computed(() => {
   gap: 2px;
   padding-left: 16px;
   margin-top: 2px;
+  overflow: hidden;
+  transition: all var(--transition-base);
 }
 
 .nav-child {
