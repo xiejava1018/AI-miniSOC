@@ -7,6 +7,7 @@ from datetime import datetime
 class MenuBase(BaseModel):
     """菜单基础schema"""
     name: str = Field(max_length=50, description="菜单名称")
+    title: Optional[str] = Field(None, max_length=50, description="菜单标题")
     path: str = Field(max_length=200, description="菜单路径")
     icon: Optional[str] = Field(None, max_length=50, description="菜单图标")
     sort_order: int = Field(0, description="排序")

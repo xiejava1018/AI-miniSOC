@@ -15,6 +15,7 @@ class Menu(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     parent_id = Column(BigInteger, ForeignKey('soc_menus.id'))
     name = Column(String(50), nullable=False)
+    title = Column(String(50))
     path = Column(String(200), nullable=False)
     icon = Column(String(50))
     sort_order = Column(Integer, default=0)
@@ -33,6 +34,7 @@ class Menu(Base):
             "id": self.id,
             "parent_id": self.parent_id,
             "name": self.name,
+            "title": self.title,
             "path": self.path,
             "icon": self.icon,
             "sort_order": self.sort_order,

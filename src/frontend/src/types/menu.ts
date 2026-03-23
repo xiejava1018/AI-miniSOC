@@ -3,6 +3,7 @@ export interface Menu {
   id: number
   parent_id?: number
   name: string
+  title?: string
   path: string
   icon: string
   sort_order: number

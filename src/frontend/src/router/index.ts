@@ -71,6 +71,12 @@ const routes: RouteRecordRaw[] = [
         name: 'SystemMenus',
         component: () => import('@/views/system/Menus.vue'),
         meta: { title: '菜单管理', requiresAuth: true }
+      },
+      {
+        path: 'audit-logs',
+        name: 'SystemAuditLogs',
+        component: () => import('@/views/system/AuditLogs.vue'),
+        meta: { title: '审计日志', requiresAuth: true }
       }
     ]
   }

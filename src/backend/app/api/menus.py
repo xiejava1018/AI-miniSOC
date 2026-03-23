@@ -1,11 +1,12 @@
 # src/backend/app/api/menus.py
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.core.permissions import require_admin
+from app.core.audit_decorator import log_audit
 from app.schemas.user import UserResponse as UserResponseSchema
 from app.schemas.menu import (
     MenuCreate,
@@ -52,7 +53,15 @@ async def get_menus(
 
 
 @router.post("", response_model=MenuResponse, status_code=status.HTTP_201_CREATED)
+@log_audit(
+    action="CREATE",
+    resource_type="menu",
+    get_resource_id=lambda result, kwargs: result.id if hasattr(result, 'id') else None,
+    get_resource_name=lambda result, kwargs: result.name if hasattr(result, 'name') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def create_menu(
+    request: Request,
     menu_data: MenuCreate,
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
@@ -88,7 +97,15 @@ async def get_menu(
 
 
 @router.put("/{menu_id}", response_model=MenuResponse)
+@log_audit(
+    action="UPDATE",
+    resource_type="menu",
+    get_resource_id=lambda result, kwargs: kwargs.get('menu_id'),
+    get_resource_name=lambda result, kwargs: result.name if hasattr(result, 'name') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def update_menu(
+    request: Request,
     menu_id: int,
     menu_data: MenuUpdate,
     current_user: UserResponseSchema = Depends(require_admin()),
@@ -107,7 +124,13 @@ async def update_menu(
 
 
 @router.delete("/{menu_id}")
+@log_audit(
+    action="DELETE",
+    resource_type="menu",
+    get_resource_id=lambda result, kwargs: kwargs.get('menu_id')
+)
 async def delete_menu(
+    request: Request,
     menu_id: int,
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)

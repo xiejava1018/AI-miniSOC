@@ -144,46 +144,52 @@ onMounted(() => {
       :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
       stripe
       default-expand-all
+      class="menus-table"
     >
-      <el-table-column prop="name" label="菜单名称" width="200" />
-      <el-table-column prop="path" label="路径" width="250">
+      <el-table-column prop="name" label="菜单名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="path" label="路径" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">
           <el-tag v-if="!row.path" type="info">父菜单</el-tag>
-          <span v-else>{{ row.path }}</span>
+          <code v-else class="path-code">{{ row.path }}</code>
         </template>
       </el-table-column>
-      <el-table-column prop="icon" label="图标" width="120">
+      <el-table-column prop="icon" label="图标" width="100" align="center">
         <template #default="{ row }">
-          <el-icon v-if="row.icon" class="menu-icon">
-            <component :is="row.icon" />
-          </el-icon>
-          <span v-else class="text-gray">-</span>
+          <div class="icon-cell">
+            <el-icon v-if="row.icon" class="menu-icon">
+              <component :is="row.icon" />
+            </el-icon>
+            <span v-else class="text-gray">-</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="sort_order" label="排序" width="80" />
-      <el-table-column prop="is_visible" label="可见" width="80">
+      <el-table-column prop="sort_order" label="排序" width="80" align="center" />
+      <el-table-column prop="is_visible" label="可见" width="80" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.is_visible ? 'success' : 'info'">
+          <el-tag :type="row.is_visible ? 'success' : 'info'" size="small">
             {{ row.is_visible ? '是' : '否' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column label="操作" width="240" align="center" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openCreateDialog(row)" size="small">
-            添加子菜单
-          </el-button>
-          <el-button link type="primary" @click="openEditDialog(row)">
-            编辑
-          </el-button>
-          <el-button
-            link
-            type="danger"
-            @click="handleDelete(row)"
-            :disabled="row.children && row.children.length > 0"
-          >
-            删除
-          </el-button>
+          <div class="action-buttons">
+            <el-button link type="primary" @click="openCreateDialog(row)" size="small">
+              添加子菜单
+            </el-button>
+            <el-button link type="primary" @click="openEditDialog(row)" size="small">
+              编辑
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              @click="handleDelete(row)"
+              :disabled="row.children && row.children.length > 0"
+              size="small"
+            >
+              删除
+            </el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -192,16 +198,16 @@ onMounted(() => {
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-form-item label="菜单名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入菜单名称" />
+          <el-input v-model="form.name" placeholder="请输入菜单名称" clearable />
         </el-form-item>
         <el-form-item label="菜单路径" prop="path">
-          <el-input v-model="form.path" placeholder="父菜单留空，子菜单填写路径如 /system/users" />
+          <el-input v-model="form.path" placeholder="父菜单留空，子菜单填写路径如 /system/users" clearable />
           <div class="form-tip">
             父菜单使用空字符串，子菜单填写实际路由路径
           </div>
         </el-form-item>
         <el-form-item label="图标">
-          <el-select v-model="form.icon" placeholder="选择图标" clearable>
+          <el-select v-model="form.icon" placeholder="选择图标" clearable filterable>
             <el-option
               v-for="icon in iconList"
               :key="icon"
@@ -216,7 +222,7 @@ onMounted(() => {
           </el-select>
         </el-form-item>
         <el-form-item label="排序">
-          <el-input-number v-model="form.sort_order" :min="0" />
+          <el-input-number v-model="form.sort_order" :min="0" :max="999" controls-position="right" />
         </el-form-item>
         <el-form-item label="是否可见">
           <el-switch v-model="form.is_visible" />
@@ -233,23 +239,73 @@ onMounted(() => {
 <style scoped>
 .menus-container {
   padding: 20px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .toolbar {
   margin-bottom: 20px;
 }
 
+.menus-table {
+  flex: 1;
+  overflow: auto;
+}
+
+.menus-table :deep(.el-table__header-wrapper) {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.icon-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
 .menu-icon {
   font-size: 18px;
+}
+
+.path-code {
+  background: var(--el-fill-color-light);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
 }
 
 .text-gray {
   color: #909399;
 }
 
+.action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .form-tip {
   font-size: 12px;
   color: #909399;
   margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* 响应式布局 */
+@media (max-width: 768px) {
+  .menus-container {
+    padding: 12px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>
