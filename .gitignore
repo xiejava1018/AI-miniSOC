@@ -57,3 +57,11 @@ playwright-report/
 
 # 数据库备份 - 包含敏感数据，绝不提交
 dbbackup/
+
+# 临时截图文件
+*.png
+*.jpg
+*.jpeg
+
+# Playwright MCP 临时文件
+.playwright-mcp/
