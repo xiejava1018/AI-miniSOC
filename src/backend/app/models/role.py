@@ -30,7 +30,7 @@ class Role(Base):
 
     # 关系
     users = relationship("User", back_populates="role")
-    # menus = relationship("Menu", secondary="soc_role_menus", back_populates="roles")
+    menus = relationship("Menu", secondary="soc_role_menus", back_populates="roles")
 
     def __repr__(self):
         return f"<Role(id={self.id}, name={self.name}, code={self.code})>"
