@@ -30,6 +30,7 @@ async def sync_assets_from_wazuh(db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=AssetListResponse)
+@router.get("", response_model=AssetListResponse)
 async def list_assets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -85,6 +86,7 @@ async def list_assets(
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
+@router.get("/{asset_id}/", response_model=AssetResponse)
 async def get_asset(asset_id: str, db: Session = Depends(get_db)):
     """获取单个资产详情"""
     try:
@@ -101,6 +103,7 @@ async def get_asset(asset_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=AssetResponse, status_code=201)
+@router.post("", response_model=AssetResponse, status_code=201)
 async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
     """创建资产"""
     # 可选：检查IP是否已存在，如果存在则返回已存在的资产（而不是阻止创建）
@@ -120,6 +123,7 @@ async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{asset_id}", response_model=AssetResponse)
+@router.put("/{asset_id}/", response_model=AssetResponse)
 async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Depends(get_db)):
     """更新资产"""
     try:
@@ -144,6 +148,7 @@ async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Dep
 
 
 @router.delete("/{asset_id}")
+@router.delete("/{asset_id}/")
 async def delete_asset(asset_id: str, db: Session = Depends(get_db)):
     """删除资产"""
     try:
