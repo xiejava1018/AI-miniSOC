@@ -1,11 +1,12 @@
 # api/users.py
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.core.permissions import require_menu_permission
+from app.core.audit_decorator import log_audit
 from app.schemas.user import (
     UserCreate,
     UserUpdate,
@@ -18,7 +19,7 @@ from app.services.user_service import UserService
 from app.schemas.user import UserResponse as UserResponseSchema
 
 
-router = APIRouter(prefix="/users", tags=["用户管理"])
+router = APIRouter(tags=["用户管理"])
 
 
 @router.get("", response_model=UserListResponse)
@@ -73,7 +74,15 @@ async def get_user(
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@log_audit(
+    action="CREATE",
+    resource_type="user",
+    get_resource_id=lambda result, kwargs: result.id if hasattr(result, 'id') else None,
+    get_resource_name=lambda result, kwargs: result.username if hasattr(result, 'username') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def create_user(
+    request: Request,
     user_data: UserCreate,
     current_user: UserResponseSchema = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -101,7 +110,15 @@ async def create_user(
 
 
 @router.put("/{user_id}", response_model=UserResponse)
+@log_audit(
+    action="UPDATE",
+    resource_type="user",
+    get_resource_id=lambda result, kwargs: kwargs.get('user_id'),
+    get_resource_name=lambda result, kwargs: result.username if hasattr(result, 'username') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def update_user(
+    request: Request,
     user_id: int,
     user_data: UserUpdate,
     current_user: UserResponseSchema = Depends(get_current_user),
@@ -130,7 +147,13 @@ async def update_user(
 
 
 @router.delete("/{user_id}")
+@log_audit(
+    action="DELETE",
+    resource_type="user",
+    get_resource_id=lambda result, kwargs: kwargs.get('user_id')
+)
 async def delete_user(
+    request: Request,
     user_id: int,
     current_user: UserResponseSchema = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -158,7 +181,13 @@ async def delete_user(
 
 
 @router.post("/{user_id}/reset-password")
+@log_audit(
+    action="RESET_PASSWORD",
+    resource_type="user",
+    get_resource_id=lambda result, kwargs: kwargs.get('user_id')
+)
 async def reset_password(
+    request: Request,
     user_id: int,
     password_data: ResetPasswordRequest,
     current_user: UserResponseSchema = Depends(get_current_user),
@@ -195,7 +224,15 @@ async def reset_password(
 
 
 @router.post("/{user_id}/lock", response_model=UserResponse)
+@log_audit(
+    action="LOCK",
+    resource_type="user",
+    get_resource_id=lambda result, kwargs: kwargs.get('user_id'),
+    get_resource_name=lambda result, kwargs: result.username if hasattr(result, 'username') else None,
+    get_new_values=lambda result, kwargs: {"is_locked": kwargs.get('lock_data').is_locked, "lock_reason": kwargs.get('lock_data').lock_reason}
+)
 async def lock_user(
+    request: Request,
     user_id: int,
     lock_data: LockUserRequest,
     current_user: UserResponseSchema = Depends(get_current_user),

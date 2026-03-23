@@ -1,11 +1,12 @@
 # src/backend/app/api/roles.py
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.core.permissions import require_admin
+from app.core.audit_decorator import log_audit
 from app.schemas.user import UserResponse as UserResponseSchema
 from app.schemas.role import (
     RoleCreate,
@@ -78,7 +79,15 @@ async def get_role(
 
 
 @router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@log_audit(
+    action="CREATE",
+    resource_type="role",
+    get_resource_id=lambda result, kwargs: result.id if hasattr(result, 'id') else None,
+    get_resource_name=lambda result, kwargs: result.name if hasattr(result, 'name') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def create_role(
+    request: Request,
     role_data: RoleCreate,
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
@@ -102,7 +111,15 @@ async def create_role(
 
 
 @router.put("/{role_id}", response_model=RoleResponse)
+@log_audit(
+    action="UPDATE",
+    resource_type="role",
+    get_resource_id=lambda result, kwargs: kwargs.get('role_id'),
+    get_resource_name=lambda result, kwargs: result.name if hasattr(result, 'name') else None,
+    get_new_values=lambda result, kwargs: result.model_dump() if hasattr(result, 'model_dump') else None
+)
 async def update_role(
+    request: Request,
     role_id: int,
     role_data: RoleUpdate,
     current_user: UserResponseSchema = Depends(require_admin()),
@@ -127,7 +144,13 @@ async def update_role(
 
 
 @router.delete("/{role_id}")
+@log_audit(
+    action="DELETE",
+    resource_type="role",
+    get_resource_id=lambda result, kwargs: kwargs.get('role_id')
+)
 async def delete_role(
+    request: Request,
     role_id: int,
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
@@ -171,7 +194,14 @@ async def get_role_menus(
 
 
 @router.put("/{role_id}/menus")
+@log_audit(
+    action="ASSIGN_PERMISSIONS",
+    resource_type="role",
+    get_resource_id=lambda result, kwargs: kwargs.get('role_id'),
+    get_new_values=lambda result, kwargs: {"menu_ids": kwargs.get('menus_data').menu_ids}
+)
 async def assign_role_menus(
+    request: Request,
     role_id: int,
     menus_data: RoleMenusRequest,
     current_user: UserResponseSchema = Depends(require_admin()),

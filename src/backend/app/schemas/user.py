@@ -1,7 +1,8 @@
 """User Schemas"""
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator, computed_field
 from typing import Optional
+from datetime import datetime
 
 
 class UserBase(BaseModel):
@@ -35,11 +36,33 @@ class UserResponse(UserBase):
     id: int = Field(..., description="用户ID")
     role_id: Optional[int] = Field(None, description="角色ID")
     role_name: Optional[str] = Field(None, description="角色名称")
-    is_active: bool = Field(..., description="是否激活")
-    is_locked: bool = Field(..., description="是否锁定")
-    last_login: Optional[str] = Field(None, description="最后登录时间")
-    created_at: str = Field(..., description="创建时间")
-    updated_at: str = Field(..., description="更新时间")
+    is_admin: bool = Field(default=False, description="是否管理员")
+    status: str = Field(..., description="用户状态")
+    last_login: Optional[datetime] = Field(None, description="最后登录时间")
+    created_at: datetime = Field(..., description="创建时间")
+    updated_at: datetime = Field(..., description="更新时间")
+
+    @computed_field
+    @property
+    def is_active(self) -> bool:
+        """是否激活"""
+        return self.status == "active"
+
+    @computed_field
+    @property
+    def is_locked(self) -> bool:
+        """是否锁定"""
+        return self.status == "locked"
+
+    def has_menu_access(self, menu_path: str) -> bool:
+        """检查用户是否有指定菜单的访问权限"""
+        # 管理员拥有所有权限
+        if self.is_admin:
+            return True
+        # TODO: 实现基于角色的菜单权限检查
+        # 当前简化实现：非管理员只返回False
+        # 完整实现需要从数据库查询用户的菜单权限
+        return False
 
     class Config:
         from_attributes = True
