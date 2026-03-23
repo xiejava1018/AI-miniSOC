@@ -54,3 +54,6 @@ docs/development-log-*.md
 # E2E Test Results
 test-results/
 playwright-report/
+
+# 数据库备份 - 包含敏感数据，绝不提交
+dbbackup/
