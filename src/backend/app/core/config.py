@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # 数据库配置
     DB_HOST: str = "192.168.0.42"
     DB_PORT: int = 5432
-    DB_NAME: str = "AI-miniSOC-db"
+    DB_NAME: str = "AI-miniSOC-testdb"  # 使用测试数据库
     DB_USER: str = "postgres"
     DB_PASSWORD: str
 
@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # 忽略.env中的额外配置项
 
 
 # 创建全局配置实例

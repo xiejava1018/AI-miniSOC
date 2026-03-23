@@ -5,14 +5,16 @@
 
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.core.auth import create_access_token, create_refresh_token, verify_token
+from app.core.auth import create_access_token, create_refresh_token, verify_token, get_current_user
 from app.core.security import verify_password
 from app.models.user import User, UserStatus
+from app.services.audit_log_service import AuditLogService
+from app.schemas.user import UserResponse
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/auth", tags=["认证"])
@@ -57,6 +59,7 @@ class RefreshTokenResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
 async def login(
     request: LoginRequest,
+    req: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -66,6 +69,7 @@ async def login(
 
     Args:
         request: 登录请求（用户名、密码）
+        req: FastAPI Request对象（用于获取IP和User-Agent）
         db: 数据库会话
 
     Returns:
@@ -75,10 +79,26 @@ async def login(
         HTTPException 401: 用户名或密码错误
         HTTPException 403: 账户被锁定或禁用
     """
+    # 获取客户端信息
+    client_ip = req.client.host if req.client else None
+    user_agent = req.headers.get("user-agent")
+
+    # 初始化审计日志服务
+    audit_service = AuditLogService(db)
+
     # 1. 查询用户
     user = db.query(User).filter(User.username == request.username).first()
 
     if not user:
+        # 记录登录失败审计日志（用户不存在）
+        audit_service.log_login(
+            user_id=0,
+            username=request.username,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            status="failure",
+            error_message="用户名或密码错误"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误"
@@ -86,12 +106,30 @@ async def login(
 
     # 2. 检查账户状态
     if user.status == UserStatus.LOCKED:
+        # 记录登录失败审计日志（账户锁定）
+        audit_service.log_login(
+            user_id=user.id,
+            username=user.username,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            status="failure",
+            error_message="账户已被锁定"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被锁定，请联系管理员"
         )
 
     if user.status == UserStatus.DISABLED:
+        # 记录登录失败审计日志（账户禁用）
+        audit_service.log_login(
+            user_id=user.id,
+            username=user.username,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            status="failure",
+            error_message="账户已被禁用"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用"
@@ -99,6 +137,15 @@ async def login(
 
     # 3. 验证密码
     if not verify_password(request.password, user.password_hash):
+        # 记录登录失败审计日志（密码错误）
+        audit_service.log_login(
+            user_id=user.id,
+            username=user.username,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            status="failure",
+            error_message="用户名或密码错误"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误"
@@ -129,7 +176,16 @@ async def login(
     user.last_login = datetime.utcnow()
     db.commit()
 
-    # 7. 返回响应
+    # 7. 记录登录成功审计日志
+    audit_service.log_login(
+        user_id=user.id,
+        username=user.username,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        status="success"
+    )
+
+    # 8. 返回响应
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -222,7 +278,11 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout():
+async def logout(
+    req: Request,
+    current_user: UserResponse = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     """
     用户登出
 
@@ -233,6 +293,18 @@ async def logout():
     Returns:
         成功消息
     """
+    # 记录登出审计日志
+    audit_service = AuditLogService(db)
+    client_ip = req.client.host if req.client else None
+    user_agent = req.headers.get("user-agent")
+
+    audit_service.log_logout(
+        user_id=current_user.id,
+        username=current_user.username,
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
+
     return {
         "success": True,
         "message": "登出成功"
