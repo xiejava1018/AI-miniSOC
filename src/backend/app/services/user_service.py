@@ -141,15 +141,6 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
 
-        # 记录审计日志
-        self.audit.log_action(
-            user_id=creator_id,
-            action="create_user",
-            resource_type="user",
-            resource_id=user.id,
-            details=f"创建用户: {user.username}"
-        )
-
         return user
 
     def update_user(
@@ -192,15 +183,6 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
 
-        # 记录审计日志
-        self.audit.log_action(
-            user_id=updater_id,
-            action="update_user",
-            resource_type="user",
-            resource_id=user.id,
-            details=f"更新用户: {user.username}"
-        )
-
         return user
 
     def delete_user(self, user_id: int, deleter_id: int) -> bool:
@@ -228,16 +210,6 @@ class UserService:
             ).count()
             if admin_count <= 1:
                 raise ValueError("不能删除最后一个管理员")
-
-        # 记录审计日志
-        username = user.username
-        self.audit.log_action(
-            user_id=deleter_id,
-            action="delete_user",
-            resource_type="user",
-            resource_id=user.id,
-            details=f"删除用户: {username}"
-        )
 
         self.db.delete(user)
         self.db.commit()
@@ -277,15 +249,6 @@ class UserService:
 
         self.db.commit()
 
-        # 记录审计日志
-        self.audit.log_action(
-            user_id=admin_id,
-            action="reset_password",
-            resource_type="user",
-            resource_id=user.id,
-            details=f"重置用户密码: {user.username}"
-        )
-
         return new_password
 
     def lock_user(
@@ -322,19 +285,5 @@ class UserService:
 
         self.db.commit()
         self.db.refresh(user)
-
-        # 记录审计日志
-        action = "lock_user" if locked else "unlock_user"
-        details = f"{'锁定' if locked else '解锁'}用户: {user.username}"
-        if reason:
-            details += f", 原因: {reason}"
-
-        self.audit.log_action(
-            user_id=admin_id,
-            action=action,
-            resource_type="user",
-            resource_id=user.id,
-            details=details
-        )
 
         return user
