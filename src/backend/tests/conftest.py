@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from typing import Generator
 from fastapi.testclient import TestClient
 
-from app.core.database import Base, get_db
+from app.models.base import Base
+from app.core.database import get_db
 from app.models.user import User, UserStatus
 from app.models.role import Role
-from app.main import app
+from main import app
 
 
 @pytest.fixture
