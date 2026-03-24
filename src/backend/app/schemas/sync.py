@@ -4,6 +4,7 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 
 
 class SyncTaskBase(BaseModel):
@@ -19,7 +20,7 @@ class SyncTaskCreate(SyncTaskBase):
 
 class SyncTaskResponse(SyncTaskBase):
     """同步任务响应"""
-    id: str
+    id: UUID
     total_count: int = 0
     created_count: int = 0
     updated_count: int = 0
