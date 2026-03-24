@@ -320,24 +320,49 @@
 
         <div class="dialog-body">
           <div class="form-group">
-            <label>资产名称</label>
-            <input v-model="assetForm.name" type="text" class="form-input" placeholder="输入资产名称" />
+            <label>资产名称 <span class="required">*</span></label>
+            <input
+              v-model="assetForm.name"
+              type="text"
+              class="form-input"
+              placeholder="输入资产名称"
+              :class="{ error: formErrors.name }"
+            />
+            <span v-if="formErrors.name" class="error-text">{{ formErrors.name }}</span>
           </div>
 
           <div class="form-group">
-            <label>IP地址</label>
-            <input v-model="assetForm.asset_ip" type="text" class="form-input" placeholder="例如: 192.168.0.100" />
+            <label>IP地址 <span class="required">*</span></label>
+            <input
+              v-model="assetForm.asset_ip"
+              type="text"
+              class="form-input"
+              placeholder="例如: 192.168.0.100"
+              :class="{ error: formErrors.asset_ip }"
+            />
+            <span v-if="formErrors.asset_ip" class="error-text">{{ formErrors.asset_ip }}</span>
           </div>
 
-          <div class="form-group">
-            <label>网络区域</label>
-            <select v-model="assetForm.network_segment" class="form-input">
-              <option value="default">默认区域</option>
-              <option value="internal">内网</option>
-              <option value="dmz">DMZ</option>
-              <option value="external">外网</option>
-              <option value="guest">访客网络</option>
-            </select>
+          <div class="form-row">
+            <div class="form-group">
+              <label>网络区域</label>
+              <select v-model="assetForm.network_segment" class="form-input">
+                <option value="default">默认区域</option>
+                <option value="internal">内网</option>
+                <option value="dmz">DMZ</option>
+                <option value="external">外网</option>
+                <option value="guest">访客网络</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>资产状态</label>
+              <select v-model="assetForm.asset_status" class="form-input">
+                <option value="active">在线</option>
+                <option value="inactive">离线</option>
+                <option value="retired">报废</option>
+              </select>
+            </div>
           </div>
 
           <div class="form-row">
@@ -348,6 +373,7 @@
                 <option value="workstation">工作站</option>
                 <option value="router">路由器</option>
                 <option value="switch">交换机</option>
+                <option value="printer">打印机</option>
                 <option value="other">其他</option>
               </select>
             </div>
@@ -363,9 +389,58 @@
             </div>
           </div>
 
+          <div class="form-row">
+            <div class="form-group">
+              <label>负责人</label>
+              <input
+                v-model="assetForm.owner"
+                type="text"
+                class="form-input"
+                placeholder="输入负责人姓名"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>业务单元</label>
+              <input
+                v-model="assetForm.business_unit"
+                type="text"
+                class="form-input"
+                placeholder="输入业务单元"
+              />
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>负责人</label>
-            <input v-model="assetForm.owner" type="text" class="form-input" placeholder="输入负责人姓名" />
+            <label>MAC地址</label>
+            <input
+              v-model="assetForm.mac_address"
+              type="text"
+              class="form-input"
+              placeholder="例如: 00:1A:2B:3C:4D:5E"
+              :class="{ error: formErrors.mac_address }"
+            />
+            <span v-if="formErrors.mac_address" class="error-text">{{ formErrors.mac_address }}</span>
+          </div>
+
+          <div class="form-group">
+            <label>Wazuh Agent ID</label>
+            <input
+              v-model="assetForm.wazuh_agent_id"
+              type="text"
+              class="form-input"
+              placeholder="输入Wazuh Agent ID"
+            />
+          </div>
+
+          <div class="form-group">
+            <label>描述</label>
+            <textarea
+              v-model="assetForm.asset_description"
+              class="form-textarea"
+              placeholder="输入资产描述信息"
+              rows="3"
+            ></textarea>
           </div>
         </div>
 
@@ -464,8 +539,15 @@ const assetForm = ref({
   asset_ip: '',
   asset_type: 'server',
   criticality: 'medium',
-  owner: ''
+  owner: '',
+  business_unit: '',
+  asset_description: '',
+  mac_address: '',
+  wazuh_agent_id: '',
+  asset_status: 'active'
 })
+
+const formErrors = ref<Record<string, string>>({})
 
 // 列表视图分页
 const paginatedAssets = computed(() => {
@@ -590,7 +672,12 @@ function editAsset(asset: any) {
     asset_ip: asset.asset_ip || '',
     asset_type: asset.asset_type || 'server',
     criticality: asset.criticality || 'medium',
-    owner: asset.owner || ''
+    owner: asset.owner || '',
+    business_unit: asset.business_unit || '',
+    asset_description: asset.asset_description || '',
+    mac_address: asset.mac_address || '',
+    wazuh_agent_id: asset.wazuh_agent_id || '',
+    asset_status: asset.asset_status || 'active'
   }
   showCreateDialog.value = true
 }
@@ -627,12 +714,60 @@ function closeDialog() {
     asset_ip: '',
     asset_type: 'server',
     criticality: 'medium',
-    owner: ''
+    owner: '',
+    business_unit: '',
+    asset_description: '',
+    mac_address: '',
+    wazuh_agent_id: '',
+    asset_status: 'active'
   }
+  formErrors.value = {}
+}
+
+// 表单验证
+function validateForm(): boolean {
+  formErrors.value = {}
+
+  // 验证资产名称
+  if (!assetForm.value.name || assetForm.value.name.trim() === '') {
+    formErrors.value.name = '请输入资产名称'
+  }
+
+  // 验证IP地址
+  if (!assetForm.value.asset_ip || assetForm.value.asset_ip.trim() === '') {
+    formErrors.value.asset_ip = '请输入IP地址'
+  } else if (!isValidIP(assetForm.value.asset_ip)) {
+    formErrors.value.asset_ip = '请输入有效的IP地址'
+  }
+
+  // 验证MAC地址（如果填写了）
+  if (assetForm.value.mac_address && !isValidMAC(assetForm.value.mac_address)) {
+    formErrors.value.mac_address = '请输入有效的MAC地址格式（如：00:1A:2B:3C:4D:5E）'
+  }
+
+  return Object.keys(formErrors.value).length === 0
+}
+
+// IP地址验证
+function isValidIP(ip: string): boolean {
+  const ipPattern = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+  return ipPattern.test(ip)
+}
+
+// MAC地址验证
+function isValidMAC(mac: string): boolean {
+  const macPattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/
+  return macPattern.test(mac)
 }
 
 async function handleUpdate() {
   if (!editingAssetId.value) return
+
+  // 验证表单
+  if (!validateForm()) {
+    return
+  }
+
   try {
     await assetStore.updateAsset(editingAssetId.value, assetForm.value)
     ElMessage.success('资产更新成功')
@@ -657,6 +792,11 @@ async function syncAssets() {
 }
 
 async function handleCreate() {
+  // 验证表单
+  if (!validateForm()) {
+    return
+  }
+
   try {
     await assetStore.createAsset(assetForm.value)
     ElMessage.success('资产创建成功')
@@ -1518,6 +1658,41 @@ async function handleCreate() {
   outline: none;
   border-color: var(--accent-cyan);
   box-shadow: 0 0 0 3px var(--accent-cyan-dim);
+}
+
+.form-input.error {
+  border-color: var(--status-critical);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all var(--transition-fast);
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 3px var(--accent-cyan-dim);
+}
+
+.required {
+  color: var(--status-critical);
+  margin-left: 2px;
+}
+
+.error-text {
+  display: block;
+  font-size: 12px;
+  color: var(--status-critical);
+  margin-top: 4px;
 }
 
 .form-row {

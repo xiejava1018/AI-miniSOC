@@ -27,8 +27,7 @@ class Incident(Base):
     resolution_notes = Column(Text)
     ai_analysis_id = Column(UUID(as_uuid=True), ForeignKey("soc_ai_analyses.id", ondelete="SET NULL"))
 
-    # 关系 - 暂时注释掉，因为soc_asset_incidents表不存在
-    # assets = relationship("AssetIncident", back_populates="incident")
+    # 关系
     ai_analysis = relationship("AIAnalysis", backref="incident")
 
     def __repr__(self):

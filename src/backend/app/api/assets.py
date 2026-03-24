@@ -16,14 +16,15 @@ router = APIRouter()
 
 @router.post("/sync/from-wazuh")
 async def sync_assets_from_wazuh(db: Session = Depends(get_db)):
-    """从 Wazuh 同步资产"""
+    """从 Wazuh 同步资产（返回任务ID）"""
+    from app.services.asset_sync import AssetSyncService
     sync_service = AssetSyncService(db)
     try:
-        result = sync_service.sync_from_wazuh()
+        task = sync_service.sync_from_wazuh_with_tracking("manual")
         return {
-            "message": "资产同步完成",
-            "status": "completed",
-            "result": result
+            "message": "同步任务已创建",
+            "task_id": str(task.id),
+            "status": task.status
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"资产同步失败: {str(e)}")

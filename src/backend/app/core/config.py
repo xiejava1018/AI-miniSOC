@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     WAZUH_API_USERNAME: str
     WAZUH_API_PASSWORD: str
 
+    # Webhook配置
+    WAZUH_WEBHOOK_KEY: str = "change-this-in-production"
+    WAZUH_WEBHOOK_ALLOWED_IPS: str = "192.168.0.30,192.168.0.40,127.0.0.1"
+
+    @property
+    def webhook_allowed_ips_list(self) -> list[str]:
+        """解析Webhook允许的IP列表"""
+        return [ip.strip() for ip in self.WAZUH_WEBHOOK_ALLOWED_IPS.split(",")]
+
     # Loki配置
     LOKI_API_URL: str = "http://192.168.0.30:3100"
 
