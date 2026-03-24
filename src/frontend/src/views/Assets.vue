@@ -3,8 +3,8 @@
     <!-- Page Header -->
     <div class="page-header">
       <div class="header-actions">
-        <button class="action-btn secondary" @click="syncAssets">
-          <svg viewBox="0 0 24 24" fill="none">
+        <button class="action-btn secondary" @click="handleManualSync" :disabled="syncLoading">
+          <svg v-if="!syncLoading" viewBox="0 0 24 24" fill="none">
             <path
               d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"
               stroke="currentColor"
@@ -12,7 +12,17 @@
             />
             <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
-          <span>从Wazuh同步</span>
+          <div v-else class="sync-spinner"></div>
+          <span>{{ syncLoading ? '同步中...' : '从Wazuh同步' }}</span>
+        </button>
+
+        <button class="action-btn secondary" @click="viewSyncHistory">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 8V4L8 8H12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 8V16L8 12H12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 12C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>同步历史</span>
         </button>
 
         <button class="action-btn primary" @click="showCreateDialog = true">
@@ -23,6 +33,11 @@
         </button>
       </div>
     </div>
+
+    <!-- Last Sync Alert -->
+    <el-alert v-if="lastSyncTime" type="info" :closable="false" style="margin-bottom: 16px">
+      最后同步时间: {{ formatDate(lastSyncTime) }}
+    </el-alert>
 
     <!-- Toolbar -->
     <div class="toolbar">
@@ -459,12 +474,14 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAssetStore } from '@/stores/assets'
+import { syncApi } from '@/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const assetStore = useAssetStore()
 
 const loading = ref(false)
+const syncLoading = ref(false)
 const assets = ref<any[]>([])
 const showCreateDialog = ref(false)
 const isEditMode = ref(false)
@@ -474,6 +491,7 @@ const filterType = ref('')
 const filterCriticality = ref('')
 const filterStatus = ref('')
 const viewMode = ref<'card' | 'list'>('card')
+const lastSyncTime = ref<string | null>(null)
 
 // 分页相关
 const currentPage = ref(1)
@@ -791,6 +809,28 @@ async function syncAssets() {
   }
 }
 
+async function handleManualSync() {
+  syncLoading.value = true
+  try {
+    const result = await syncApi.manualSync()
+    ElMessage.success('同步任务已创建')
+    router.push(`/sync-tasks/${result.task_id}`)
+  } catch (error) {
+    console.error('创建同步任务失败:', error)
+    ElMessage.error('创建同步任务失败')
+  } finally {
+    syncLoading.value = false
+  }
+}
+
+function viewSyncHistory() {
+  router.push('/sync-tasks')
+}
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleString('zh-CN')
+}
+
 async function handleCreate() {
   // 验证表单
   if (!validateForm()) {
@@ -869,6 +909,26 @@ async function handleCreate() {
 .action-btn.secondary:hover {
   border-color: var(--accent-cyan);
   background: rgba(0, 212, 255, 0.05);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sync-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Toolbar */
