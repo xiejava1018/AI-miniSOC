@@ -20,6 +20,7 @@ from .password_reset_token import PasswordResetToken
 from .audit_log import AuditLog
 from .rate_limit import RateLimit
 from .sync_task import SyncTask
+from .asset_change_log import AssetChangeLog
 
 __all__ = [
     "Base",
@@ -42,4 +43,5 @@ __all__ = [
     "AuditLog",
     "RateLimit",
     "SyncTask",
+    "AssetChangeLog",
 ]

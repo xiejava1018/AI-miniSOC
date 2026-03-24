@@ -206,3 +206,31 @@ def sample_role(db_session: Session):
     db_session.commit()
     db_session.refresh(role)
     return role
+
+
+@pytest.fixture
+def test_asset(db_session: Session):
+    """
+    创建测试资产
+
+    Args:
+        db_session: 数据库会话
+
+    Returns:
+        创建的测试资产
+    """
+    from app.models.asset import Asset
+
+    asset = Asset(
+        network_segment="default",
+        asset_ip="192.168.1.100",
+        asset_description="测试资产",
+        asset_status="在线",
+        name="测试服务器",
+        asset_type="server",
+        criticality="medium"
+    )
+    db_session.add(asset)
+    db_session.commit()
+    db_session.refresh(asset)
+    return asset
