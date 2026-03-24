@@ -3,7 +3,7 @@ API 路由汇总
 """
 
 from fastapi import APIRouter
-from app.api import auth, users, assets, incidents, alerts, ai, menus, roles, audit_logs
+from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, menus, roles, audit_logs, sync, webhooks
 
 api_router = APIRouter()
 
@@ -11,9 +11,14 @@ api_router = APIRouter()
 api_router.include_router(auth.router, tags=["认证"])
 api_router.include_router(users.router, prefix="/users", tags=["用户管理"])
 api_router.include_router(assets.router, prefix="/assets", tags=["资产管理"])
+api_router.include_router(asset_ports.router, prefix="/assets", tags=["资产端口管理"])
+api_router.include_router(asset_tags.router, prefix="/assets", tags=["资产标签管理"])
+api_router.include_router(asset_incidents.router, prefix="/assets", tags=["资产-事件关联"])
 api_router.include_router(incidents.router, prefix="/incidents", tags=["事件管理"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["告警管理"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI分析"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(audit_logs.router, tags=["审计日志管理"])
+api_router.include_router(sync.router, prefix="/sync", tags=["资产同步"])
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])

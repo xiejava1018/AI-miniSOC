@@ -129,6 +129,17 @@ class WazuhClient:
         data = self._request("GET", f"/syscheck/{agent_id}", params=params)
         return data.get("data", {}).get("items", [])
 
+    def get_agent_sysinfo(self, agent_id: str) -> Dict[str, Any]:
+        """获取 agent 的系统信息（硬件、操作系统等）"""
+        try:
+            # 获取硬件信息
+            data = self._request("GET", f"/syscollector/{agent_id}/hardware")
+            return data.get("data", {})
+        except Exception as e:
+            logger = __import__("logging").getLogger(__name__)
+            logger.error(f"Failed to get sysinfo for agent {agent_id}: {e}")
+            return {}
+
     def close(self):
         """关闭客户端"""
         self._client.close()

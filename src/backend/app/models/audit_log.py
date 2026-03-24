@@ -14,7 +14,7 @@ class AuditLog(Base):
     __tablename__ = "soc_audit_logs"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(BigInteger, ForeignKey('soc_users.id'))
+    user_id = Column(BigInteger, ForeignKey('soc_users.id', ondelete='SET NULL'), nullable=True)
     username = Column(String(50), nullable=False)
     action = Column(String(50), nullable=False)
     resource_type = Column(String(50))

@@ -92,7 +92,7 @@ async def login(
     if not user:
         # 记录登录失败审计日志（用户不存在）
         audit_service.log_login(
-            user_id=0,
+            user_id=None,
             username=request.username,
             ip_address=client_ip,
             user_agent=user_agent,

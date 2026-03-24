@@ -4,6 +4,8 @@
 
 from .base import Base
 from .asset import Asset
+from .asset_port import AssetPort
+from .asset_tag import AssetTag
 from .incident import Incident
 from .ai_analysis import AIAnalysis
 from .asset_incident import AssetIncident
@@ -17,10 +19,14 @@ from .password_history import PasswordHistory
 from .password_reset_token import PasswordResetToken
 from .audit_log import AuditLog
 from .rate_limit import RateLimit
+from .sync_task import SyncTask
+from .asset_change_log import AssetChangeLog
 
 __all__ = [
     "Base",
     "Asset",
+    "AssetPort",
+    "AssetTag",
     "Incident",
     "AIAnalysis",
     "AssetIncident",
@@ -36,4 +42,6 @@ __all__ = [
     "PasswordResetToken",
     "AuditLog",
     "RateLimit",
+    "SyncTask",
+    "AssetChangeLog",
 ]

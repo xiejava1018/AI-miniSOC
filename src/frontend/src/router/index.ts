@@ -45,6 +45,18 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '告警管理', requiresAuth: true }
   },
   {
+    path: '/sync-tasks',
+    name: 'SyncTasks',
+    component: () => import('@/views/SyncHistory.vue'),
+    meta: { title: '同步历史', requiresAuth: true }
+  },
+  {
+    path: '/sync-tasks/:id',
+    name: 'SyncTaskDetail',
+    component: () => import('@/views/SyncTaskDetail.vue'),
+    meta: { title: '同步任务详情', requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login.vue'),

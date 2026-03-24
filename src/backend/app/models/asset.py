@@ -3,7 +3,7 @@
 """
 
 from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, MACADDR
+from sqlalchemy.dialects.postgresql import UUID, MACADDR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.models.base import Base
@@ -25,6 +25,14 @@ class Asset(Base):
     parent_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Wazuh同步相关字段
+    data_source = Column(String(20), default="manual")  # 'wazuh', 'manual'
+    last_synced_at = Column(DateTime(timezone=True))
+    os_name = Column(String(100))
+    os_version = Column(String(100))
+    hardware_info = Column(JSONB)
+
     name = Column(String(255))
     mac_address = Column(MACADDR)
     asset_type = Column(String(50), default="other")
@@ -32,6 +40,10 @@ class Asset(Base):
     owner = Column(String(255))
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))
+
+    # 关系
+    ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")
+    tags = relationship("AssetTag", backref="asset", cascade="all, delete-orphan")
 
     # 关系 - 暂时注释掉，因为soc_asset_incidents表不存在
     # incidents = relationship("AssetIncident", back_populates="asset")

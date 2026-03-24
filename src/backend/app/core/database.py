@@ -19,6 +19,9 @@ engine = create_engine(
 # 同步 Session 工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# 测试用 Session 工厂 (使用内存数据库或独立测试数据库)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def get_db() -> Session:
     """获取数据库会话"""
