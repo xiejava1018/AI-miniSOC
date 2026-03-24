@@ -28,7 +28,7 @@ export interface SyncTaskList {
 
 export const syncApi = {
   manualSync: () =>
-    apiClient.post<ManualSyncResponse>('/assets/sync/manual', {}),
+    apiClient.post<ManualSyncResponse>('/sync/tasks/manual', {}),
 
   getTask: (taskId: string) =>
     apiClient.get<SyncTask>(`/sync/tasks/${taskId}`),
