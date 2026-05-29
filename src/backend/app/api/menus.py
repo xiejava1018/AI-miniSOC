@@ -21,18 +21,28 @@ router = APIRouter(tags=["菜单管理"])
 
 
 def _build_menu_with_auth(menu, role_perms: dict) -> dict:
-    """构建带权限信息的菜单字典"""
+    """构建带权限信息的菜单字典（包含 meta 字段，与前端表格列对齐）"""
     data = menu.to_dict(include_children=True)
     available = data.get('permissions') or []
     granted = role_perms.get(menu.id, [])
-    if available:
-        data['authList'] = [
-            {**p, 'hasPermission': p.get('authMark') in granted}
-            for p in available
-        ]
-    else:
-        data['authList'] = []
+    auth_list = [
+        {**p, 'hasPermission': p.get('authMark') in granted}
+        for p in available
+    ] if available else []
+    data['authList'] = auth_list
     data['hasPermission'] = True
+    # 构建 meta 字段（与前端 columns prop 对齐）
+    data['meta'] = {
+        'title': data.get('title') or data.get('name') or '',
+        'icon': data.get('icon') or '',
+        'isEnable': data.get('is_visible', True),
+        'keepAlive': True,
+        'authList': auth_list,
+        'isHide': False,
+        'isHideTab': False,
+        'isIframe': False,
+        'isFirstLevel': False,
+    }
     if data.get('children'):
         data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in data['children']]
     return data
@@ -42,14 +52,23 @@ def _build_child_menu_with_auth(child_data: dict, role_perms: dict) -> dict:
     """递归构建子菜单权限信息（child_data 已是字典）"""
     available = child_data.get('permissions') or []
     granted = role_perms.get(child_data['id'], [])
-    if available:
-        child_data['authList'] = [
-            {**p, 'hasPermission': p.get('authMark') in granted}
-            for p in available
-        ]
-    else:
-        child_data['authList'] = []
+    auth_list = [
+        {**p, 'hasPermission': p.get('authMark') in granted}
+        for p in available
+    ] if available else []
+    child_data['authList'] = auth_list
     child_data['hasPermission'] = True
+    child_data['meta'] = {
+        'title': child_data.get('title') or child_data.get('name') or '',
+        'icon': child_data.get('icon') or '',
+        'isEnable': child_data.get('is_visible', True),
+        'keepAlive': True,
+        'authList': auth_list,
+        'isHide': False,
+        'isHideTab': False,
+        'isIframe': False,
+        'isFirstLevel': False,
+    }
     if child_data.get('children'):
         child_data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in child_data['children']]
     return child_data

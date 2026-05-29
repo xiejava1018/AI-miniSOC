@@ -12,12 +12,24 @@ from app.schemas.department import (
     DepartmentCreate,
     DepartmentUpdate,
     DepartmentResponse,
-    DepartmentListResponse
+    DepartmentListResponse,
+    DepartmentTreeNode
 )
 from app.services.department_service import DepartmentService
 
 
 router = APIRouter(tags=["部门管理"])
+
+
+@router.get("/tree", response_model=List[DepartmentTreeNode])
+async def get_department_tree(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取部门树形结构"""
+    service = DepartmentService(db)
+    tree = service.get_department_tree()
+    return [DepartmentTreeNode.model_validate(node) for node in tree]
 
 
 @router.get("", response_model=DepartmentListResponse)

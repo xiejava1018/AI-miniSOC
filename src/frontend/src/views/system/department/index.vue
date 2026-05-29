@@ -4,30 +4,51 @@
     <ArtSearchBar
       v-model="searchParams"
       :items="searchItems"
-      @reset="resetSearchParams"
-      @search="getDataByPage"
+      @reset="resetSearch"
+      @search="loadTreeData"
     />
 
     <ElCard class="art-table-card" shadow="never">
       <!-- 表格头部 -->
-      <ArtTableHeader v-model:columns="columnChecks" @refresh="refresh">
+      <ArtTableHeader @refresh="loadTreeData">
         <template #left>
-          <ElButton @click="showDialog('add')">添加部门</ElButton>
+          <ElButton @click="showDialog('add')" v-ripple>添加部门</ElButton>
         </template>
       </ArtTableHeader>
 
-      <!-- 表格 -->
-      <ArtTable
-        :loading="loading"
-        :data="data"
-        :columns="columns"
-        :pagination="pagination"
+      <!-- 树形表格 -->
+      <ElTable
+        v-loading="loading"
+        :data="treeData"
+        row-key="id"
+        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+        default-expand-all
         table-layout="fixed"
-        :table-config="{ rowKey: 'id' }"
-        :layout="{ marginTop: 10 }"
-        @pagination:size-change="handleSizeChange"
-        @pagination:current-change="handleCurrentChange"
-      />
+        class="department-tree-table"
+      >
+        <ElTableColumn prop="name" label="部门名称" min-width="200" />
+        <ElTableColumn prop="sort" label="排序" width="100" align="center" />
+        <ElTableColumn prop="user_count" label="人数" width="100" align="center">
+          <template #default="{ row }">
+            {{ row.user_count ?? 0 }}
+          </template>
+        </ElTableColumn>
+        <ElTableColumn prop="status" label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <ElTag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+              {{ row.status === 1 ? '启用' : '禁用' }}
+            </ElTag>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="操作" width="150" align="center" fixed="right">
+          <template #default="{ row }">
+            <div class="operation-column-container">
+              <ArtButtonTable type="edit" style="margin-right: 8px;" @click="showDialog('edit', row)" />
+              <ArtButtonTable type="delete" @click="handleDelete(row)" />
+            </div>
+          </template>
+        </ElTableColumn>
+      </ElTable>
 
       <!-- 部门弹窗 -->
       <ElDialog
@@ -41,7 +62,7 @@
         <ElForm ref="formRef" :model="formData" :rules="rules" label-width="85px">
           <ElRow :gutter="20">
             <ElCol :span="12">
-              <ElFormItem label="名称" prop="name">
+              <ElFormItem label="部门名称" prop="name">
                 <ElInput v-model="formData.name" placeholder="请输入部门名称" />
               </ElFormItem>
             </ElCol>
@@ -50,7 +71,7 @@
                 <ElInputNumber
                   v-model="formData.sort"
                   style="width: 100%"
-                  :min="1"
+                  :min="0"
                   controls-position="right"
                   placeholder="请输入排序号"
                 />
@@ -59,8 +80,21 @@
           </ElRow>
           <ElRow :gutter="20">
             <ElCol :span="12">
-              <ElFormItem label="启用" prop="status">
-                <ElSwitch v-model="formData.status" />
+              <ElFormItem label="上级部门" prop="parent_id">
+                <ElCascader
+                  v-model="formData.parent_id"
+                  :options="departmentOptions"
+                  :props="cascaderProps"
+                  clearable
+                  placeholder="请选择上级部门（不选则为顶级）"
+                  style="width: 100%"
+                  :key="cascaderKey"
+                />
+              </ElFormItem>
+            </ElCol>
+            <ElCol :span="12">
+              <ElFormItem label="启用">
+                <ElSwitch v-model="formData.statusActive" :active-value="1" :inactive-value="2" />
               </ElFormItem>
             </ElCol>
           </ElRow>
@@ -77,20 +111,56 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, h, resolveComponent } from 'vue'
+  import { ref, reactive, nextTick } from 'vue'
   import { ElMessageBox, ElMessage } from 'element-plus'
-  import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import type { FormInstance, FormRules } from 'element-plus'
   import {
-    getDepartmentList,
+    getDepartmentTree,
     addDepartment,
     updateDepartment,
     deleteDepartment as apiDeleteDepartment
   } from '@/api/system/api'
-  import { useTable } from '@/composables/useTable'
+  import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import { SearchFormItem } from '@/types'
 
-  // 搜索表单配置项
+  // ========== 状态 ==========
+  const loading = ref(false)
+  const treeData = ref<any[]>([])
+  const dialogVisible = ref(false)
+  const dialogType = ref<'add' | 'edit'>('add')
+  const submitLoading = ref(false)
+  const currentId = ref<number | null>(null)
+  const formRef = ref<FormInstance>()
+  const cascaderKey = ref(0)
+
+  // 部门选项（用于 Cascader 选择上级部门）
+  const departmentOptions = ref<any[]>([])
+
+  // 搜索参数
+  const searchParams = reactive({
+    name: '',
+    status: undefined as number | undefined
+  })
+
+  // 表单数据
+  const formData = reactive({
+    name: '',
+    sort: 0,
+    parent_id: undefined as number | undefined,
+    statusActive: 1
+  })
+
+  // Cascader 配置：允许选择任意层级，不限制只能选叶子节点
+  const cascaderProps = {
+    value: 'id',
+    label: 'name',
+    children: 'children',
+    checkStrictly: true,
+    emitPath: false,
+    expandTrigger: 'hover' as const
+  }
+
+  // ========== 搜索配置 ==========
   const searchItems: SearchFormItem[] = [
     {
       label: '部门名称',
@@ -114,223 +184,157 @@
     }
   ]
 
-  // 表单数据
-  const formData = reactive({
-    name: '',
-    sort: 1,
-    status: true
-  })
-  const dialogType = ref('add')
-  const dialogVisible = ref(false)
-  const submitLoading = ref(false)
-  const currentId = ref<number | null>(null)
-  const formRef = ref<FormInstance>()
-
-  // 表单验证规则
+  // ========== 表单验证 ==========
   const rules = reactive<FormRules>({
     name: [
       { required: true, message: '请输入部门名称', trigger: 'blur' },
-      { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
-    ],
-    sort: [
-      { required: true, message: '请输入排序号', trigger: 'blur' },
-      { pattern: /^[0-9]*$/, message: '请输入数字', trigger: 'blur' }
+      { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
     ]
   })
 
-  // useTable 适配
-  const {
-    columns,
-    columnChecks,
-    data,
-    loading,
-    pagination,
-    searchParams,
-    getData: getDataByPage,
-    resetSearchParams,
-    handleSizeChange,
-    handleCurrentChange,
-    refreshAll: refresh
-  } = useTable<any>({
-    core: {
-      apiFn: getDepartmentList,
-      apiParams: {
-        page: 1,
-        pageSize: 10,
-        name: '',
-        status: undefined
-      },
-      columnsFactory: () => [
-        {
-          prop: 'name',
-          label: '名称',
-          align: 'center'
-        },
-        {
-          prop: 'sort',
-          label: '排序',
-          sortable: true,
-          align: 'center'
-        },
-        {
-          prop: 'users',
-          label: '人数',
-          align: 'center',
-          formatter: (row: any) => (Array.isArray(row.users) ? row.users.length : 0)
-        },
-        {
-          prop: 'status',
-          label: '状态',
-          align: 'center',
-          formatter: (row: any) =>
-            h(
-              resolveComponent('ElTag'),
-              { type: row.status === 1 ? 'primary' : 'warning' },
-              { default: () => (row.status === 1 ? '启用' : '禁用') }
-            )
-        },
-        {
-          prop: 'operation',
-          label: '操作',
-          align: 'center',
-          width: 120,
-          fixed: 'right',
-          formatter: (row: any) =>
-            h('div', { class: 'operation-column-container' }, [
-              h(ArtButtonTable, {
-                type: 'edit',
-                style: 'margin-right: 8px;',
-                onClick: () => showDialog('edit', row)
-              }),
-              h(ArtButtonTable, {
-                type: 'delete',
-                onClick: () => deleteDepartment(row.id)
-              })
-            ])
-        }
-      ]
-    },
-    hooks: {
-      onError: (error) => ElMessage.error(error.message)
+  // ========== 数据加载 ==========
+  const loadTreeData = async () => {
+    loading.value = true
+    try {
+      const res = await getDepartmentTree()
+      treeData.value = (res as any) ?? []
+    } catch (err) {
+      console.error('加载部门树出错:', err)
+      ElMessage.error('加载部门列表失败')
+    } finally {
+      loading.value = false
     }
-  })
-
-  // 弹窗相关
-  const resetForm = () => {
-    formData.name = ''
-    formData.sort = 1
-    formData.status = true
-    currentId.value = null
   }
 
-  const showDialog = (type: string, row?: any) => {
+  // 加载部门选项（用于 Cascader）
+  const loadDepartmentOptions = async () => {
+    try {
+      const res = await getDepartmentTree()
+      departmentOptions.value = (res as any) ?? []
+    } catch (err) {
+      console.error('加载部门选项出错:', err)
+    }
+  }
+
+  const resetSearch = () => {
+    searchParams.name = ''
+    searchParams.status = undefined
+    loadTreeData()
+  }
+
+  // ========== 弹窗操作 ==========
+  const resetForm = () => {
+    formData.name = ''
+    formData.sort = 0
+    formData.parent_id = undefined
+    formData.statusActive = 1
+    currentId.value = null
+    cascaderKey.value++
+  }
+
+  const showDialog = (type: 'add' | 'edit', row?: any) => {
     dialogType.value = type
     dialogVisible.value = true
+
     if (type === 'edit' && row) {
       currentId.value = row.id
       formData.name = row.name
-      formData.sort = row.sort ?? 1
-      formData.status = row.status === 1
+      formData.sort = row.sort ?? 0
+      formData.parent_id = row.parent_id ?? undefined
+      formData.statusActive = row.status ?? 1
     } else {
       resetForm()
     }
+
+    // 强制重新渲染 Cascader（避免旧数据残留）
+    nextTick(() => {
+      cascaderKey.value++
+      formRef.value?.clearValidate()
+    })
   }
 
-  // 删除部门
-  const deleteDepartment = (id: number) => {
-    ElMessageBox.confirm('确定要删除该部门吗？', '删除部门', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+  // ========== 删除 ==========
+  const handleDelete = (row: any) => {
+    ElMessageBox.confirm(
+      `确定要删除部门「${row.name}」吗？${row.user_count > 0 ? `该部门下有 ${row.user_count} 个用户关联。` : ''}`,
+      '删除部门',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
       .then(async () => {
-        // 这里不直接修改 useTable 返回的只读 loading 状态
         try {
-          await apiDeleteDepartment(id)
-          // HTTP client returns data directly on success
-          ElMessage.success('删除部门成功')
-          await refresh()
-        } catch (err) {
+          const res: any = await apiDeleteDepartment(row.id)
+          if (res?.code === 200 || res?.success) {
+            ElMessage.success('删除部门成功')
+            await Promise.all([loadTreeData(), loadDepartmentOptions()])
+          } else {
+            ElMessage.error(res?.message || '删除部门失败')
+          }
+        } catch (err: any) {
           console.error('删除部门出错:', err)
-          ElMessage.error('删除部门失败')
-        } finally {
-          // no-op
+          ElMessage.error(err?.message || '删除部门失败')
         }
       })
       .catch(() => {})
   }
 
-  // 提交表单
+  // ========== 提交 ==========
   const submitForm = async () => {
     if (!formRef.value) return
+
     await formRef.value.validate(async (valid) => {
-      if (valid) {
-        submitLoading.value = true
-        try {
-          const params = {
-            name: formData.name,
-            sort: formData.sort,
-            status: formData.status ? 1 : 2
-          }
-          if (dialogType.value === 'edit') {
-            if (!currentId.value) {
-              ElMessage.error('部门ID无效')
-              return
-            }
-            await updateDepartment({ ...params, id: currentId.value })
-            // HTTP client returns data directly on success
-            ElMessage.success('修改部门成功')
-            dialogVisible.value = false
-            await refresh()
-          } else {
-            await addDepartment(params)
-            // HTTP client returns data directly on success
-            ElMessage.success('添加部门成功')
-            dialogVisible.value = false
-            await refresh()
-          }
-        } catch (err) {
-          console.error('提交表单出错:', err)
-          ElMessage.error(`${dialogType.value === 'add' ? '添加' : '修改'}部门失败`)
-        } finally {
-          submitLoading.value = false
+      if (!valid) return
+
+      submitLoading.value = true
+      try {
+        const params = {
+          name: formData.name,
+          sort: formData.sort,
+          parent_id: formData.parent_id ?? null,
+          status: formData.statusActive
         }
+
+        let res: any
+        if (dialogType.value === 'edit') {
+          if (!currentId.value) {
+            ElMessage.error('部门ID无效')
+            return
+          }
+          res = await updateDepartment({ id: currentId.value, ...params })
+        } else {
+          res = await addDepartment(params)
+        }
+
+        if (res?.code === 200 || res?.success) {
+          ElMessage.success(dialogType.value === 'add' ? '添加成功' : '修改成功')
+          dialogVisible.value = false
+          await Promise.all([loadTreeData(), loadDepartmentOptions()])
+        } else {
+          ElMessage.error(res?.message || (dialogType.value === 'add' ? '添加失败' : '修改失败'))
+        }
+      } catch (err: any) {
+        console.error('提交表单出错:', err)
+        ElMessage.error(err?.message || (dialogType.value === 'add' ? '添加失败' : '修改失败'))
+      } finally {
+        submitLoading.value = false
       }
     })
   }
+
+  // ========== 初始化 ==========
+  loadTreeData()
+  loadDepartmentOptions()
 </script>
 
 <style lang="scss" scoped>
   .department-page {
-    .table-container {
-      flex: 1;
-      min-height: 0;
-      padding: 16px;
-    }
-
-    .search-container {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 16px;
-
-      .el-input {
-        width: 240px;
-        margin-right: 16px;
-      }
-    }
-
     .operation-column-container {
       display: flex;
       align-items: center;
       justify-content: center;
-    }
-
-    .svg-icon {
-      width: 1.8em;
-      height: 1.8em;
-      overflow: hidden;
-      vertical-align: -8px;
-      fill: currentcolor;
     }
   }
 </style>

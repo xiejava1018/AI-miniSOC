@@ -187,6 +187,11 @@ export class MenuProcessor {
   /**
    * 验证菜单路径配置
    * 检测非一级菜单是否错误使用了 / 开头的路径
+   *
+   * 注意：由于 menuDataToRouter 在 fetchGetMenuList 时已将相对路径拼接为完整路径，
+   * 此处检查的是 normalizeMenuPaths 之后的路径。
+   * 2级菜单的完整路径（如 /system/users）以 / 开头是正确的，
+   * 所以仅对 3级及更深层级检查非法绝对路径。
    */
   private validateMenuPaths(menuList: AppRouteRecord[], level = 1): void {
     menuList.forEach((route) => {
@@ -200,8 +205,9 @@ export class MenuProcessor {
         // 跳过合法的绝对路径：外部链接和 iframe 路由
         if (this.isValidAbsolutePath(childPath)) return
 
-        // 检测非法的绝对路径
-        if (childPath.startsWith('/')) {
+        // 仅 3 级及更深层级才检查非法绝对路径
+        // 2 级菜单的完整路径（如 /vulnerabilities/list）以 / 开头是正常的
+        if (level >= 2 && childPath.startsWith('/')) {
           this.logPathError(child, childPath, parentName, level)
         }
       })

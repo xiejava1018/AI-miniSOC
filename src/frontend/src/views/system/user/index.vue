@@ -44,27 +44,22 @@
       <ElForm ref="formRef" :model="formData" :rules="computedRules" label-width="85px">
         <ElRow :gutter="20">
           <ElCol :span="12">
-            <ElFormItem label="登录账号" prop="account">
+            <ElFormItem label="登录账号" prop="username">
               <ElInput
-                v-model="formData.account"
+                v-model="formData.username"
                 :disabled="dialogType === 'edit'"
-                placeholder="请输入登录账号"
+                placeholder="请输入登录账号（字母或数字）"
               />
             </ElFormItem>
           </ElCol>
           <ElCol :span="12">
-            <ElFormItem label="用户名称" prop="name">
-              <ElInput v-model="formData.name" placeholder="请输入用户名称" />
+            <ElFormItem label="用户名称" prop="full_name">
+              <ElInput v-model="formData.full_name" placeholder="请输入用户名称（界面显示名）" />
             </ElFormItem>
           </ElCol>
         </ElRow>
 
         <ElRow :gutter="20">
-          <ElCol :span="12">
-            <ElFormItem label="用户名" prop="username">
-              <ElInput v-model="formData.username" placeholder="请输入用户名" />
-            </ElFormItem>
-          </ElCol>
           <ElCol :span="12">
             <ElFormItem label="密码" prop="password">
               <ElInput
@@ -75,14 +70,14 @@
               />
             </ElFormItem>
           </ElCol>
-        </ElRow>
-
-        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="手机号" prop="phone">
               <ElInput v-model="formData.phone" placeholder="请输入手机号" />
             </ElFormItem>
           </ElCol>
+        </ElRow>
+
+        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="性别" prop="gender">
               <ElSelect v-model="formData.gender" placeholder="请选择性别" style="width: 100%">
@@ -92,9 +87,6 @@
               </ElSelect>
             </ElFormItem>
           </ElCol>
-        </ElRow>
-
-        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="部门" prop="department_id">
               <ElSelect
@@ -113,6 +105,9 @@
               </ElSelect>
             </ElFormItem>
           </ElCol>
+        </ElRow>
+
+        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="角色" prop="role_id">
               <ElSelect v-model="formData.role_id" placeholder="请选择角色" style="width: 100%">
@@ -127,8 +122,6 @@
               </ElSelect>
             </ElFormItem>
           </ElCol>
-        </ElRow>
-        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="启用">
               <ElSwitch v-model="formData.status" :active-value="1" :inactive-value="2" />
@@ -173,31 +166,24 @@
       apiParams: {
         page: 1,
         pageSize: 10,
-        name: '',
-        account: '',
         username: '',
+        full_name: '',
         phone: '',
         department_id: undefined,
         role_id: undefined
       },
       columnsFactory: () => [
         {
-          prop: 'name',
-          label: '用户名称',
-          align: 'center',
-          formatter: (row: any) => row.name || '--'
-        },
-        {
-          prop: 'account',
+          prop: 'username',
           label: '登录账号',
           align: 'center',
-          formatter: (row: any) => row.account || '--'
+          formatter: (row: any) => row.username || '--'
         },
         {
-          prop: 'username',
-          label: '用户名',
+          prop: 'full_name',
+          label: '用户名称',
           align: 'center',
-          formatter: (row: any) => row.username || '--'
+          formatter: (row: any) => row.full_name || '--'
         },
         {
           prop: 'phone',
@@ -293,9 +279,8 @@
   // 用户表单数据
   const formData = reactive({
     id: '',
-    account: '',
     username: '',
-    name: '',
+    full_name: '',
     password: '',
     phone: '',
     gender: undefined,
@@ -307,28 +292,20 @@
   // 搜索表单配置项
   const searchItems: SearchFormItem[] = [
     {
-      label: '用户名称',
-      key: 'name',
-      type: 'input',
-      span: 6,
-      clearable: true,
-      placeholder: '请输入用户名称'
-    },
-    {
       label: '登录账号',
-      key: 'account',
+      key: 'username',
       type: 'input',
       span: 6,
       clearable: true,
       placeholder: '请输入登录账号'
     },
     {
-      label: '用户名',
-      key: 'username',
+      label: '用户名称',
+      key: 'full_name',
       type: 'input',
       span: 6,
       clearable: true,
-      placeholder: '请输入用户名'
+      placeholder: '请输入用户名称'
     },
     {
       label: '手机号',
@@ -368,9 +345,8 @@
 
   // 列配置选项
   const columnOptions = [
-    { label: '用户名称', prop: 'name' },
-    { label: '登录账号', prop: 'account' },
-    { label: '用户名', prop: 'username' },
+    { label: '登录账号', prop: 'username' },
+    { label: '用户名称', prop: 'full_name' },
     { label: '手机号', prop: 'phone' },
     { label: '性别', prop: 'gender' },
     { label: '部门', prop: 'department_name' },
@@ -438,21 +414,18 @@
 
     if (type === 'edit' && row) {
       formData.id = row.id
-      formData.account = row.account || ''
       formData.username = row.username || ''
-      formData.name = row.name
+      formData.full_name = row.full_name || ''
       formData.phone = row.phone || ''
-      formData.gender = row.gender === 0 ? 1 : row.gender // 如果性别是未知(0)，则默认设为男(1)
+      formData.gender = row.gender === 0 ? 1 : row.gender
       formData.status = row.status
       formData.department_id = row.department_id
-      formData.role_id = row.role_id || 1 // 获取角色ID，如果没有则默认为1
-      formData.password = '' // 编辑模式下明确清空密码
+      formData.role_id = row.role_id || 1
+      formData.password = ''
     } else {
-      // 添加用户时重置表单并确保状态为启用
       formData.id = ''
-      formData.account = ''
       formData.username = ''
-      formData.name = ''
+      formData.full_name = ''
       formData.password = ''
       formData.phone = ''
       formData.gender = undefined
@@ -521,20 +494,16 @@
 
   // 定义基本验证规则
   const baseRules = {
-    account: [
-      { required: true, message: '请输入登录账号', trigger: 'blur' },
-      { min: 4, max: 20, message: '长度在 4 到 20 个字符', trigger: 'blur' }
-    ],
     username: [
-      { required: true, message: '请输入用户名', trigger: 'blur' },
-      { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+      { required: true, message: '请输入登录账号', trigger: 'blur' },
+      { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
     ],
-    name: [
+    full_name: [
       { required: true, message: '请输入用户名称', trigger: 'blur' },
-      { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+      { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
     ],
     phone: [
-      { required: true, message: '请输入手机号', trigger: 'blur' },
+      { required: false, message: '请输入手机号', trigger: 'blur' },
       { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式', trigger: 'blur' }
     ],
     gender: [{ required: true, message: '请选择性别', trigger: 'change' }],

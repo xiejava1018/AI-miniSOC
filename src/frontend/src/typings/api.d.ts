@@ -137,11 +137,14 @@ declare namespace Api {
   namespace SystemDepartment {
     interface DepartmentItem {
       id: number
+      parent_id?: number | null
       name: string
       status: number // 1 启用 / 2 禁用（后端定义）
       sort?: number
+      user_count?: number
       created_at?: number
       updated_at?: number
+      children?: DepartmentItem[]
     }
 
     interface DepartmentSearchParams {
@@ -154,6 +157,7 @@ declare namespace Api {
 
     interface DepartmentPayload {
       id?: number
+      parent_id?: number | null
       name: string
       status: number
       sort?: number

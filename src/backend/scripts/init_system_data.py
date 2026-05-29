@@ -46,11 +46,11 @@ def init_menus(db: Session):
 
     # 业务菜单
     menus = [
-        {"name": "概览仪表板", "path": "/dashboard", "icon": "DataAnalysis", "sort_order": 1, "is_visible": True},
-        {"name": "资产管理", "path": "/assets", "icon": "Monitor", "sort_order": 2, "is_visible": True},
-        {"name": "事件管理", "path": "/incidents", "icon": "Warning", "sort_order": 3, "is_visible": True},
-        {"name": "告警管理", "path": "/alerts", "icon": "Bell", "sort_order": 4, "is_visible": True},
-        {"name": "系统管理", "path": "", "icon": "Setting", "sort_order": 5, "is_visible": True}
+        {"name": "概览仪表板", "path": "/dashboard", "icon": "ri:bar-chart-box-line", "sort_order": 1, "is_visible": True},
+        {"name": "资产管理", "path": "/assets", "icon": "ri:computer-line", "sort_order": 2, "is_visible": True},
+        {"name": "事件管理", "path": "/incidents", "icon": "ri:alert-line", "sort_order": 3, "is_visible": True},
+        {"name": "告警管理", "path": "/alerts", "icon": "ri:notification-3-line", "sort_order": 4, "is_visible": True},
+        {"name": "系统管理", "path": "", "icon": "ri:settings-3-line", "sort_order": 5, "is_visible": True}
     ]
 
     for menu_data in menus:
@@ -66,10 +66,10 @@ def init_menus(db: Session):
     system_menu = db.query(Menu).filter(Menu.name == "系统管理").first()
     if system_menu:
         sub_menus = [
-            {"parent_id": system_menu.id, "name": "用户管理", "path": "/system/users", "icon": "User", "sort_order": 1, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "角色管理", "path": "/system/roles", "icon": "Lock", "sort_order": 2, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "菜单管理", "path": "/system/menus", "icon": "Menu", "sort_order": 3, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "审计日志", "path": "/system/audit", "icon": "Document", "sort_order": 4, "is_visible": True}
+            {"parent_id": system_menu.id, "name": "用户管理", "path": "users", "icon": "ri:user-3-line", "sort_order": 1, "is_visible": True},
+            {"parent_id": system_menu.id, "name": "角色管理", "path": "roles", "icon": "ri:lock-line", "sort_order": 2, "is_visible": True},
+            {"parent_id": system_menu.id, "name": "菜单管理", "path": "menus", "icon": "ri:menu-3-line", "sort_order": 3, "is_visible": True},
+            {"parent_id": system_menu.id, "name": "审计日志", "path": "audit-logs", "icon": "ri:file-text-line", "sort_order": 4, "is_visible": True}
         ]
 
         for menu_data in sub_menus:

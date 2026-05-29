@@ -31,7 +31,7 @@ export const getUserMenu = (): Promise<any[]> => {
 }
 
 export const getAllMenu = (): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/menus` })
+  return httpClient.get({ url: `${API_PREFIX}/menus/tree`, showErrorMessage: false })
 }
 
 export const addMenu = (data: any): Promise<any> => {
@@ -118,6 +118,10 @@ export const getDepartmentList = (
     params: normalizePaginationParams(params),
     keepFullResponse: true
   })
+}
+
+export const getDepartmentTree = (): Promise<Api.SystemDepartment.DepartmentItem[]> => {
+  return httpClient.get({ url: `${API_PREFIX}/departments/tree` })
 }
 
 export const addDepartment = (data: any): Promise<any> => {
