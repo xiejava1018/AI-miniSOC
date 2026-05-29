@@ -37,7 +37,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 # Import all models to ensure they're registered with Base.metadata
-from app.models import Asset, AssetPort, AssetTag
+from app.models import Asset, AssetPort, AssetTag, Department
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
 

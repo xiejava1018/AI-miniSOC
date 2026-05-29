@@ -3,7 +3,7 @@
 """
 
 from typing import Optional, List, Tuple
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func
 from datetime import datetime, timedelta
 
@@ -48,7 +48,10 @@ class UserService:
         Returns:
             (用户列表, 总数)
         """
-        query = self.db.query(User)
+        query = self.db.query(User).options(
+            joinedload(User.role),
+            joinedload(User.department)
+        )
 
         # 搜索条件
         if search:
@@ -87,7 +90,10 @@ class UserService:
         Returns:
             用户对象或None
         """
-        return self.db.query(User).filter(User.id == user_id).first()
+        return self.db.query(User).options(
+            joinedload(User.role),
+            joinedload(User.department)
+        ).filter(User.id == user_id).first()
 
     def get_user_by_username(self, username: str) -> Optional[User]:
         """
@@ -125,16 +131,27 @@ class UserService:
             if existing:
                 raise ValueError("邮箱已被使用")
 
+        # 状态转换：前端数字 -> 后端字符串
+        status_val = getattr(user_data, 'status', None)
+        if isinstance(status_val, int):
+            status_map = {1: UserStatus.ACTIVE, 2: UserStatus.DISABLED}
+            status_val = status_map.get(status_val, UserStatus.ACTIVE)
+        if not status_val:
+            status_val = UserStatus.ACTIVE
+
         # 创建用户
         user = User(
             username=user_data.username,
             password_hash=hash_password(user_data.password),
             email=user_data.email,
             full_name=user_data.full_name,
+            nick_name=getattr(user_data, 'nick_name', None),
             phone=getattr(user_data, 'phone', None),
-            department=getattr(user_data, 'department', None),
+            avatar=getattr(user_data, 'avatar', None),
+            gender=getattr(user_data, 'gender', None),
+            department_id=getattr(user_data, 'department_id', None),
             role_id=user_data.role_id,
-            status=UserStatus.ACTIVE
+            status=status_val
         )
 
         self.db.add(user)
@@ -177,6 +194,12 @@ class UserService:
 
         # 更新字段
         update_data_dict = user_data.model_dump(exclude_unset=True)
+
+        # 状态转换：前端数字 -> 后端字符串
+        if 'status' in update_data_dict and isinstance(update_data_dict['status'], int):
+            status_map = {1: UserStatus.ACTIVE, 2: UserStatus.DISABLED}
+            update_data_dict['status'] = status_map.get(update_data_dict['status'], UserStatus.ACTIVE)
+
         for field, value in update_data_dict.items():
             setattr(user, field, value)
 

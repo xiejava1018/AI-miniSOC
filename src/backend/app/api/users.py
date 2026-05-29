@@ -17,9 +17,34 @@ from app.schemas.user import (
 )
 from app.services.user_service import UserService
 from app.schemas.user import UserResponse as UserResponseSchema
+from app.models.user import UserStatus
 
 
 router = APIRouter(tags=["用户管理"])
+
+
+def _build_user_response(user) -> UserResponse:
+    """构建用户响应，处理关联数据"""
+    data = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+        "nick_name": user.nick_name,
+        "phone": user.phone,
+        "avatar": user.avatar,
+        "gender": user.gender,
+        "department_id": user.department_id,
+        "department_name": user.department.name if user.department else None,
+        "role_id": user.role_id,
+        "role_name": user.role.name if user.role else None,
+        "is_admin": user.is_admin,
+        "status": user.status,
+        "last_login": user.last_login,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+    }
+    return UserResponse.model_validate(data)
 
 
 @router.get("", response_model=UserListResponse)
@@ -28,7 +53,7 @@ async def get_users(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
     search: Optional[str] = Query(None, description="搜索关键词"),
     role_id: Optional[int] = Query(None, description="角色ID"),
-    status: Optional[str] = Query(None, description="状态"),
+    status: Optional[int] = Query(None, ge=1, le=2, description="状态: 1=启用, 2=禁用"),
     current_user: UserResponseSchema = Depends(require_menu_permission("system-users")),
     db: Session = Depends(get_db)
 ):
@@ -40,17 +65,23 @@ async def get_users(
     service = UserService(db)
     skip = (page - 1) * page_size
 
+    # 状态转换：前端数字 -> 后端字符串
+    status_str = None
+    if status is not None:
+        status_map = {1: UserStatus.ACTIVE, 2: UserStatus.DISABLED}
+        status_str = status_map.get(status, UserStatus.ACTIVE)
+
     users, total = service.get_users(
         skip=skip,
         limit=page_size,
         search=search,
         role_id=role_id,
-        status=status
+        status=status_str
     )
 
     return UserListResponse(
         total=total,
-        items=[UserResponse.model_validate(u) for u in users]
+        items=[_build_user_response(u) for u in users]
     )
 
 
@@ -70,7 +101,7 @@ async def get_user(
             detail="用户不存在"
         )
 
-    return UserResponse.model_validate(user)
+    return _build_user_response(user)
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -101,7 +132,7 @@ async def create_user(
     service = UserService(db)
     try:
         user = service.create_user(user_data, creator_id=current_user.id)
-        return UserResponse.model_validate(user)
+        return _build_user_response(user)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -138,7 +169,7 @@ async def update_user(
     service = UserService(db)
     try:
         user = service.update_user(user_id, user_data, updater_id=current_user.id)
-        return UserResponse.model_validate(user)
+        return _build_user_response(user)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -257,7 +288,7 @@ async def lock_user(
             reason=lock_data.lock_reason,
             admin_id=current_user.id
         )
-        return UserResponse.model_validate(user)
+        return _build_user_response(user)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

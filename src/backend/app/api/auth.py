@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.core.auth import create_access_token, create_refresh_token, verify_token, get_current_user
 from app.core.security import verify_password
+from app.core.captcha import create_captcha, verify_captcha
 from app.models.user import User, UserStatus
 from app.services.audit_log_service import AuditLogService
 from app.schemas.user import UserResponse
@@ -29,6 +30,8 @@ class LoginRequest(BaseModel):
     """登录请求"""
     username: str = Field(..., min_length=3, max_length=50, description="用户名")
     password: str = Field(..., min_length=6, max_length=100, description="密码")
+    captcha_key: Optional[str] = Field(None, description="验证码key")
+    captcha_code: Optional[str] = Field(None, description="验证码")
 
 
 class LoginResponse(BaseModel):
@@ -86,7 +89,23 @@ async def login(
     # 初始化审计日志服务
     audit_service = AuditLogService(db)
 
-    # 1. 查询用户
+    # 1. 验证码校验（如果提供了验证码）
+    if request.captcha_key and request.captcha_code:
+        if not verify_captcha(request.captcha_key, request.captcha_code):
+            audit_service.log_login(
+                user_id=None,
+                username=request.username,
+                ip_address=client_ip,
+                user_agent=user_agent,
+                status="failure",
+                error_message="验证码错误"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="验证码错误或已过期"
+            )
+
+    # 2. 查询用户
     user = db.query(User).filter(User.username == request.username).first()
 
     if not user:
@@ -205,6 +224,24 @@ async def login(
     )
 
 
+@router.get("/captcha")
+async def get_captcha():
+    """
+    获取验证码
+
+    生成图形验证码并返回base64图片
+
+    Returns:
+        captcha_key: 验证码key（用于登录时验证）
+        captcha_image: base64编码的验证码图片
+    """
+    key, image = create_captcha()
+    return {
+        "captcha_key": key,
+        "captcha_image": image
+    }
+
+
 @router.post("/refresh", response_model=RefreshTokenResponse)
 async def refresh_token(
     request: RefreshTokenRequest,
@@ -313,7 +350,7 @@ async def logout(
 
 @router.get("/me")
 async def get_current_user_info(
-    current_user: dict = Depends(lambda: None)  # 临时实现，后续需要真正的认证
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     获取当前用户信息
@@ -323,9 +360,4 @@ async def get_current_user_info(
     Returns:
         当前用户信息
     """
-    # TODO: 实现真实的认证逻辑
-    # 目前返回401，需要前端先调用login
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="需要先登录"
-    )
+    return current_user

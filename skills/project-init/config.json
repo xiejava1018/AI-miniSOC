@@ -1,0 +1,24 @@
+{
+  "version": "1.1.0",
+  "templates": {
+    "minimal": "templates/minimal/CLAUDE.md.tpl",
+    "standard": "templates/standard/CLAUDE.md.tpl",
+    "strict": "templates/strict/CLAUDE.md.tpl",
+    "env": "templates/env-example.tpl",
+    "adr": "templates/adr-template.md",
+    "architecture": "templates/architecture-overview.md",
+    "runbook": "templates/runbook-template.md"
+  },
+  "projectTypes": [
+    "web-app",
+    "api-service",
+    "cli-tool",
+    "library-sdk",
+    "data-platform"
+  ],
+  "specLevels": [
+    "minimal",
+    "standard",
+    "strict"
+  ]
+}

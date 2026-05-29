@@ -13,8 +13,8 @@ class AssetBase(BaseModel):
     name: Optional[str] = None
     network_segment: str = "default"
     asset_ip: str
-    asset_type: str = "other"
-    criticality: str = "medium"
+    asset_type: Optional[str] = "other"
+    criticality: Optional[str] = "medium"
     owner: Optional[str] = None
     business_unit: Optional[str] = None
     asset_description: Optional[str] = None

@@ -60,6 +60,13 @@ class RoleListResponse(BaseModel):
     page_size: int = Field(..., description="每页数量")
 
 
+class RoleMenuPermissionItem(BaseModel):
+    """角色菜单权限项"""
+    menu_id: int = Field(..., description="菜单ID")
+    permissions: List[str] = Field(default_factory=list, description="权限标识列表")
+
+
 class RoleMenusRequest(BaseModel):
     """菜单权限分配请求"""
     menu_ids: List[int] = Field(..., description="菜单ID列表")
+    menu_permissions: List[RoleMenuPermissionItem] = Field(default_factory=list, description="菜单权限分配")

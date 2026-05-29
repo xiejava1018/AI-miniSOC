@@ -25,8 +25,13 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     email = Column(String(100), unique=True)
     full_name = Column(String(100))
+    nick_name = Column(String(100))
+    phone = Column(String(20))
+    avatar = Column(String(255))
+    gender = Column(Integer, default=0)  # 0=未知, 1=男, 2=女
     status = Column(String(20), default=UserStatus.ACTIVE)
     role_id = Column(Integer, ForeignKey('soc_roles.id'))
+    department_id = Column(BigInteger, ForeignKey('soc_departments.id'))
     is_superuser = Column(Boolean, default=False)
     last_login = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -34,6 +39,7 @@ class User(Base):
 
     # 关系
     role = relationship("Role", back_populates="users")
+    department = relationship("Department", back_populates="users")
     sessions = relationship("UserSession", back_populates="user")
     password_history = relationship("PasswordHistory", back_populates="user")
     audit_logs = relationship("AuditLog", back_populates="user")

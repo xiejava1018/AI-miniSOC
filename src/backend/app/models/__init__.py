@@ -14,6 +14,7 @@ from .user_session import UserSession
 from .role import Role, RoleCode
 from .role_menu import RoleMenu
 from .menu import Menu
+from .department import Department
 from .system_config import SystemConfig
 from .password_history import PasswordHistory
 from .password_reset_token import PasswordResetToken
@@ -37,6 +38,7 @@ __all__ = [
     "RoleCode",
     "RoleMenu",
     "Menu",
+    "Department",
     "SystemConfig",
     "PasswordHistory",
     "PasswordResetToken",

@@ -177,14 +177,33 @@ async def get_role_menus(
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
-    """获取角色的菜单列表"""
+    """获取角色的菜单列表（含按钮权限）"""
     service = RoleService(db)
     try:
         menus = service.get_role_menus(role_id)
+        perms = service.get_role_menu_permissions(role_id)
+
+        result = []
+        for menu in menus:
+            menu_dict = menu.to_dict()
+            # 合并按钮权限
+            available_perms = menu_dict.get('permissions') or []
+            granted_perms = perms.get(menu.id, [])
+            if available_perms:
+                menu_dict['authList'] = [
+                    {
+                        **p,
+                        'hasPermission': p.get('authMark') in granted_perms
+                    }
+                    for p in available_perms
+                ]
+            menu_dict['hasPermission'] = True  # 菜单本身已授权
+            result.append(menu_dict)
+
         return {
             "role_id": role_id,
             "menu_ids": [menu.id for menu in menus],
-            "menus": [menu.to_dict() for menu in menus]
+            "menus": result
         }
     except ValueError as e:
         raise HTTPException(
@@ -198,7 +217,10 @@ async def get_role_menus(
     action="ASSIGN_PERMISSIONS",
     resource_type="role",
     get_resource_id=lambda result, kwargs: kwargs.get('role_id'),
-    get_new_values=lambda result, kwargs: {"menu_ids": kwargs.get('menus_data').menu_ids}
+    get_new_values=lambda result, kwargs: {
+        "menu_ids": kwargs.get('menus_data').menu_ids,
+        "menu_permissions": [p.model_dump() for p in kwargs.get('menus_data').menu_permissions] if kwargs.get('menus_data').menu_permissions else []
+    }
 )
 async def assign_role_menus(
     request: Request,
@@ -207,10 +229,11 @@ async def assign_role_menus(
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
-    """分配菜单权限"""
+    """分配菜单权限（含按钮权限）"""
     service = RoleService(db)
     try:
-        role = service.assign_menus(role_id, menus_data.menu_ids)
+        perm_list = [p.model_dump() for p in menus_data.menu_permissions] if menus_data.menu_permissions else []
+        role = service.assign_menus(role_id, menus_data.menu_ids, perm_list)
         return {
             "success": True,
             "message": "菜单权限已分配",

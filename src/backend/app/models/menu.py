@@ -5,6 +5,7 @@
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Boolean, Integer
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB
 from app.models.base import Base
 
 
@@ -18,8 +19,10 @@ class Menu(Base):
     title = Column(String(50))
     path = Column(String(200), nullable=False)
     icon = Column(String(50))
+    component = Column(String(200))
     sort_order = Column(Integer, default=0)
     is_visible = Column(Boolean, default=True)
+    permissions = Column(JSONB, default=list)  # 按钮权限: [{"title": "新增", "authMark": "add"}, ...]
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -37,8 +40,10 @@ class Menu(Base):
             "title": self.title,
             "path": self.path,
             "icon": self.icon,
+            "component": self.component,
             "sort_order": self.sort_order,
             "is_visible": self.is_visible,
+            "permissions": self.permissions or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

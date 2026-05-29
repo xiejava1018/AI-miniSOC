@@ -10,6 +10,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.response_wrapper import ResponseWrapperMiddleware
 from app.api import api_router
 
 # 创建 FastAPI 应用实例
@@ -20,6 +21,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# 注册响应包装中间件（必须在CORS之前）
+app.add_middleware(ResponseWrapperMiddleware)
 
 # 配置 CORS
 app.add_middleware(

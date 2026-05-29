@@ -156,25 +156,45 @@ class RoleService:
         role = self.get_role_by_id(role_id)
         return role.menus
 
-    def assign_menus(self, role_id: int, menu_ids: List[int]) -> Role:
+    def assign_menus(self, role_id: int, menu_ids: List[int], menu_permissions: List[dict] = None) -> Role:
         """
         分配菜单权限
 
         Args:
             role_id: 角色ID
             menu_ids: 菜单ID列表
+            menu_permissions: 菜单权限分配 [{"menu_id": int, "permissions": ["add", "edit"]}, ...]
 
         Returns:
             更新后的角色
         """
+        from app.models.role_menu import RoleMenu
+
         role = self.get_role_by_id(role_id)
 
         menus = self.db.query(Menu).filter(Menu.id.in_(menu_ids)).all()
         role.menus = menus
 
+        # 保存按钮权限
+        if menu_permissions:
+            perm_map = {item['menu_id']: item.get('permissions', []) for item in menu_permissions}
+            for menu in menus:
+                role_menu = self.db.query(RoleMenu).filter(
+                    RoleMenu.role_id == role_id,
+                    RoleMenu.menu_id == menu.id
+                ).first()
+                if role_menu:
+                    role_menu.permissions = perm_map.get(menu.id, [])
+
         self.db.commit()
         self.db.refresh(role)
         return role
+
+    def get_role_menu_permissions(self, role_id: int) -> dict:
+        """获取角色的菜单权限映射 {menu_id: [permissions]}"""
+        from app.models.role_menu import RoleMenu
+        mappings = self.db.query(RoleMenu).filter(RoleMenu.role_id == role_id).all()
+        return {m.menu_id: m.permissions or [] for m in mappings}
 
     def get_role_users(self, role_id: int) -> List[User]:
         """获取使用该角色的用户列表"""

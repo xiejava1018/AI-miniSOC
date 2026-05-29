@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     # 数据库配置
     DB_HOST: str = "192.168.0.42"
     DB_PORT: int = 5432
-    DB_NAME: str = "AI-miniSOC-testdb"  # 使用测试数据库
+    DB_NAME: str = "AI-miniSOC-db"
     DB_USER: str = "postgres"
     DB_PASSWORD: str
 
@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:5173",
         "http://localhost:5174",
+        "http://localhost:3006",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3006",
         "http://192.168.0.42:5173",
         "http://192.168.0.128:5173"
     ]

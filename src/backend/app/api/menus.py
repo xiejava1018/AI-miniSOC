@@ -20,15 +20,57 @@ from app.services.menu_service import MenuService
 router = APIRouter(tags=["菜单管理"])
 
 
-@router.get("/tree", response_model=List[MenuTreeResponse])
+def _build_menu_with_auth(menu, role_perms: dict) -> dict:
+    """构建带权限信息的菜单字典"""
+    data = menu.to_dict(include_children=True)
+    available = data.get('permissions') or []
+    granted = role_perms.get(menu.id, [])
+    if available:
+        data['authList'] = [
+            {**p, 'hasPermission': p.get('authMark') in granted}
+            for p in available
+        ]
+    else:
+        data['authList'] = []
+    data['hasPermission'] = True
+    if data.get('children'):
+        data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in data['children']]
+    return data
+
+
+def _build_child_menu_with_auth(child_data: dict, role_perms: dict) -> dict:
+    """递归构建子菜单权限信息（child_data 已是字典）"""
+    available = child_data.get('permissions') or []
+    granted = role_perms.get(child_data['id'], [])
+    if available:
+        child_data['authList'] = [
+            {**p, 'hasPermission': p.get('authMark') in granted}
+            for p in available
+        ]
+    else:
+        child_data['authList'] = []
+    child_data['hasPermission'] = True
+    if child_data.get('children'):
+        child_data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in child_data['children']]
+    return child_data
+
+
+@router.get("/tree")
 async def get_menu_tree(
     current_user: UserResponseSchema = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """获取菜单树（所有用户可访问）"""
+    """获取菜单树（按当前用户角色过滤）"""
+    from app.services.role_service import RoleService
+
     service = MenuService(db)
-    menus = service.get_menu_tree()
-    return [MenuTreeResponse.model_validate(m) for m in menus]
+    role_service = RoleService(db)
+
+    # 按角色过滤菜单
+    menus = service.get_menu_tree(role_id=current_user.role_id)
+    role_perms = role_service.get_role_menu_permissions(current_user.role_id)
+
+    return [_build_menu_with_auth(m, role_perms) for m in menus]
 
 
 @router.get("/options")

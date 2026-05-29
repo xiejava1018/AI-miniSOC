@@ -1,5 +1,3 @@
-# CLAUDE.md
-
 # AI-miniSOC 项目开发指南
 
 这个文件为 Claude Code (claude.ai/code) 提供 AI-miniSOC 项目开发时的上下文和指导。
@@ -8,7 +6,155 @@
 
 AI-miniSOC 是一个**AI驱动的微型安全运营中心**，集成了日志聚合、威胁检测、主机监控和AI分析能力。
 
-当前开发环境位于 `/home/xiejava/AIproject/AI-miniSOC`
+当前开发环境位于 `/Users/xiejava/AIproject/AI-miniSOC`
+
+## 技术栈
+
+### 后端 (Backend)
+| 技术 | 版本/说明 |
+|------|----------|
+| Python | 3.14 |
+| FastAPI | Web框架 |
+| SQLAlchemy | ORM |
+| PostgreSQL | 数据库 |
+| Pydantic | 数据校验 |
+| PyJWT | JWT认证 |
+| Pillow | 验证码图片生成 |
+| python-dotenv | 环境变量管理 |
+
+### 前端 (Frontend)
+| 技术 | 版本/说明 |
+|------|----------|
+| Vue | 3.5.26 |
+| TypeScript | ~5.6.3 |
+| Vite | 7.3.0 |
+| Element Plus | 2.13.0 |
+| Vue Router | 4.6.4 |
+| Pinia | 3.0.4 (持久化存储) |
+| Tailwind CSS | 4.1.18 |
+| Sass | 样式预处理器 |
+| ECharts | 图表库 |
+| axios | HTTP客户端 |
+
+前端基于 **art-design-pro-edge** 框架重构，已剥离所有多租户代码。
+
+## 项目结构
+
+```
+AI-miniSOC/
+├── src/
+│   ├── backend/              # FastAPI 后端
+│   │   ├── app/
+│   │   │   ├── api/          # API路由 (auth, users, roles, menus, departments, assets, ...)
+│   │   │   ├── core/         # 核心配置、认证、验证码、响应包装中间件
+│   │   │   ├── models/       # SQLAlchemy 模型 (19张表)
+│   │   │   ├── schemas/      # Pydantic Schema
+│   │   │   ├── services/     # 业务逻辑层
+│   │   │   └── database.py   # 数据库连接
+│   │   ├── alembic/          # 数据库迁移
+│   │   ├── main.py           # FastAPI 入口
+│   │   └── .env              # 环境变量 (不上传Git)
+│   │
+│   └── frontend/             # Vue3 前端 (art-design-pro-edge)
+│       ├── src/
+│       │   ├── api/          # API请求封装
+│       │   ├── components/   # 业务组件 + 核心组件
+│       │   ├── composables/  # 组合式函数
+│       │   ├── config/       # 应用配置
+│       │   ├── directives/   # 自定义指令 (v-auth)
+│       │   ├── hooks/        # 通用Hooks (useTable, useAuth, ...)
+│       │   ├── mock/         # Mock数据
+│       │   ├── router/       # 路由配置 (后端驱动菜单)
+│       │   ├── store/        # Pinia状态管理
+│       │   ├── types/        # TypeScript类型定义
+│       │   ├── utils/        # 工具函数
+│       │   └── views/        # 页面视图
+│       ├── package.json
+│       └── vite.config.ts
+│
+├── docs/                     # 项目文档
+│   ├── design/               # 设计文档
+│   ├── development/          # 开发指南、日报
+│   ├── installation/         # 安装指南
+│   └── api/                  # API文档
+│
+├── configs/                  # 配置文件
+├── scripts/                  # 工具脚本
+├── skills/                   # Claude Code技能
+└── CLAUDE.md                 # 本文件
+```
+
+## 后端API模块
+
+所有API统一前缀 `/api/v1`，响应格式由中间件包装为 `{code, msg, data}`。
+
+| 模块 | 路由前缀 | 说明 |
+|------|---------|------|
+| 认证 | `/auth` | 登录/登出/刷新Token/验证码/当前用户 |
+| 用户管理 | `/users` | 用户CRUD、重置密码、锁定/解锁 |
+| 角色管理 | `/roles` | 角色CRUD、菜单权限分配（含按钮权限） |
+| 菜单管理 | `/menus` | 菜单CRUD、菜单树（按角色过滤） |
+| 部门管理 | `/departments` | 部门CRUD |
+| 审计日志 | `/audit-logs` | 审计日志查询、CSV导出 |
+| 资产管理 | `/assets` | 资产CRUD、端口、标签 |
+| 事件管理 | `/incidents` | 安全事件管理 |
+| 告警管理 | `/alerts` | 告警查询 |
+| AI分析 | `/ai` | AI日志分析 |
+| 同步任务 | `/sync` | 资产同步 |
+| Webhooks | `/webhooks` | Wazuh Webhook接收 |
+
+## 数据库表结构
+
+| 表名 | 说明 |
+|------|------|
+| soc_users | 用户表（含nick_name, phone, avatar, gender, department_id） |
+| soc_roles | 角色表 |
+| soc_role_menus | 角色菜单关联表（含permissions JSONB按钮权限） |
+| soc_menus | 菜单表（含permissions JSONB可用权限定义） |
+| soc_departments | 部门表 |
+| soc_assets | 资产表 |
+| soc_asset_ports | 资产端口表 |
+| soc_asset_tags | 资产标签表 |
+| soc_incidents | 安全事件表 |
+| soc_audit_logs | 审计日志表 |
+| soc_user_sessions | 用户会话表 |
+| soc_password_history | 密码历史表 |
+| soc_password_reset_tokens | 密码重置令牌表 |
+| soc_system_config | 系统配置表 |
+| soc_rate_limits | 限流表 |
+| soc_ai_analyses | AI分析结果表 |
+| soc_asset_incidents | 资产事件关联表 |
+| asset_change_logs | 资产变更日志表 |
+| sync_tasks | 同步任务表 |
+
+## 前端核心特性
+
+### 1. 后端驱动菜单
+- 登录后从 `/api/v1/menus/tree` 获取菜单树
+- `backendMenuToRoute()` 将后端菜单格式转换为前端 `AppRouteRecord`
+- 后端菜单的 `component` 字段直接使用实际组件路径（如 `/system/user`）
+
+### 2. 按钮级权限 (RBAC)
+- 菜单表 `permissions` 字段定义可用按钮权限 `[{title, authMark}]`
+- 角色菜单关联表 `permissions` 字段存储已授权的权限标识 `["add", "edit", "delete"]`
+- 前端通过 `v-auth` 指令或 `useAuth()` Hook 控制按钮显示
+- `hasAuth('add')` 检查当前路由下是否有新增权限
+
+### 3. 路由别名
+```typescript
+RoutesAlias.Layout = '/index/index'
+RoutesAlias.Dashboard = '/dashboard/console'
+RoutesAlias.User = '/system/user'
+RoutesAlias.Role = '/system/role'
+RoutesAlias.Menu = '/system/menu'
+RoutesAlias.Department = '/system/department'
+RoutesAlias.Placeholder = '/placeholder'  // 功能开发中占位页
+```
+
+### 4. 响应适配
+- 后端统一返回 `{code, msg, data}` 格式
+- `useTable` Hook 的 `responseAdapter` 自动适配分页数据
+- `defaultResponseAdapter` 支持 `records`/`data`/`list`/`items` 等多种字段名
 
 ## 核心组件
 
@@ -50,62 +196,12 @@ AI-miniSOC 是一个**AI驱动的微型安全运营中心**，集成了日志聚
 - `exporter`: OTLP
 - `service_name`: 服务名称
 
-## 项目结构规划
-
-```
-AI-miniSOC/
-├── docs/                      # 📚 文档
-│   ├── design/               # 设计文档
-│   │   ├── architecture.md   # 架构设计
-│   │   ├── data-model.md     # 数据模型
-│   │   └── api-design.md     # API设计
-│   ├── installation/         # 安装指南
-│   │   ├── wazuh-setup.md
-│   │   ├── loki-setup.md
-│   │   └── grafana-setup.md
-│   └── api/                  # API文档
-│       ├── loki-api.md
-│       ├── wazuh-api.md
-│       └── rest-api.md
-├── services/                 # 🔧 微服务
-│   ├── log-collector/        # 日志采集增强
-│   ├── alert-engine/         # 告警引擎
-│   ├── ai-analyzer/          # AI分析服务
-│   └── dashboard/            # Web仪表板
-├── configs/                  # ⚙️ 配置文件
-│   ├── wazuh/
-│   │   ├── rules/           # 自定义规则
-│   │   └── decoders/        # 自定义解码器
-│   ├── loki/
-│   │   └── retention-policy.yml
-│   ├── grafana/
-│   │   └── dashboards/      # 仪表板JSON
-│   └── deployment/
-│       ├── docker-compose.yml
-│       └── k8s/
-├── scripts/                  # 📜 工具脚本
-│   ├── install/             # 安装脚本
-│   ├── monitoring/          # 监控脚本
-│   │   └── health-check.sh  # 健康检查
-│   ├── backup/              # 备份脚本
-│   └── maintenance/         # 维护脚本
-├── tests/                   # 🧪 测试
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-├── skills/                  # 🎯 Claude Code技能
-│   ├── log-query/          # 日志查询技能
-│   ├── threat-analysis/    # 威胁分析技能
-│   └── report-gen/         # 报告生成技能
-└── docker-compose.yml       # Docker编排
-```
-
 ## 开发规范
 
 ### 代码规范
-- **Shell脚本**: 遵循 ShellCheck 规范，支持 bash 3.2+
 - **Python**: 遵循 PEP 8，使用类型注解
-- **JavaScript**: 使用 ESLint + Prettier
+- **JavaScript/TypeScript**: 使用 ESLint + Prettier + Stylelint
+- **Shell脚本**: 遵循 ShellCheck 规范，支持 bash 3.2+
 - **文档**: Markdown格式，中文优先
 
 ### Git工作流
@@ -140,6 +236,24 @@ docs/*           # 文档更新
 
 ## API 端点
 
+### REST API (FastAPI)
+```bash
+# 基础URL
+http://localhost:8000/api/v1
+
+# 登录
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 验证码
+curl http://localhost:8000/api/v1/auth/captcha
+
+# 菜单树
+curl http://localhost:8000/api/v1/menus/tree \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
 ### Loki API
 ```bash
 # 基础URL
@@ -152,12 +266,6 @@ GET  /query
 # 标签查询
 GET  /label
 GET  /label/<name>/values
-
-# 示例
-curl -G http://192.168.0.30:3100/loki/api/v1/query_range \
-  --data-urlencode 'query={ip="192.168.0.2"}' \
-  --data-urlencode 'start=<nanosecond_timestamp>' \
-  --data-urlencode 'end=<nanosecond_timestamp>'
 ```
 
 ### Wazuh API
@@ -170,14 +278,31 @@ POST /security/user/authenticate
 
 # 查询告警
 GET /alerts?offset=0&limit=10
-
-# 示例
-curl -k -X GET \
-  "https://192.168.0.30:55000/api/alerts?offset=0&limit=10" \
-  -H "Authorization: Bearer <JWT_TOKEN>"
 ```
 
 ## 常用命令
+
+### 启动开发服务器
+```bash
+# 后端 (从 src/backend/ 目录启动以正确加载 .env)
+cd src/backend
+../../venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# 前端
+cd src/frontend
+npm run dev        # 开发服务器: http://localhost:3006
+npm run build      # 生产构建
+```
+
+### 数据库操作
+```bash
+# 直接创建表（绕过alembic）
+cd src/backend
+../../venv/bin/python -c "from app.core.database import engine; from app.models.xxx import XXX; XXX.__table__.create(engine, checkfirst=True)"
+
+# 查看所有表
+../../venv/bin/python -c "from app.models.base import Base; print(sorted(Base.metadata.tables.keys()))"
+```
 
 ### Loki查询
 ```bash
@@ -225,11 +350,22 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - 需要分页查询大量数据
 - 时戳使用纳秒级
 
+### Alembic迁移
+- 数据库版本表引用了一个不存在的修订版本
+- 当前使用直接SQL/SQLAlchemy创建表作为替代方案
+
 ## 开发优先级
 
-### Phase 1: 基础完善 (当前)
+### Phase 1: 基础完善 (进行中)
+- [x] 前端重构 (art-design-pro-edge)
+- [x] 剥离多租户代码
+- [x] 后端驱动菜单
+- [x] 部门管理模块
+- [x] 角色菜单按钮权限 (RBAC)
+- [x] 用户字段完善 (nick_name, phone, avatar, gender, department)
+- [x] 验证码支持
+- [x] 统一响应包装中间件
 - [ ] 补全项目文档
-- [ ] 创建基础脚本框架
 - [ ] 配置Docker Compose
 - [ ] 集成现有监控工具
 
@@ -251,6 +387,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - **Loki文档**: https://grafana.com/docs/loki/latest/
 - **Grafana文档**: https://grafana.com/docs/grafana/latest/
 - **Claude Code**: https://claude.ai/code
+- **art-design-pro-edge**: https://gitee.com/chnmig/art-design-pro-edge
 
 ## 注意事项
 
@@ -259,8 +396,13 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 3. **认证**: Wazuh使用JWT认证，需定期刷新
 4. **性能**: 大量日志查询注意分页，避免超时
 5. **安全**: 不要在代码中硬编码凭证
+6. **环境变量**: `.env` 文件不上传Git，参考 `.env.example` 创建
+7. **启动目录**: 后端必须从 `src/backend/` 目录启动才能正确加载 `.env`
+8. **CORS**: 开发环境需将前端地址加入 `BACKEND_CORS_ORIGINS`
+9. **状态映射**: 后端用户状态使用字符串枚举 (`active`/`disabled`/`locked`)，前端使用数字 (1/2)
+10. **验证码**: 内存存储（5分钟过期），生产环境建议替换为Redis
 
 ---
 
-**文档版本**: v1.0
-**最后更新**: 2026-03-09
+**文档版本**: v2.0
+**最后更新**: 2026-05-29
