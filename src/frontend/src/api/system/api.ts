@@ -125,18 +125,18 @@ export const getDepartmentTree = (): Promise<Api.SystemDepartment.DepartmentItem
 }
 
 export const addDepartment = (data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/departments`, data })
+  return httpClient.post({ url: `${API_PREFIX}/departments`, data, keepFullResponse: true })
 }
 
 export const updateDepartment = (data: any): Promise<any> => {
   const id = data.id
   const payload = { ...data }
   delete payload.id
-  return httpClient.put({ url: `${API_PREFIX}/departments/${id}`, data: payload })
+  return httpClient.put({ url: `${API_PREFIX}/departments/${id}`, data: payload, keepFullResponse: true })
 }
 
 export const deleteDepartment = (id: number): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/departments/${id}` })
+  return httpClient.del({ url: `${API_PREFIX}/departments/${id}`, keepFullResponse: true })
 }
 
 // ========== 菜单元素权限 (后端暂不支持, 保留接口占位) ==========

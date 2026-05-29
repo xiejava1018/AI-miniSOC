@@ -66,10 +66,11 @@ def init_menus(db: Session):
     system_menu = db.query(Menu).filter(Menu.name == "系统管理").first()
     if system_menu:
         sub_menus = [
-            {"parent_id": system_menu.id, "name": "用户管理", "path": "users", "icon": "ri:user-3-line", "sort_order": 1, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "角色管理", "path": "roles", "icon": "ri:lock-line", "sort_order": 2, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "菜单管理", "path": "menus", "icon": "ri:menu-3-line", "sort_order": 3, "is_visible": True},
-            {"parent_id": system_menu.id, "name": "审计日志", "path": "audit-logs", "icon": "ri:file-text-line", "sort_order": 4, "is_visible": True}
+            {"parent_id": system_menu.id, "name": "用户管理", "path": "users", "icon": "ri:user-3-line", "sort_order": 1, "is_visible": True, "component": "/system/user", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
+            {"parent_id": system_menu.id, "name": "角色管理", "path": "roles", "icon": "ri:lock-line", "sort_order": 2, "is_visible": True, "component": "/system/role", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}, {"title": "分配权限", "authMark": "assign"}]},
+            {"parent_id": system_menu.id, "name": "菜单管理", "path": "menus", "icon": "ri:menu-3-line", "sort_order": 3, "is_visible": True, "component": "/system/menu", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
+            {"parent_id": system_menu.id, "name": "部门管理", "path": "departments", "icon": "ri:building-2-line", "sort_order": 5, "is_visible": True, "component": "/system/department", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
+            {"parent_id": system_menu.id, "name": "审计日志", "path": "audit-logs", "icon": "ri:file-text-line", "sort_order": 4, "is_visible": True, "component": "/system/audit"}]
         ]
 
         for menu_data in sub_menus:
