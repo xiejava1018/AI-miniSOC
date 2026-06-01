@@ -167,6 +167,88 @@ declare namespace Api {
     }
   }
 
+  /** 资产管理 */
+  namespace Asset {
+    /** 资产列表项 */
+    interface AssetListItem {
+      id: string
+      name?: string
+      network_segment?: string
+      asset_ip: string
+      asset_type?: string
+      criticality?: string
+      owner?: string
+      business_unit?: string
+      asset_description?: string
+      mac_address?: string
+      wazuh_agent_id?: string
+      asset_status?: string
+      os_name?: string
+      os_version?: string
+      hardware_info?: Record<string, any>
+      data_source?: string
+      last_synced_at?: string
+      parent_id?: string
+      status_updated_at?: string
+      created_at?: string
+      updated_at?: string
+    }
+
+    /** 资产搜索参数 */
+    interface AssetSearchParams {
+      page?: number
+      pageSize?: number
+      asset_ip?: string
+      name?: string
+      asset_type?: string
+      criticality?: string
+      asset_status?: string
+      data_source?: string
+    }
+
+    /** 资产创建/编辑表单 */
+    interface AssetPayload {
+      id?: string
+      name?: string
+      network_segment?: string
+      asset_ip?: string
+      asset_type?: string
+      criticality?: string
+      owner?: string
+      business_unit?: string
+      asset_description?: string
+      mac_address?: string
+      wazuh_agent_id?: string
+      asset_status?: string
+    }
+
+    /** 端口列表项 */
+    interface AssetPortItem {
+      id: string
+      asset_id?: string
+      asset_ip: string
+      port: number
+      protocol: string
+      state: string
+      service?: string
+      version?: string
+      service_banner?: string
+      vulnerability?: string
+      scan_time?: string
+      last_seen?: string
+      created_at?: string
+    }
+
+    /** 标签列表项 */
+    interface AssetTagItem {
+      id: string
+      asset_id: string
+      tag_key: string
+      tag_value: string
+      created_at?: string
+    }
+  }
+
   /** 部门管理 */
   namespace SystemDepartment {
     interface DepartmentItem {
@@ -191,6 +273,80 @@ declare namespace Api {
       name: string
       status: number
       sort?: number
+    }
+  }
+
+  /** 字典管理 */
+  namespace SystemDict {
+    interface DictItem {
+      id: number
+      dict_type: string
+      dict_code: string
+      dict_label: string
+      color?: string | null
+      sort_order: number
+      is_active: boolean
+      is_default: boolean
+      remark?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+
+    interface DictSearchParams {
+      page?: number
+      page_size?: number
+      dict_type?: string
+      search?: string
+    }
+
+    interface DictPayload {
+      id?: number
+      dict_type: string
+      dict_code: string
+      dict_label: string
+      color?: string | null
+      sort_order?: number
+      is_active?: boolean
+      is_default?: boolean
+      remark?: string | null
+    }
+  }
+
+  namespace SystemConfig {
+    type ValueType = 'string' | 'number' | 'boolean' | 'json' | 'password'
+
+    interface ConfigItem {
+      id: number
+      category: string
+      key: string
+      value: string | null
+      value_type: ValueType
+      is_encrypted: boolean
+      description: string | null
+      updated_by: number | null
+      created_at?: string
+      updated_at?: string
+    }
+
+    interface ConfigSearchParams {
+      page?: number
+      page_size?: number
+      category?: string
+      search?: string
+    }
+
+    interface ConfigPayload {
+      category: string
+      key: string
+      value?: string | null
+      value_type?: ValueType
+      is_encrypted?: boolean
+      description?: string | null
+    }
+
+    interface CategoryItem {
+      category: string
+      count: number
     }
   }
 }
