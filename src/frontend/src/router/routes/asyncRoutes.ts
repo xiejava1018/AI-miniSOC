@@ -85,6 +85,70 @@ export const asyncRoutes: AppRouteRecord[] = [
             { title: '删除', authMark: 'delete' }
           ]
         }
+      },
+      {
+        path: 'dict',
+        name: 'Dict',
+        component: RoutesAlias.Dict,
+        meta: {
+          title: '字典管理',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      },
+      {
+        path: 'config',
+        name: 'SystemConfig',
+        component: RoutesAlias.SystemConfig,
+        meta: {
+          title: '系统配置',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN'],
+          authList: [
+            { title: '新增', authMark: 'add' },
+            { title: '编辑', authMark: 'edit' },
+            { title: '删除', authMark: 'delete' }
+          ]
+        }
+      }
+    ]
+  },
+
+  {
+    path: '/assets',
+    name: 'Asset',
+    component: RoutesAlias.Layout,
+    meta: {
+      title: '资产管理',
+      icon: '&#xe6ca;',
+      roles: ['R_SUPER', 'R_ADMIN']
+    },
+    children: [
+      {
+        path: 'list',
+        name: 'AssetList',
+        component: RoutesAlias.Assets,
+        meta: {
+          title: '资产列表',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN'],
+          authList: [
+            { title: '新增', authMark: 'add' },
+            { title: '编辑', authMark: 'edit' },
+            { title: '删除', authMark: 'delete' }
+          ]
+        }
+      },
+      {
+        path: 'detail/:id',
+        name: 'AssetDetail',
+        component: RoutesAlias.AssetDetail,
+        meta: {
+          title: '资产详情',
+          isHide: true,
+          keepAlive: false,
+          isHideTab: true
+        }
       }
     ]
   },

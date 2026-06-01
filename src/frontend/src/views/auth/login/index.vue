@@ -88,6 +88,7 @@
   import { RoutesAlias } from '@/router/routesAlias'
   import { ElNotification, ElMessage } from 'element-plus'
   import { useUserStore } from '@/store/modules/user'
+  import { useDictStore } from '@/store/modules/dict'
   import { themeAnimation } from '@/utils/theme/animation'
   import { fetchLogin, fetchGetUserInfo, fetchCaptcha } from '@/api/auth'
   import { useHeaderBar } from '@/composables/useHeaderBar'
@@ -101,6 +102,7 @@
   const { shouldShowThemeToggle } = useHeaderBar()
 
   const userStore = useUserStore()
+  const dictStore = useDictStore()
   const router = useRouter()
   const route = useRoute()
 
@@ -184,6 +186,10 @@
       }
 
       showLoginSuccessNotice()
+
+      // 预加载字典数据
+      dictStore.loadAll().catch((e) => console.warn('[Login] 加载字典失败:', e))
+
       const redirect = route.query.redirect as string | undefined
       router.push(redirect || '/')
     } catch (error) {
