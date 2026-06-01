@@ -65,3 +65,7 @@ dbbackup/
 
 # Playwright MCP 临时文件
 .playwright-mcp/
+
+# Claude Code / IDE 工具本地数据
+.auto-insight/
+.claude/
