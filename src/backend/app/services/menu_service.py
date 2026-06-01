@@ -21,8 +21,8 @@ class MenuService:
         Returns:
             树形结构的菜单列表
         """
-        # 查询所有可见菜单
-        all_visible = self.db.query(Menu).filter(Menu.is_visible == True).all()
+        # 查询所有菜单（包含不可见的，因为隐藏菜单仍需注册为路由）
+        all_menus = self.db.query(Menu).all()
 
         if role_id:
             # 获取角色直接分配的菜单ID集合
@@ -32,13 +32,13 @@ class MenuService:
                 # 获取角色关联的菜单ID集合
                 assigned_ids = {m.id for m in role.menus}
                 # 过滤：保留已分配的菜单，或其父菜单已被分配的菜单
-                menus = [m for m in all_visible if
+                menus = [m for m in all_menus if
                          m.id in assigned_ids or
                          (m.parent_id is not None and m.parent_id in assigned_ids)]
             else:
-                menus = all_visible
+                menus = all_menus
         else:
-            menus = all_visible
+            menus = all_menus
 
         return self._build_tree(menus)
 

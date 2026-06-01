@@ -57,7 +57,9 @@ function backendMenuToRoute(menu: BackendMenuItem): AppRouteRecord {
     meta: {
       title: menu.title || menu.name,
       icon: menu.icon,
-      keepAlive: !hasChildren
+      keepAlive: !hasChildren,
+      isHide: menu.is_visible === false,
+      isHideTab: menu.is_visible === false
     },
     children: hasChildren ? menu.children!.map((child) => backendMenuToRoute(child)) : undefined
   }
