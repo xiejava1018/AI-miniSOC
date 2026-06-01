@@ -17,7 +17,10 @@ export enum RoutesAlias {
   Menu = '/system/menu', // 菜单
   Department = '/system/department', // 部门
   AuditLog = '/placeholder', // 审计日志（占位）
-  Assets = '/placeholder', // 资产管理（占位）
+  Dict = '/system/dict', // 字典管理
+  SystemConfig = '/system/config', // 系统配置
+  Assets = '/asset/list', // 资产管理
+  AssetDetail = '/asset/detail', // 资产详情
   Incidents = '/placeholder', // 事件管理（占位）
   Alerts = '/placeholder', // 告警管理（占位）
   Vulnerabilities = '/placeholder', // 脆弱性管理（占位）
