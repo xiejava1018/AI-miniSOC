@@ -15,8 +15,104 @@ load_dotenv()
 
 from sqlalchemy.orm import Session
 from app.core.database import engine, SessionLocal
-from app.models import User, Role, Menu, RoleMenu
+from app.models import User, Role, Menu, RoleMenu, Dict, SystemConfig
 from app.core.security import get_password_hash
+
+
+def init_system_configs(db: Session):
+    """初始化系统配置（幂等）"""
+    print("初始化系统配置...")
+
+    config_items = [
+        # 基础信息
+        {"category": "general", "key": "system_name", "value": "AI-miniSOC", "value_type": "string", "description": "系统显示名称"},
+        {"category": "general", "key": "system_logo", "value": "", "value_type": "string", "description": "系统 Logo URL"},
+
+        # 安全策略
+        {"category": "security", "key": "password_min_length", "value": "8", "value_type": "number", "description": "密码最小长度"},
+        {"category": "security", "key": "password_require_uppercase", "value": "true", "value_type": "boolean", "description": "密码必须包含大写字母"},
+        {"category": "security", "key": "password_require_digit", "value": "true", "value_type": "boolean", "description": "密码必须包含数字"},
+        {"category": "security", "key": "session_timeout_minutes", "value": "60", "value_type": "number", "description": "会话超时时间(分钟)"},
+        {"category": "security", "key": "max_login_attempts", "value": "5", "value_type": "number", "description": "最大登录失败次数"},
+        {"category": "security", "key": "lockout_duration_minutes", "value": "30", "value_type": "number", "description": "账户锁定时长(分钟)"},
+
+        # 验证码
+        {"category": "captcha", "key": "captcha_enabled", "value": "true", "value_type": "boolean", "description": "是否启用登录验证码"},
+        {"category": "captcha", "key": "captcha_expire_seconds", "value": "300", "value_type": "number", "description": "验证码有效期(秒)"},
+
+        # 同步
+        {"category": "sync", "key": "wazuh_api_url", "value": "", "value_type": "string", "description": "Wazuh API 地址"},
+        {"category": "sync", "key": "sync_interval_minutes", "value": "30", "value_type": "number", "description": "自动同步间隔(分钟)"},
+    ]
+
+    for item_data in config_items:
+        existing = db.query(SystemConfig).filter(
+            SystemConfig.category == item_data["category"],
+            SystemConfig.key == item_data["key"],
+        ).first()
+        if not existing:
+            item = SystemConfig(**item_data)
+            db.add(item)
+            print(f"  ✅ 创建系统配置: {item_data['category']}.{item_data['key']}")
+
+    db.commit()
+    print("系统配置初始化完成！")
+
+
+def init_dicts(db: Session):
+    """初始化字典数据"""
+    print("初始化字典数据...")
+
+    dict_items = [
+        # 资产类型
+        {"dict_type": "asset_type", "dict_code": "server", "dict_label": "服务器", "color": "primary", "sort_order": 1},
+        {"dict_type": "asset_type", "dict_code": "workstation", "dict_label": "工作站", "color": "info", "sort_order": 2},
+        {"dict_type": "asset_type", "dict_code": "network_device", "dict_label": "网络设备", "color": "warning", "sort_order": 3},
+        {"dict_type": "asset_type", "dict_code": "security_device", "dict_label": "安全设备", "color": "danger", "sort_order": 4},
+        {"dict_type": "asset_type", "dict_code": "other", "dict_label": "其他", "color": "info", "sort_order": 5},
+
+        # 资产等级 / 重要性
+        {"dict_type": "importance", "dict_code": "core", "dict_label": "核心", "color": "danger", "sort_order": 1},
+        {"dict_type": "importance", "dict_code": "important", "dict_label": "重要", "color": "warning", "sort_order": 2},
+        {"dict_type": "importance", "dict_code": "normal", "dict_label": "普通", "color": "info", "sort_order": 3},
+
+        # 资产状态
+        {"dict_type": "asset_status", "dict_code": "online", "dict_label": "在线", "color": "success", "sort_order": 1},
+        {"dict_type": "asset_status", "dict_code": "offline", "dict_label": "离线", "color": "danger", "sort_order": 2},
+        {"dict_type": "asset_status", "dict_code": "never_connected", "dict_label": "从未连接", "color": "info", "sort_order": 3},
+        {"dict_type": "asset_status", "dict_code": "decommissioned", "dict_label": "已下线", "color": "info", "sort_order": 4},
+        {"dict_type": "asset_status", "dict_code": "unknown", "dict_label": "未知", "color": "info", "sort_order": 5},
+
+        # 网络区域
+        {"dict_type": "network_zone", "dict_code": "intranet", "dict_label": "内网", "color": "primary", "sort_order": 1},
+        {"dict_type": "network_zone", "dict_code": "dmz", "dict_label": "DMZ", "color": "warning", "sort_order": 2},
+        {"dict_type": "network_zone", "dict_code": "office", "dict_label": "办公网", "color": "info", "sort_order": 3},
+        {"dict_type": "network_zone", "dict_code": "management", "dict_label": "管理网", "color": "info", "sort_order": 4},
+        {"dict_type": "network_zone", "dict_code": "other", "dict_label": "其他", "color": "info", "sort_order": 5},
+
+        # 数据来源
+        {"dict_type": "data_source", "dict_code": "wazuh", "dict_label": "Wazuh", "color": "success", "sort_order": 1},
+        {"dict_type": "data_source", "dict_code": "manual", "dict_label": "手动录入", "color": "info", "sort_order": 2},
+
+        # 事件严重性
+        {"dict_type": "severity", "dict_code": "critical", "dict_label": "严重", "color": "danger", "sort_order": 1},
+        {"dict_type": "severity", "dict_code": "high", "dict_label": "高", "color": "danger", "sort_order": 2},
+        {"dict_type": "severity", "dict_code": "medium", "dict_label": "中", "color": "warning", "sort_order": 3},
+        {"dict_type": "severity", "dict_code": "low", "dict_label": "低", "color": "info", "sort_order": 4},
+    ]
+
+    for item_data in dict_items:
+        existing = db.query(Dict).filter(
+            Dict.dict_type == item_data["dict_type"],
+            Dict.dict_code == item_data["dict_code"],
+        ).first()
+        if not existing:
+            item = Dict(**item_data)
+            db.add(item)
+            print(f"  ✅ 创建字典: {item_data['dict_type']} - {item_data['dict_label']}")
+
+    db.commit()
+    print("字典数据初始化完成！")
 
 
 def init_roles(db: Session):
@@ -70,7 +166,9 @@ def init_menus(db: Session):
             {"parent_id": system_menu.id, "name": "角色管理", "path": "roles", "icon": "ri:lock-line", "sort_order": 2, "is_visible": True, "component": "/system/role", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}, {"title": "分配权限", "authMark": "assign"}]},
             {"parent_id": system_menu.id, "name": "菜单管理", "path": "menus", "icon": "ri:menu-3-line", "sort_order": 3, "is_visible": True, "component": "/system/menu", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
             {"parent_id": system_menu.id, "name": "部门管理", "path": "departments", "icon": "ri:building-2-line", "sort_order": 5, "is_visible": True, "component": "/system/department", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
-            {"parent_id": system_menu.id, "name": "审计日志", "path": "audit-logs", "icon": "ri:file-text-line", "sort_order": 4, "is_visible": True, "component": "/system/audit"}]
+            {"parent_id": system_menu.id, "name": "审计日志", "path": "audit-logs", "icon": "ri:file-text-line", "sort_order": 4, "is_visible": True, "component": "/system/audit"},
+            {"parent_id": system_menu.id, "name": "字典管理", "path": "dicts", "icon": "ri:booklet-line", "sort_order": 6, "is_visible": True, "component": "/system/dict", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]},
+            {"parent_id": system_menu.id, "name": "系统配置", "path": "system-configs", "icon": "ri:settings-2-line", "sort_order": 7, "is_visible": True, "component": "/system/config", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}]}
         ]
 
         for menu_data in sub_menus:
@@ -153,6 +251,12 @@ def main():
     db = SessionLocal()
 
     try:
+        # 初始化字典数据
+        init_dicts(db)
+
+        # 初始化系统配置
+        init_system_configs(db)
+
         # 初始化角色
         init_roles(db)
 

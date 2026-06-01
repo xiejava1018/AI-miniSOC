@@ -64,13 +64,15 @@ class AssetSyncService:
         name = agent.get("name")
         status = agent.get("status")
 
-        # 映射状态
+        # 映射状态 - 写入英文 dict_code，字典类型: asset_status
+        # 字典值: online(在线), offline(离线), never_connected(从未连接), decommissioned(已下线), unknown(未知)
         status_map = {
-            "active": "在线",
-            "disconnected": "离线",
-            "never_connected": "从未连接"
+            "active": "online",
+            "disconnected": "offline",
+            "never_connected": "never_connected",
+            "pending": "never_connected",
         }
-        asset_status = status_map.get(status, "未知")
+        asset_status = status_map.get(status, "unknown")
 
         return {
             "name": name,
@@ -79,6 +81,7 @@ class AssetSyncService:
             "asset_status": asset_status,
             "wazuh_agent_id": agent_id,
             "criticality": "medium",
+            "data_source": "wazuh",
             "asset_description": f"Wazuh Agent: {name}",
             "is_new": False  # 标记是否为新资产
         }
