@@ -21,10 +21,10 @@ export function getConfigList(params?: Api.SystemConfig.ConfigSearchParams) {
   return request.get({
     url: BASE,
     params: {
-      page: params?.page ?? 1,
-      page_size: params?.page_size ?? 20,
-      category: params?.category,
-      search: params?.search,
+      page: (params as any)?.current ?? (params as any)?.page ?? 1,
+      page_size: (params as any)?.size ?? (params as any)?.page_size ?? 20,
+      category: (params as any)?.category,
+      search: (params as any)?.search,
     },
     keepFullResponse: true,
   })

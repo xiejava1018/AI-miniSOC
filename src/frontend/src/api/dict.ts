@@ -7,10 +7,10 @@ export function getDictList(params?: Api.SystemDict.DictSearchParams) {
   return request.get({
     url: DICT_BASE,
     params: {
-      page: params?.page ?? 1,
-      page_size: params?.page_size ?? 20,
-      dict_type: params?.dict_type,
-      search: params?.search,
+      page: (params as any)?.current ?? (params as any)?.page ?? 1,
+      page_size: (params as any)?.size ?? (params as any)?.page_size ?? 20,
+      dict_type: (params as any)?.dict_type,
+      search: (params as any)?.search,
     },
     keepFullResponse: true,
   })

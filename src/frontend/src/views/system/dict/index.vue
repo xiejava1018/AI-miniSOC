@@ -187,6 +187,10 @@ const {
       dict_type: undefined,
       search: '',
     },
+    paginationKey: {
+      current: 'page',
+      size: 'page_size'
+    },
     columnsFactory: () => [
       {
         prop: 'dict_type',
