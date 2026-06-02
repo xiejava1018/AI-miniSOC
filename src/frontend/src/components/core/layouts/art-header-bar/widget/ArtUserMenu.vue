@@ -14,8 +14,9 @@
     <template #reference>
       <img
         class="size-8.5 mr-5 c-p rounded-full max-sm:w-6.5 max-sm:h-6.5 max-sm:mr-[16px]"
-        :src="avatarSrc"
+        :src="displayedAvatar"
         alt="avatar"
+        @error="onAvatarError"
       />
     </template>
     <template #default>
@@ -23,7 +24,8 @@
         <div class="flex-c pb-1 px-0">
           <img
             class="w-10 h-10 mr-3 ml-0 overflow-hidden rounded-full float-left"
-            :src="avatarSrc"
+            :src="displayedAvatar"
+            @error="onAvatarError"
           />
           <div class="w-[calc(100%-60px)] h-full">
             <span class="block text-sm font-medium text-g-800 truncate">{{ displayName }}</span>
@@ -73,13 +75,28 @@
   const { getUserInfo: userInfo } = storeToRefs(userStore)
   const userMenuPopover = ref()
 
-  const avatarSrc = computed(() => {
+  const computedAvatarSrc = computed(() => {
     const avatar = userInfo.value?.avatar
     if (!avatar) return defaultAvatar
     const invalidPrefixes = ['/src/', '@/']
     if (invalidPrefixes.some((prefix) => avatar.startsWith(prefix))) return defaultAvatar
     return avatar
   })
+
+  // 兜底：computedAvatarSrc 可能是后端存的失效外链（如 example.com），
+  // @error 触发时把 displayedAvatar 强制切回 defaultAvatar，
+  // 下次 userInfo.avatar 变化（重新登录/换头像）会通过 watch 自动复位。
+  const displayedAvatar = ref<string>(defaultAvatar)
+  const onAvatarError = () => {
+    displayedAvatar.value = defaultAvatar
+  }
+  watch(
+    computedAvatarSrc,
+    (next) => {
+      displayedAvatar.value = next
+    },
+    { immediate: true }
+  )
 
   const displayName = computed(() => {
     const info = userInfo.value || {}
