@@ -87,21 +87,28 @@ AI-miniSOC/
 ## 后端API模块
 
 所有API统一前缀 `/api/v1`，响应格式由中间件包装为 `{code, msg, data}`。
+**注意**：HTTP 状态码恒为 200，业务成功 / 失败通过 `body.code` 区分（200=成功，401/403/4xx=业务错误）。
 
-| 模块 | 路由前缀 | 说明 |
+| 模块 | 路由文件 | 说明 |
 |------|---------|------|
-| 认证 | `/auth` | 登录/登出/刷新Token/验证码/当前用户 |
-| 用户管理 | `/users` | 用户CRUD、重置密码、锁定/解锁 |
-| 角色管理 | `/roles` | 角色CRUD、菜单权限分配（含按钮权限） |
-| 菜单管理 | `/menus` | 菜单CRUD、菜单树（按角色过滤） |
-| 部门管理 | `/departments` | 部门CRUD |
-| 审计日志 | `/audit-logs` | 审计日志查询、CSV导出 |
-| 资产管理 | `/assets` | 资产CRUD、端口、标签 |
-| 事件管理 | `/incidents` | 安全事件管理 |
-| 告警管理 | `/alerts` | 告警查询 |
-| AI分析 | `/ai` | AI日志分析 |
-| 同步任务 | `/sync` | 资产同步 |
-| Webhooks | `/webhooks` | Wazuh Webhook接收 |
+| 认证 | `app/api/auth.py` | 登录/登出/刷新Token/验证码/当前用户 |
+| 用户管理 | `app/api/users.py` | 用户CRUD、重置密码、锁定/解锁 |
+| 角色管理 | `app/api/roles.py` | 角色CRUD、菜单权限分配（含按钮权限） |
+| 菜单管理 | `app/api/menus.py` | 菜单CRUD、菜单树（按角色过滤） |
+| 部门管理 | `app/api/departments.py` | 部门CRUD |
+| 审计日志 | `app/api/audit_logs.py` | 审计日志查询、CSV导出 |
+| 资产管理 | `app/api/assets.py` | 资产CRUD |
+| 资产端口 | `app/api/asset_ports.py` | 资产端口CRUD |
+| 资产标签 | `app/api/asset_tags.py` | 资产标签CRUD |
+| 资产事件关联 | `app/api/asset_incidents.py` | 资产↔事件多对多关联 |
+| 字典管理 | `app/api/dicts.py` | 字典CRUD、字典项管理 |
+| 系统配置 | `app/api/system_configs.py` | 系统配置CRUD |
+| 事件管理 | `app/api/incidents.py` | 安全事件管理 |
+| 告警管理 | `app/api/alerts.py` | 告警查询 |
+| AI分析 | `app/api/ai.py` | AI日志分析 |
+| 同步任务 | `app/api/sync.py` | 资产同步 |
+| Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
+| 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
 ## 数据库表结构
 
@@ -116,6 +123,7 @@ AI-miniSOC/
 | soc_asset_ports | 资产端口表 |
 | soc_asset_tags | 资产标签表 |
 | soc_incidents | 安全事件表 |
+| soc_asset_incidents | 资产↔事件多对多关联表 |
 | soc_audit_logs | 审计日志表 |
 | soc_user_sessions | 用户会话表 |
 | soc_password_history | 密码历史表 |
@@ -123,9 +131,11 @@ AI-miniSOC/
 | soc_system_config | 系统配置表 |
 | soc_rate_limits | 限流表 |
 | soc_ai_analyses | AI分析结果表 |
-| soc_asset_incidents | 资产事件关联表 |
+| soc_dicts | 字典表（含 dict_code 英文键） |
 | asset_change_logs | 资产变更日志表 |
 | sync_tasks | 同步任务表 |
+
+> 实际共 **20 张表**（`from app.models.base import Base; len(Base.metadata.tables)`）。
 
 ## 前端核心特性
 
@@ -141,14 +151,32 @@ AI-miniSOC/
 - `hasAuth('add')` 检查当前路由下是否有新增权限
 
 ### 3. 路由别名
+文件：`src/frontend/src/router/routesAlias.ts`
+
 ```typescript
-RoutesAlias.Layout = '/index/index'
-RoutesAlias.Dashboard = '/dashboard/console'
-RoutesAlias.User = '/system/user'
-RoutesAlias.Role = '/system/role'
-RoutesAlias.Menu = '/system/menu'
-RoutesAlias.Department = '/system/department'
-RoutesAlias.Placeholder = '/placeholder'  // 功能开发中占位页
+export enum RoutesAlias {
+  Layout = '/index/index'
+  Login = '/auth/login'
+  ForgetPassword = '/auth/forget-password'
+  Exception403 = '/exception/403'
+  Exception404 = '/exception/404'
+  Exception500 = '/exception/500'
+  Dashboard = '/dashboard/console'
+  User = '/system/user'             // 账户管理
+  UserCenter = '/system/user-center' // 个人中心
+  Role = '/system/role'
+  Menu = '/system/menu'
+  Department = '/system/department'
+  AuditLog = '/system/audit-log/index'
+  Dict = '/system/dict'             // 字典管理
+  SystemConfig = '/system/config'   // 系统配置
+  Assets = '/asset/list/index'
+  AssetDetail = '/asset/detail/index'
+  Incidents = '/placeholder'        // 事件管理（占位）
+  Alerts = '/placeholder'           // 告警管理（占位）
+  Vulnerabilities = '/placeholder'  // 脆弱性管理（占位）
+  Placeholder = '/placeholder'      // 功能开发中占位页
+}
 ```
 
 ### 4. 响应适配
@@ -206,33 +234,31 @@ RoutesAlias.Placeholder = '/placeholder'  // 功能开发中占位页
 
 ### Git工作流
 ```bash
-# 主分支
-main              # 稳定版本
-develop           # 开发分支
+# 主分支（项目实际只使用 master，不存在 develop / main）
+master             # 唯一分支，fast-forward 更新
 
-# 功能分支
-feature/*         # 新功能
-fix/*            # 修复
-docs/*           # 文档更新
+# 实际不创建功能分支，所有工作在 master 上直接 commit
+# （如需分支隔离，可临时建 worktree，例如 .claude/worktrees/frontend-refactor）
 ```
 
 ### 提交信息规范
 ```
-<type>(<scope>): <subject>
+<type>: <subject>
 
-<body>
-
-<footer>
+<optional body>
 ```
+类型（项目实际使用频次排序）：
+- `feat`: 新功能
+- `fix`: 修复
+- `docs`: 文档
+- `refactor`: 重构
+- `chore`: 构建/工具
+- `style`: 格式
+- `test`: 测试
+- `perf`: 性能
+- `ci`: CI
 
-类型:
-- feat: 新功能
-- fix: 修复
-- docs: 文档
-- style: 格式
-- refactor: 重构
-- test: 测试
-- chore: 构建/工具
+> **注**：项目历史**不**用 `(<scope>)` 前缀（如 `feat(auth):` 不出现），用 emoji 也常见（🐛 ✨ 📝 🔧）。保持简洁即可。
 
 ## API 端点
 
@@ -351,8 +377,19 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - 时戳使用纳秒级
 
 ### Alembic迁移
-- 数据库版本表引用了一个不存在的修订版本
-- 当前使用直接SQL/SQLAlchemy创建表作为替代方案
+- `alembic_version` 表引用了一个不存在的修订版本
+- 当前使用直接SQL/SQLAlchemy创建表作为替代方案（见 `src/backend/scripts/create_missing_tables.py`）
+- 实际已能 create_all（通过 Base.metadata）正常启动
+
+### ENCRYPTION_KEY 不是合法 Fernet 密钥（pre-existing, 2026-06-02 发现）
+- 启动 warning: `Fernet key must be 32 url-safe base64-encoded bytes.. Using temporary key.`
+- 临时密钥每次重启换 → 旧加密数据（如有）解不开
+- **不阻塞功能**，但生产部署前必须修（生成 32 字节 url-safe base64 写入 .env）
+
+### tests/integration/test_user_workflow.py::test_user_lifecycle（pre-existing）
+- 测试 `assert response.status_code == 201` 但中间件包成 HTTP 200 + `body.code=201`
+- envelope 设计 vs 断言风格不匹配
+- 跑测试时如要全绿，需把断言改成 `body["code"] == 201`
 
 ## 开发优先级
 
@@ -365,9 +402,16 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] 用户字段完善 (nick_name, phone, avatar, gender, department)
 - [x] 验证码支持
 - [x] 统一响应包装中间件
+- [x] 审计日志前端 (`c50513e` 2026-06-02 完成)
+- [x] 字典管理 (前后端)
+- [x] 系统配置前端
+- [x] JWT 登录硬化 (登录失败计数 + 自动锁定 + logout 黑名单 + refresh rotation)
+- [x] 独立测试库 (TEST_DATABASE_URL + test_engine) + 44 个 in-process 测试
+- [x] 顶栏头像 onerror 兜底
 - [ ] 补全项目文档
 - [ ] 配置Docker Compose
 - [ ] 集成现有监控工具
+- [ ] 事件管理 / 告警管理 / 脆弱性管理前端页面（仍占位）
 
 ### Phase 2: AI能力
 - [ ] 实现日志AI分析
@@ -396,13 +440,39 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 3. **认证**: Wazuh使用JWT认证，需定期刷新
 4. **性能**: 大量日志查询注意分页，避免超时
 5. **安全**: 不要在代码中硬编码凭证
-6. **环境变量**: `.env` 文件不上传Git，参考 `.env.example` 创建
+6. **环境变量**: `.env` 文件不上传Git，参考 `.env.example` 创建（**键名必须 1:1 对应 `app.core.config.Settings` 字段**，如 `SECRET_KEY` 不是 `JWT_SECRET_KEY`）
 7. **启动目录**: 后端必须从 `src/backend/` 目录启动才能正确加载 `.env`
 8. **CORS**: 开发环境需将前端地址加入 `BACKEND_CORS_ORIGINS`
 9. **状态映射**: 后端用户状态使用字符串枚举 (`active`/`disabled`/`locked`)，前端使用数字 (1/2)
 10. **验证码**: 内存存储（5分钟过期），生产环境建议替换为Redis
+11. **响应包装**: HTTP 状态码恒为 200，业务成功/失败通过 `body.code` 区分。前端 axios 拦截器要看 `body.code`，不要看 `response.status`
+12. **测试库**: `pytest` 走独立库 `AI-miniSOC-db_test`，跑测试前需 `CREATE DATABASE "AI-miniSOC-db_test";`
+13. **JWT 测试**: 部分 E2E 用例 (`tests/test_auth_api.py`) 走 live uvicorn (http://localhost:8000)，需要先启动后端进程
+14. **PINIA 持久化**: 登录态、用户信息、菜单树等都持久化到 localStorage，登出时显式 `userStore.logOut()` 清
 
 ---
 
-**文档版本**: v2.0
-**最后更新**: 2026-05-29
+## 今日补充（2026-06-02 session 续记）
+
+> 本节由 Claude 续写，记录 5/29 后到 6/2 期间本会话发现的项目状态变化。
+
+### 关键变更
+- **API 模块从 11 个 → 18 个**：新增 dicts / system_configs / asset_ports / asset_tags / asset_incidents / deps 等
+- **数据表从 19 → 20**：新增 `soc_dicts`（字典管理）
+- **Phase 1 进度约 87%**：审计日志前端、字典管理、系统配置、JWT 硬化、独立测试库、头像兜底已完成
+- **Git 分支**：项目**只**用 `master`，没有 `develop`/`main`，也**不**用 `<type>(<scope>)` 前缀
+
+### 测试基线（2026-06-02 建立）
+- `tests/test_token_blacklist.py`（unit, 8 个）：token 黑名单模块
+- `tests/test_auth_api.py`（E2E, 12 个）：登录锁定 / refresh 轮换 / logout 黑名单，走 live uvicorn
+- `tests/test_users_api.py`（2 个）：in-process TestClient
+- **总计 44 in-process 测试 pass**（pre-existing 的 `tests/integration/test_user_workflow.py::test_user_lifecycle` 仍 fail，是 envelope 设计 vs 断言风格不匹配，未在本次范围）
+
+### 本次未做但建议尽快处理
+1. `ENCRYPTION_KEY` 修成合法 Fernet 密钥（pre-existing 启动 warning，重启丢加密数据）
+2. 修 `tests/integration/test_user_workflow.py` 的 envelope 断言
+
+---
+
+**文档版本**: v2.1
+**最后更新**: 2026-06-02
