@@ -44,6 +44,7 @@
       :close-on-click-modal="false"
     >
       <ElForm ref="formRef" :model="formData" :rules="computedRules" label-width="90px">
+        <!-- 第一档：核心识别 -->
         <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="资产名称" prop="name">
@@ -61,26 +62,7 @@
           </ElCol>
         </ElRow>
 
-        <ElRow :gutter="20">
-          <ElCol :span="12">
-            <ElFormItem label="网络段" prop="network_segment">
-              <ElInput v-model="formData.network_segment" placeholder="默认: default" />
-            </ElFormItem>
-          </ElCol>
-          <ElCol :span="12">
-            <ElFormItem label="网络区域" prop="network_zone">
-              <ElSelect v-model="formData.network_zone" placeholder="请选择网络区域" style="width: 100%">
-                <ElOption
-                  v-for="opt in networkZoneOptions"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </ElSelect>
-            </ElFormItem>
-          </ElCol>
-        </ElRow>
-
+        <!-- 第二档：业务分类（决定告警/事件处置优先级） -->
         <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="资产类型" prop="asset_type">
@@ -108,7 +90,20 @@
           </ElCol>
         </ElRow>
 
+        <!-- 第三档：网络位置 + 状态（决定应急响应） -->
         <ElRow :gutter="20">
+          <ElCol :span="12">
+            <ElFormItem label="网络区域" prop="network_zone">
+              <ElSelect v-model="formData.network_zone" placeholder="请选择网络区域" style="width: 100%">
+                <ElOption
+                  v-for="opt in networkZoneOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
           <ElCol :span="12">
             <ElFormItem label="状态" prop="asset_status">
               <ElSelect v-model="formData.asset_status" placeholder="请选择状态" style="width: 100%">
@@ -123,6 +118,7 @@
           </ElCol>
         </ElRow>
 
+        <!-- 第四档：管理归属 -->
         <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="负责人" prop="owner">
@@ -136,7 +132,13 @@
           </ElCol>
         </ElRow>
 
+        <!-- 第五档：技术细节（次要识别，编辑时常不变） -->
         <ElRow :gutter="20">
+          <ElCol :span="12">
+            <ElFormItem label="网络段" prop="network_segment">
+              <ElInput v-model="formData.network_segment" placeholder="默认: default" />
+            </ElFormItem>
+          </ElCol>
           <ElCol :span="12">
             <ElFormItem label="MAC地址" prop="mac_address">
               <ElInput
@@ -148,6 +150,7 @@
           </ElCol>
         </ElRow>
 
+        <!-- 备注 -->
         <ElRow>
           <ElCol :span="24">
             <ElFormItem label="描述" prop="asset_description">
