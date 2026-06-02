@@ -19,12 +19,22 @@ class Settings(BaseSettings):
     DB_USER: str = "postgres"
     DB_PASSWORD: str
 
+    # 独立测试库（需先执行 CREATE DATABASE <TEST_DB_NAME>;）
+    # 测试通过 conftest 走这个库，与生产数据完全隔离
+    TEST_DB_NAME: str = "AI-miniSOC-db_test"
+
     # 数据库连接字符串
     @property
     def DATABASE_URL(self) -> str:
         # 对密码进行 URL 编码，处理特殊字符
         encoded_password = quote_plus(self.DB_PASSWORD)
         return f"postgresql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+
+    @property
+    def TEST_DATABASE_URL(self) -> str:
+        """独立测试库 URL。仅 conftest 使用，运行时业务代码不应触碰。"""
+        encoded_password = quote_plus(self.DB_PASSWORD)
+        return f"postgresql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.TEST_DB_NAME}"
 
     # 智谱AI配置
     GLM_API_KEY: str
@@ -36,6 +46,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7天
+    JWT_ISSUER: str = "AI-miniSOC"
+    JWT_AUDIENCE: str = "AI-miniSOC-Client"
+    ACCESS_TOKEN_ATTEMPT_LIMIT: int = 5
+    ACCESS_TOKEN_LOCKOUT_MINUTES: int = 30
 
     # 加密配置
     ENCRYPTION_KEY: str  # 用于敏感配置加密（Fernet）

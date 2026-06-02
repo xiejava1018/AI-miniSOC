@@ -1,0 +1,72 @@
+"""
+认证相关 FastAPI 依赖集中层
+
+将 `get_current_user` / `require_admin` / `RequireAdmin` / `require_active_user`
+等高频复用依赖统一暴露，方便新代码直接 `from app.api.deps import ...`。
+
+历史原因：`app.core.auth` 仍保留同名符号的导入路径，老代码可继续使用。
+新代码优先从本模块导入，便于后续将 `core/auth.py` 收敛为纯 token 编解码原语。
+"""
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+
+from app.core.auth import (
+    get_current_user,
+    RequireAdmin,
+)
+from app.core.database import get_db
+from app.models.user import User, UserStatus
+
+
+# 共享 security 依赖（与 core.auth 保持同一实例）
+security = HTTPBearer()
+
+
+# ---------------------------------------------------------------------------
+# 便捷依赖
+# ---------------------------------------------------------------------------
+
+async def require_active_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    要求当前用户处于 `ACTIVE` 状态的 FastAPI 依赖。
+
+    与 `get_current_user` 的差异：
+    - `get_current_user` 允许 `LOCKED` 状态通过（部分业务接口仍可读）
+    - `require_active_user` 在 `LOCKED` / `DISABLED` 状态时均返回 403
+
+    用法：
+        @router.post("/sensitive-action")
+        async def sensitive(
+            current_user: User = Depends(require_active_user),
+        ):
+            ...
+    """
+    user: User = await get_current_user(credentials, db)
+    if user.status in (UserStatus.LOCKED, UserStatus.DISABLED):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"账户不可用（当前状态：{user.status.value}）",
+        )
+    return user
+
+
+# ---------------------------------------------------------------------------
+# 统一导出
+# ---------------------------------------------------------------------------
+
+__all__ = [
+    "get_current_user",
+    "RequireAdmin",
+    "require_admin",
+    "require_active_user",
+]
+
+
+# RequireAdmin 实例的便捷别名
+# 兼容旧用法：`Depends(require_admin)` / `Depends(RequireAdmin())`
+require_admin = RequireAdmin()

@@ -3,15 +3,18 @@ JWT认证和授权模块
 提供JWT token创建/验证、用户认证依赖等功能
 """
 
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Union
 
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.schemas.user import UserResponse
+from app.core.database import get_db
+from app.models.user import User
 
 
 # OAuth2密码模式的token URL（用于FastAPI文档UI）
@@ -35,14 +38,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
 
     # 设置过期时间
+    now = datetime.utcnow()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    # 添加token类型和过期时间
+    # 添加token类型、过期时间以及标准声明（iss, aud, iat, jti）
     to_encode.update({
         "exp": expire,
+        "iat": now,
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
+        "jti": uuid.uuid4().hex,
         "type": "access"
     })
 
@@ -64,10 +72,16 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
 
     # 设置7天过期
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    now = datetime.utcnow()
+    expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
+    # 添加标准声明
     to_encode.update({
         "exp": expire,
+        "iat": now,
+        "iss": settings.JWT_ISSUER,
+        "aud": settings.JWT_AUDIENCE,
+        "jti": uuid.uuid4().hex,
         "type": "refresh"
     })
 
@@ -97,8 +111,14 @@ def verify_token(token: str, token_type: str = "access") -> dict:
     )
 
     try:
-        # 解码JWT
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        # 解码JWT，校验 iss / aud / exp / iat
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            audience=settings.JWT_AUDIENCE,
+            issuer=settings.JWT_ISSUER,
+        )
 
         # 验证token类型
         if token_type and payload.get("type") != token_type:
@@ -108,8 +128,20 @@ def verify_token(token: str, token_type: str = "access") -> dict:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # 校验黑名单
+        from app.core.token_blacklist import is_revoked
+        jti = payload.get("jti")
+        if jti and is_revoked(jti):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="令牌已撤销",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         return payload
 
+    except HTTPException:
+        raise
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -119,32 +151,33 @@ def verify_token(token: str, token_type: str = "access") -> dict:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> UserResponse:
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+) -> User:
     """
     FastAPI依赖：从JWT令牌中获取当前用户
 
     用法：
         @app.get("/api/users/me")
-        async def get_me(current_user: UserResponse = Depends(get_current_user)):
+        async def get_me(current_user: User = Depends(get_current_user)):
             return current_user
 
     Args:
         credentials: HTTP Bearer认证凭据
+        db: 数据库会话
 
     Returns:
-        UserResponse: 当前用户信息
+        User: 当前用户信息
 
     Raises:
-        HTTPException: 认证失败时抛出401错误
+        HTTPException: 认证失败或用户状态无效时抛出401/403错误
     """
-    # TODO: 实现完整的用户查询逻辑
     # 1. 验证token
     token = credentials.credentials
     payload = verify_token(token, "access")
 
     # 2. 从payload中提取用户信息
-    user_id: Optional[int] = payload.get("sub")
+    user_id: Optional[str] = payload.get("sub")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -152,29 +185,25 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. 从数据库查询用户（需要User模型）
-    # from app.models.user import User
-    # from app.database import get_db
-    # user = db.query(User).filter(User.id == user_id).first()
-    # if user is None:
-    #     raise HTTPException(status_code=404, detail="用户不存在")
+    # 3. 从数据库查询用户
+    from app.models.user import User, UserStatus
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不存在或已被删除",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    # 4. 返回用户响应（临时实现，返回模拟数据）
-    # 实际使用时需要从数据库查询并转换为UserResponse
-    is_admin = payload.get("is_admin", payload.get("role_name") == "admin")
-    return UserResponse(
-        id=int(user_id),
-        username=payload.get("username", "unknown"),
-        email=payload.get("email"),
-        full_name=payload.get("full_name"),
-        role_id=payload.get("role_id"),
-        role_name=payload.get("role_name"),
-        is_admin=is_admin,
-        status=payload.get("status", "active"),
-        last_login=payload.get("last_login"),
-        created_at=payload.get("created_at", datetime.utcnow()),
-        updated_at=payload.get("updated_at", datetime.utcnow())
-    )
+    # 4. 检查用户状态
+    if user.status == UserStatus.DISABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="该账户已被禁用"
+        )
+    # 允许 locked 状态，有些接口可能需要处理逻辑，但登录会被拦截
+
+    return user
 
 
 class RequireAdmin:
@@ -184,7 +213,7 @@ class RequireAdmin:
     用法：
         @app.post("/api/users")
         async def create_user(
-            current_user: UserResponse = Depends(RequireAdmin())
+            current_user: User = Depends(RequireAdmin())
         ):
             # 只有管理员可以访问
             pass
@@ -201,25 +230,27 @@ class RequireAdmin:
 
     async def __call__(
         self,
-        credentials: HTTPAuthorizationCredentials = Depends(security)
-    ) -> UserResponse:
+        credentials: HTTPAuthorizationCredentials = Depends(security),
+        db: Session = Depends(get_db)
+    ) -> User:
         """
         验证当前用户是否为管理员
 
         Args:
             credentials: HTTP Bearer认证凭据
+            db: 数据库会话
 
         Returns:
-            UserResponse: 当前管理员用户
+            User: 当前管理员用户
 
         Raises:
             HTTPException: 非管理员用户抛出403错误
         """
         # 获取当前用户
-        current_user = await get_current_user(credentials)
+        current_user = await get_current_user(credentials, db)
 
-        # 检查是否为管理员（通过role_name判断）
-        if current_user.role_name != "admin":
+        # 检查是否为管理员
+        if not current_user.is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="权限不足，需要管理员角色"
