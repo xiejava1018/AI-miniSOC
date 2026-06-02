@@ -147,6 +147,9 @@
   const handleSubmit = async () => {
     if (!formRef.value) return
 
+    // 防止重复提交
+    if (loading.value) return
+
     const valid = await formRef.value.validate().catch(() => false)
     if (!valid) return
 
@@ -191,7 +194,13 @@
       dictStore.loadAll().catch((e) => console.warn('[Login] 加载字典失败:', e))
 
       const redirect = route.query.redirect as string | undefined
-      router.push(redirect || '/')
+      // 如果没有重定向参数，跳转到首页
+      console.log('[Login] 准备跳转到:', redirect || '/dashboard')
+      router.push(redirect || '/dashboard').then(() => {
+        console.log('[Login] 跳转成功')
+      }).catch((err) => {
+        console.error('[Login] 跳转失败:', err)
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
       ElMessage.error(message || '登录失败，请稍后重试')
