@@ -18,6 +18,7 @@ class Asset(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     network_segment = Column(String(50), nullable=False, default="default")
+    network_zone = Column(String(50), default="other")
     asset_ip = Column(Text, nullable=False)
     asset_description = Column(Text)
     asset_status = Column(String)

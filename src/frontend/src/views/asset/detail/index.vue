@@ -29,6 +29,7 @@
         <ElDescriptionsItem label="资产名称">{{ assetDetail.name || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="资产类型">{{ assetTypeLabelMap[assetDetail.asset_type] || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="网络段">{{ assetDetail.network_segment || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="网络区域">{{ networkZoneLabelMap[assetDetail.network_zone] || assetDetail.network_zone || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="MAC地址">{{ assetDetail.mac_address || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="负责人">{{ assetDetail.owner || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="业务单元">{{ assetDetail.business_unit || '--' }}</ElDescriptionsItem>
@@ -236,6 +237,7 @@
   const criticalityColorMap = computed(() => dictStore.getColorMap('asset_criticality'))
   const statusLabelMap = computed(() => dictStore.getLabelMap('asset_status'))
   const statusColorMap = computed(() => dictStore.getColorMap('asset_status'))
+  const networkZoneLabelMap = computed(() => dictStore.getLabelMap('network_zone'))
   const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
   const severityColorMap = computed(() => dictStore.getColorMap('severity'))
 

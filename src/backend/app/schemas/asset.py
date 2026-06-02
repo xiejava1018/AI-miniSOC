@@ -12,6 +12,7 @@ class AssetBase(BaseModel):
     """资产基础模型"""
     name: Optional[str] = None
     network_segment: str = "default"
+    network_zone: Optional[str] = "other"
     asset_ip: str
     asset_type: Optional[str] = "other"
     criticality: Optional[str] = "normal"
@@ -32,6 +33,7 @@ class AssetUpdate(BaseModel):
     """更新资产"""
     name: Optional[str] = None
     network_segment: Optional[str] = None
+    network_zone: Optional[str] = None
     asset_type: Optional[str] = None
     criticality: Optional[str] = None
     owner: Optional[str] = None

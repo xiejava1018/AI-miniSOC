@@ -135,6 +135,7 @@ AI-miniSOC 数据库设计遵循以下原则：
 | asset_description | text | NULL | - | 资产描述 |
 | asset_type | varchar(50) | NULL | 'other' | 资产类型 |
 | criticality | varchar(20) | NULL | 'normal' | 重要性等级 (3级:core/important/normal) |
+| network_zone | varchar(50) | NULL | 'other' | 网络区域 (intranet/dmz/office/management/other) |
 | owner | varchar(255) | NULL | - | 负责人 |
 | business_unit | varchar(255) | NULL | - | 业务单元 |
 | asset_status | varchar(20) | NULL | - | 资产状态 |
@@ -150,6 +151,7 @@ AI-miniSOC 数据库设计遵循以下原则：
 - `idx_soc_assets_ip` - IP索引 (asset_ip)
 - `idx_soc_assets_type` - 类型索引 (asset_type)
 - `idx_soc_assets_criticality` - 重要性索引 (criticality)
+- `idx_soc_assets_network_zone` - 网络区域索引 (network_zone)
 - `idx_soc_assets_status` - 状态索引 (asset_status)
 - `idx_soc_assets_wazuh_agent_id` - Wazuh Agent索引 (wazuh_agent_id)
 - `idx_soc_assets_created_at` - 创建时间索引 (created_at DESC)
@@ -165,10 +167,16 @@ AI-miniSOC 数据库设计遵循以下原则：
 - `other` - 其他
 
 **criticality**:
-- `critical` - 关键
-- `high` - 重要
-- `medium` - 一般
-- `low` - 低
+- `core` - 核心
+- `important` - 重要
+- `normal` - 普通
+
+**network_zone**:
+- `intranet` - 内网
+- `dmz` - DMZ
+- `office` - 办公网
+- `management` - 管理网
+- `other` - 其他
 
 **asset_status**:
 - `active` - 在线
@@ -498,7 +506,7 @@ soc_incidents (1) ─── (1) soc_ai_analyses
 
 | 表名 | 主键索引 | 唯一索引 | 普通索引 | 总计 |
 |------|----------|----------|----------|------|
-| soc_assets | 1 | 1 | 6 | 8 |
+| soc_assets | 1 | 1 | 7 | 9 |
 | soc_asset_ports | 1 | 1 | 5 | 7 |
 | soc_incidents | 1 | 0 | 5 | 6 |
 | soc_ai_analyses | 1 | 1 | 3 | 5 |
@@ -530,7 +538,12 @@ soc_incidents (1) ─── (1) soc_ai_analyses
 
 #### 重要性等级 (criticality)
 ```sql
-'critical', 'high', 'medium', 'low'
+'core', 'important', 'normal'
+```
+
+#### 网络区域 (network_zone)
+```sql
+'intranet', 'dmz', 'office', 'management', 'other'
 ```
 
 #### 资产状态 (asset_status)

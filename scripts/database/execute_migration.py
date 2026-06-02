@@ -82,6 +82,7 @@ def main():
         ("mac_address MACADDR", "MAC地址"),
         ("asset_type VARCHAR(50) DEFAULT 'other'", "资产类型"),
         ("criticality VARCHAR(20) DEFAULT 'normal'", "重要性等级"),
+        ("network_zone VARCHAR(50) DEFAULT 'other'", "网络区域"),
         ("owner VARCHAR(255)", "负责人"),
         ("business_unit VARCHAR(255)", "业务单元"),
         ("wazuh_agent_id VARCHAR(100) UNIQUE", "Wazuh Agent ID"),
@@ -114,7 +115,8 @@ def main():
 
     constraints = [
         ("asset_type", "CHECK (asset_type IN ('server', 'workstation', 'printer', 'router', 'switch', 'nas', 'firewall', 'other'))", "资产类型约束"),
-        ("criticality", "CHECK (criticality IN ('core', 'important', 'normal'))", "重要性等级约束")
+        ("criticality", "CHECK (criticality IN ('core', 'important', 'normal'))", "重要性等级约束"),
+        ("network_zone", "CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other'))", "网络区域约束")
     ]
 
     for constraint_name, constraint_sql, description in constraints:
@@ -155,7 +157,8 @@ def main():
     indexes = [
         ("idx_soc_assets_wazuh", "wazuh_agent_id", "Wazuh Agent索引"),
         ("idx_soc_assets_type", "asset_type", "资产类型索引"),
-        ("idx_soc_assets_criticality", "criticality", "重要性索引")
+        ("idx_soc_assets_criticality", "criticality", "重要性索引"),
+        ("idx_soc_assets_network_zone", "network_zone", "网络区域索引")
     ]
 
     for index_name, column_name, description in indexes:
@@ -174,7 +177,8 @@ def main():
         ("COLUMN", "soc_assets.name", "资产名称"),
         ("COLUMN", "soc_assets.mac_address", "MAC地址（用于设备识别）"),
         ("COLUMN", "soc_assets.asset_type", "资产类型：server/workstation/printer/router/switch/nas/firewall/other"),
-        ("COLUMN", "soc_assets.criticality", "重要性等级：critical/high/medium/low"),
+        ("COLUMN", "soc_assets.criticality", "重要性等级：core/important/normal"),
+        ("COLUMN", "soc_assets.network_zone", "网络区域：intranet/dmz/office/management/other"),
         ("COLUMN", "soc_assets.owner", "资产负责人"),
         ("COLUMN", "soc_assets.business_unit", "所属业务单元/部门"),
         ("COLUMN", "soc_assets.wazuh_agent_id", "关联的Wazuh Agent ID（用于告警关联）"),

@@ -68,6 +68,21 @@
             </ElFormItem>
           </ElCol>
           <ElCol :span="12">
+            <ElFormItem label="网络区域" prop="network_zone">
+              <ElSelect v-model="formData.network_zone" placeholder="请选择网络区域" style="width: 100%">
+                <ElOption
+                  v-for="opt in networkZoneOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+        </ElRow>
+
+        <ElRow :gutter="20">
+          <ElCol :span="12">
             <ElFormItem label="资产类型" prop="asset_type">
               <ElSelect v-model="formData.asset_type" placeholder="请选择资产类型" style="width: 100%">
                 <ElOption
@@ -79,9 +94,6 @@
               </ElSelect>
             </ElFormItem>
           </ElCol>
-        </ElRow>
-
-        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="重要性" prop="criticality">
               <ElSelect v-model="formData.criticality" placeholder="请选择重要性" style="width: 100%">
@@ -94,6 +106,9 @@
               </ElSelect>
             </ElFormItem>
           </ElCol>
+        </ElRow>
+
+        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="状态" prop="asset_status">
               <ElSelect v-model="formData.asset_status" placeholder="请选择状态" style="width: 100%">
@@ -188,9 +203,12 @@
   const criticalityColorMap = computed(() => dictStore.getColorMap('asset_criticality'))
   const statusLabelMap = computed(() => dictStore.getLabelMap('asset_status'))
   const statusColorMap = computed(() => dictStore.getColorMap('asset_status'))
+  const networkZoneLabelMap = computed(() => dictStore.getLabelMap('network_zone'))
+  const networkZoneColorMap = computed(() => dictStore.getColorMap('network_zone'))
   const assetTypeOptions = computed(() => dictStore.getOptions('asset_type'))
   const criticalityOptions = computed(() => dictStore.getOptions('asset_criticality'))
   const assetStatusOptions = computed(() => dictStore.getOptions('asset_status'))
+  const networkZoneOptions = computed(() => dictStore.getOptions('network_zone'))
   const dataSourceOptions = computed(() => dictStore.getOptions('data_source'))
   const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
   const dataSourceColorMap = computed(() => dictStore.getColorMap('data_source'))
@@ -204,7 +222,8 @@
         name: '',
         asset_type: '',
         criticality: '',
-        asset_status: ''
+        asset_status: '',
+        network_zone: ''
       },
       columnsFactory: () => [
         {
@@ -252,6 +271,22 @@
               ? h(
                   resolveComponent('ElTag'),
                   { type: (criticalityColorMap.value[row.criticality] as any) || 'info', effect: 'light' },
+                  { default: () => label }
+                )
+              : '--'
+          }
+        },
+        {
+          prop: 'network_zone',
+          label: '网络区域',
+          align: 'center',
+          width: 100,
+          formatter: (row: any) => {
+            const label = networkZoneLabelMap.value[row.network_zone]
+            return label
+              ? h(
+                  resolveComponent('ElTag'),
+                  { type: (networkZoneColorMap.value[row.network_zone] as any) || 'info', effect: 'light' },
                   { default: () => label }
                 )
               : '--'
@@ -366,6 +401,7 @@
     name: '',
     asset_ip: '',
     network_segment: 'default',
+    network_zone: 'other',
     asset_type: 'other',
     criticality: 'normal',
     asset_status: '',
@@ -412,6 +448,15 @@
       options: criticalityOptions.value
     },
     {
+      label: '网络区域',
+      key: 'network_zone',
+      type: 'select',
+      span: 6,
+      clearable: true,
+      placeholder: '请选择网络区域',
+      options: networkZoneOptions.value
+    },
+    {
       label: '状态',
       key: 'asset_status',
       type: 'select',
@@ -428,6 +473,7 @@
     { label: 'IP地址', prop: 'asset_ip' },
     { label: '资产类型', prop: 'asset_type' },
     { label: '重要性', prop: 'criticality' },
+    { label: '网络区域', prop: 'network_zone' },
     { label: '状态', prop: 'asset_status' },
     { label: '操作系统', prop: 'os_name' },
     { label: '负责人', prop: 'owner' },
@@ -458,6 +504,7 @@
       formData.name = row.name || ''
       formData.asset_ip = row.asset_ip || ''
       formData.network_segment = row.network_segment || 'default'
+      formData.network_zone = row.network_zone || 'other'
       formData.asset_type = row.asset_type || 'other'
       formData.criticality = row.criticality || 'normal'
       formData.asset_status = row.asset_status || ''
@@ -470,6 +517,7 @@
       formData.name = ''
       formData.asset_ip = ''
       formData.network_segment = 'default'
+      formData.network_zone = 'other'
       formData.asset_type = 'other'
       formData.criticality = 'normal'
       formData.asset_status = ''

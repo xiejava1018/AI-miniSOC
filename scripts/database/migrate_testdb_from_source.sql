@@ -360,10 +360,13 @@ COMMENT ON TABLE soc_asset_ports IS '资产端口表 - 存储资产开放端口�
 ALTER TABLE soc_assets ADD CONSTRAINT soc_assets_asset_ip_key UNIQUE (asset_ip);
 ALTER TABLE soc_assets ADD CONSTRAINT soc_assets_asset_type_check CHECK (((asset_type)::text = ANY ((ARRAY['server'::character varying, 'workstation'::character varying, 'printer'::character varying, 'router'::character varying, 'switch'::character varying, 'nas'::character varying, 'firewall'::character varying, 'other'::character varying])::text[])));
 ALTER TABLE soc_assets ADD CONSTRAINT soc_assets_criticality_check CHECK (((criticality)::text = ANY ((ARRAY['core'::character varying, 'important'::character varying, 'normal'::character varying])::text[])));
+ALTER TABLE soc_assets ADD CONSTRAINT soc_assets_network_zone_check CHECK (((network_zone)::text = ANY ((ARRAY['intranet'::character varying, 'dmz'::character varying, 'office'::character varying, 'management'::character varying, 'other'::character varying])::text[])));
 
-CREATE INDEX idx_soc_assets_criticality ON soc_assets(criticality);
-CREATE INDEX idx_soc_assets_type ON soc_assets(asset_type);
-CREATE INDEX idx_soc_assets_wazuh ON soc_assets(wazuh_agent_id);
+ALTER TABLE soc_assets ADD COLUMN IF NOT EXISTS network_zone varchar(50) DEFAULT 'other'::character varying;
+CREATE INDEX IF NOT EXISTS idx_soc_assets_criticality ON soc_assets(criticality);
+CREATE INDEX IF NOT EXISTS idx_soc_assets_type ON soc_assets(asset_type);
+CREATE INDEX IF NOT EXISTS idx_soc_assets_wazuh ON soc_assets(wazuh_agent_id);
+CREATE INDEX IF NOT EXISTS idx_soc_assets_network_zone ON soc_assets(network_zone);
 
 CREATE TRIGGER trigger_update_soc_assets_updated_at
     BEFORE UPDATE ON soc_assets
@@ -374,7 +377,8 @@ COMMENT ON COLUMN soc_assets.name IS '资产名称';
 COMMENT ON COLUMN soc_assets.mac_address IS 'MAC地址（用于设备识别）';
 COMMENT ON COLUMN soc_assets.business_unit IS '所属业务单元/部门';
 COMMENT ON COLUMN soc_assets.asset_ip IS '资产IP地址（PostgreSQL INET类型）';
-COMMENT ON COLUMN soc_assets.criticality IS '重要性等级：critical/high/medium/low';
+COMMENT ON COLUMN soc_assets.criticality IS '重要性等级：core/important/normal';
+COMMENT ON COLUMN soc_assets.network_zone IS '网络区域：intranet/dmz/office/management/other';
 COMMENT ON COLUMN soc_assets.wazuh_agent_id IS '关联的Wazuh Agent ID（用于告警关联）';
 COMMENT ON COLUMN soc_assets.updated_at IS '资产信息最后更新时间';
 COMMENT ON COLUMN soc_assets.owner IS '资产负责人';

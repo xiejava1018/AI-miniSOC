@@ -256,6 +256,7 @@ def test_asset(db_session: Session):
 
     asset = Asset(
         network_segment="default",
+        network_zone="other",
         asset_ip="192.168.1.100",
         asset_description="测试资产",
         asset_status="在线",

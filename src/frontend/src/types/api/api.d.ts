@@ -174,6 +174,7 @@ declare namespace Api {
       id: string
       name?: string
       network_segment?: string
+      network_zone?: string
       asset_ip: string
       asset_type?: string
       criticality?: string
@@ -203,6 +204,7 @@ declare namespace Api {
       asset_type?: string
       criticality?: string
       asset_status?: string
+      network_zone?: string
       data_source?: string
     }
 
@@ -211,6 +213,7 @@ declare namespace Api {
       id?: string
       name?: string
       network_segment?: string
+      network_zone?: string
       asset_ip?: string
       asset_type?: string
       criticality?: string

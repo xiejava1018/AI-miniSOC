@@ -88,6 +88,7 @@ def create_soc_assets_table(cursor):
             mac_address MACADDR,
             asset_type VARCHAR(50) DEFAULT 'other',
             criticality VARCHAR(20) DEFAULT 'normal',
+            network_zone VARCHAR(50) DEFAULT 'other',
             owner VARCHAR(255),
             business_unit VARCHAR(255),
             asset_status VARCHAR(20) DEFAULT '离线',
@@ -100,7 +101,10 @@ def create_soc_assets_table(cursor):
                 CHECK (asset_type IN ('server', 'workstation', 'printer', 'router', 'switch', 'nas', 'firewall', 'other')),
 
             CONSTRAINT soc_assets_criticality_check
-                CHECK (criticality IN ('core', 'important', 'normal'))
+                CHECK (criticality IN ('core', 'important', 'normal')),
+
+            CONSTRAINT soc_assets_network_zone_check
+                CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other'))
         );
     """)
 
@@ -124,6 +128,7 @@ def add_missing_columns(cursor):
         'mac_address': 'MACADDR',
         'asset_type': "VARCHAR(50) DEFAULT 'other'",
         'criticality': "VARCHAR(20) DEFAULT 'medium'",
+        'network_zone': "VARCHAR(50) DEFAULT 'other'",
         'owner': 'VARCHAR(255)',
         'business_unit': 'VARCHAR(255)',
         'wazuh_agent_id': 'VARCHAR(100) UNIQUE',
@@ -147,6 +152,7 @@ def create_indexes(cursor):
         ("idx_soc_assets_wazuh", "wazuh_agent_id"),
         ("idx_soc_assets_type", "asset_type"),
         ("idx_soc_assets_criticality", "criticality"),
+        ("idx_soc_assets_network_zone", "network_zone"),
         ("idx_soc_assets_status", "asset_status")
     ]
 
@@ -205,6 +211,7 @@ def add_comments(cursor):
         ("COLUMN", "soc_assets.mac_address", "MAC地址"),
         ("COLUMN", "soc_assets.asset_type", "资产类型"),
         ("COLUMN", "soc_assets.criticality", "重要性等级"),
+        ("COLUMN", "soc_assets.network_zone", "网络区域（intranet/dmz/office/management/other）"),
         ("COLUMN", "soc_assets.owner", "资产负责人"),
         ("COLUMN", "soc_assets.business_unit", "所属业务单元"),
         ("COLUMN", "soc_assets.asset_status", "在线状态"),

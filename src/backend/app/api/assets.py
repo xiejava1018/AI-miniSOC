@@ -38,6 +38,7 @@ async def list_assets(
     asset_type: Optional[str] = None,
     criticality: Optional[str] = None,
     asset_status: Optional[str] = None,
+    network_zone: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """获取资产列表"""
@@ -50,6 +51,8 @@ async def list_assets(
         query = query.filter(Asset.criticality == criticality)
     if asset_status:
         query = query.filter(Asset.asset_status == asset_status)
+    if network_zone:
+        query = query.filter(Asset.network_zone == network_zone)
 
     # 总数
     total = query.count()
@@ -72,6 +75,8 @@ async def list_assets(
             mac_address=str(asset.mac_address) if asset.mac_address else None,
             wazuh_agent_id=asset.wazuh_agent_id,
             asset_status=asset.asset_status,
+            network_segment=asset.network_segment,
+            network_zone=asset.network_zone,
             created_at=asset.created_at,
             updated_at=asset.updated_at,
             status_updated_at=asset.status_updated_at,

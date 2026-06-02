@@ -274,6 +274,7 @@ CREATE TABLE assets (
     mac_address MACADDR,
     asset_type VARCHAR(50),  -- server/workstation/printer/router/other
     criticality VARCHAR(20) CHECK (criticality IN ('core', 'important', 'normal')),
+    network_zone VARCHAR(50) DEFAULT 'other' CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other')),
     owner VARCHAR(255),
     business_unit VARCHAR(255),
     description TEXT,

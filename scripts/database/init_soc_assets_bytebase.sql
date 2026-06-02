@@ -33,6 +33,7 @@ CREATE TABLE soc_assets (
     -- 分类信息
     asset_type VARCHAR(50) DEFAULT 'other',
     criticality VARCHAR(20) DEFAULT 'normal',
+    network_zone VARCHAR(50) DEFAULT 'other',
     owner VARCHAR(255),
     business_unit VARCHAR(255),
 
@@ -63,6 +64,15 @@ CREATE TABLE soc_assets (
             'core',       -- 核心资产
             'important',  -- 重要资产
             'normal'      -- 普通资产
+        )),
+
+    CONSTRAINT soc_assets_network_zone_check
+        CHECK (network_zone IN (
+            'intranet',    -- 内网
+            'dmz',         -- DMZ
+            'office',      -- 办公网
+            'management',  -- 管理网
+            'other'        -- 其他
         ))
 );
 
@@ -92,6 +102,7 @@ CREATE INDEX idx_soc_assets_ip ON soc_assets(asset_ip);
 CREATE INDEX idx_soc_assets_wazuh ON soc_assets(wazuh_agent_id);
 CREATE INDEX idx_soc_assets_type ON soc_assets(asset_type);
 CREATE INDEX idx_soc_assets_criticality ON soc_assets(criticality);
+CREATE INDEX idx_soc_assets_network_zone ON soc_assets(network_zone);
 CREATE INDEX idx_soc_assets_status ON soc_assets(asset_status);
 
 -- soc_asset_ports索引
@@ -133,6 +144,7 @@ COMMENT ON COLUMN soc_assets.name IS '资产名称';
 COMMENT ON COLUMN soc_assets.asset_description IS '资产描述（详细信息）';
 COMMENT ON COLUMN soc_assets.asset_type IS '资产类型：server/workstation/printer/router/switch/nas/firewall/other';
 COMMENT ON COLUMN soc_assets.criticality IS '重要性等级：core/important/normal (3 级)';
+COMMENT ON COLUMN soc_assets.network_zone IS '网络区域：intranet/dmz/office/management/other';
 COMMENT ON COLUMN soc_assets.owner IS '资产负责人';
 COMMENT ON COLUMN soc_assets.business_unit IS '所属业务单元/部门';
 COMMENT ON COLUMN soc_assets.asset_status IS '在线状态：新发现/在线/离线/已删除';
