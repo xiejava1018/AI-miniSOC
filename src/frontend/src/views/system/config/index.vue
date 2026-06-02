@@ -30,33 +30,37 @@
 
         <!-- 右侧：当前分类下的配置项 -->
         <ElCol :span="18" class="config-col">
-          <ArtSearchBar
-            v-model="searchParams"
-            :items="searchItems"
-            @reset="resetSearch"
-            @search="searchData"
-          />
+          <div class="search-wrapper">
+            <ArtSearchBar
+              v-model="searchParams"
+              :items="searchItems"
+              @reset="resetSearch"
+              @search="searchData"
+            />
+          </div>
 
-          <ArtTableHeader
-            v-model:columns="columnChecks"
-            @refresh="refreshAll"
-          >
-            <template #left>
-              <ElButton @click="showDialog('add')" v-ripple>新增配置</ElButton>
-            </template>
-          </ArtTableHeader>
+          <ElCard shadow="never" class="art-table-card config-table-card">
+            <ArtTableHeader
+              v-model:columns="columnChecks"
+              @refresh="refreshAll"
+            >
+              <template #left>
+                <ElButton @click="showDialog('add')" v-ripple>新增配置</ElButton>
+              </template>
+            </ArtTableHeader>
 
-          <ArtTable
-            :data="tableData"
-            :columns="columns"
-            :pagination="paginationState"
-            :loading="isLoading"
-            table-layout="fixed"
-            :table-config="{ rowKey: 'id' }"
-            :layout="{ marginTop: 10 }"
-            @pagination:size-change="onPageSizeChange"
-            @pagination:current-change="onCurrentPageChange"
-          />
+            <ArtTable
+              :data="tableData"
+              :columns="columns"
+              :pagination="paginationState"
+              :loading="isLoading"
+              table-layout="fixed"
+              :table-config="{ rowKey: 'id' }"
+              :layout="{ marginTop: 10 }"
+              @pagination:size-change="onPageSizeChange"
+              @pagination:current-change="onCurrentPageChange"
+            />
+          </ElCard>
         </ElCol>
       </ElRow>
     </ElCard>
@@ -199,6 +203,10 @@ const tableApi = useTable<any>({
       page_size: 20,
       category: '',
       search: '',
+    },
+    paginationKey: {
+      current: 'page',
+      size: 'page_size'
     },
     columnsFactory: () => [
       {
@@ -553,6 +561,21 @@ onMounted(() => {
 
   .config-col {
     padding-left: 12px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .search-wrapper {
+    margin-bottom: 12px;
+  }
+
+  .config-table-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .config-key {
