@@ -208,7 +208,7 @@ export enum RoutesAlias {
 
 #### 主机监控
 - **工具**: ops-health-check (位于 ../host-manage/)
-- **功能**: 系统健康检查、Docker监控、安全检查
+- **功能**: 系统健康检查、容器/服务监控、安全检查
 - **输出格式**: Markdown + JSON
 
 ### 日志数据源
@@ -342,18 +342,6 @@ curl -G http://192.168.0.30:3100/loki/api/v1/query_range \
 curl ... | jq '.data.result[0].values | length'
 ```
 
-### Docker操作
-```bash
-# 启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f [service]
-
-# 重启服务
-docker-compose restart [service]
-```
-
 ### 健康检查
 ```bash
 # 运行健康检查
@@ -409,7 +397,6 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] 独立测试库 (TEST_DATABASE_URL + test_engine) + 44 个 in-process 测试
 - [x] 顶栏头像 onerror 兜底
 - [ ] 补全项目文档
-- [ ] 配置Docker Compose
 - [ ] 集成现有监控工具
 - [ ] 事件管理 / 告警管理 / 脆弱性管理前端页面（仍占位）
 
