@@ -20,14 +20,15 @@
 <script setup lang="ts">
   import { computed, toRefs } from 'vue'
   import { storeToRefs } from 'pinia'
-  import AppConfig from '@/config'
   import { useSettingStore } from '@/store/modules/setting'
   import { useUserStore } from '@/store/modules/user'
+  import { useSystemStore } from '@/store/modules/system'
 
   defineOptions({ name: 'ArtWatermark' })
 
   const settingStore = useSettingStore()
   const userStore = useUserStore()
+  const systemStore = useSystemStore()
   const { watermarkVisible: storeVisible } = storeToRefs(settingStore)
 
   interface WatermarkProps {
@@ -80,6 +81,6 @@
     if (account) {
       return account
     }
-    return AppConfig.systemInfo.name
+    return systemStore.appName
   })
 </script>

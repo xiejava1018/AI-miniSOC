@@ -84,7 +84,6 @@
   import { computed, onMounted, reactive, ref } from 'vue'
   import { useRouter, useRoute } from 'vue-router'
   import { storeToRefs } from 'pinia'
-  import AppConfig from '@/config'
   import { RoutesAlias } from '@/router/routesAlias'
   import { ElNotification, ElMessage } from 'element-plus'
   import { useUserStore } from '@/store/modules/user'
@@ -93,6 +92,7 @@
   import { fetchLogin, fetchGetUserInfo, fetchCaptcha } from '@/api/auth'
   import { useHeaderBar } from '@/composables/useHeaderBar'
   import { useSettingStore } from '@/store/modules/setting'
+  import { useSystemStore } from '@/store/modules/system'
   import type { FormInstance, FormRules } from 'element-plus'
 
   defineOptions({ name: 'Login' })
@@ -105,8 +105,9 @@
   const dictStore = useDictStore()
   const router = useRouter()
   const route = useRoute()
+  const systemStore = useSystemStore()
 
-  const systemName = AppConfig.systemInfo.name
+  const systemName = systemStore.appName
   const formRef = ref<FormInstance>()
 
   const formData = reactive({

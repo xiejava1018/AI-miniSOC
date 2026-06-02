@@ -3,7 +3,7 @@ API 路由汇总
 """
 
 from fastapi import APIRouter
-from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, menus, roles, departments, audit_logs, sync, webhooks, dicts, system_configs
+from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, menus, roles, departments, audit_logs, sync, webhooks, dicts, system_configs, public
 
 api_router = APIRouter()
 
@@ -25,3 +25,5 @@ api_router.include_router(sync.router, prefix="/sync", tags=["资产同步"])
 api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(dicts.router, prefix="/dicts", tags=["字典管理"])
 api_router.include_router(system_configs.router, prefix="/system-configs", tags=["系统配置"])
+# public 接口（不鉴权；前缀 /public 显式标注，避免误以为受保护）
+api_router.include_router(public.router, prefix="/public", tags=["公共信息"])

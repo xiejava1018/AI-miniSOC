@@ -6,9 +6,9 @@
  * @module utils/router
  */
 import { RouteLocationNormalized, RouteRecordRaw } from 'vue-router'
-import AppConfig from '@/config'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
+import { useSystemStore } from '@/store/modules/system'
 // i18n 已移除，菜单标题直接使用静态文本
 
 /** 扩展的路由配置类型 */
@@ -34,7 +34,7 @@ export const setPageTitle = (to: RouteLocationNormalized): void => {
   const { title } = to.meta
   if (title) {
     setTimeout(() => {
-      document.title = `${formatMenuTitle(String(title))} - ${AppConfig.systemInfo.name}`
+      document.title = `${formatMenuTitle(String(title))} - ${useSystemStore().appName}`
     }, 150)
   }
 }

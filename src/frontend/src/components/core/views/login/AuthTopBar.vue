@@ -5,7 +5,7 @@
   >
     <div class="flex-cc !hidden max-[1180px]:!flex ml-2 max-sm:ml-6">
       <ArtLogo class="icon" size="46" />
-      <h1 class="text-xl ont-mediumf ml-2">{{ AppConfig.systemInfo.name }}</h1>
+      <h1 class="text-xl ont-mediumf ml-2">{{ systemStore.appName }}</h1>
     </div>
 
     <div class="flex-cc gap-1.5 mr-2 max-sm:mr-5">
@@ -50,12 +50,14 @@
   import { useHeaderBar } from '@/hooks/core/useHeaderBar'
   import { themeAnimation } from '@/utils/ui/animation'
   import AppConfig from '@/config'
+  import { useSystemStore } from '@/store/modules/system'
 
   defineOptions({ name: 'AuthTopBar' })
 
   const settingStore = useSettingStore()
   const { isDark, systemThemeColor } = storeToRefs(settingStore)
   const { shouldShowThemeToggle } = useHeaderBar()
+  const systemStore = useSystemStore()
 
   const mainColors = AppConfig.systemMainColor
   const color = systemThemeColor // css v-bind 使用

@@ -184,6 +184,23 @@ export enum RoutesAlias {
 - `useTable` Hook 的 `responseAdapter` 自动适配分页数据
 - `defaultResponseAdapter` 支持 `records`/`data`/`list`/`items` 等多种字段名
 
+### 5. 动态系统信息（System Info）
+
+系统名称 / Logo / 版权 / 描述从 `soc_system_config` 表读取，不再硬编码。
+
+- **后端公开接口**：`GET /api/v1/public/system-info`（无需鉴权，路由 `src/backend/app/api/public.py`）
+  - 白名单字段：`system_name` / `system_logo` / `system_copyright` / `system_description`
+  - 数据源：`soc_system_config` 中 `category='general'` 的 4 条记录
+  - DB 缺失时回退硬编码默认值（`AI-miniSOC` 等）
+- **前端 Pinia 存储**：`src/frontend/src/store/modules/system.ts`
+  - state: `appName` / `logo` / `copyright` / `description` / `loaded`
+  - 同样内置 FALLBACK 常量，DB 接口失败时静默回退
+  - 配套 API 封装：`src/frontend/src/api/public.ts`
+- **启动预拉取**：`src/main.ts` 的 `bootstrap()` 改为 `async`，**先 `await useSystemStore().fetchSystemInfo()` 再 mount**。保证首屏 `<title>`、登录页 Logo 旁文字、关于卡片都不会闪现旧名
+- **页面 title 拼接**：`src/utils/router.ts` 的 `setPageTitle()` 从 `useSystemStore().appName` 读后缀
+- **应用范围**：登录/忘记密码/关于项目卡片/侧边栏 Logo 旁文字/顶栏 Logo 旁文字/水印等 8 处 UI 全部从 `useSystemStore()` 取值
+- **兜底**：`index.html` 的 `<title>` 和 `<meta description>` 改为 `AI-miniSOC`，避免 JS 加载前一片空白
+
 ## 核心组件
 
 ### 已部署的监控栈
@@ -396,6 +413,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] JWT 登录硬化 (登录失败计数 + 自动锁定 + logout 黑名单 + refresh rotation)
 - [x] 独立测试库 (TEST_DATABASE_URL + test_engine) + 44 个 in-process 测试
 - [x] 顶栏头像 onerror 兜底
+- [x] 系统名称/logo/版权/描述全量动态化（public 接口 + Pinia 预拉取 + 8 处 UI 引用改造）
 - [ ] 补全项目文档
 - [ ] 集成现有监控工具
 - [ ] 事件管理 / 告警管理 / 脆弱性管理前端页面（仍占位）

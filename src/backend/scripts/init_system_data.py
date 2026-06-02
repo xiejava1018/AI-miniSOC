@@ -27,6 +27,8 @@ def init_system_configs(db: Session):
         # 基础信息
         {"category": "general", "key": "system_name", "value": "AI-miniSOC", "value_type": "string", "description": "系统显示名称"},
         {"category": "general", "key": "system_logo", "value": "", "value_type": "string", "description": "系统 Logo URL"},
+        {"category": "general", "key": "system_copyright", "value": "© 2026 AI-miniSOC", "value_type": "string", "description": "系统版权信息"},
+        {"category": "general", "key": "system_description", "value": "AI-driven mini Security Operation Center", "value_type": "string", "description": "系统描述"},
 
         # 安全策略
         {"category": "security", "key": "password_min_length", "value": "8", "value_type": "number", "description": "密码最小长度"},

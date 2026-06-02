@@ -4,7 +4,7 @@
     <div class="right-wrap">
       <div class="header">
         <ArtLogo class="icon" />
-        <h1>{{ systemName }}</h1>
+        <h1>{{ systemStore.appName }}</h1>
       </div>
       <div class="login-wrap">
         <div class="form">
@@ -28,14 +28,14 @@
 </template>
 
 <script setup lang="ts">
-  import AppConfig from '@/config'
+  import { useSystemStore } from '@/store/modules/system'
   import { RoutesAlias } from '@/router/routesAlias'
   import QrcodeVue from 'qrcode.vue'
 
   defineOptions({ name: 'ForgetPassword' })
 
   const router = useRouter()
-  const systemName = AppConfig.systemInfo.name
+  const systemStore = useSystemStore()
   const adminQrcodeValue = computed(() => import.meta.env.VITE_ADMIN_QRCODE_URL || location.origin)
 
   const toLogin = () => {
