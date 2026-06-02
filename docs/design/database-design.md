@@ -134,7 +134,7 @@ AI-miniSOC 数据库设计遵循以下原则：
 | name | varchar(255) | NULL | - | 资产名称 |
 | asset_description | text | NULL | - | 资产描述 |
 | asset_type | varchar(50) | NULL | 'other' | 资产类型 |
-| criticality | varchar(20) | NULL | 'medium' | 重要性等级 |
+| criticality | varchar(20) | NULL | 'normal' | 重要性等级 (3级:core/important/normal) |
 | owner | varchar(255) | NULL | - | 负责人 |
 | business_unit | varchar(255) | NULL | - | 业务单元 |
 | asset_status | varchar(20) | NULL | - | 资产状态 |

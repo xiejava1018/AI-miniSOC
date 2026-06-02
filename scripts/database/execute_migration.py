@@ -81,7 +81,7 @@ def main():
         ("name VARCHAR(255)", "资产名称"),
         ("mac_address MACADDR", "MAC地址"),
         ("asset_type VARCHAR(50) DEFAULT 'other'", "资产类型"),
-        ("criticality VARCHAR(20) DEFAULT 'medium'", "重要性等级"),
+        ("criticality VARCHAR(20) DEFAULT 'normal'", "重要性等级"),
         ("owner VARCHAR(255)", "负责人"),
         ("business_unit VARCHAR(255)", "业务单元"),
         ("wazuh_agent_id VARCHAR(100) UNIQUE", "Wazuh Agent ID"),
@@ -114,7 +114,7 @@ def main():
 
     constraints = [
         ("asset_type", "CHECK (asset_type IN ('server', 'workstation', 'printer', 'router', 'switch', 'nas', 'firewall', 'other'))", "资产类型约束"),
-        ("criticality", "CHECK (criticality IN ('critical', 'high', 'medium', 'low'))", "重要性等级约束")
+        ("criticality", "CHECK (criticality IN ('core', 'important', 'normal'))", "重要性等级约束")
     ]
 
     for constraint_name, constraint_sql, description in constraints:

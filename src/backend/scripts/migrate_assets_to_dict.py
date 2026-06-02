@@ -34,15 +34,15 @@ MIGRATIONS = {
         "": "unknown",
     },
     "criticality": {
-        # 已存在的英文 code 与 severity 字典一致，无需转换
-        # 修复历史脏数据
-        "核心": "critical",
-        "重要": "high",
-        "普通": "medium",
-        "低": "low",
-        "中": "medium",
-        "高": "high",
-        "严重": "critical",
+        # 历史脏数据 → 现行 asset_criticality 字典 dict_code (3 级)
+        # 核心 / 重要 / 普通
+        "核心": "core",
+        "重要": "important",
+        "普通": "normal",
+        "低": "normal",          # 4 级时代的 low 已废,并入 normal
+        "中": "normal",          # severity 时代 medium 脏数据
+        "高": "important",       # severity 时代 high 脏数据
+        "严重": "core",          # severity 时代 critical 脏数据
     },
     "asset_type": {
         "服务器": "server",
@@ -61,7 +61,7 @@ MIGRATIONS = {
 
 # 字段名 -> 兜底默认值 (用于把 NULL 设为合理默认值)
 DEFAULTS = {
-    "criticality": "medium",
+    "criticality": "normal",
     "asset_type": "other",
     "data_source": "manual",
     "asset_status": "unknown",

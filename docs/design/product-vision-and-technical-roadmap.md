@@ -273,7 +273,7 @@ CREATE TABLE assets (
     ip_address INET UNIQUE,
     mac_address MACADDR,
     asset_type VARCHAR(50),  -- server/workstation/printer/router/other
-    criticality VARCHAR(20) CHECK (criticality IN ('critical', 'high', 'medium', 'low')),
+    criticality VARCHAR(20) CHECK (criticality IN ('core', 'important', 'normal')),
     owner VARCHAR(255),
     business_unit VARCHAR(255),
     description TEXT,

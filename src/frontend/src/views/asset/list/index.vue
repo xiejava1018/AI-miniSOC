@@ -367,7 +367,7 @@
     asset_ip: '',
     network_segment: 'default',
     asset_type: 'other',
-    criticality: 'medium',
+    criticality: 'normal',
     asset_status: '',
     owner: '',
     business_unit: '',
@@ -459,7 +459,7 @@
       formData.asset_ip = row.asset_ip || ''
       formData.network_segment = row.network_segment || 'default'
       formData.asset_type = row.asset_type || 'other'
-      formData.criticality = row.criticality || 'medium'
+      formData.criticality = row.criticality || 'normal'
       formData.asset_status = row.asset_status || ''
       formData.owner = row.owner || ''
       formData.business_unit = row.business_unit || ''
@@ -471,7 +471,7 @@
       formData.asset_ip = ''
       formData.network_segment = 'default'
       formData.asset_type = 'other'
-      formData.criticality = 'medium'
+      formData.criticality = 'normal'
       formData.asset_status = ''
       formData.owner = ''
       formData.business_unit = ''

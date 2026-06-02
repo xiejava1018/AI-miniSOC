@@ -87,7 +87,7 @@ def create_soc_assets_table(cursor):
             asset_description TEXT,
             mac_address MACADDR,
             asset_type VARCHAR(50) DEFAULT 'other',
-            criticality VARCHAR(20) DEFAULT 'medium',
+            criticality VARCHAR(20) DEFAULT 'normal',
             owner VARCHAR(255),
             business_unit VARCHAR(255),
             asset_status VARCHAR(20) DEFAULT '离线',
@@ -100,7 +100,7 @@ def create_soc_assets_table(cursor):
                 CHECK (asset_type IN ('server', 'workstation', 'printer', 'router', 'switch', 'nas', 'firewall', 'other')),
 
             CONSTRAINT soc_assets_criticality_check
-                CHECK (criticality IN ('critical', 'high', 'medium', 'low'))
+                CHECK (criticality IN ('core', 'important', 'normal'))
         );
     """)
 

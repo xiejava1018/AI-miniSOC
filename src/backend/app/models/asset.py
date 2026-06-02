@@ -36,7 +36,7 @@ class Asset(Base):
     name = Column(String(255))
     mac_address = Column(MACADDR)
     asset_type = Column(String(50), default="other")
-    criticality = Column(String(20), default="medium")
+    criticality = Column(String(20), default="normal")
     owner = Column(String(255))
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))

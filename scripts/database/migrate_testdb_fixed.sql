@@ -342,7 +342,7 @@ COMMENT ON TABLE soc_asset_ports IS '资产端口表 - 存储资产开放端口�
 -- 表: soc_assets
 ALTER TABLE soc_assets ADD CONSTRAINT IF NOT EXISTS soc_assets_asset_ip_key UNIQUE (asset_ip);
 ALTER TABLE soc_assets ADD CONSTRAINT IF NOT EXISTS soc_assets_asset_type_check CHECK (((asset_type)::text = ANY ((ARRAY['server'::character varying, 'workstation'::character varying, 'printer'::character varying, 'router'::character varying, 'switch'::character varying, 'nas'::character varying, 'firewall'::character varying, 'other'::character varying])::text[])));
-ALTER TABLE soc_assets ADD CONSTRAINT IF NOT EXISTS soc_assets_criticality_check CHECK (((criticality)::text = ANY ((ARRAY['critical'::character varying, 'high'::character varying, 'medium'::character varying, 'low'::character varying])::text[])));
+ALTER TABLE soc_assets ADD CONSTRAINT IF NOT EXISTS soc_assets_criticality_check CHECK (((criticality)::text = ANY ((ARRAY['core'::character varying, 'important'::character varying, 'normal'::character varying])::text[])));
 
 CREATE INDEX IF NOT EXISTS idx_soc_assets_criticality ON soc_assets(criticality);
 CREATE INDEX IF NOT EXISTS idx_soc_assets_type ON soc_assets(asset_type);

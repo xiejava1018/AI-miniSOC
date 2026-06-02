@@ -32,7 +32,7 @@ CREATE TABLE soc_assets (
 
     -- 分类信息
     asset_type VARCHAR(50) DEFAULT 'other',
-    criticality VARCHAR(20) DEFAULT 'medium',
+    criticality VARCHAR(20) DEFAULT 'normal',
     owner VARCHAR(255),
     business_unit VARCHAR(255),
 
@@ -60,10 +60,9 @@ CREATE TABLE soc_assets (
 
     CONSTRAINT soc_assets_criticality_check
         CHECK (criticality IN (
-            'critical',  -- 关键资产
-            'high',      -- 重要资产
-            'medium',    -- 一般资产
-            'low'        -- 低优先级
+            'core',       -- 核心资产
+            'important',  -- 重要资产
+            'normal'      -- 普通资产
         ))
 );
 
@@ -133,7 +132,7 @@ COMMENT ON COLUMN soc_assets.mac_address IS 'MAC地址（用于设备识别）';
 COMMENT ON COLUMN soc_assets.name IS '资产名称';
 COMMENT ON COLUMN soc_assets.asset_description IS '资产描述（详细信息）';
 COMMENT ON COLUMN soc_assets.asset_type IS '资产类型：server/workstation/printer/router/switch/nas/firewall/other';
-COMMENT ON COLUMN soc_assets.criticality IS '重要性等级：critical/high/medium/low';
+COMMENT ON COLUMN soc_assets.criticality IS '重要性等级：core/important/normal (3 级)';
 COMMENT ON COLUMN soc_assets.owner IS '资产负责人';
 COMMENT ON COLUMN soc_assets.business_unit IS '所属业务单元/部门';
 COMMENT ON COLUMN soc_assets.asset_status IS '在线状态：新发现/在线/离线/已删除';

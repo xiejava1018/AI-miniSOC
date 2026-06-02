@@ -261,7 +261,7 @@ def test_asset(db_session: Session):
         asset_status="在线",
         name="测试服务器",
         asset_type="server",
-        criticality="medium"
+        criticality="normal"
     )
     db_session.add(asset)
     db_session.commit()
