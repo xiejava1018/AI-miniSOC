@@ -86,7 +86,7 @@
             <ElFormItem label="重要性" prop="criticality">
               <ElSelect v-model="formData.criticality" placeholder="请选择重要性" style="width: 100%">
                 <ElOption
-                  v-for="opt in severityOptions"
+                  v-for="opt in criticalityOptions"
                   :key="opt.value"
                   :label="opt.label"
                   :value="opt.value"
@@ -184,12 +184,12 @@
   // 字典派生
   const assetTypeLabelMap = computed(() => dictStore.getLabelMap('asset_type'))
   const assetTypeColorMap = computed(() => dictStore.getColorMap('asset_type'))
-  const criticalityLabelMap = computed(() => dictStore.getLabelMap('severity'))
-  const criticalityColorMap = computed(() => dictStore.getColorMap('severity'))
+  const criticalityLabelMap = computed(() => dictStore.getLabelMap('asset_criticality'))
+  const criticalityColorMap = computed(() => dictStore.getColorMap('asset_criticality'))
   const statusLabelMap = computed(() => dictStore.getLabelMap('asset_status'))
   const statusColorMap = computed(() => dictStore.getColorMap('asset_status'))
   const assetTypeOptions = computed(() => dictStore.getOptions('asset_type'))
-  const severityOptions = computed(() => dictStore.getOptions('severity'))
+  const criticalityOptions = computed(() => dictStore.getOptions('asset_criticality'))
   const assetStatusOptions = computed(() => dictStore.getOptions('asset_status'))
   const dataSourceOptions = computed(() => dictStore.getOptions('data_source'))
   const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
@@ -409,7 +409,7 @@
       span: 6,
       clearable: true,
       placeholder: '请选择重要性',
-      options: severityOptions.value
+      options: criticalityOptions.value
     },
     {
       label: '状态',

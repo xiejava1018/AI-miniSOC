@@ -232,8 +232,8 @@
 
   // 字典映射
   const assetTypeLabelMap = computed(() => dictStore.getLabelMap('asset_type'))
-  const criticalityLabelMap = computed(() => dictStore.getLabelMap('severity'))
-  const criticalityColorMap = computed(() => dictStore.getColorMap('severity'))
+  const criticalityLabelMap = computed(() => dictStore.getLabelMap('asset_criticality'))
+  const criticalityColorMap = computed(() => dictStore.getColorMap('asset_criticality'))
   const statusLabelMap = computed(() => dictStore.getLabelMap('asset_status'))
   const statusColorMap = computed(() => dictStore.getColorMap('asset_status'))
   const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
