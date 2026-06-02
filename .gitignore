@@ -63,6 +63,10 @@ dbbackup/
 *.jpg
 *.jpeg
 
+# 例外：允许图片资源目录的PNG文件被跟踪
+!src/assets/images/**/*.png
+!src/frontend/src/assets/images/**/*.png
+
 # Playwright MCP 临时文件
 .playwright-mcp/
 
