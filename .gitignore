@@ -67,9 +67,17 @@ dbbackup/
 !src/assets/images/**/*.png
 !src/frontend/src/assets/images/**/*.png
 
+# 上述白名单的窄例外：本地未提交的孤儿资源
+# （不在远端 master，由本地其它来源引入，避免被白名单重新放行）
+src/frontend/src/assets/images/ceremony/xc.png
+src/frontend/src/assets/images/safeguard/
+
 # Playwright MCP 临时文件
 .playwright-mcp/
 
 # Claude Code / IDE 工具本地数据
 .auto-insight/
 .claude/
+
+# 本地 ECC 工具副本（用户在 ~/.claude/skills 也有，不要污染项目仓库）
+scripts/harness-audit.js
