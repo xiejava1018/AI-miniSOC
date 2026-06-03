@@ -5,8 +5,7 @@
   1 次请求拿到全量数据,展示:
   - 顶部 4 个 KPI(总资产/高危/24h 告警/未关闭事件)
   - 中部 3 张环图(类型/在线状态/重要度)
-  - 中部 1 张双轴折线(24h 总告警 + 高危告警)
-  - 底部 2 张 Top 表(高危资产 + 告警资产)
+  - 底部 2 张 Top 表并列(高危资产 + 告警资产)
   - 行可点 → /assets/detail/{id}
 -->
 <template>
@@ -37,7 +36,7 @@
       </ElCol>
     </ElRow>
 
-    <!-- 2. 分布区:类型 + 状态 + 24h 告警趋势 -->
+    <!-- 2. 分布区:类型 + 状态 + 重要度 -->
     <ElRow :gutter="16" class="chart-row">
       <ElCol :sm="24" :md="8">
         <ElCard shadow="never" class="chart-card">
@@ -83,106 +82,92 @@
       </ElCol>
     </ElRow>
 
-    <!-- 3. 24h 告警趋势(双轴折线) -->
-    <ElCard shadow="never" class="trend-card">
-      <template #header>
-        <span class="chart-title">24h 告警趋势</span>
-        <span class="chart-subtitle">(总告警 / 高危告警)</span>
-      </template>
-      <ArtLineChart
-        v-if="trendLineData.length > 0"
-        height="320px"
-        :data="trendLineData"
-        :xAxisData="trendHours"
-        :showAreaColor="true"
-        :showAxisLine="true"
-        :showLegend="true"
-        legend-position="top"
-      />
-      <div v-else class="empty-chart">暂无 24h 告警数据</div>
-    </ElCard>
+    <!-- 3. Top 10 并列 -->
+    <ElRow :gutter="16" class="top-row">
+      <ElCol :sm="24" :md="12">
+        <ElCard shadow="never" class="top-card">
+          <template #header>
+            <span class="chart-title">Top 10 高危资产</span>
+            <span class="chart-subtitle">(按风险评分排序)</span>
+          </template>
+          <ElTable
+            :data="topRisky"
+            v-loading="false"
+            stripe
+            size="small"
+            class="top-table"
+            empty-text="暂无高危资产"
+            @row-click="goDetail"
+          >
+            <ElTableColumn prop="ip" label="IP" min-width="120" />
+            <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
+            <ElTableColumn label="类型" min-width="100">
+              <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="重要度" min-width="90">
+              <template #default="{ row }">
+                <ElTag
+                  v-if="row.criticality"
+                  :type="criticalityTagType(row.criticality)"
+                  size="small"
+                >
+                  {{ criticalityLabel(row.criticality) }}
+                </ElTag>
+                <span v-else>-</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="score" label="评分" min-width="80" align="right" />
+            <ElTableColumn label="风险因子" min-width="280">
+              <template #default="{ row }">
+                <ElTag
+                  v-for="f in row.factors"
+                  :key="f"
+                  type="danger"
+                  effect="plain"
+                  size="small"
+                  class="factor-tag"
+                >
+                  {{ f }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+        </ElCard>
+      </ElCol>
 
-    <!-- 4. Top 10 高危资产 -->
-    <ElCard shadow="never" class="top-card">
-      <template #header>
-        <span class="chart-title">Top 10 高危资产</span>
-        <span class="chart-subtitle">(按风险评分排序)</span>
-      </template>
-      <ElTable
-        :data="topRisky"
-        v-loading="false"
-        stripe
-        size="small"
-        class="top-table"
-        empty-text="暂无高危资产"
-        @row-click="goDetail"
-      >
-        <ElTableColumn prop="ip" label="IP" min-width="120" />
-        <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
-        <ElTableColumn label="类型" min-width="100">
-          <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
-        </ElTableColumn>
-        <ElTableColumn label="重要度" min-width="90">
-          <template #default="{ row }">
-            <ElTag
-              v-if="row.criticality"
-              :type="criticalityTagType(row.criticality)"
-              size="small"
-            >
-              {{ criticalityLabel(row.criticality) }}
-            </ElTag>
-            <span v-else>-</span>
+      <ElCol :sm="24" :md="12">
+        <ElCard shadow="never" class="top-card">
+          <template #header>
+            <span class="chart-title">Top 10 告警资产</span>
+            <span class="chart-subtitle">(按 24h 告警数排序)</span>
           </template>
-        </ElTableColumn>
-        <ElTableColumn prop="score" label="评分" min-width="80" align="right" />
-        <ElTableColumn label="风险因子" min-width="280">
-          <template #default="{ row }">
-            <ElTag
-              v-for="f in row.factors"
-              :key="f"
-              type="danger"
-              effect="plain"
-              size="small"
-              class="factor-tag"
-            >
-              {{ f }}
-            </ElTag>
-          </template>
-        </ElTableColumn>
-      </ElTable>
-    </ElCard>
-
-    <!-- 5. Top 10 告警资产 -->
-    <ElCard shadow="never" class="top-card">
-      <template #header>
-        <span class="chart-title">Top 10 告警资产</span>
-        <span class="chart-subtitle">(按 24h 告警数排序)</span>
-      </template>
-      <ElTable
-        :data="topAlert"
-        size="small"
-        class="top-table"
-        empty-text="暂无告警数据"
-        @row-click="goDetail"
-      >
-        <ElTableColumn prop="ip" label="IP" min-width="120" />
-        <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
-        <ElTableColumn label="类型" min-width="100">
-          <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
-        </ElTableColumn>
-        <ElTableColumn prop="alert_24h" label="24h 告警" min-width="100" align="right" />
-        <ElTableColumn prop="alert_critical_24h" label="高危告警" min-width="100" align="right">
-          <template #default="{ row }">
-            <span :class="{ 'text-danger fw-600': row.alert_critical_24h > 0 }">
-              {{ row.alert_critical_24h }}
-            </span>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn prop="last_alert_at" label="最近告警时间" min-width="160">
-          <template #default="{ row }">{{ formatTime(row.last_alert_at) }}</template>
-        </ElTableColumn>
-      </ElTable>
-    </ElCard>
+          <ElTable
+            :data="topAlert"
+            size="small"
+            class="top-table"
+            empty-text="暂无告警数据"
+            @row-click="goDetail"
+          >
+            <ElTableColumn prop="ip" label="IP" min-width="120" />
+            <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
+            <ElTableColumn label="类型" min-width="100">
+              <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
+            </ElTableColumn>
+            <ElTableColumn prop="alert_24h" label="24h 告警" min-width="100" align="right" />
+            <ElTableColumn prop="alert_critical_24h" label="高危告警" min-width="100" align="right">
+              <template #default="{ row }">
+                <span :class="{ 'text-danger fw-600': row.alert_critical_24h > 0 }">
+                  {{ row.alert_critical_24h }}
+                </span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="last_alert_at" label="最近告警时间" min-width="160">
+              <template #default="{ row }">{{ formatTime(row.last_alert_at) }}</template>
+            </ElTableColumn>
+          </ElTable>
+        </ElCard>
+      </ElCol>
+    </ElRow>
   </div>
 </template>
 
@@ -265,27 +250,6 @@
       value: it.count
     }))
   }
-
-  // ---------- 24h 趋势(双轴) ----------
-
-  const trendLineData = computed(() => {
-    const points = overview.value?.alert_trend_24h ?? []
-    if (points.length === 0) return []
-    return [
-      { name: '总告警', data: points.map((p) => p.total) },
-      { name: '高危告警', data: points.map((p) => p.critical) }
-    ]
-  })
-
-  const trendHours = computed(() => {
-    const points = overview.value?.alert_trend_24h ?? []
-    return points.map((p) => {
-      // ISO → HH:mm
-      const d = new Date(p.hour)
-      if (isNaN(d.getTime())) return p.hour
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    })
-  })
 
   // ---------- Top 表 ----------
 
@@ -378,12 +342,12 @@
     flex-shrink: 0;
   }
 
-  .chart-row {
+  .chart-row,
+  .top-row {
     flex-shrink: 0;
   }
 
   .chart-card,
-  .trend-card,
   .top-card {
     margin-bottom: 0;
   }
@@ -398,15 +362,6 @@
     margin-left: 8px;
     font-size: 12px;
     color: var(--el-text-color-secondary, #909399);
-  }
-
-  .empty-chart {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 320px;
-    color: var(--el-text-color-placeholder, #c0c4cc);
-    font-size: 13px;
   }
 
   .top-table {
