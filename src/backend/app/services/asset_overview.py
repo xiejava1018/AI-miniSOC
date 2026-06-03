@@ -93,7 +93,7 @@ class AssetOverviewService:
         """
         4 个核心数字:
         - total_assets: 资产总数
-        - high_risk_assets: 高危资产数(走评分扫描后过滤)
+        - high_risk_assets: 高危资产数(D6 命中任一条件)
         - alerts_24h: 24h 总告警数
         - open_incidents: 未关闭事件数
         """
@@ -101,13 +101,8 @@ class AssetOverviewService:
         open_incidents = self._count_open_incidents()
         alerts_24h = self._count_alerts_24h()
 
-        # 高危资产:依赖评分扫描结果
-        try:
-            top_risky = self._build_top_risky_assets()
-            high_risk_assets = len(top_risky)
-        except Exception as e:
-            logger.warning(f"高危资产统计失败,降级为 0: {e}")
-            high_risk_assets = 0
+        # 高危资产:独立基于 D6 计算,不走 topN
+        high_risk_assets = self._count_high_risk_assets()
 
         return {
             "total_assets": total_assets,
@@ -115,6 +110,40 @@ class AssetOverviewService:
             "alerts_24h": alerts_24h,
             "open_incidents": open_incidents,
         }
+
+    def _count_high_risk_assets(self) -> int:
+        """
+        D6 高危资产计数:对每个资产计算命中条件后求和
+        失败兜底 0
+        """
+        try:
+            assets = self.db.query(Asset).all()
+            if not assets:
+                return 0
+
+            asset_ips = [a.asset_ip for a in assets if a.asset_ip]
+            asset_ids = [a.id for a in assets]
+
+            port_stats = self._aggregate_port_stats(asset_ids)
+            incident_stats = self._aggregate_incident_stats(asset_ids)
+            alert_stats = self._aggregate_alert_stats(asset_ips)
+
+            count = 0
+            for a in assets:
+                p_stat = port_stats.get(str(a.id), {"open": 0, "high_risk": 0})
+                open_inc = incident_stats.get(str(a.id), 0)
+                alert_24h = alert_stats.get(a.asset_ip, 0)
+                if self._is_high_risk(
+                    criticality=a.criticality,
+                    open_incidents=open_inc,
+                    alert_24h=alert_24h,
+                    high_risk_ports=p_stat["high_risk"],
+                ):
+                    count += 1
+            return count
+        except Exception as e:
+            logger.warning(f"高危资产统计失败,降级为 0: {e}")
+            return 0
 
     def _safe_count(self, model, label: str) -> int:
         try:
@@ -261,16 +290,12 @@ class AssetOverviewService:
                     if alert_24h > 0:
                         factors.append(f"24h 告警 {alert_24h}")
 
-                    # 命中 D6 任意一条才算高危
-                    is_high_risk = self._is_high_risk(
-                        criticality=asset.criticality,
-                        open_incidents=open_inc,
-                        alert_24h=alert_24h,
-                        high_risk_ports=high_risk_ports,
-                    )
-                    if not is_high_risk:
+                    # 评分=0(无任何风险因子)的资产不展示
+                    if score <= 0:
                         continue
 
+                    # Top 10 始终按评分排序,不再硬过滤 D6
+                    # 高危资产数仍由 KPI 通过 _is_high_risk 独立计算
                     scored.append({
                         "id": str(asset.id),
                         "ip": asset.asset_ip,

@@ -84,87 +84,91 @@
 
     <!-- 3. Top 10 并列 -->
     <ElRow :gutter="16" class="top-row">
-      <ElCol :sm="24" :md="12">
+      <ElCol :sm="24" :md="12" class="top-col">
         <ElCard shadow="never" class="top-card">
           <template #header>
             <span class="chart-title">Top 10 高危资产</span>
             <span class="chart-subtitle">(按风险评分排序)</span>
           </template>
-          <ElTable
-            :data="topRisky"
-            v-loading="false"
-            stripe
-            size="small"
-            class="top-table"
-            empty-text="暂无高危资产"
-            @row-click="goDetail"
-          >
-            <ElTableColumn prop="ip" label="IP" min-width="120" />
-            <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
-            <ElTableColumn label="类型" min-width="100">
-              <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
-            </ElTableColumn>
-            <ElTableColumn label="重要度" min-width="90">
-              <template #default="{ row }">
-                <ElTag
-                  v-if="row.criticality"
-                  :type="criticalityTagType(row.criticality)"
-                  size="small"
-                >
-                  {{ criticalityLabel(row.criticality) }}
-                </ElTag>
-                <span v-else>-</span>
-              </template>
-            </ElTableColumn>
-            <ElTableColumn prop="score" label="评分" min-width="80" align="right" />
-            <ElTableColumn label="风险因子" min-width="280">
-              <template #default="{ row }">
-                <ElTag
-                  v-for="f in row.factors"
-                  :key="f"
-                  type="danger"
-                  effect="plain"
-                  size="small"
-                  class="factor-tag"
-                >
-                  {{ f }}
-                </ElTag>
-              </template>
-            </ElTableColumn>
-          </ElTable>
+          <div class="top-table-wrap">
+            <ElTable
+              :data="topRisky"
+              v-loading="false"
+              stripe
+              size="small"
+              class="top-table"
+              empty-text="暂无高危资产"
+              @row-click="goDetail"
+            >
+              <ElTableColumn prop="ip" label="IP" min-width="120" />
+              <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
+              <ElTableColumn label="类型" min-width="100">
+                <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="重要度" min-width="90">
+                <template #default="{ row }">
+                  <ElTag
+                    v-if="row.criticality"
+                    :type="criticalityTagType(row.criticality)"
+                    size="small"
+                  >
+                    {{ criticalityLabel(row.criticality) }}
+                  </ElTag>
+                  <span v-else>-</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="score" label="评分" min-width="80" align="right" />
+              <ElTableColumn label="风险因子" min-width="280">
+                <template #default="{ row }">
+                  <ElTag
+                    v-for="f in row.factors"
+                    :key="f"
+                    type="danger"
+                    effect="plain"
+                    size="small"
+                    class="factor-tag"
+                  >
+                    {{ f }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
         </ElCard>
       </ElCol>
 
-      <ElCol :sm="24" :md="12">
+      <ElCol :sm="24" :md="12" class="top-col">
         <ElCard shadow="never" class="top-card">
           <template #header>
             <span class="chart-title">Top 10 告警资产</span>
             <span class="chart-subtitle">(按 24h 告警数排序)</span>
           </template>
-          <ElTable
-            :data="topAlert"
-            size="small"
-            class="top-table"
-            empty-text="暂无告警数据"
-            @row-click="goDetail"
-          >
-            <ElTableColumn prop="ip" label="IP" min-width="120" />
-            <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
-            <ElTableColumn label="类型" min-width="100">
-              <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
-            </ElTableColumn>
-            <ElTableColumn prop="alert_24h" label="24h 告警" min-width="100" align="right" />
-            <ElTableColumn prop="alert_critical_24h" label="高危告警" min-width="100" align="right">
-              <template #default="{ row }">
-                <span :class="{ 'text-danger fw-600': row.alert_critical_24h > 0 }">
-                  {{ row.alert_critical_24h }}
-                </span>
-              </template>
-            </ElTableColumn>
-            <ElTableColumn prop="last_alert_at" label="最近告警时间" min-width="160">
-              <template #default="{ row }">{{ formatTime(row.last_alert_at) }}</template>
-            </ElTableColumn>
-          </ElTable>
+          <div class="top-table-wrap">
+            <ElTable
+              :data="topAlert"
+              size="small"
+              class="top-table"
+              empty-text="暂无告警数据"
+              @row-click="goDetail"
+            >
+              <ElTableColumn prop="ip" label="IP" min-width="120" />
+              <ElTableColumn prop="name" label="名称" min-width="140" show-overflow-tooltip />
+              <ElTableColumn label="类型" min-width="100">
+                <template #default="{ row }">{{ typeLabel(row.asset_type) }}</template>
+              </ElTableColumn>
+              <ElTableColumn prop="alert_24h" label="24h 告警" min-width="100" align="right" />
+              <ElTableColumn prop="alert_critical_24h" label="高危告警" min-width="100" align="right">
+                <template #default="{ row }">
+                  <span :class="{ 'text-danger fw-600': row.alert_critical_24h > 0 }">
+                    {{ row.alert_critical_24h }}
+                  </span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="last_alert_at" label="最近告警时间" min-width="160">
+                <template #default="{ row }">{{ formatTime(row.last_alert_at) }}</template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
         </ElCard>
       </ElCol>
     </ElRow>
@@ -347,9 +351,50 @@
     flex-shrink: 0;
   }
 
+  // 显式给 Top 行一个最小高度,让两列等高(10 行表格 ~ 420px)
+  .top-row {
+    min-height: 480px;
+  }
+
   .chart-card,
   .top-card {
     margin-bottom: 0;
+  }
+
+  // 让两列 Top 卡片等高
+  .top-col {
+    display: flex;
+  }
+
+  .top-card {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+
+    :deep(.el-card__body) {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+    }
+  }
+
+  .top-table-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .top-table {
+    flex: 1 1 0;
+
+    :deep(.el-table__body-wrapper) {
+      flex: 1 1 0;
+      min-height: 0;
+      overflow: auto;
+    }
   }
 
   .chart-title {

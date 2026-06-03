@@ -283,9 +283,9 @@ def test_top_risky_assets_sorting_by_score(db_session):
 
 
 @pytest.mark.unit
-def test_top_risky_excludes_assets_meeting_no_d6_condition(db_session):
-    """无 D6 条件的资产不进 Top 10"""
-    # 普通资产,无事件、无高危端口、告警为 0
+def test_top_risky_excludes_assets_with_zero_score(db_session):
+    """评分为 0(无任何风险因子)的资产不进 Top 10"""
+    # 普通资产,无事件、无高危端口、告警为 0 → 评分 0
     _make_asset(db_session, asset_ip="10.2.0.1", criticality="normal", name="无关资产")
     _make_port(db_session, _make_asset(db_session, asset_ip="10.2.0.2", criticality="normal", name="无关资产2"), 80)
 
@@ -297,6 +297,7 @@ def test_top_risky_excludes_assets_meeting_no_d6_condition(db_session):
         service = AssetOverviewService(db_session)
         result = service.build_overview()
 
+    # score=0 的资产被过滤
     assert result["top_risky_assets"] == []
 
 
