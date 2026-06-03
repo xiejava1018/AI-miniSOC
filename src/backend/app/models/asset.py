@@ -42,6 +42,10 @@ class Asset(Base):
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))
 
+    # 合规 + 应急联系字段(详情页 v2 引入)
+    data_classification = Column(String(20), default="internal")  # public/internal/confidential/secret
+    owner_contact = Column(String(50))  # 负责人联系电话
+
     # 关系
     ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")
     tags = relationship("AssetTag", backref="asset", cascade="all, delete-orphan")

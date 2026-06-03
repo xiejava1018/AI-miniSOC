@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS soc_assets (
     asset_status VARCHAR(20) DEFAULT '离线',
     wazuh_agent_id VARCHAR(100) UNIQUE,
 
+    -- 合规 + 应急联系（详情页 v2 引入）
+    data_classification VARCHAR(20) DEFAULT 'internal',
+    owner_contact VARCHAR(50),
+
     -- 时间戳
     status_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -81,6 +85,14 @@ CREATE TABLE IF NOT EXISTS soc_assets (
             'office',      -- 办公网
             'management',  -- 管理网
             'other'        -- 其他
+        )),
+
+    CONSTRAINT soc_assets_data_classification_check
+        CHECK (data_classification IN (
+            'public',         -- 公开
+            'internal',       -- 内部
+            'confidential',   -- 机密
+            'secret'          -- 秘密
         ))
 );
 
@@ -161,6 +173,8 @@ COMMENT ON COLUMN soc_assets.owner IS '资产负责人';
 COMMENT ON COLUMN soc_assets.business_unit IS '所属业务单元/部门';
 COMMENT ON COLUMN soc_assets.asset_status IS '在线状态：新发现/在线/离线/已删除';
 COMMENT ON COLUMN soc_assets.wazuh_agent_id IS '关联的Wazuh Agent ID（用于告警关联）';
+COMMENT ON COLUMN soc_assets.data_classification IS '数据敏感度：public/internal/confidential/secret';
+COMMENT ON COLUMN soc_assets.owner_contact IS '负责人联系电话';
 COMMENT ON COLUMN soc_assets.status_updated_at IS '状态最后更新时间';
 COMMENT ON COLUMN soc_assets.created_at IS '资产创建时间';
 COMMENT ON COLUMN soc_assets.updated_at IS '资产信息最后更新时间';

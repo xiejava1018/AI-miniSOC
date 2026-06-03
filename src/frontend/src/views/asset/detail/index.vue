@@ -32,6 +32,13 @@
         <ElDescriptionsItem label="网络区域">{{ networkZoneLabelMap[assetDetail.network_zone] || assetDetail.network_zone || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="MAC地址">{{ assetDetail.mac_address || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="负责人">{{ assetDetail.owner || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="负责人电话">{{ assetDetail.owner_contact || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="数据分类">
+          <ElTag v-if="assetDetail.data_classification" type="warning" effect="plain" size="small">
+            {{ dataClassLabelMap[assetDetail.data_classification] || assetDetail.data_classification }}
+          </ElTag>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
         <ElDescriptionsItem label="业务单元">{{ assetDetail.business_unit || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="操作系统">
           {{ assetDetail.os_name ? `${assetDetail.os_name} ${assetDetail.os_version || ''}`.trim() : '--' }}
@@ -41,19 +48,116 @@
         <ElDescriptionsItem label="更新时间">{{ formatTime(assetDetail.updated_at) }}</ElDescriptionsItem>
         <ElDescriptionsItem label="状态更新">{{ formatTime(assetDetail.status_updated_at) }}</ElDescriptionsItem>
         <ElDescriptionsItem label="描述" :span="3">{{ assetDetail.asset_description || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="标签" :span="3">
+          <ElTag
+            v-for="tag in tagsData"
+            :key="tag.id"
+            type="info"
+            effect="light"
+            class="mr-1 mb-1"
+            closable
+            @close="handleDeleteTag(tag)"
+          >
+            {{ tag.tag_key }}: {{ tag.tag_value }}
+          </ElTag>
+          <ElButton size="small" type="primary" plain @click="showTagDialog('add')">
+            <ElIcon><Plus /></ElIcon>添加标签
+          </ElButton>
+        </ElDescriptionsItem>
       </ElDescriptions>
     </ElCard>
 
+    <!-- 安全摘要卡(详情页 v2 新增) -->
+    <ElCard shadow="never" class="summary-card" v-loading="summaryLoading">
+      <template #header>
+        <div class="card-header">
+          <span class="title">安全摘要</span>
+          <ElButton size="small" text :icon="Refresh" @click="loadSummary" :loading="summaryLoading">刷新</ElButton>
+        </div>
+      </template>
+
+      <div class="summary-grid">
+        <MetricCard
+          label="24h 告警"
+          :value="summary.alert_24h"
+          type="danger"
+          :clickable="summary.alert_24h > 0"
+          @click="activeTab = 'alerts'"
+          :sub-label="summary.alert_critical_24h > 0 ? `高危 ${summary.alert_critical_24h}` : '无高危'"
+        />
+        <MetricCard
+          label="高危 CVE"
+          :value="summary.vuln_critical"
+          type="danger"
+          :clickable="summary.vuln_critical > 0"
+          @click="activeTab = 'vulnerabilities'"
+          :sub-label="`未修复 ${summary.vuln_total} 个`"
+        />
+        <MetricCard
+          label="开放端口"
+          :value="summary.open_ports"
+          :type="summary.high_risk_ports > 0 ? 'warning' : 'info'"
+          :clickable="true"
+          @click="activeTab = 'ports'"
+          :sub-label="summary.high_risk_ports > 0 ? `高危 ${summary.high_risk_ports}` : '无高危'"
+        />
+        <MetricCard
+          label="应用数"
+          :value="summary.applications"
+          type="info"
+          :clickable="false"
+          sub-label="Wazuh packages"
+        />
+        <MetricCard
+          label="SCA 合规率"
+          :value="summary.sca_pass_rate !== null ? Math.round(summary.sca_pass_rate * 100) : '-'"
+          :type="scaPassRateType"
+          :clickable="false"
+          :suffix="summary.sca_pass_rate !== null ? '%' : ''"
+          :sub-label="summary.sca_total > 0 ? `失败 ${summary.sca_failed}/${summary.sca_total}` : '待接入'"
+        />
+        <MetricCard
+          label="在线状态"
+          :value="onlineStatusLabel"
+          :type="onlineStatusType"
+          :clickable="false"
+          :sub-label="summary.last_port_scan ? `端口扫描 ${relativeTime.format(summary.last_port_scan)}` : '尚无扫描'"
+        />
+      </div>
+    </ElCard>
+
     <!-- Tab 区域 -->
-    <ElCard shadow="never" class="tab-card" style="margin-top: 16px">
+    <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
-        <!-- 端口管理 -->
-        <ElTabPane label="端口管理" name="ports">
+        <!-- 1. 应用清单(Phase 2 接入) -->
+        <ElTabPane label="应用清单" name="applications">
+          <ElEmpty description="应用清单数据待 Phase 2 接入 Wazuh 同步服务后填充">
+            <template #image>
+              <ElIcon :size="48" color="#909399"><Box /></ElIcon>
+            </template>
+          </ElEmpty>
+        </ElTabPane>
+
+        <!-- 2. 漏洞(Phase 2 接入) -->
+        <ElTabPane label="漏洞" name="vulnerabilities">
+          <ElEmpty description="漏洞数据待 Phase 2 接入 Wazuh 漏洞缓存表后填充">
+            <template #image>
+              <ElIcon :size="48" color="#909399"><Warning /></ElIcon>
+            </template>
+          </ElEmpty>
+        </ElTabPane>
+
+        <!-- 3. 端口管理(现有,增强) -->
+        <ElTabPane label="端口" name="ports">
           <div class="tab-header">
-            <ElButton type="primary" size="small" @click="showPortDialog('add')">添加端口</ElButton>
+            <ElButton type="primary" size="small" @click="showPortDialog">添加端口</ElButton>
           </div>
           <ElTable :data="portsData" v-loading="portsLoading" border stripe style="width: 100%">
-            <ElTableColumn prop="port" label="端口" width="80" align="center" />
+            <ElTableColumn prop="port" label="端口" width="80" align="center">
+              <template #default="{ row }">
+                <span :class="{ 'high-risk-port': isHighRisk(row.port) }">{{ row.port }}</span>
+              </template>
+            </ElTableColumn>
             <ElTableColumn prop="protocol" label="协议" width="80" align="center" />
             <ElTableColumn prop="state" label="状态" width="90" align="center">
               <template #default="{ row }">
@@ -64,8 +168,33 @@
             </ElTableColumn>
             <ElTableColumn prop="service" label="服务" width="120" align="center" />
             <ElTableColumn prop="version" label="版本" min-width="140" align="center" />
+            <ElTableColumn label="风险等级" width="180" align="center">
+              <template #default="{ row }">
+                <ElTag v-if="isHighRisk(row.port)" :type="riskTagType(row.port)" size="small" effect="dark">
+                  {{ riskLabel(row.port) }}
+                </ElTag>
+                <span v-else class="text-placeholder">--</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="漏洞" min-width="180" align="center">
+              <template #default="{ row }">
+                <ElTag
+                  v-for="(vuln, idx) in parseVulns(row.vulnerability)"
+                  :key="idx"
+                  type="danger"
+                  size="small"
+                  effect="plain"
+                  class="mr-1 mb-1"
+                >
+                  {{ vuln }}
+                </ElTag>
+                <span v-if="!row.vulnerability" class="text-placeholder">--</span>
+              </template>
+            </ElTableColumn>
             <ElTableColumn prop="scan_time" label="扫描时间" width="170" align="center">
-              <template #default="{ row }">{{ formatTime(row.scan_time) }}</template>
+              <template #default="{ row }">
+                <span :title="formatTime(row.scan_time)">{{ relativeTime.format(row.scan_time) }}</span>
+              </template>
             </ElTableColumn>
             <ElTableColumn label="操作" width="100" align="center" fixed="right">
               <template #default="{ row }">
@@ -73,49 +202,40 @@
               </template>
             </ElTableColumn>
           </ElTable>
+          <ElEmpty v-if="!portsLoading && portsData.length === 0" description="暂无端口数据" />
         </ElTabPane>
 
-        <!-- 标签管理 -->
-        <ElTabPane label="标签管理" name="tags">
+        <!-- 4. 基线(Phase 4 接入) -->
+        <ElTabPane label="基线" name="baseline">
+          <ElEmpty description="SCA 基线数据待 Phase 4 接入 Wazuh SCA 缓存表后填充">
+            <template #image>
+              <ElIcon :size="48" color="#909399"><Document /></ElIcon>
+            </template>
+          </ElEmpty>
+        </ElTabPane>
+
+        <!-- 5. 告警 -->
+        <ElTabPane label="告警" name="alerts">
           <div class="tab-header">
-            <ElButton type="primary" size="small" @click="showTagDialog('add')">添加标签</ElButton>
+            <ElButton type="primary" size="small" :icon="Refresh" @click="loadAlerts" :loading="alertsLoading">刷新</ElButton>
           </div>
-          <ElTable :data="tagsData" v-loading="tagsLoading" border stripe style="width: 100%">
-            <ElTableColumn prop="tag_key" label="标签键" width="160" align="center" />
-            <ElTableColumn prop="tag_value" label="标签值" min-width="200" align="center" />
-            <ElTableColumn prop="created_at" label="创建时间" width="170" align="center">
-              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+          <ElTable :data="alertsData" v-loading="alertsLoading" border stripe style="width: 100%">
+            <ElTableColumn label="时间" width="170" align="center">
+              <template #default="{ row }">{{ formatTime(row.timestamp) }}</template>
             </ElTableColumn>
-            <ElTableColumn label="操作" width="140" align="center" fixed="right">
+            <ElTableColumn label="等级" width="100" align="center">
               <template #default="{ row }">
-                <ElButton type="primary" link size="small" @click="showTagDialog('edit', row)">编辑</ElButton>
-                <ElButton type="danger" link size="small" @click="handleDeleteTag(row)">删除</ElButton>
-              </template>
-            </ElTableColumn>
-          </ElTable>
-        </ElTabPane>
-
-        <!-- 关联事件 -->
-        <ElTabPane label="关联事件" name="incidents">
-          <ElTable :data="incidentsData" v-loading="incidentsLoading" border stripe style="width: 100%">
-            <ElTableColumn prop="title" label="事件标题" min-width="200" align="center" />
-            <ElTableColumn prop="severity" label="严重性" width="100" align="center">
-              <template #default="{ row }">
-                <ElTag :type="getSeverityType(row.severity)" size="small" effect="light">
-                  {{ row.severity || '--' }}
+                <ElTag :type="getAlertLevelType(row.rule?.level)" size="small" effect="dark">
+                  L{{ row.rule?.level ?? '-' }}
                 </ElTag>
               </template>
             </ElTableColumn>
-            <ElTableColumn prop="status" label="状态" width="100" align="center">
-              <template #default="{ row }">
-                <ElTag type="info" size="small" effect="light">{{ row.status || '--' }}</ElTag>
-              </template>
-            </ElTableColumn>
-            <ElTableColumn prop="created_at" label="创建时间" width="170" align="center">
-              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-            </ElTableColumn>
+            <ElTableColumn prop="rule.description" label="规则描述" min-width="280" align="left" show-overflow-tooltip />
+            <ElTableColumn prop="agent.id" label="Agent" width="100" align="center" />
+            <ElTableColumn prop="location" label="位置" width="120" align="center" show-overflow-tooltip />
+            <ElTableColumn prop="rule.id" label="规则ID" width="100" align="center" />
           </ElTable>
-          <ElEmpty v-if="!incidentsLoading && incidentsData.length === 0" description="暂无关联事件" />
+          <ElEmpty v-if="!alertsLoading && alertsData.length === 0" description="暂无告警(默认查询最近 24h)" />
         </ElTabPane>
       </ElTabs>
     </ElCard>
@@ -152,7 +272,7 @@
       </template>
     </ElDialog>
 
-    <!-- 标签弹窗 -->
+    <!-- 标签弹窗(从基本信息卡触发) -->
     <ElDialog
       v-model="tagDialogVisible"
       :title="tagDialogType === 'add' ? '添加标签' : '编辑标签'"
@@ -163,7 +283,6 @@
       <ElForm ref="tagFormRef" :model="tagFormData" :rules="tagRules" label-width="80px">
         <ElFormItem label="标签键" prop="tag_key">
           <ElSelect
-            v-if="tagDialogType === 'add'"
             v-model="tagFormData.tag_key"
             filterable
             allow-create
@@ -177,7 +296,6 @@
               :value="item.value"
             />
           </ElSelect>
-          <ElInput v-else v-model="tagFormData.tag_key" disabled />
         </ElFormItem>
         <ElFormItem label="标签值" prop="tag_value">
           <ElSelect
@@ -207,11 +325,10 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, watch } from 'vue'
+  import { ref, reactive, computed, onMounted, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import { ArrowLeft } from '@element-plus/icons-vue'
-  import { FormInstance } from 'element-plus'
-  import { ElMessageBox, ElMessage } from 'element-plus'
+  import { ArrowLeft, Refresh, Plus, Box, Warning, Document } from '@element-plus/icons-vue'
+  import { FormInstance, ElMessageBox, ElMessage } from 'element-plus'
   import {
     getAssetDetail,
     getAssetPorts,
@@ -219,17 +336,21 @@
     deleteAssetPort,
     getAssetTags,
     addAssetTag,
-    updateAssetTag,
     deleteAssetTag,
     getCommonTagKeys,
-    getAssetIncidents
+    getAssetSummary
   } from '@/api/asset'
+  import { getAlertsByIp } from '@/api/alert'
   import { useDictStore } from '@/store/modules/dict'
+  import { useRelativeTime } from '@/composables/useRelativeTime'
+  import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
+  import MetricCard from './components/MetricCard.vue'
 
   const route = useRoute()
   const router = useRouter()
   const assetId = computed(() => route.params.id as string)
   const dictStore = useDictStore()
+  const relativeTime = useRelativeTime()
 
   // 字典映射
   const assetTypeLabelMap = computed(() => dictStore.getLabelMap('asset_type'))
@@ -239,7 +360,7 @@
   const statusColorMap = computed(() => dictStore.getColorMap('asset_status'))
   const networkZoneLabelMap = computed(() => dictStore.getLabelMap('network_zone'))
   const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
-  const severityColorMap = computed(() => dictStore.getColorMap('severity'))
+  const dataClassLabelMap = computed(() => dictStore.getLabelMap('data_classification'))
 
   // 资产详情
   const detailLoading = ref(false)
@@ -262,8 +383,75 @@
     }
   }
 
-  // Tab
+  // Tab - 默认进 ports(Phase 1 唯一有数据的 Tab)
+  // Phase 3 接入应用数据后,改回默认 applications(设计文档 §4.2)
   const activeTab = ref('ports')
+
+  // ========== 安全摘要 ==========
+  const summaryLoading = ref(false)
+  const summary = ref<Api.Asset.AssetSummary>({
+    asset_id: '',
+    online_status: 'unknown',
+    alert_24h: 0,
+    alert_critical_24h: 0,
+    open_incidents: 0,
+    vuln_critical: 0,
+    vuln_high: 0,
+    vuln_total: 0,
+    open_ports: 0,
+    high_risk_ports: 0,
+    applications: 0,
+    sca_pass_rate: null,
+    sca_total: 0,
+    sca_failed: 0,
+    last_port_scan: null,
+    last_vuln_scan: null,
+    last_sca_scan: null,
+    data_classification: 'internal',
+    owner: null,
+    owner_contact: null,
+    tags: []
+  })
+
+  const loadSummary = async () => {
+    if (!assetId.value) return
+    summaryLoading.value = true
+    try {
+      const res = await getAssetSummary(assetId.value)
+      const r: any = res
+      const d = r?.data
+      if (d) {
+        summary.value = { ...summary.value, ...d }
+      }
+    } catch (err) {
+      console.error('获取安全摘要失败:', err)
+    } finally {
+      summaryLoading.value = false
+    }
+  }
+
+  // 摘要派生
+  const onlineStatusLabel = computed(() => {
+    const map: Record<string, string> = {
+      online: '在线',
+      offline: '离线',
+      unknown: '未知'
+    }
+    return map[summary.value.online_status] || '未知'
+  })
+
+  const onlineStatusType = computed<'success' | 'danger' | 'info'>(() => {
+    if (summary.value.online_status === 'online') return 'success'
+    if (summary.value.online_status === 'offline') return 'danger'
+    return 'info'
+  })
+
+  const scaPassRateType = computed<'success' | 'warning' | 'danger' | 'neutral'>(() => {
+    if (summary.value.sca_pass_rate === null) return 'neutral'
+    if (summary.value.sca_pass_rate >= 0.9) return 'success'
+    if (summary.value.sca_pass_rate >= 0.7) return 'warning'
+    return 'danger'
+  })
 
   // ========== 端口管理 ==========
   const portsLoading = ref(false)
@@ -283,6 +471,23 @@
     state: [{ required: true, message: '请选择状态', trigger: 'change' }]
   }
 
+  const isHighRisk = (port: number) => getHighRiskPort(port) !== null
+  const riskLabel = (port: number) => getHighRiskPort(port)?.reason ?? ''
+  const riskTagType = (port: number): 'danger' | 'warning' | 'info' => {
+    const info = getHighRiskPort(port)
+    if (!info) return 'info'
+    if (info.risk === 'critical' || info.risk === 'high') return 'danger'
+    return 'warning'
+  }
+
+  const parseVulns = (v?: string | null): string[] => {
+    if (!v) return []
+    return v
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+
   const loadPorts = async () => {
     if (!assetId.value) return
     portsLoading.value = true
@@ -298,7 +503,7 @@
     }
   }
 
-  const showPortDialog = (type: string) => {
+  const showPortDialog = () => {
     portDialogVisible.value = true
     portFormData.port = 80
     portFormData.protocol = 'tcp'
@@ -349,7 +554,7 @@
       .catch(() => {})
   }
 
-  // ========== 标签管理 ==========
+  // ========== 标签管理(从基本信息卡触发) ==========
   const tagsLoading = ref(false)
   const tagsData = ref<any[]>([])
   const tagDialogVisible = ref(false)
@@ -365,7 +570,7 @@
     tag_value: [{ required: true, message: '请输入标签值', trigger: 'change' }]
   }
 
-  // 常用标签键
+  // 常用标签键(Phase 4 改字典驱动)
   const commonTagKeys = [
     { label: '环境 (environment)', value: 'environment' },
     { label: '业务系统 (business_system)', value: 'business_system' },
@@ -374,7 +579,6 @@
     { label: '数据分类 (data_classification)', value: 'data_classification' }
   ]
 
-  // 根据标签键提供可选值
   const tagKeyOptionsMap: Record<string, string[]> = {
     environment: ['production', 'staging', 'development', 'testing'],
     business_system: ['hr-system', 'finance-system', 'crm', 'erp', 'oa-system'],
@@ -420,19 +624,12 @@
     await tagFormRef.value.validate(async (valid) => {
       if (valid) {
         try {
-          let res
-          if (tagDialogType.value === 'add') {
-            res = await addAssetTag(assetId.value, {
-              tag_key: tagFormData.tag_key,
-              tag_value: tagFormData.tag_value
-            })
-          } else {
-            res = await updateAssetTag(tagFormData.id, {
-              tag_value: tagFormData.tag_value
-            })
-          }
+          const res = await addAssetTag(assetId.value, {
+            tag_key: tagFormData.tag_key,
+            tag_value: tagFormData.tag_value
+          })
           if ((res as any)?.code === 200 || res) {
-            ElMessage.success(tagDialogType.value === 'add' ? '添加成功' : '更新成功')
+            ElMessage.success('添加成功')
             tagDialogVisible.value = false
             loadTags()
           } else {
@@ -446,7 +643,7 @@
   }
 
   const handleDeleteTag = (row: any) => {
-    ElMessageBox.confirm(`确定删除标签 ${row.tag_key}？`, '删除标签', {
+    ElMessageBox.confirm(`确定删除标签 ${row.tag_key}?`, '删除标签', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
@@ -463,23 +660,35 @@
       .catch(() => {})
   }
 
-  // ========== 关联事件 ==========
-  const incidentsLoading = ref(false)
-  const incidentsData = ref<any[]>([])
+  // ========== 告警 Tab ==========
+  const alertsLoading = ref(false)
+  const alertsData = ref<any[]>([])
 
-  const loadIncidents = async () => {
-    if (!assetId.value) return
-    incidentsLoading.value = true
+  const loadAlerts = async () => {
+    if (!assetId.value || !assetDetail.value.asset_ip) return
+    alertsLoading.value = true
     try {
-      const res = await getAssetIncidents(assetId.value)
+      const res = await getAlertsByIp(assetDetail.value.asset_ip, {
+        hours: 24,
+        skip: 0,
+        limit: 20
+      })
       const r: any = res
       const d = r?.data
-      incidentsData.value = Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []
+      alertsData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
     } catch {
-      incidentsData.value = []
+      alertsData.value = []
     } finally {
-      incidentsLoading.value = false
+      alertsLoading.value = false
     }
+  }
+
+  const getAlertLevelType = (level?: number): 'danger' | 'warning' | 'info' | 'success' => {
+    if (!level) return 'info'
+    if (level >= 12) return 'danger'
+    if (level >= 8) return 'warning'
+    if (level >= 4) return 'info'
+    return 'success'
   }
 
   // ========== 工具函数 ==========
@@ -488,24 +697,17 @@
     return new Date(time).toLocaleString('zh-CN')
   }
 
-  const getSeverityType = (severity?: string): any => {
-    return severityColorMap.value[severity || ''] || 'info'
-  }
-
   const goBack = () => {
     router.push('/assets/list')
-  }
-
-  const nextTick = (fn: () => void) => {
-    setTimeout(fn, 0)
   }
 
   // 加载数据
   onMounted(() => {
     loadDetail()
+    loadSummary()
     loadPorts()
     loadTags()
-    loadIncidents()
+    loadAlerts()
   })
 </script>
 
@@ -515,6 +717,12 @@
 
     .detail-header {
       margin-bottom: 12px;
+    }
+
+    .info-card,
+    .summary-card,
+    .tab-card {
+      margin-bottom: 16px;
     }
 
     .card-header {
@@ -533,10 +741,45 @@
       }
     }
 
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+    }
+
     .tab-header {
       margin-bottom: 12px;
       display: flex;
       justify-content: flex-end;
+    }
+
+    .text-placeholder {
+      color: var(--el-text-color-placeholder, #c0c4cc);
+    }
+
+    .high-risk-port {
+      color: var(--el-color-danger, #f56c6c);
+      font-weight: 600;
+    }
+
+    .mr-1 {
+      margin-right: 4px;
+    }
+
+    .mb-1 {
+      margin-bottom: 4px;
+    }
+  }
+
+  @media (max-width: 1400px) {
+    .summary-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .summary-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
   }
 </style>

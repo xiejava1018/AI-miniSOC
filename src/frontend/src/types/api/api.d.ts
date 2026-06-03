@@ -250,6 +250,43 @@ declare namespace Api {
       tag_value: string
       created_at?: string
     }
+
+    /** 资产安全摘要(详情页 v2 §7.1) */
+    interface AssetSummary {
+      asset_id: string
+      /** 在线状态: online / offline / unknown */
+      online_status: 'online' | 'offline' | 'unknown'
+      /** 近 24h 告警总数 */
+      alert_24h: number
+      /** 近 24h 高危告警数(Wazuh level >= 12) */
+      alert_critical_24h: number
+      /** 未关闭事件数(status != closed) */
+      open_incidents: number
+      /** 漏洞统计(Phase 2 接入) */
+      vuln_critical: number
+      vuln_high: number
+      vuln_total: number
+      /** 开放端口统计 */
+      open_ports: number
+      high_risk_ports: number
+      /** 应用数量(Wazuh packages, Phase 2 接入) */
+      applications: number
+      /** SCA 基线合规率(0-1, Phase 2 接入) */
+      sca_pass_rate: number | null
+      sca_total: number
+      sca_failed: number
+      /** 最近一次扫描时间(ISO) */
+      last_port_scan: string | null
+      last_vuln_scan: string | null
+      last_sca_scan: string | null
+      /** 数据敏感等级 */
+      data_classification: string
+      /** 负责人信息 */
+      owner: string | null
+      owner_contact: string | null
+      /** 标签 */
+      tags: { key: string; value: string }[]
+    }
   }
 
   /** 部门管理 */

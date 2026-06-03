@@ -86,6 +86,8 @@ def main():
         ("owner VARCHAR(255)", "负责人"),
         ("business_unit VARCHAR(255)", "业务单元"),
         ("wazuh_agent_id VARCHAR(100) UNIQUE", "Wazuh Agent ID"),
+        ("data_classification VARCHAR(20) DEFAULT 'internal'", "数据敏感度"),
+        ("owner_contact VARCHAR(50)", "负责人联系电话"),
         ("updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP", "更新时间")
     ]
 
@@ -116,7 +118,8 @@ def main():
     constraints = [
         ("asset_type", "CHECK (asset_type IN ('server', 'workstation', 'printer', 'router', 'switch', 'nas', 'firewall', 'other'))", "资产类型约束"),
         ("criticality", "CHECK (criticality IN ('core', 'important', 'normal'))", "重要性等级约束"),
-        ("network_zone", "CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other'))", "网络区域约束")
+        ("network_zone", "CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other'))", "网络区域约束"),
+        ("data_classification", "CHECK (data_classification IN ('public', 'internal', 'confidential', 'secret'))", "数据敏感度约束")
     ]
 
     for constraint_name, constraint_sql, description in constraints:
@@ -182,6 +185,8 @@ def main():
         ("COLUMN", "soc_assets.owner", "资产负责人"),
         ("COLUMN", "soc_assets.business_unit", "所属业务单元/部门"),
         ("COLUMN", "soc_assets.wazuh_agent_id", "关联的Wazuh Agent ID（用于告警关联）"),
+        ("COLUMN", "soc_assets.data_classification", "数据敏感度：public/internal/confidential/secret"),
+        ("COLUMN", "soc_assets.owner_contact", "负责人联系电话"),
         ("COLUMN", "soc_assets.updated_at", "资产信息最后更新时间")
     ]
 

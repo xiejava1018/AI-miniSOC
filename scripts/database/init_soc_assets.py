@@ -93,6 +93,8 @@ def create_soc_assets_table(cursor):
             business_unit VARCHAR(255),
             asset_status VARCHAR(20) DEFAULT '离线',
             wazuh_agent_id VARCHAR(100) UNIQUE,
+            data_classification VARCHAR(20) DEFAULT 'internal',
+            owner_contact VARCHAR(50),
             status_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -104,7 +106,10 @@ def create_soc_assets_table(cursor):
                 CHECK (criticality IN ('core', 'important', 'normal')),
 
             CONSTRAINT soc_assets_network_zone_check
-                CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other'))
+                CHECK (network_zone IN ('intranet', 'dmz', 'office', 'management', 'other')),
+
+            CONSTRAINT soc_assets_data_classification_check
+                CHECK (data_classification IN ('public', 'internal', 'confidential', 'secret'))
         );
     """)
 
@@ -132,6 +137,8 @@ def add_missing_columns(cursor):
         'owner': 'VARCHAR(255)',
         'business_unit': 'VARCHAR(255)',
         'wazuh_agent_id': 'VARCHAR(100) UNIQUE',
+        'data_classification': "VARCHAR(20) DEFAULT 'internal'",
+        'owner_contact': 'VARCHAR(50)',
         'updated_at': 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'
     }
 
@@ -216,6 +223,8 @@ def add_comments(cursor):
         ("COLUMN", "soc_assets.business_unit", "所属业务单元"),
         ("COLUMN", "soc_assets.asset_status", "在线状态"),
         ("COLUMN", "soc_assets.wazuh_agent_id", "关联的Wazuh Agent ID"),
+        ("COLUMN", "soc_assets.data_classification", "数据敏感度（public/internal/confidential/secret）"),
+        ("COLUMN", "soc_assets.owner_contact", "负责人联系电话"),
         ("COLUMN", "soc_assets.updated_at", "最后更新时间")
     ]
 

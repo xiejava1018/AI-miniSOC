@@ -22,6 +22,8 @@ class AssetBase(BaseModel):
     mac_address: Optional[str] = None
     wazuh_agent_id: Optional[str] = None
     asset_status: Optional[str] = None
+    data_classification: Optional[str] = "internal"
+    owner_contact: Optional[str] = None
 
 
 class AssetCreate(AssetBase):
@@ -41,6 +43,8 @@ class AssetUpdate(BaseModel):
     asset_description: Optional[str] = None
     asset_status: Optional[str] = None
     wazuh_agent_id: Optional[str] = None
+    data_classification: Optional[str] = None
+    owner_contact: Optional[str] = None
 
 
 class AssetResponse(AssetBase):

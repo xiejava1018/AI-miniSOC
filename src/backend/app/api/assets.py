@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models import Asset
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse
 from app.services.asset_sync import AssetSyncService
+from app.services.asset_summary import AssetSummaryService
 import uuid
 
 router = APIRouter()
@@ -106,6 +107,29 @@ async def get_asset(asset_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="资产不存在")
 
     return AssetResponse.model_validate(asset)
+
+
+@router.get("/{asset_id}/summary")
+@router.get("/{asset_id}/summary/")
+async def get_asset_summary(asset_id: str, db: Session = Depends(get_db)):
+    """
+    获取资产安全摘要(详情页 v2)
+
+    聚合该资产所需的 6+ 个 MetricCard 数据,具体字段见
+    docs/design/2026-06-03-asset-detail-v2-design.md §7.1
+    Wazuh 相关字段(漏洞/应用/SCA)在 Phase 2 接入后填充。
+    """
+    try:
+        uuid.UUID(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的资产ID格式")
+
+    asset = db.query(Asset).filter(Asset.id == uuid.UUID(asset_id)).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="资产不存在")
+
+    summary_service = AssetSummaryService(db)
+    return summary_service.build_summary(asset_id)
 
 
 @router.post("/", response_model=AssetResponse, status_code=201)

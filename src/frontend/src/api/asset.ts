@@ -49,6 +49,19 @@ export const getAssetDetail = (id: string): Promise<Http.BaseResponse<Api.Asset.
   })
 }
 
+/**
+ * 获取资产安全摘要(详情页 v2)
+ *
+ * 后端:`GET /api/v1/assets/{id}/summary`
+ * 字段定义见 `Api.Asset.AssetSummary` 与 docs/design/2026-06-03-asset-detail-v2-design.md §7.1
+ */
+export const getAssetSummary = (id: string): Promise<Http.BaseResponse<Api.Asset.AssetSummary>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${id}/summary`,
+    keepFullResponse: true
+  })
+}
+
 export const addAsset = (data: any): Promise<any> => {
   return httpClient.post({ url: `${API_PREFIX}`, data })
 }
