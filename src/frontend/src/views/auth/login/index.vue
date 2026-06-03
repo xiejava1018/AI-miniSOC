@@ -215,13 +215,16 @@
   }
 
   const showLoginSuccessNotice = () => {
+    // 优先用显示名 (full_name), 回退到登录账号 (username)
+    const displayName =
+      userStore.userInfo?.full_name || userStore.userInfo?.username || formData.username || ''
     setTimeout(() => {
       ElNotification({
         title: '登录成功',
         type: 'success',
         duration: 2500,
         zIndex: 10000,
-        message: `欢迎回来, ${systemName}!`
+        message: displayName ? `欢迎回来, ${displayName}!` : '登录成功'
       })
     }, 150)
   }

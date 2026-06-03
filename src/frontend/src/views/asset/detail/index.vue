@@ -714,11 +714,15 @@
 <style lang="scss" scoped>
   .asset-detail-page {
     padding: 0;
+    // 兜底滚动: 在小屏/小笔记本上 (顶部信息卡+摘要卡+Tab 累加高度 > 视口高度)
+    // .art-full-height 的 height: var(--art-full-height) 会让内容溢出但不可滚。
+    // 这里强制允许页面级滚动, 避免下半截被截断。
+    // 大屏 (信息卡+摘要卡 < 视口的 ~70%) 时 Tab 内部 overflow-y 仍生效, 互不冲突。
+    overflow: auto;
+    // 自适应内容高度 —— 内容超出视口时让父容器随内容伸展
+    height: auto;
+    min-height: var(--art-full-height);
 
-    // 关键布局约束:
-    // .art-full-height 已是 display:flex; flex-direction:column; height: var(--art-full-height)
-    // 顶部 3 个区块必须 flex-shrink:0 保持自身内容高度,Tab 区域用 flex:1 + overflow:hidden 占满剩余
-    // 高度,TabPane 内部滚动 —— 这样切换 Tab 时顶部信息/摘要不会被压缩、不会出现页面级滚动条。
     .detail-header {
       flex-shrink: 0;
       margin-bottom: 12px;
@@ -730,42 +734,20 @@
       margin-bottom: 16px;
     }
 
+    // 取消 tab-card 的 flex:1 + overflow:hidden,
+    // 让卡片高度随内容伸展, 避免被父级 scroll 夹住压成 0 高度
     .tab-card {
-      flex: 1 1 0;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 0;
-      overflow: hidden;
+      flex-shrink: 0;
+      margin-bottom: 16px;
 
-      // ElCard body 也要 flex,否则 el-tabs 拿不到高度
-      :deep(.el-card__body) {
-        flex: 1 1 0;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-
-      // ElTabs 整体填满 card body
-      :deep(.el-tabs) {
-        flex: 1 1 0;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-      }
-
-      // Tab 内容区(去掉默认 100% 让 flex 子项接管)
+      // Tab 内部滚动限制改轻 —— 表格自身有滚动条
       :deep(.el-tabs__content) {
-        flex: 1 1 0;
-        min-height: 0;
-        overflow: hidden;
+        overflow: visible;
       }
 
-      // 每个 Pane 自身滚动
       :deep(.el-tab-pane) {
-        height: 100%;
-        overflow-y: auto;
+        height: auto;
+        overflow: visible;
       }
     }
 
