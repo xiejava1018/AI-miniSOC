@@ -133,8 +133,12 @@
       const response = await getAllMenuByRole(Number(roleId))
 
       if (response.code === 200) {
+        // 后端 /api/v1/roles/{id}/menus 返回 { role_id, menu_ids, menus }
+        // 我们需要的是 menus 树数组
+        const payload = response.data || {}
+        const menuTree = Array.isArray(payload.menus) ? payload.menus : []
         // 处理菜单数据，确保图标有效
-        menus.value = processMenuIcons(response.data || [])
+        menus.value = processMenuIcons(menuTree)
         // 转换菜单和权限为树形结构
         processedMenus.value = convertAuthsToTreeNodes(menus.value)
 
@@ -149,7 +153,8 @@
       } else {
         ElMessage.error((response as any).msg || '获取菜单权限失败')
       }
-    } catch {
+    } catch (err) {
+      console.error('加载角色菜单失败:', err)
       ElMessage.error('获取菜单权限失败，请稍后再试')
     } finally {
       loading.value = false

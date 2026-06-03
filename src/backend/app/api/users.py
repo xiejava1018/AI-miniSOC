@@ -54,13 +54,13 @@ async def get_users(
     search: Optional[str] = Query(None, description="搜索关键词"),
     role_id: Optional[int] = Query(None, description="角色ID"),
     status: Optional[int] = Query(None, ge=1, le=2, description="状态: 1=启用, 2=禁用"),
-    current_user: UserResponseSchema = Depends(require_menu_permission("users")),
+    current_user: UserResponseSchema = Depends(require_menu_permission("user")),
     db: Session = Depends(get_db)
 ):
     """
     获取用户列表
 
-    需要权限: system-users
+    需要权限: system-user
     """
     service = UserService(db)
     skip = (page - 1) * page_size
@@ -88,7 +88,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
-    current_user: UserResponseSchema = Depends(require_menu_permission("users")),
+    current_user: UserResponseSchema = Depends(require_menu_permission("user")),
     db: Session = Depends(get_db)
 ):
     """获取用户详情"""

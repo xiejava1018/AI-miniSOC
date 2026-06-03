@@ -153,7 +153,7 @@
           align: 'center'
         },
         {
-          prop: 'desc',
+          prop: 'description',
           label: '描述',
           align: 'center',
           showOverflowTooltip: true
@@ -165,8 +165,8 @@
           formatter: (row: any) =>
             h(
               resolveComponent('ElTag'),
-              { type: row.status === 1 ? 'primary' : 'warning' },
-              { default: () => (row.status === 1 ? '启用' : '禁用') }
+              { type: row.is_active !== false ? 'primary' : 'warning' },
+              { default: () => (row.is_active !== false ? '启用' : '禁用') }
             )
         },
         {
@@ -211,8 +211,8 @@
       if (type === 'edit' && row) {
         form.id = row.id
         form.name = row.name
-        form.desc = row.desc
-        form.status = row.status === 1
+        form.desc = row.description || ''
+        form.status = row.is_active !== false
       } else {
         form.id = ''
         form.name = ''
@@ -264,21 +264,24 @@
       if (valid) {
         submitLoading.value = true
         try {
+          // 字段名映射：前端 desc → 后端 description；status:1/2 → is_active:bool
           const roleData = {
             name: form.name,
-            desc: form.desc,
-            status: form.status ? 1 : 2
+            description: form.desc,
+            is_active: form.status === true
           }
           const response =
             dialogType.value === 'add'
               ? await addRole(roleData)
               : await updateRole(Number(form.id), roleData)
-          if (response.code === 200) {
+          // axios 默认解包 → response 是 RoleResponse 对象本身（无 code 字段）
+          // 没 reject 就视为成功
+          if (response && (response.id || response.name)) {
             ElMessage.success(dialogType.value === 'add' ? '新增成功' : '修改成功')
             dialogVisible.value = false
             refresh()
           } else {
-            ElMessage.error(response.message || '操作失败')
+            ElMessage.error('操作失败')
           }
         } catch (err) {
           console.error('提交表单出错:', err)

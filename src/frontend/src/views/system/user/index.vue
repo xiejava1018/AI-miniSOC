@@ -100,7 +100,6 @@
                   :key="item.id"
                   :label="item.name"
                   :value="item.id"
-                  :disabled="item.status !== 1"
                 />
               </ElSelect>
             </ElFormItem>
@@ -117,7 +116,7 @@
                   :key="item.id"
                   :label="item.name"
                   :value="item.id"
-                  :disabled="item.status !== 1"
+                  :disabled="item.is_active === false"
                 />
               </ElSelect>
             </ElFormItem>
@@ -372,13 +371,16 @@
     try {
       const res = await getDepartmentList({ page: 1, pageSize: 200 })
       const r: any = res as any
-      const list = Array.isArray(r?.data?.records)
-        ? r.data.records
-        : Array.isArray(r?.data)
-          ? r.data
-          : Array.isArray(r)
-            ? r
-            : []
+      // 后端 DepartmentListResponse 字段是 items（不是 records）
+      const list = Array.isArray(r?.data?.items)
+        ? r.data.items
+        : Array.isArray(r?.data?.records)
+          ? r.data.records
+          : Array.isArray(r?.data)
+            ? r.data
+            : Array.isArray(r)
+              ? r
+              : []
       departmentList.value = list
     } catch (err) {
       console.error('获取部门列表出错:', err)
@@ -391,13 +393,16 @@
     try {
       const res = await getRoleList({ page: 1, pageSize: 200 })
       const r: any = res as any
-      const list = Array.isArray(r?.data?.records)
-        ? r.data.records
-        : Array.isArray(r?.data)
-          ? r.data
-          : Array.isArray(r)
-            ? r
-            : []
+      // 后端 RoleListResponse 字段是 items（不是 records）
+      const list = Array.isArray(r?.data?.items)
+        ? r.data.items
+        : Array.isArray(r?.data?.records)
+          ? r.data.records
+          : Array.isArray(r?.data)
+            ? r.data
+            : Array.isArray(r)
+              ? r
+              : []
       roleList.value = list
     } catch (err) {
       console.error('获取角色列表出错:', err)

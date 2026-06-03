@@ -41,9 +41,9 @@ def require_menu_permission(menu_path: str) -> Callable:
         menu_path: 菜单路径
 
     用法：
-        @router.get("/system/users")
+        @router.get("/api/v1/users")
         async def get_users(
-            current_user: User = Depends(require_menu_permission("system-users"))
+            current_user: User = Depends(require_menu_permission("user"))
         ):
             ...
     """
