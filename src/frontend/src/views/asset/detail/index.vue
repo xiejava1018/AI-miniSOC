@@ -715,14 +715,58 @@
   .asset-detail-page {
     padding: 0;
 
+    // 关键布局约束:
+    // .art-full-height 已是 display:flex; flex-direction:column; height: var(--art-full-height)
+    // 顶部 3 个区块必须 flex-shrink:0 保持自身内容高度,Tab 区域用 flex:1 + overflow:hidden 占满剩余
+    // 高度,TabPane 内部滚动 —— 这样切换 Tab 时顶部信息/摘要不会被压缩、不会出现页面级滚动条。
     .detail-header {
+      flex-shrink: 0;
       margin-bottom: 12px;
     }
 
     .info-card,
-    .summary-card,
-    .tab-card {
+    .summary-card {
+      flex-shrink: 0;
       margin-bottom: 16px;
+    }
+
+    .tab-card {
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 0;
+      overflow: hidden;
+
+      // ElCard body 也要 flex,否则 el-tabs 拿不到高度
+      :deep(.el-card__body) {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      // ElTabs 整体填满 card body
+      :deep(.el-tabs) {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      // Tab 内容区(去掉默认 100% 让 flex 子项接管)
+      :deep(.el-tabs__content) {
+        flex: 1 1 0;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      // 每个 Pane 自身滚动
+      :deep(.el-tab-pane) {
+        height: 100%;
+        overflow-y: auto;
+      }
     }
 
     .card-header {
