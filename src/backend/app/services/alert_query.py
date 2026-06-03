@@ -150,3 +150,72 @@ class AlertQueryService:
                 {"key": "SSHD: Attempt to login using a non-existent user", "doc_count": 6}
             ]
         }
+
+    def get_alert_trend(
+        self,
+        hours: int = 24,
+        interval_hours: int = 1
+    ) -> List[Dict[str, Any]]:
+        """
+        获取近 N 小时告警趋势(按 interval_hours 桶聚合)
+
+        真实实现:走 OpenSearch date_histogram
+        mock 实现:返回 24 个伪数据点,数字按小时波动
+
+        Returns:
+            list of {"hour": ISO8601, "total": int, "critical": int}
+        """
+        from datetime import timedelta
+
+        # 真实接入后改为 OpenSearch date_histogram 聚合
+        # 这里 mock:按小时生成 24 个数据点(0-23 小时前)
+        now = datetime.utcnow()
+        # 模拟数据:总数在 [0, 15] 之间波动,高危在 [0, 3] 之间
+        mock_buckets = [
+            (3, 0), (5, 1), (8, 0), (12, 2), (15, 3), (10, 1),  # 0-5 时
+            (6, 0), (4, 0), (7, 1), (11, 2), (9, 1), (13, 2),  # 6-11 时
+            (14, 3), (10, 1), (8, 0), (5, 0), (7, 1), (9, 2),  # 12-17 时(工作时段)
+            (11, 2), (6, 1), (4, 0), (3, 0), (5, 1), (7, 2),  # 18-23 时
+        ]
+
+        result = []
+        for i in range(hours):
+            bucket_time = now - timedelta(hours=(hours - 1 - i))
+            total, critical = mock_buckets[i % len(mock_buckets)]
+            result.append({
+                "hour": bucket_time.isoformat() + "Z",
+                "total": total,
+                "critical": critical,
+            })
+        return result
+
+    def get_top_alert_assets(
+        self,
+        hours: int = 24,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        获取近 N 小时告警最多的资产(IP 维度)
+
+        真实实现:OpenSearch top by agent.ip,带 critical 计数
+        mock 实现:返回硬编码的 IP 列表
+
+        Returns:
+            list of {"ip", "alert_count", "critical_count", "last_alert_at"}
+        """
+        from datetime import timedelta
+
+        now = datetime.utcnow()
+        mock_top = [
+            {"ip": "192.168.0.2", "alert_count": 312, "critical_count": 8,
+             "last_alert_at": (now - timedelta(minutes=3)).isoformat() + "Z"},
+            {"ip": "192.168.0.30", "alert_count": 145, "critical_count": 3,
+             "last_alert_at": (now - timedelta(minutes=12)).isoformat() + "Z"},
+            {"ip": "192.168.0.35", "alert_count": 87, "critical_count": 1,
+             "last_alert_at": (now - timedelta(hours=1)).isoformat() + "Z"},
+            {"ip": "192.168.0.42", "alert_count": 56, "critical_count": 0,
+             "last_alert_at": (now - timedelta(hours=2)).isoformat() + "Z"},
+            {"ip": "192.168.0.50", "alert_count": 23, "critical_count": 0,
+             "last_alert_at": (now - timedelta(hours=3)).isoformat() + "Z"},
+        ]
+        return mock_top[:limit]

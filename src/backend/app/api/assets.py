@@ -10,6 +10,7 @@ from app.models import Asset
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse
 from app.services.asset_sync import AssetSyncService
 from app.services.asset_summary import AssetSummaryService
+from app.services.asset_overview import AssetOverviewService
 import uuid
 
 router = APIRouter()
@@ -90,6 +91,21 @@ async def list_assets(
         skip=skip,
         limit=limit
     )
+
+
+@router.get("/overview")
+@router.get("/overview/")
+async def get_asset_overview(db: Session = Depends(get_db)):
+    """
+    获取资产概览聚合数据(SOC 风险全貌)
+
+    一次性返回 4 个 KPI + 3 张分布图 + 24h 告警趋势 + 2 张 Top 表,
+    供「资产概览」页 + Dashboard console 入口卡使用。
+
+    任意子步骤失败不影响其他字段,失败字段降级为 0 / 空。
+    """
+    service = AssetOverviewService(db)
+    return service.build_overview()
 
 
 @router.get("/{asset_id}", response_model=AssetResponse)
