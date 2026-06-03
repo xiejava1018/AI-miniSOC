@@ -7,6 +7,8 @@
 
 import base64
 import io
+import os
+import platform
 import random
 import string
 import time
@@ -19,6 +21,60 @@ from PIL import Image, ImageDraw, ImageFont
 _captcha_store: dict[str, Tuple[str, float]] = {}
 CAPTCHA_EXPIRE_SECONDS = 300  # 5分钟过期
 CAPTCHA_LENGTH = 4
+CAPTCHA_FONT_SIZE = 36  # 跨平台统一字号（之前 macOS 28 偏小, Windows/Linux fallback 10 更小）
+
+
+def _candidate_font_paths() -> list[str]:
+    """
+    跨平台常见等宽字体路径，按优先级排序。
+
+    历史: 之前硬编码 /System/Library/Fonts/Supplemental/Courier New.ttf,
+    只在 macOS 命中 (28px); Windows/Linux 走 ImageFont.load_default() (10px),
+    导致验证码字看起来比 macOS 小很多。
+    """
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        return [
+            "/System/Library/Fonts/Supplemental/Courier New.ttf",
+            "/System/Library/Fonts/Courier New.ttf",
+            "/Library/Fonts/Courier New.ttf",
+            "/System/Library/Fonts/Menlo.ttc",
+            "/System/Library/Fonts/Monaco.ttf",
+        ]
+    if system == "Windows":
+        return [
+            "C:/Windows/Fonts/consola.ttf",       # Consolas (等宽)
+            "C:/Windows/Fonts/cour.ttf",          # Courier New
+            "C:/Windows/Fonts/courier.ttf",       # Courier New (alt)
+            "C:/Windows/Fonts/lucon.ttf",         # Lucida Console
+            "C:/Windows/Fonts/arial.ttf",         # Arial (非等宽 fallback)
+        ]
+    # Linux (Debian/Ubuntu/RHEL/Arch 主流包)
+    return [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+    ]
+
+
+def _load_font(size: int = CAPTCHA_FONT_SIZE) -> ImageFont.ImageFont:
+    """
+    加载跨平台字体：按候选路径依次尝试，失败则用 load_default 兜底。
+
+    兜底字号也按目标 size 给 Pillow 默认字体升档位（10/12/15/20/26 ...）
+    虽然不能完美对齐 truetype，但至少不会像之前那样永远是 10px。
+    """
+    for path in _candidate_font_paths():
+        if os.path.exists(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except Exception:
+                continue
+    # Pillow load_default 不支持 size 参数; 用 bitmap font 加 anchor 对齐居中
+    return ImageFont.load_default()
 
 
 def _generate_code(length: int = CAPTCHA_LENGTH) -> str:
@@ -27,17 +83,13 @@ def _generate_code(length: int = CAPTCHA_LENGTH) -> str:
     return ''.join(random.choices(chars, k=length))
 
 
-def _generate_image(code: str, width: int = 120, height: int = 40) -> Image.Image:
+def _generate_image(code: str, width: int = 150, height: int = 50) -> Image.Image:
     """生成验证码图片"""
     # 创建图片
     img = Image.new('RGB', (width, height), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
 
-    # 尝试使用等宽字体
-    try:
-        font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Courier New.ttf", 28)
-    except Exception:
-        font = ImageFont.load_default()
+    font = _load_font(CAPTCHA_FONT_SIZE)
 
     # 添加干扰线
     for _ in range(5):
@@ -56,8 +108,8 @@ def _generate_image(code: str, width: int = 120, height: int = 40) -> Image.Imag
     # 绘制文字
     char_width = width // len(code)
     for i, char in enumerate(code):
-        x = i * char_width + random.randint(5, 10)
-        y = random.randint(2, 8)
+        x = i * char_width + random.randint(8, 14)
+        y = random.randint(4, 10)
         color = (random.randint(30, 120), random.randint(30, 120), random.randint(30, 120))
         draw.text((x, y), char, font=font, fill=color)
 
