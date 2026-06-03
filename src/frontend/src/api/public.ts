@@ -14,6 +14,7 @@ export interface PublicSystemInfo {
   system_logo: string
   system_copyright: string
   system_description: string
+  allowed_hosts: string  // 允许的主机列表，"all" 表示允许所有，否则为逗号分隔的域名列表
 }
 
 /**

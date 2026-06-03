@@ -23,6 +23,7 @@ PUBLIC_SYSTEM_KEYS = {
     "system_logo": "",
     "system_copyright": "© 2026 AI-miniSOC",
     "system_description": "AI-driven mini Security Operation Center",
+    "allowed_hosts": "all",  # 默认允许所有主机，可在系统配置中修改为逗号分隔的域名列表
 }
 
 

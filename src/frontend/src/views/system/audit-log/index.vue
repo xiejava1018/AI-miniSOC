@@ -172,7 +172,7 @@
       EXPORT: 'info',
       IMPORT: 'info',
     }
-    return map[action] || 'info'
+    return (map[action] || "info") as "info" | "primary" | "success" | "warning" | "danger"
   }
 
   // JSON 格式化
@@ -334,13 +334,13 @@
     exportLoading.value = true
     try {
       const params: Record<string, any> = {
-        user_id: searchParams.user_id,
-        username: searchParams.username,
-        action: searchParams.action,
-        resource_type: searchParams.resource_type,
-        status: searchParams.status,
-        start_date: searchParams.start_date,
-        end_date: searchParams.end_date,
+        user_id: (searchParams as any).user_id,
+        username: (searchParams as any).username,
+        action: (searchParams as any).action,
+        resource_type: (searchParams as any).resource_type,
+        status: (searchParams as any).status,
+        start_date: (searchParams as any).start_date,
+        end_date: (searchParams as any).end_date,
       }
       // 清理空值
       Object.keys(params).forEach((k) => {

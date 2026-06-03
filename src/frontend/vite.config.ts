@@ -14,10 +14,18 @@ import tailwindcss from '@tailwindcss/vite'
 export default ({ mode }: { mode: string }) => {
   const root = process.cwd()
   const env = loadEnv(mode, root)
-  const { VITE_VERSION, VITE_PORT, VITE_BASE_URL, VITE_API_URL, VITE_API_PROXY_URL } = env
+  const { VITE_VERSION, VITE_PORT, VITE_BASE_URL, VITE_API_URL, VITE_API_PROXY_URL, VITE_ALLOWED_HOSTS } = env
 
   console.log(`🚀 API_URL = ${VITE_API_URL}`)
   console.log(`🚀 VERSION = ${VITE_VERSION}`)
+  console.log(`🚀 ALLOWED_HOSTS = ${VITE_ALLOWED_HOSTS || 'all'}`)
+
+  // 处理 allowed_hosts 配置
+  let allowedHosts: string | true | string[] = true  // 默认允许所有主机
+  if (VITE_ALLOWED_HOSTS && VITE_ALLOWED_HOSTS !== 'all') {
+    // 将逗号分隔的字符串转换为数组
+    allowedHosts = VITE_ALLOWED_HOSTS.split(',').map(h => h.trim())
+  }
 
   return defineConfig({
     define: {
@@ -32,7 +40,8 @@ export default ({ mode }: { mode: string }) => {
           changeOrigin: true
         }
       },
-      host: true
+      host: true,
+      allowedHosts: allowedHosts
     },
     // 路径别名
     resolve: {
