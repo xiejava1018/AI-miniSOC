@@ -116,6 +116,8 @@ class RoleService:
             role.name = role_data.name
         if role_data.description is not None:
             role.description = role_data.description
+        if role_data.is_active is not None:
+            role.is_active = role_data.is_active
 
         # 更新菜单权限
         if role_data.menu_ids is not None:
