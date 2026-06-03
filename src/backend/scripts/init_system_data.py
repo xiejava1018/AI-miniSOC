@@ -167,6 +167,25 @@ def init_menus(db: Session):
 
     db.commit()
 
+    # 创建资产管理子菜单
+    asset_menu = db.query(Menu).filter(Menu.name == "资产管理").first()
+    if asset_menu:
+        asset_sub_menus = [
+            # 资产概览(2026-06-03 引入)放第一位作为高频入口
+            {"parent_id": asset_menu.id, "name": "资产概览", "path": "overview", "icon": "ri:dashboard-2-line", "sort_order": 1, "is_visible": True, "component": "/asset/overview/index"},
+            {"parent_id": asset_menu.id, "name": "资产列表", "path": "list", "icon": "ri:list-unordered", "sort_order": 2, "is_visible": True, "component": "/asset/list/index", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "新增", "authMark": "add"}, {"title": "编辑", "authMark": "edit"}, {"title": "删除", "authMark": "delete"}, {"title": "Wazuh同步", "authMark": "sync"}]},
+            {"parent_id": asset_menu.id, "name": "资产详情", "path": "detail/:id", "icon": "", "sort_order": 3, "is_visible": False, "component": "/asset/detail/index"}
+        ]
+
+        for menu_data in asset_sub_menus:
+            existing = db.query(Menu).filter(Menu.path == menu_data["path"], Menu.parent_id == asset_menu.id).first()
+            if not existing:
+                menu = Menu(**menu_data)
+                db.add(menu)
+                print(f"  ✅ 创建资产管理子菜单: {menu_data['name']}")
+
+    db.commit()
+
     # 创建系统管理子菜单
     system_menu = db.query(Menu).filter(Menu.name == "系统管理").first()
     if system_menu:
@@ -185,7 +204,7 @@ def init_menus(db: Session):
             if not existing:
                 menu = Menu(**menu_data)
                 db.add(menu)
-                print(f"  ✅ 创建子菜单: {menu_data['name']}")
+                print(f"  ✅ 创建系统管理子菜单: {menu_data['name']}")
 
     db.commit()
     print("菜单初始化完成！")

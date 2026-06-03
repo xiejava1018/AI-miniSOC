@@ -20,6 +20,7 @@ export enum RoutesAlias {
   Dict = '/system/dict', // 字典管理
   SystemConfig = '/system/config', // 系统配置
   Assets = '/asset/list/index', // 资产管理
+  AssetOverview = '/asset/overview/index', // 资产概览
   AssetDetail = '/asset/detail/index', // 资产详情
   Incidents = '/placeholder', // 事件管理（占位）
   Alerts = '/placeholder', // 告警管理（占位）

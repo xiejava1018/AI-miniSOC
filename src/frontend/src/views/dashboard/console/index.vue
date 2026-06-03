@@ -21,6 +21,9 @@
       </el-col>
     </el-row>
 
+    <!-- SOC 资产健康度(末尾追加,不破坏原 6 个模块) -->
+    <AssetHealth />
+
     <AboutProject />
   </div>
 </template>
@@ -31,6 +34,7 @@
   import SalesOverview from './modules/sales-overview.vue'
   import Dynamic from './modules/dynamic-stats.vue'
   import TodoList from './modules/todo-list.vue'
+  import AssetHealth from './modules/asset-health.vue'
   import AboutProject from './modules/about-project.vue'
 
   defineOptions({ name: 'Console' })

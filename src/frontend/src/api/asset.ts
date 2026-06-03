@@ -62,6 +62,21 @@ export const getAssetSummary = (id: string): Promise<Http.BaseResponse<Api.Asset
   })
 }
 
+/**
+ * 获取资产概览聚合数据
+ *
+ * 后端:`GET /api/v1/assets/overview`
+ * 字段定义见 `Api.Asset.AssetOverview` 与 docs/design/2026-06-03-asset-overview-design.md §5.1
+ * 1 次调用产出 KPI + 3 张分布 + 24h 趋势 + 2 张 Top 表
+ * 任意子步骤失败字段降级为 0/空,不影响整体响应
+ */
+export const getAssetOverview = (): Promise<Http.BaseResponse<Api.Asset.AssetOverview>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/overview`,
+    keepFullResponse: true
+  })
+}
+
 export const addAsset = (data: any): Promise<any> => {
   return httpClient.post({ url: `${API_PREFIX}`, data })
 }

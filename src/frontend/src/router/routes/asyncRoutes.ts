@@ -125,6 +125,17 @@ export const asyncRoutes: AppRouteRecord[] = [
     },
     children: [
       {
+        // 资产概览(SOC 风险全貌),放在第一位作为高频入口
+        path: 'overview',
+        name: 'AssetOverview',
+        component: RoutesAlias.AssetOverview,
+        meta: {
+          title: '资产概览',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      },
+      {
         path: 'list',
         name: 'AssetList',
         component: RoutesAlias.Assets,

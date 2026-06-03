@@ -287,6 +287,65 @@ declare namespace Api {
       /** 标签 */
       tags: { key: string; value: string }[]
     }
+
+    /** 资产概览 - KPI 区(概览页 §5.1) */
+    interface AssetOverviewKpi {
+      total_assets: number
+      high_risk_assets: number
+      alerts_24h: number
+      open_incidents: number
+    }
+
+    /** 资产概览 - 分布图统一项 */
+    interface AssetDistributionItem {
+      key: string
+      count: number
+    }
+
+    /** 资产概览 - 分布图 */
+    interface AssetOverviewDistribution {
+      by_type: AssetDistributionItem[]
+      by_status: AssetDistributionItem[]
+      by_criticality: AssetDistributionItem[]
+    }
+
+    /** 资产概览 - 24h 告警趋势(1h 桶) */
+    interface AssetOverviewTrendPoint {
+      hour: string
+      total: number
+      critical: number
+    }
+
+    /** 资产概览 - Top 10 高危资产(D7 评分) */
+    interface AssetOverviewTopRisky {
+      id: string
+      ip: string
+      name: string
+      asset_type: string | null
+      criticality: string | null
+      score: number
+      factors: string[]
+    }
+
+    /** 资产概览 - Top 10 告警资产 */
+    interface AssetOverviewTopAlert {
+      id: string | null
+      ip: string
+      name: string
+      asset_type: string | null
+      alert_24h: number
+      alert_critical_24h: number
+      last_alert_at: string | null
+    }
+
+    /** 资产概览 - 完整数据(概览页 + console 入口卡共用) */
+    interface AssetOverview {
+      kpi: AssetOverviewKpi
+      distribution: AssetOverviewDistribution
+      alert_trend_24h: AssetOverviewTrendPoint[]
+      top_risky_assets: AssetOverviewTopRisky[]
+      top_alert_assets: AssetOverviewTopAlert[]
+    }
   }
 
   /** 部门管理 */
