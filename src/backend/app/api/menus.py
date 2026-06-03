@@ -38,13 +38,18 @@ def _build_menu_with_auth(menu, role_perms: dict) -> dict:
         'isEnable': data.get('is_visible', True),
         'keepAlive': True,
         'authList': auth_list,
+        # 菜单本身已授权（能进入这个端点说明角色拥有该菜单）
+        'hasPermission': True,
         'isHide': False,
         'isHideTab': False,
         'isIframe': False,
         'isFirstLevel': False,
     }
+    # 始终暴露 children 字段（前端 el-tree 依赖此字段判断是否叶子）
     if data.get('children'):
         data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in data['children']]
+    else:
+        data['children'] = []
     return data
 
 
@@ -64,13 +69,17 @@ def _build_child_menu_with_auth(child_data: dict, role_perms: dict) -> dict:
         'isEnable': child_data.get('is_visible', True),
         'keepAlive': True,
         'authList': auth_list,
+        'hasPermission': True,
         'isHide': False,
         'isHideTab': False,
         'isIframe': False,
         'isFirstLevel': False,
     }
+    # 始终暴露 children 字段（前端 el-tree 依赖此字段判断是否叶子）
     if child_data.get('children'):
         child_data['children'] = [_build_child_menu_with_auth(c, role_perms) for c in child_data['children']]
+    else:
+        child_data['children'] = []
     return child_data
 
 

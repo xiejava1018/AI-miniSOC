@@ -316,19 +316,19 @@ INSERT INTO soc_menus (parent_id, name, path, icon, sort_order) VALUES
 
 -- Get the ID of system management directory
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order)
-SELECT id, '用户管理', '/system/users', 'Users', 1
+SELECT id, '用户管理', '/system/user', 'Users', 1
 FROM soc_menus WHERE name = '系统管理';
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order)
-SELECT id, '角色管理', '/system/roles', 'Shield', 2
+SELECT id, '角色管理', '/system/role', 'Shield', 2
 FROM soc_menus WHERE name = '系统管理';
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order)
-SELECT id, '菜单管理', '/system/menus', 'Menu', 3
+SELECT id, '菜单管理', '/system/menu', 'Menu', 3
 FROM soc_menus WHERE name = '系统管理';
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order)
-SELECT id, '审计日志', '/system/audit', 'FileText', 4
+SELECT id, '审计日志', '/system/audit-log', 'FileText', 4
 FROM soc_menus WHERE name = '系统管理';
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order)

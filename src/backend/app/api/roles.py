@@ -16,6 +16,9 @@ from app.schemas.role import (
     RoleMenusRequest
 )
 from app.services.role_service import RoleService
+from app.services.menu_service import MenuService
+# 复用 menus.py 已有的「树形 + meta 嵌套」构建器（项目既定契约）
+from app.api.menus import _build_menu_with_auth
 
 
 router = APIRouter(tags=["角色管理"])
@@ -177,32 +180,28 @@ async def get_role_menus(
     current_user: UserResponseSchema = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
-    """获取角色的菜单列表（含按钮权限）"""
-    service = RoleService(db)
-    try:
-        menus = service.get_role_menus(role_id)
-        perms = service.get_role_menu_permissions(role_id)
+    """获取角色的菜单列表（含按钮权限）
 
-        result = []
-        for menu in menus:
-            menu_dict = menu.to_dict()
-            # 合并按钮权限
-            available_perms = menu_dict.get('permissions') or []
-            granted_perms = perms.get(menu.id, [])
-            if available_perms:
-                menu_dict['authList'] = [
-                    {
-                        **p,
-                        'hasPermission': p.get('authMark') in granted_perms
-                    }
-                    for p in available_perms
-                ]
-            menu_dict['hasPermission'] = True  # 菜单本身已授权
-            result.append(menu_dict)
+    返回结构与 GET /api/v1/menus/tree 一致：树形（children 嵌套）+ meta.{title,icon,authList,hasPermission}。
+    前端 src/views/system/role/auth.vue 依赖 meta.authList 与 children 数组渲染 el-tree。
+    """
+    service = RoleService(db)
+    menu_service = MenuService(db)
+    try:
+        # 1. 角色直接分配的菜单 ID 集合（独立 query，避免触发 SQLAlchemy 关系
+        #    重新加载把 children 关系清空）
+        role = service.get_role_by_id(role_id)
+        role_menu_ids = [m.id for m in role.menus]
+        # 2. 按角色过滤的顶级菜单树（_build_tree 已通过 parent/children 关系挂好嵌套）
+        top_menus = menu_service.get_menu_tree(role_id=role_id)
+        # 3. 角色在各菜单上的按钮权限映射
+        perms = service.get_role_menu_permissions(role_id)
+        # 4. 复用 menus.py 的「树形 + meta 嵌套」构建器，附加 authList 与 hasPermission
+        result = [_build_menu_with_auth(m, perms) for m in top_menus]
 
         return {
             "role_id": role_id,
-            "menu_ids": [menu.id for menu in menus],
+            "menu_ids": role_menu_ids,
             "menus": result
         }
     except ValueError as e:

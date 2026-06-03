@@ -18,41 +18,41 @@ INSERT INTO soc_menus (parent_id, name, path, icon, sort_order, is_visible)
 SELECT
     (SELECT id FROM soc_menus WHERE name='系统管理'),
     '用户管理',
-    '/system/users',
+    '/system/user',
     'User',
     1,
     true
-WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/users');
+WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/user');
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order, is_visible)
 SELECT
     (SELECT id FROM soc_menus WHERE name='系统管理'),
     '角色管理',
-    '/system/roles',
+    '/system/role',
     'Lock',
     2,
     true
-WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/roles');
+WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/role');
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order, is_visible)
 SELECT
     (SELECT id FROM soc_menus WHERE name='系统管理'),
     '菜单管理',
-    '/system/menus',
+    '/system/menu',
     'Menu',
     3,
     true
-WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/menus');
+WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/menu');
 
 INSERT INTO soc_menus (parent_id, name, path, icon, sort_order, is_visible)
 SELECT
     (SELECT id FROM soc_menus WHERE name='系统管理'),
     '审计日志',
-    '/system/audit',
+    '/system/audit-log',
     'Document',
     4,
     true
-WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/audit');
+WHERE NOT EXISTS (SELECT 1 FROM soc_menus WHERE path='/system/audit-log');
 
 -- 显示插入结果
 SELECT id, parent_id, name, path, icon, sort_order FROM soc_menus ORDER BY sort_order;

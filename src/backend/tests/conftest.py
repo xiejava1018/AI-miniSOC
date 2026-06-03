@@ -77,6 +77,10 @@ def sample_menus(db_session: Session) -> list:
 
     路径要和 ``app/api/users.py`` 实际校验的 key（"users"）一致；
     多 seed 几个常用 key（roles/menus/departments）便于后续 endpoint 测试。
+
+    NOTE: path 故意保留复数历史值，与 ``test_role_menus_api.py`` 的
+    ``Menu.path == "users"`` 断言耦合。菜单 path 单数化回归由独立的
+    ``test_menu_path_singular.py`` 覆盖（自带 seed，不依赖本 fixture）。
     """
     from app.models.menu import Menu
 
