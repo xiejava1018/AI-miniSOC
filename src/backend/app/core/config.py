@@ -94,6 +94,16 @@ class Settings(BaseSettings):
     # 日志配置
     LOG_LEVEL: str = "INFO"
 
+    # Claude Code CLI 配置（通过本地 claude 子进程调用）
+    CLAUDE_CLI_PATH: str = "claude"  # 绝对路径或 PATH 中可执行
+    CLAUDE_CLI_MODEL: str = "sonnet"  # 别名或完整 ID（claude-opus-4-8 等）
+    CLAUDE_CLI_TIMEOUT: int = 300  # 单次生成超时（秒）
+    CLAUDE_CLI_WORKSPACE: str = ""  # AI 工作目录（默认临时目录）
+    CLAUDE_CLI_EFFORT: str = "medium"  # low|medium|high|xhigh|max
+    CLAUDE_CLI_ALLOWED_TOOLS: str = ""  # 逗号分隔的工具白名单；空=默认
+    CLAUDE_CLI_DANGEROUSLY_SKIP: bool = False  # 仅在隔离环境开启
+    CLAUDE_CLI_NO_PERSIST: bool = True  # True=用 --no-session-persistence，CLI 不留本地 session
+
     class Config:
         env_file = ".env"
         case_sensitive = True
