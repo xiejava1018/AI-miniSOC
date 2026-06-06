@@ -9,6 +9,7 @@
 """
 
 import logging
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,7 +40,7 @@ def _to_out(n) -> NotificationOut:
 async def list_notifications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    is_read: bool | None = Query(None),
+    is_read: Optional[bool] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

@@ -3,17 +3,13 @@
 提供密码哈希、配置加密解密、密码强度验证等功能
 """
 
-from passlib.context import CryptContext
+import bcrypt
 from cryptography.fernet import Fernet
 import re
 import secrets
 import string
 
 from app.core.config import settings
-
-
-# 密码哈希上下文（bcrypt算法，work factor 12）
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Fernet加密器（用于敏感配置加密）
 # 使用环境变量中的ENCRYPTION_KEY，如果不存在则使用SECRET_KEY
@@ -45,7 +41,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: 密码是否匹配
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    # bcrypt有72字节限制，超过的部分会被忽略，所以需要手动截断
+    password_bytes = plain_password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    return bcrypt.checkpw(password_bytes, hashed_password.encode('utf-8'))
 
 
 def get_password_hash(password: str) -> str:
@@ -58,7 +58,11 @@ def get_password_hash(password: str) -> str:
     Returns:
         str: 哈希后的密码（bcrypt，work factor 12）
     """
-    return pwd_context.hash(password)
+    # bcrypt有72字节限制，超过的部分会被忽略，所以需要手动截断
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode('utf-8')
 
 
 def encrypt_config(value: str) -> str:

@@ -133,6 +133,9 @@ def create_captcha() -> Tuple[str, str]:
 
     # 存储验证码
     _captcha_store[key] = (code.upper(), time.time() + CAPTCHA_EXPIRE_SECONDS)
+    
+    print(f"[Captcha] 创建验证码: key={key}, code={code.upper()}")
+    print(f"[Captcha] 当前验证码存储: {_captcha_store.keys()}")
 
     # 清理过期验证码
     _cleanup_expired()
@@ -151,18 +154,37 @@ def verify_captcha(key: str, code: str) -> bool:
     Returns:
         是否验证通过
     """
+    print(f"[Captcha] 验证请求: key={key}, code={code}")
+    print(f"[Captcha] 当前验证码存储: {_captcha_store.keys()}")
+    
     if not key or not code:
+        print(f"[Captcha] 失败: 缺少key或code")
         return False
 
-    stored = _captcha_store.pop(key, None)
+    # 不使用pop()，这样验证失败后验证码还可以再次尝试
+    stored = _captcha_store.get(key)
     if not stored:
+        print(f"[Captcha] 失败: key不存在")
         return False
 
     stored_code, expire = stored
+    print(f"[Captcha] 存储的code: {stored_code}, expire: {expire}, 当前时间: {time.time()}")
+    
     if time.time() > expire:
+        print(f"[Captcha] 失败: 已过期")
+        # 过期了就删除
+        _captcha_store.pop(key, None)
         return False
 
-    return stored_code == code.upper().strip()
+    result = stored_code == code.upper().strip()
+    print(f"[Captcha] 验证结果: {result} (存储: {stored_code}, 输入: {code.upper().strip()})")
+    
+    # 只有验证成功才删除验证码
+    if result:
+        _captcha_store.pop(key, None)
+        print(f"[Captcha] 验证成功，已删除验证码")
+    
+    return result
 
 
 def _cleanup_expired():
