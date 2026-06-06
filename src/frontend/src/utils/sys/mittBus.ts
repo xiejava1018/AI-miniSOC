@@ -57,6 +57,8 @@ type Events = {
   openLockScreen: void
   // 打开编辑信息对话框事件 - 无参数
   openEditInfoDialog: void
+  // 打开通知面板事件 - 无参数
+  openNotice: void
 }
 
 // 创建类型安全的事件总线实例

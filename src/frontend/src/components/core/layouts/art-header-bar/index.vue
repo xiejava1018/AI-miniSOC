@@ -82,6 +82,31 @@
           @click="toggleFullScreen"
         />
 
+        <!-- Art Bot + 通知（上游 art-chat-window / art-notification 全局挂在 App.vue） -->
+        <ElTooltip content="Art Bot · 与 AI 对话" placement="bottom" :show-after="300">
+          <ArtIconButton
+            v-if="shouldShowChat"
+            icon="ri:robot-line"
+            class="chat-button"
+            @click="openChat"
+          />
+        </ElTooltip>
+
+        <ElTooltip content="站内通知" placement="bottom" :show-after="300">
+          <ElBadge
+            v-if="shouldShowNotice"
+            :value="notifStore.unreadCount"
+            :hidden="notifStore.unreadCount === 0"
+            :max="99"
+          >
+            <ArtIconButton
+              icon="ri:notification-3-line"
+              class="notice-button relative"
+              @click="openNotice"
+            />
+          </ElBadge>
+        </ElTooltip>
+
         <!-- 设置按钮 -->
         <div v-if="shouldShowSettings">
           <ElPopover :visible="showSettingGuide" placement="bottom-start" :width="190" :offset="0">
@@ -126,6 +151,7 @@
   import { useSettingStore } from '@/store/modules/setting'
   import { useMenuStore } from '@/store/modules/menu'
   import { useSystemStore } from '@/store/modules/system'
+  import { useNotificationStore } from '@/store/modules/notification'
   import { mittBus } from '@/utils/sys'
   import { themeAnimation } from '@/utils/ui/animation'
   import { useCommon } from '@/hooks/core/useCommon'
@@ -143,6 +169,7 @@
   const settingStore = useSettingStore()
   const menuStore = useMenuStore()
   const systemStore = useSystemStore()
+  const notifStore = useNotificationStore()
 
   // 顶部栏功能配置
   const {
@@ -152,7 +179,9 @@
     shouldShowGlobalSearch,
     shouldShowFullscreen,
     shouldShowSettings,
-    shouldShowThemeToggle
+    shouldShowThemeToggle,
+    shouldShowChat,
+    shouldShowNotice
   } = useHeaderBar()
 
   const { menuOpen, systemThemeColor, showSettingGuide, menuType, isDark, tabStyle } =
@@ -216,6 +245,20 @@
     if (showSettingGuide.value) {
       settingStore.hideSettingGuide()
     }
+  }
+
+  /**
+   * 打开 Art Bot 聊天窗口
+   */
+  const openChat = (): void => {
+    mittBus.emit('openChat')
+  }
+
+  /**
+   * 打开通知面板
+   */
+  const openNotice = (): void => {
+    mittBus.emit('openNotice')
   }
 
   /**

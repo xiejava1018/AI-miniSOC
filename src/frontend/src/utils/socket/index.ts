@@ -39,7 +39,7 @@ export default class WebSocketClient {
   private isReconnecting: boolean = false
 
   private constructor(options: WebSocketOptions) {
-    this.url = options.url || (process.env.VUE_APP_LOGIN_WEBSOCKET as string)
+    this.url = options.url || (import.meta.env.VITE_APP_WS_URL as string) || ''
     this.messageHandler = options.messageHandler
     this.reconnectInterval = options.reconnectInterval ?? 20 * 1000
     this.heartbeatInterval = options.heartbeatInterval ?? 5 * 1000

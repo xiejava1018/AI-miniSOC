@@ -202,4 +202,8 @@ export interface HeaderBarFeatureConfig {
   settings: FeatureConfigItem
   /** 主题切换 */
   themeToggle: FeatureConfigItem
+  /** Art Bot 聊天入口 */
+  chatButton: FeatureConfigItem
+  /** 站内通知入口 */
+  noticeButton: FeatureConfigItem
 }

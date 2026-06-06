@@ -45,6 +45,14 @@ export const headerBarConfig: HeaderBarFeatureConfig = {
   themeToggle: {
     enabled: true,
     description: '主题切换功能（明暗主题）'
+  },
+  chatButton: {
+    enabled: true,
+    description: 'Art Bot 聊天入口（顶栏按钮 + 抽屉式聊天面板）'
+  },
+  noticeButton: {
+    enabled: true,
+    description: '站内通知入口（顶栏铃铛 + 未读数 + 抽屉列表）'
   }
 }
 

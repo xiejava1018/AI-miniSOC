@@ -92,6 +92,16 @@ export function useHeaderBar() {
     return isFeatureEnabled('themeToggle')
   })
 
+  // Art Bot 聊天按钮（M2 新增）
+  const shouldShowChat = computed(() => {
+    return isFeatureEnabled('chatButton')
+  })
+
+  // 站内通知按钮（M3 新增）
+  const shouldShowNotice = computed(() => {
+    return isFeatureEnabled('noticeButton')
+  })
+
   // 获取快速入口的最小宽度
   const fastEnterMinWidth = computed(() => {
     const config = getFeatureConfig('fastEnter')
@@ -165,6 +175,8 @@ export function useHeaderBar() {
     shouldShowFullscreen, // 是否显示全屏按钮
     shouldShowSettings, // 是否显示设置面板
     shouldShowThemeToggle, // 是否显示主题切换
+    shouldShowChat, // 是否显示 Art Bot
+    shouldShowNotice, // 是否显示站内通知
 
     // 配置相关
     fastEnterMinWidth, // 快速入口最小宽度
