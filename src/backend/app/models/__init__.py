@@ -23,6 +23,8 @@ from .rate_limit import RateLimit
 from .sync_task import SyncTask
 from .asset_change_log import AssetChangeLog
 from .dict import Dict
+from .chat import ChatSession, ChatMessage
+from .notification import Notification
 
 __all__ = [
     "Base",
@@ -48,4 +50,7 @@ __all__ = [
     "SyncTask",
     "AssetChangeLog",
     "Dict",
+    "ChatSession",
+    "ChatMessage",
+    "Notification",
 ]

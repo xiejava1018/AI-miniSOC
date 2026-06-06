@@ -1,13 +1,19 @@
 """
 Webhook 接收端点
 用于接收来自 Wazuh 的实时通知
+
+- POST /webhooks/wazuh                资产同步（已有）
+- POST /webhooks/wazuh/alert          严重告警（level >= 12）→ 触发站内通知
 """
 
 from fastapi import APIRouter, Request, HTTPException, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 from app.core.database import get_db
 from app.schemas.sync import WebhookPayload, WebhookResponse
 from app.services.asset_sync import AssetSyncService
+from app.services.notification_service import NotificationService
 from app.core.config import settings
 import logging
 
@@ -74,3 +80,73 @@ async def wazuh_webhook(
             message=str(e),
             asset_id=None
         )
+
+
+class AlertWebhookPayload(BaseModel):
+    """严重告警 webhook 负载
+
+    来源：Wazuh / 第三方 SIEM 在 level >= 12 时主动推送
+    """
+    agent_id: Optional[str] = None
+    rule_id: Optional[str] = None
+    rule_level: int = 0
+    rule_description: Optional[str] = None
+    full_log: Optional[str] = None
+    # 如需指定接收人；不传则广播给所有 admin
+    target_user_id: Optional[int] = None
+
+
+@router.post("/wazuh/alert", response_model=WebhookResponse)
+async def wazuh_alert_webhook(
+    payload: AlertWebhookPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_webhook_request),
+):
+    """严重告警 webhook：level >= 12 时触发站内通知 + WS 推送
+
+    目标用户：payload.target_user_id 指定；否则发给所有 is_admin=True 的用户。
+    """
+    if payload.rule_level < 12:
+        # 等级不够，直接忽略
+        return WebhookResponse(success=True, message="alert level below threshold, ignored")
+
+    # 解析目标用户
+    from sqlalchemy import select
+    from app.models.user import User, UserStatus
+
+    if payload.target_user_id is not None:
+        u = db.get(User, payload.target_user_id)
+        targets = [u] if (u and u.status == UserStatus.ACTIVE) else []
+    else:
+        # 广播给所有 active 用户中 is_admin=True 的
+        stmt = select(User).where(User.status == UserStatus.ACTIVE)
+        targets = [u for u in db.execute(stmt).scalars().all() if u.is_admin]
+
+    if not targets:
+        logger.warning("alert webhook: no active admin to notify")
+        return WebhookResponse(success=True, message="no active target users")
+
+    title = f"严重告警 L{payload.rule_level}：{payload.rule_description or '未知规则'}"
+    content = (payload.full_log or "")[:500]
+    link = f"/alerts?rule_id={payload.rule_id}" if payload.rule_id else "/alerts"
+
+    svc = NotificationService(db)
+    delivered = 0
+    for u in targets:
+        try:
+            await svc.create(
+                user_id=u.id,
+                type="alert",
+                title=title,
+                content=content,
+                link=link,
+            )
+            delivered += 1
+        except Exception as e:  # noqa: BLE001
+            logger.warning("alert webhook notify user=%s failed: %s", u.id, e)
+
+    return WebhookResponse(
+        success=True,
+        message=f"notified {delivered} user(s)",
+    )
