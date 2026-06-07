@@ -88,7 +88,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('code'),
     sa.UniqueConstraint('name')
     )
-    op.create_table('sync_tasks',
+    op.create_table('soc_sync_tasks',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('sync_type', sa.String(length=20), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=False),
@@ -102,7 +102,7 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_table('asset_change_logs',
+    op.create_table('soc_asset_change_logs',
     sa.Column('id', sa.UUID(), server_default=sa.text('gen_random_uuid()'), nullable=False),
     sa.Column('asset_id', sa.UUID(), nullable=False),
     sa.Column('sync_task_id', sa.UUID(), nullable=True),
@@ -112,7 +112,7 @@ def upgrade() -> None:
     sa.Column('new_value', sa.Text(), nullable=True),
     sa.Column('changed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.ForeignKeyConstraint(['asset_id'], ['soc_assets.id'], ondelete='CASCADE'),
-    sa.ForeignKeyConstraint(['sync_task_id'], ['sync_tasks.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['sync_task_id'], ['soc_sync_tasks.id'], ondelete='SET NULL'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('soc_asset_ports',
@@ -306,8 +306,8 @@ def downgrade() -> None:
     op.drop_table('soc_incidents')
     op.drop_table('soc_asset_tags')
     op.drop_table('soc_asset_ports')
-    op.drop_table('asset_change_logs')
-    op.drop_table('sync_tasks')
+    op.drop_table('soc_asset_change_logs')
+    op.drop_table('soc_sync_tasks')
     op.drop_table('soc_roles')
     op.drop_table('soc_menus')
     op.drop_table('soc_assets')

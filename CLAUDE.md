@@ -13,7 +13,7 @@ AI-miniSOC 是一个**AI驱动的微型安全运营中心**，集成了日志聚
 ### 后端 (Backend)
 | 技术 | 版本/说明 |
 |------|----------|
-| Python | 3.14 |
+| Python | 3.13 |
 | FastAPI | Web框架 |
 | SQLAlchemy | ORM |
 | PostgreSQL | 数据库 |
@@ -45,15 +45,21 @@ AI-miniSOC/
 ├── src/
 │   ├── backend/              # FastAPI 后端
 │   │   ├── app/
-│   │   │   ├── api/          # API路由 (auth, users, roles, menus, departments, assets, ...)
+│   │   │   ├── api/          # API路由 (auth, users, roles, menus, departments, assets, data_sync, ...)
 │   │   │   ├── core/         # 核心配置、认证、验证码、响应包装中间件
-│   │   │   ├── models/       # SQLAlchemy 模型 (19张表)
+│   │   │   ├── models/       # SQLAlchemy 模型 (24张表)
 │   │   │   ├── schemas/      # Pydantic Schema
-│   │   │   ├── services/     # 业务逻辑层
+│   │   │   ├── services/     # 业务逻辑层 (含 sync_handlers/)
 │   │   │   └── database.py   # 数据库连接
 │   │   ├── alembic/          # 数据库迁移
+│   │   ├── tests/            # 测试
 │   │   ├── main.py           # FastAPI 入口
 │   │   └── .env              # 环境变量 (不上传Git)
+│   │
+│   ├── collectors/           # 外部采集器 (Docker部署)
+│   │   ├── base/             # collector-framework 共享库
+│   │   ├── tplink/           # TP-Link 路由器资产采集器
+│   │   └── docker-compose.yaml
 │   │
 │   └── frontend/             # Vue3 前端 (art-design-pro-edge)
 │       ├── src/
@@ -106,7 +112,8 @@ AI-miniSOC/
 | 事件管理 | `app/api/incidents.py` | 安全事件管理 |
 | 告警管理 | `app/api/alerts.py` | 告警查询 |
 | AI分析 | `app/api/ai.py` | AI日志分析 |
-| 同步任务 | `app/api/sync.py` | 资产同步 |
+| 采集数据同步 | `app/api/data_sync.py` | 接收外部采集器推送的数据 |
+| 同步任务 | `app/api/sync.py` | 同步任务状态查询 |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -119,9 +126,11 @@ AI-miniSOC/
 | soc_role_menus | 角色菜单关联表（含permissions JSONB按钮权限） |
 | soc_menus | 菜单表（含permissions JSONB可用权限定义） |
 | soc_departments | 部门表 |
-| soc_assets | 资产表 |
+| soc_assets | 资产表（含 source/source_id/mac 等采集器字段） |
 | soc_asset_ports | 资产端口表 |
 | soc_asset_tags | 资产标签表 |
+| soc_asset_sources | 资产数据源配置表 |
+| soc_asset_change_logs | 资产变更日志表 |
 | soc_incidents | 安全事件表 |
 | soc_asset_incidents | 资产↔事件多对多关联表 |
 | soc_audit_logs | 审计日志表 |
@@ -132,10 +141,14 @@ AI-miniSOC/
 | soc_rate_limits | 限流表 |
 | soc_ai_analyses | AI分析结果表 |
 | soc_dicts | 字典表（含 dict_code 英文键） |
-| asset_change_logs | 资产变更日志表 |
-| sync_tasks | 同步任务表 |
+| soc_sync_tasks | 同步任务表 |
+| soc_asset_change_logs | 资产变更日志表 |
+| soc_notifications | 站内通知表 |
+| soc_chat_sessions | AI对话会话表 |
+| soc_chat_messages | AI对话消息表 |
 
-> 实际共 **20 张表**（`from app.models.base import Base; len(Base.metadata.tables)`）。
+> 实际共 **24 张表**（`from app.models.base import Base; len(Base.metadata.tables)`）。
+> 所有业务表统一使用 `soc_` 前缀（`alembic_version` 除外）。
 
 ## 前端核心特性
 
@@ -414,6 +427,11 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] 独立测试库 (TEST_DATABASE_URL + test_engine) + 44 个 in-process 测试
 - [x] 顶栏头像 onerror 兜底
 - [x] 系统名称/logo/版权/描述全量动态化（public 接口 + Pinia 预拉取 + 8 处 UI 引用改造）
+- [x] 站内通知系统 + WebSocket 实时推送
+- [x] 采集器架构集成 (collector-framework + tplink-collector)
+- [x] 资产数据同步 (data_sync API + sync_handlers)
+- [x] Python 虚拟环境升级到 3.13
+- [x] 表名统一 soc_ 前缀（24 张表全部合规）
 - [ ] 补全项目文档
 - [ ] 集成现有监控工具
 - [ ] 事件管理 / 告警管理 / 脆弱性管理前端页面（仍占位）
@@ -457,27 +475,30 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 
 ---
 
-## 今日补充（2026-06-02 session 续记）
+## 今日补充（2026-06-07 session 续记）
 
-> 本节由 Claude 续写，记录 5/29 后到 6/2 期间本会话发现的项目状态变化。
+> 本节由 Claude 续写，记录 6/2 后到 6/7 期间本会话发现的项目状态变化。
 
 ### 关键变更
-- **API 模块从 11 个 → 18 个**：新增 dicts / system_configs / asset_ports / asset_tags / asset_incidents / deps 等
-- **数据表从 19 → 20**：新增 `soc_dicts`（字典管理）
-- **Phase 1 进度约 87%**：审计日志前端、字典管理、系统配置、JWT 硬化、独立测试库、头像兜底已完成
-- **Git 分支**：项目**只**用 `master`，没有 `develop`/`main`，也**不**用 `<type>(<scope>)` 前缀
+- **Python 虚拟环境**：从 3.9.6 升级到 3.13.2
+- **采集器架构**：新增 `src/collectors/` 目录，含 collector-framework 共享库 + tplink-collector（Docker 部署）
+- **数据同步**：新增 `POST /api/v1/data/sync` 端点 + `sync_handlers/` 服务层（支持资产 upsert + 变更日志）
+- **数据表**：从 20 张 → 24 张，新增 `soc_asset_sources`、`soc_notifications`、`soc_chat_sessions`、`soc_chat_messages`
+- **表名规范**：全部业务表统一 `soc_` 前缀（`asset_change_logs` → `soc_asset_change_logs`，`sync_tasks` → `soc_sync_tasks`）
+- **Phase 1 进度约 95%**：通知系统、采集器架构、数据同步、Python 升级、表名规范化已完成
 
-### 测试基线（2026-06-02 建立）
-- `tests/test_token_blacklist.py`（unit, 8 个）：token 黑名单模块
-- `tests/test_auth_api.py`（E2E, 12 个）：登录锁定 / refresh 轮换 / logout 黑名单，走 live uvicorn
-- `tests/test_users_api.py`（2 个）：in-process TestClient
-- **总计 44 in-process 测试 pass**（pre-existing 的 `tests/integration/test_user_workflow.py::test_user_lifecycle` 仍 fail，是 envelope 设计 vs 断言风格不匹配，未在本次范围）
+### 采集器工作原理
+- TP-Link 采集器默认每 300 秒（5 分钟）采集一次路由器在线设备列表
+- 采集后通过 `POST /api/v1/data/sync` 推送到 AI-miniSOC
+- 同步处理器对比 source + source_id 执行 upsert（新建/更新/跳过），写入变更日志
+- 支持 `--once` 单次执行、`--interval` 自定义间隔、`--test` 连通性验证
 
 ### 本次未做但建议尽快处理
 1. `ENCRYPTION_KEY` 修成合法 Fernet 密钥（pre-existing 启动 warning，重启丢加密数据）
 2. 修 `tests/integration/test_user_workflow.py` 的 envelope 断言
+3. 数据库仍连 `AI-miniSOC-testdb`，生产环境应切到正式库
 
 ---
 
-**文档版本**: v2.1
-**最后更新**: 2026-06-02
+**文档版本**: v2.2
+**最后更新**: 2026-06-07

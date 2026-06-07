@@ -9,7 +9,7 @@ from app.models.base import Base
 
 class SyncTask(Base):
     """同步任务表"""
-    __tablename__ = "sync_tasks"
+    __tablename__ = "soc_sync_tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     sync_type = Column(String(20), nullable=False)  # 'manual', 'webhook', 'scheduled'
