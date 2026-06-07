@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from app.models import Asset
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
+from app.models.asset_source import AssetSource
 from app.services.wazuh_client import wazuh_client
 import logging
 
@@ -63,6 +64,7 @@ class AssetSyncService:
         ip = agent.get("ip")
         name = agent.get("name")
         status = agent.get("status")
+        os_data = agent.get("os", {}) or {}
 
         # 映射状态 - 写入英文 dict_code，字典类型: asset_status
         # 字典值: online(在线), offline(离线), never_connected(从未连接), decommissioned(已下线), unknown(未知)
@@ -83,7 +85,19 @@ class AssetSyncService:
             "criticality": "normal",
             "data_source": "wazuh",
             "asset_description": f"Wazuh Agent: {name}",
-            "is_new": False  # 标记是否为新资产
+            "is_new": False,  # 标记是否为新资产
+            # --- 传递给 source record 的信息 ---
+            "_source_status": asset_status,
+            "_source_id": str(agent_id) if agent_id else None,
+            "_source_metadata": {
+                "os_name": os_data.get("name") or agent.get("os_name"),
+                "os_version": os_data.get("version") or agent.get("os_version"),
+                "os_platform": os_data.get("platform") or agent.get("os_platform"),
+                "agent_version": agent.get("version"),
+                "node_name": agent.get("node_name"),
+                "group": agent.get("group"),
+                "date_add": agent.get("date_add"),
+            },
         }
 
     def _create_or_update_asset(self, asset_data: dict) -> tuple[Asset, bool]:
@@ -92,6 +106,11 @@ class AssetSyncService:
         Returns:
             tuple: (asset对象, 是否为新创建)
         """
+        # 提取来源信息（不写入 asset 主表）
+        source_status = asset_data.pop("_source_status", None)
+        source_id = asset_data.pop("_source_id", None)
+        source_metadata = asset_data.pop("_source_metadata", None) or {}
+
         # 移除标记字段
         is_new = asset_data.pop("is_new", False)
 
@@ -112,7 +131,60 @@ class AssetSyncService:
             self.db.add(asset)
             is_new = True
 
+        self.db.flush()  # 确保 asset.id 可用
+
+        # 写入/更新 soc_asset_sources 记录
+        if source_status or source_id:
+            self._upsert_asset_source(
+                asset_id=asset.id,
+                source="wazuh",
+                source_id=source_id,
+                source_status=source_status,
+                source_metadata=source_metadata,
+            )
+
         return asset, is_new
+
+    def _upsert_asset_source(
+        self,
+        asset_id,
+        source: str,
+        source_id: str = None,
+        source_status: str = None,
+        source_metadata: dict = None,
+    ):
+        """写入/更新 soc_asset_sources 记录"""
+        now = datetime.now(timezone.utc)
+
+        existing = self.db.query(AssetSource).filter(
+            AssetSource.asset_id == asset_id,
+            AssetSource.source == source,
+        ).first()
+
+        # 清理 metadata 中的 None 值
+        clean_meta = None
+        if source_metadata:
+            clean_meta = {k: v for k, v in source_metadata.items() if v is not None}
+            if not clean_meta:
+                clean_meta = None
+
+        if existing:
+            if source_status:
+                existing.source_status = source_status
+            existing.last_seen_at = now
+            if clean_meta:
+                existing.source_metadata = clean_meta
+            if source_id:
+                existing.source_id = source_id
+        else:
+            self.db.add(AssetSource(
+                asset_id=asset_id,
+                source=source,
+                source_id=source_id,
+                source_status=source_status,
+                last_seen_at=now,
+                source_metadata=clean_meta,
+            ))
 
     def sync_single_asset(self, agent_id: str) -> Asset:
         """同步单个资产"""
@@ -167,6 +239,11 @@ class AssetSyncService:
         agent = wazuh_client.get_agent_info(agent_id)
         asset_data = self._map_agent_to_asset(agent)
 
+        # 提取来源信息（不写入 asset 主表）
+        source_status = asset_data.pop("_source_status", None)
+        source_id = asset_data.pop("_source_id", None)
+        source_metadata = asset_data.pop("_source_metadata", None) or {}
+
         # 移除is_new标记字段（不是模型字段）
         asset_data.pop("is_new", None)
 
@@ -202,6 +279,16 @@ class AssetSyncService:
 
             self._log_change(asset.id, "created", None, None, None)
             existing = asset
+
+        # 写入/更新 soc_asset_sources 记录
+        if source_status or source_id:
+            self._upsert_asset_source(
+                asset_id=existing.id,
+                source="wazuh",
+                source_id=source_id,
+                source_status=source_status,
+                source_metadata=source_metadata,
+            )
 
         self.db.commit()
         self.db.refresh(existing)

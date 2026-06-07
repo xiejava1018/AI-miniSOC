@@ -3,7 +3,7 @@ API 路由汇总
 """
 
 from fastapi import APIRouter
-from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, ai_chat, menus, roles, departments, audit_logs, sync, webhooks, dicts, system_configs, public, notifications, ws
+from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, ai_chat, menus, roles, departments, audit_logs, sync, webhooks, dicts, system_configs, public, notifications, ws, data_sync
 
 api_router = APIRouter()
 
@@ -31,3 +31,5 @@ api_router.include_router(notifications.router, tags=["站内通知"])
 api_router.include_router(ws.router, tags=["WebSocket"])
 # public 接口（不鉴权；前缀 /public 显式标注，避免误以为受保护）
 api_router.include_router(public.router, prefix="/public", tags=["公共信息"])
+# Collector 数据同步接口（API Key 认证，非 JWT）
+api_router.include_router(data_sync.router, prefix="/data", tags=["数据同步"])

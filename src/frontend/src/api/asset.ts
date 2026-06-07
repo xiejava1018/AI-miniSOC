@@ -77,6 +77,18 @@ export const getAssetOverview = (): Promise<Http.BaseResponse<Api.Asset.AssetOve
   })
 }
 
+/**
+ * 获取资产的所有数据来源
+ *
+ * 后端: `GET /api/v1/assets/{id}/sources`
+ */
+export const getAssetSources = (id: string): Promise<Http.BaseResponse<any[]>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${id}/sources`,
+    keepFullResponse: true
+  })
+}
+
 export const addAsset = (data: any): Promise<any> => {
   return httpClient.post({ url: `${API_PREFIX}`, data })
 }
@@ -95,10 +107,7 @@ export const syncFromWazuh = (): Promise<any> => {
 
 // ========== 端口管理 ==========
 
-export const getAssetPorts = (
-  assetId: string,
-  params?: Record<string, any>
-): Promise<any> => {
+export const getAssetPorts = (assetId: string, params?: Record<string, any>): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/${assetId}/ports`,
     params: normalizePaginationParams(params),
@@ -120,10 +129,7 @@ export const deleteAssetPort = (portId: string): Promise<any> => {
 
 // ========== 标签管理 ==========
 
-export const getAssetTags = (
-  assetId: string,
-  params?: Record<string, any>
-): Promise<any> => {
+export const getAssetTags = (assetId: string, params?: Record<string, any>): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/${assetId}/tags`,
     params: normalizePaginationParams(params),
@@ -149,10 +155,7 @@ export const getCommonTagKeys = (): Promise<any> => {
 
 // ========== 资产-事件关联 ==========
 
-export const getAssetIncidents = (
-  assetId: string,
-  params?: Record<string, any>
-): Promise<any> => {
+export const getAssetIncidents = (assetId: string, params?: Record<string, any>): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/${assetId}/incidents`,
     params,

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
 from app.models import Asset
+from app.models.asset_source import AssetSource
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetListResponse
 from app.services.asset_sync import AssetSyncService
 from app.services.asset_summary import AssetSummaryService
@@ -41,6 +42,7 @@ async def list_assets(
     criticality: Optional[str] = None,
     asset_status: Optional[str] = None,
     network_zone: Optional[str] = None,
+    data_source: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """获取资产列表"""
@@ -55,6 +57,14 @@ async def list_assets(
         query = query.filter(Asset.asset_status == asset_status)
     if network_zone:
         query = query.filter(Asset.network_zone == network_zone)
+    if data_source:
+        query = query.filter(
+            Asset.id.in_(
+                db.query(AssetSource.asset_id).filter(
+                    AssetSource.source == data_source
+                )
+            )
+        )
 
     # 总数
     total = query.count()
@@ -91,6 +101,35 @@ async def list_assets(
         skip=skip,
         limit=limit
     )
+
+
+@router.get("/{asset_id}/sources")
+@router.get("/{asset_id}/sources/")
+async def get_asset_sources(asset_id: str, db: Session = Depends(get_db)):
+    """获取资产的所有数据来源"""
+    try:
+        asset_uuid = uuid.UUID(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的资产ID格式")
+
+    asset = db.query(Asset).filter(Asset.id == asset_uuid).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="资产不存在")
+
+    sources = db.query(AssetSource).filter(
+        AssetSource.asset_id == asset_uuid
+    ).order_by(AssetSource.last_seen_at.desc()).all()
+
+    return [
+        {
+            "source": s.source,
+            "source_id": s.source_id,
+            "source_status": s.source_status,
+            "last_seen_at": s.last_seen_at.isoformat() if s.last_seen_at else None,
+            "source_metadata": s.source_metadata,
+        }
+        for s in sources
+    ]
 
 
 @router.get("/overview")

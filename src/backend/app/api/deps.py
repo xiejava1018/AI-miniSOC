@@ -2,13 +2,13 @@
 认证相关 FastAPI 依赖集中层
 
 将 `get_current_user` / `require_admin` / `RequireAdmin` / `require_active_user`
-等高频复用依赖统一暴露，方便新代码直接 `from app.api.deps import ...`。
+/ `require_api_key` 等高频复用依赖统一暴露，方便新代码直接 `from app.api.deps import ...`。
 
 历史原因：`app.core.auth` 仍保留同名符号的导入路径，老代码可继续使用。
 新代码优先从本模块导入，便于后续将 `core/auth.py` 收敛为纯 token 编解码原语。
 """
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.core.auth import (
     get_current_user,
     RequireAdmin,
 )
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, UserStatus
 
@@ -55,6 +56,26 @@ async def require_active_user(
     return user
 
 
+async def require_api_key(
+    x_api_key: str = Header(..., alias="X-API-Key"),
+) -> str:
+    """
+    Collector 服务间认证 — 校验 X-API-Key 请求头。
+
+    用法：
+        @router.post("/sync")
+        async def sync(_auth: str = Depends(require_api_key)):
+            ...
+    """
+    valid_keys = settings.collector_api_keys_list
+    if not valid_keys or x_api_key not in valid_keys:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的 API Key",
+        )
+    return x_api_key
+
+
 # ---------------------------------------------------------------------------
 # 统一导出
 # ---------------------------------------------------------------------------
@@ -64,6 +85,7 @@ __all__ = [
     "RequireAdmin",
     "require_admin",
     "require_active_user",
+    "require_api_key",
 ]
 
 

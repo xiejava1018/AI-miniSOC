@@ -212,9 +212,6 @@
   const criticalityOptions = computed(() => dictStore.getOptions('asset_criticality'))
   const assetStatusOptions = computed(() => dictStore.getOptions('asset_status'))
   const networkZoneOptions = computed(() => dictStore.getOptions('network_zone'))
-  const dataSourceOptions = computed(() => dictStore.getOptions('data_source'))
-  const dataSourceLabelMap = computed(() => dictStore.getLabelMap('data_source'))
-  const dataSourceColorMap = computed(() => dictStore.getColorMap('data_source'))
 
   // useTable
   const tableApi = useTable<any>({
@@ -324,23 +321,6 @@
           align: 'center',
           width: 100,
           formatter: (row: any) => row.owner || '--'
-        },
-        {
-          prop: 'data_source',
-          label: '数据来源',
-          align: 'center',
-          width: 100,
-          formatter: (row: any) => {
-            const label = dataSourceLabelMap.value[row.data_source]
-            const color = dataSourceColorMap.value[row.data_source]
-            return label
-              ? h(
-                  resolveComponent('ElTag'),
-                  { type: (color as any) || 'info', effect: 'light' },
-                  { default: () => label }
-                )
-              : '--'
-          }
         },
         {
           prop: 'updated_at',
@@ -480,7 +460,6 @@
     { label: '状态', prop: 'asset_status' },
     { label: '操作系统', prop: 'os_name' },
     { label: '负责人', prop: 'owner' },
-    { label: '数据来源', prop: 'data_source' },
     { label: '更新时间', prop: 'updated_at' },
     { label: '操作', prop: 'operation' }
   ]

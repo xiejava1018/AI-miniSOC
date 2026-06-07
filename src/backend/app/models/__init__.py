@@ -25,6 +25,7 @@ from .asset_change_log import AssetChangeLog
 from .dict import Dict
 from .chat import ChatSession, ChatMessage
 from .notification import Notification
+from .asset_source import AssetSource
 
 __all__ = [
     "Base",
@@ -53,4 +54,5 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "Notification",
+    "AssetSource",
 ]

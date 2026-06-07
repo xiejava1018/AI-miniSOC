@@ -237,6 +237,50 @@
           </ElTable>
           <ElEmpty v-if="!alertsLoading && alertsData.length === 0" description="暂无告警(默认查询最近 24h)" />
         </ElTabPane>
+
+        <!-- 6. 数据来源 -->
+        <ElTabPane label="数据来源" name="datasources">
+          <ElTable :data="datasourcesData" v-loading="datasourcesLoading" border stripe style="width: 100%">
+            <ElTableColumn prop="source" label="来源" width="160" align="center">
+              <template #default="{ row }">
+                <ElTag type="primary" effect="plain" size="small">
+                  {{ sourceLabelMap[row.source] || row.source }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="source_id" label="来源ID" width="140" align="center" />
+            <ElTableColumn prop="source_status" label="来源状态" width="120" align="center">
+              <template #default="{ row }">
+                <ElTag v-if="row.source_status" :type="getSourceStatusTagType(row.source_status)" size="small" effect="dark">
+                  {{ statusLabelMap[row.source_status] || row.source_status }}
+                </ElTag>
+                <span v-else class="text-placeholder">--</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="last_seen_at" label="最后发现" width="170" align="center">
+              <template #default="{ row }">
+                <span :title="formatTime(row.last_seen_at)">{{ relativeTime.format(row.last_seen_at) }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="来源详情" min-width="280" align="left">
+              <template #default="{ row }">
+                <ElPopover v-if="row.source_metadata && Object.keys(row.source_metadata).length > 0" placement="left" :width="320" trigger="click">
+                  <template #reference>
+                    <ElButton size="small" type="info" link>查看详情 ({{ Object.keys(row.source_metadata).length }} 项)</ElButton>
+                  </template>
+                  <div class="source-meta-popover">
+                    <div v-for="(val, key) in row.source_metadata" :key="key" class="source-meta-row">
+                      <span class="source-meta-key">{{ key }}:</span>
+                      <span class="source-meta-value">{{ val ?? '--' }}</span>
+                    </div>
+                  </div>
+                </ElPopover>
+                <span v-else class="text-placeholder">--</span>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+          <ElEmpty v-if="!datasourcesLoading && datasourcesData.length === 0" description="暂无数据来源记录" />
+        </ElTabPane>
       </ElTabs>
     </ElCard>
 
@@ -338,7 +382,8 @@
     addAssetTag,
     deleteAssetTag,
     getCommonTagKeys,
-    getAssetSummary
+    getAssetSummary,
+    getAssetSources
   } from '@/api/asset'
   import { getAlertsByIp } from '@/api/alert'
   import { useDictStore } from '@/store/modules/dict'
@@ -691,6 +736,41 @@
     return 'success'
   }
 
+  // ========== 数据来源 Tab ==========
+  const datasourcesLoading = ref(false)
+  const datasourcesData = ref<any[]>([])
+
+  // 来源标签映射
+  const sourceLabelMap: Record<string, string> = {
+    'wazuh': 'Wazuh',
+    'tplink-router': 'TP-Link 路由器',
+    'nmap': 'Nmap',
+    'manual': '手动录入'
+  }
+
+  const getSourceStatusTagType = (status: string): 'success' | 'danger' | 'warning' | 'info' => {
+    if (status === 'online' || status === 'active') return 'success'
+    if (status === 'offline' || status === 'disconnected') return 'danger'
+    if (status === 'never_connected' || status === 'pending') return 'warning'
+    return 'info'
+  }
+
+  const loadDataSources = async () => {
+    if (!assetId.value) return
+    datasourcesLoading.value = true
+    try {
+      const res = await getAssetSources(assetId.value)
+      const r: any = res
+      const d = r?.data
+      datasourcesData.value = Array.isArray(d) ? d : []
+    } catch (err) {
+      console.error('获取数据来源失败:', err)
+      datasourcesData.value = []
+    } finally {
+      datasourcesLoading.value = false
+    }
+  }
+
   // ========== 工具函数 ==========
   const formatTime = (time?: string) => {
     if (!time) return '--'
@@ -708,6 +788,7 @@
     loadPorts()
     loadTags()
     loadAlerts()
+    loadDataSources()
   })
 </script>
 
@@ -794,6 +875,32 @@
 
     .mb-1 {
       margin-bottom: 4px;
+    }
+
+    // 数据来源 popover 样式
+    .source-meta-popover {
+      max-height: 300px;
+      overflow-y: auto;
+
+      .source-meta-row {
+        display: flex;
+        gap: 8px;
+        padding: 2px 0;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .source-meta-key {
+        flex-shrink: 0;
+        color: var(--el-text-color-secondary, #909399);
+        font-weight: 500;
+        min-width: 100px;
+      }
+
+      .source-meta-value {
+        color: var(--el-text-color-primary, #303133);
+        word-break: break-all;
+      }
     }
   }
 

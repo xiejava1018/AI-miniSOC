@@ -27,8 +27,8 @@ class Asset(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
-    # Wazuh同步相关字段
-    data_source = Column(String(20), default="manual")  # 'wazuh', 'manual'
+    # 数据同步相关字段
+    data_source = Column(String(20), default="manual")  # 'manual', 'wazuh', 'tplink-router'
     last_synced_at = Column(DateTime(timezone=True))
     os_name = Column(String(100))
     os_version = Column(String(100))

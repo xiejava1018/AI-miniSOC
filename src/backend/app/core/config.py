@@ -88,6 +88,16 @@ class Settings(BaseSettings):
         """解析Webhook允许的IP列表"""
         return [ip.strip() for ip in self.WAZUH_WEBHOOK_ALLOWED_IPS.split(",")]
 
+    # Collector API Key 配置
+    COLLECTOR_API_KEYS: str = ""  # 逗号分隔，如 sk-minisoc-tplink-xxx,sk-minisoc-wazuh-yyy
+
+    @property
+    def collector_api_keys_list(self) -> list[str]:
+        """解析 Collector API Key 列表"""
+        if not self.COLLECTOR_API_KEYS:
+            return []
+        return [k.strip() for k in self.COLLECTOR_API_KEYS.split(",")]
+
     # Loki配置
     LOKI_API_URL: str = "http://192.168.0.30:3100"
 

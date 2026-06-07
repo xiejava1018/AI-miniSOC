@@ -1,0 +1,18 @@
+# AI-miniSOC 连接配置
+minisoc:
+  url: http://host.docker.internal:8000
+  # api_key 建议通过环境变量 MINISOC_API_KEY 注入
+
+# 路由器连接配置
+router:
+  host: 192.168.0.1
+  port: 80
+  username: tploginadmin
+  # password 必须通过环境变量 ROUTER_PASSWORD 注入
+
+# 采集调度
+collect:
+  types:
+    - asset
+  interval: 300
+  once: false

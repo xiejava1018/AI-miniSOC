@@ -1,0 +1,27 @@
+services:
+  tplink-collector:
+    build:
+      context: .
+      dockerfile: tplink/Dockerfile
+    container_name: minisoc-tplink-collector
+    restart: unless-stopped
+    environment:
+      - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
+      - MINISOC_API_KEY=${MINISOC_API_KEY}
+      - ROUTER_HOST=${ROUTER_HOST:-192.168.0.1}
+      - ROUTER_USERNAME=${ROUTER_USERNAME:-tploginadmin}
+      - ROUTER_PASSWORD=${ROUTER_PASSWORD}
+      - COLLECT_INTERVAL=${TPLINK_INTERVAL:-300}
+    mem_limit: 128m
+    cpus: 0.5
+    networks:
+      - minisoc-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  minisoc-net:
+    driver: bridge
