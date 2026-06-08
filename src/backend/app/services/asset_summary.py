@@ -86,8 +86,8 @@ class AssetSummaryService:
         # 1. 在线状态
         online_status = _map_status_to_online(asset.asset_status)
 
-        # 2. 告警数据(走 Wazuh/OpenSearch,失败降级为 0)
-        alert_24h, alert_critical_24h = self._get_alert_stats(asset.asset_ip)
+        # 2. 告警数据(按 wazuh_agent_id 查询，失败降级为 0)
+        alert_24h, alert_critical_24h = self._get_alert_stats(asset.wazuh_agent_id)
 
         # 3. 事件数据(本地 DB,JOIN asset_incidents)
         open_incidents = self._get_open_incidents_count(asset.id)
@@ -137,22 +137,29 @@ class AssetSummaryService:
             "tags": tags,
         }
 
-    def _get_alert_stats(self, asset_ip: str) -> tuple[int, int]:
+    def _get_alert_stats(self, wazuh_agent_id: str) -> tuple[int, int]:
         """
         拉取近 24h 告警统计(总告警数 + 高危告警数)
+        按 wazuh_agent_id 查询该资产的告警
 
         Wazuh 高危告警阈值: level >= 12
         失败兜底: 返回 (0, 0),不抛异常
         """
+        # 没有 agent_id 则返回 0
+        if not wazuh_agent_id:
+            return 0, 0
+
         try:
             alert_service = AlertQueryService(self.db)
             from datetime import timedelta
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=24)
 
+            # 按 agent_id 查询统计
             stats = alert_service.get_alert_statistics(
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
+                agent_id=wazuh_agent_id  # 传入 agent_id 过滤
             )
             by_level = stats.get("by_level", [])
 
@@ -174,7 +181,7 @@ class AssetSummaryService:
                     pass
             return total, critical
         except Exception as e:
-            logger.warning(f"获取告警统计失败(IP={asset_ip}): {e}")
+            logger.warning(f"获取告警统计失败(agent_id={wazuh_agent_id}): {e}")
             return 0, 0
 
     def _get_open_incidents_count(self, asset_id) -> int:

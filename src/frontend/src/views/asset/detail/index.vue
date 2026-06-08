@@ -385,7 +385,7 @@
     getAssetSummary,
     getAssetSources
   } from '@/api/asset'
-  import { getAlertsByIp } from '@/api/alert'
+  import { getAlertsByIp, getAlertsByAgentId } from '@/api/alert'
   import { useDictStore } from '@/store/modules/dict'
   import { useRelativeTime } from '@/composables/useRelativeTime'
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
@@ -713,11 +713,23 @@
     if (!assetId.value || !assetDetail.value.asset_ip) return
     alertsLoading.value = true
     try {
-      const res = await getAlertsByIp(assetDetail.value.asset_ip, {
+      // 优先使用 wazuh_agent_id 查询，更准确
+      const agentId = assetDetail.value.wazuh_agent_id
+      const params = {
         hours: 24,
         skip: 0,
         limit: 20
-      })
+      }
+
+      let res
+      if (agentId) {
+        // 通过 agent_id 查询
+        res = await getAlertsByAgentId(agentId, params)
+      } else {
+        // 没有 agent_id 时使用 IP 查询（降级方案）
+        res = await getAlertsByIp(assetDetail.value.asset_ip, params)
+      }
+
       const r: any = res
       const d = r?.data
       alertsData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []

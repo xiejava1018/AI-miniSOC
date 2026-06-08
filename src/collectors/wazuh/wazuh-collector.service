@@ -1,0 +1,21 @@
+[Unit]
+Description=Wazuh Collector Service
+After=network.target
+
+[Service]
+Type=simple
+User=xiejava
+WorkingDirectory=/home/xiejava/AIproject/AI-miniSOC/src/collectors/wazuh
+Environment="MINISOC_URL=http://192.168.0.128:8000"
+Environment="MINISOC_API_KEY=sk-minisoc-wazuh-test2024"
+Environment="WAZUH_URL=https://192.168.0.40:55000"
+Environment="WAZUH_USER=wazuh"
+Environment="WAZUH_PASSWORD=OgdHes6S57Y?L5HwU0dLB3tWtw.1.TUu"
+ExecStart=/home/xiejava/AIproject/AI-miniSOC/src/backend/venv/bin/python -m wazuh_collector --config /home/xiejava/AIproject/AI-miniSOC/src/collectors/wazuh/config.yaml
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

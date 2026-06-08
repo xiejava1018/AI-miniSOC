@@ -1,0 +1,27 @@
+# Wazuh Collector 配置
+
+# AI-miniSOC 连接配置
+minisoc:
+  url: http://192.168.0.128:8000
+  api_key: ${MINISOC_API_KEY}
+
+# 采集配置
+collect:
+  interval: 300  # 5 分钟
+  once: false
+  types:
+    - asset
+    - vulnerability
+    - baseline
+
+# Wazuh 连接配置
+wazuh:
+  url: https://192.168.0.40:55000
+  user: ${WAZUH_USER:-wazuh}
+  password: ${WAZUH_PASSWORD}
+  verify_ssl: false
+
+# 日志配置
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

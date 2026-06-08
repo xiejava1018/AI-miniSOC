@@ -20,6 +20,8 @@ async def list_alerts(
     agent_id: Optional[str] = None,
     ip: Optional[str] = None,
     hours: Optional[int] = 24,
+    sort_by: Optional[str] = Query(None, description="排序字段: timestamp, level"),
+    sort_order: Optional[str] = Query(None, regex="^(asc|desc)$", description="排序方向: asc, desc"),
     db: Session = Depends(get_db)
 ):
     """获取 Wazuh 告警列表"""
@@ -46,7 +48,9 @@ async def list_alerts(
             result_data = alert_service.get_alerts_by_ip(
                 ip=ip,
                 offset=skip,
-                limit=limit
+                limit=limit,
+                sort_by=sort_by,
+                sort_order=sort_order
             )
             alerts = result_data.get("items", []) if isinstance(result_data, dict) else result_data
         else:
@@ -56,7 +60,9 @@ async def list_alerts(
                 level=level,
                 agent_id=agent_id,
                 start_time=start_time,
-                end_time=end_time
+                end_time=end_time,
+                sort_by=sort_by,
+                sort_order=sort_order
             )
             alerts = result_data.get("items", []) if isinstance(result_data, dict) else result_data
 

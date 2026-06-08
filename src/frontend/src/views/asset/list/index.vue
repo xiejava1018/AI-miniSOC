@@ -249,6 +249,13 @@
           formatter: (row: any) => row.asset_ip || '--'
         },
         {
+          prop: 'mac_address',
+          label: 'MAC地址',
+          align: 'center',
+          minWidth: 160,
+          formatter: (row: any) => row.mac_address || '--'
+        },
+        {
           prop: 'asset_type',
           label: '资产类型',
           align: 'center',
@@ -447,6 +454,19 @@
       clearable: true,
       placeholder: '请选择状态',
       options: assetStatusOptions.value
+    },
+    {
+      label: '数据来源',
+      key: 'data_source',
+      type: 'select',
+      span: 6,
+      clearable: true,
+      placeholder: '请选择来源',
+      options: [
+        { label: '手动', value: 'manual' },
+        { label: 'Wazuh', value: 'wazuh' },
+        { label: 'TP-Link', value: 'tplink-router' }
+      ]
     }
   ])
 
@@ -454,6 +474,7 @@
   const columnOptions = [
     { label: '资产名称', prop: 'name' },
     { label: 'IP地址', prop: 'asset_ip' },
+    { label: 'MAC地址', prop: 'mac_address' },
     { label: '资产类型', prop: 'asset_type' },
     { label: '重要性', prop: 'criticality' },
     { label: '网络区域', prop: 'network_zone' },

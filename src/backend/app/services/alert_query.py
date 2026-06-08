@@ -56,9 +56,15 @@ class AlertQueryService:
         agent_id: str = None,
         start_time: datetime = None,
         end_time: datetime = None,
+        sort_by: str = None,
+        sort_order: str = None,
     ) -> Dict[str, Any]:
         """
         从 OpenSearch 查询告警列表，返回 {total, items}
+
+        Args:
+            sort_by: 排序字段，支持 'timestamp' (默认) 或 'level'
+            sort_order: 排序方向，'asc' 或 'desc'
         """
         must = []
         filters = []
@@ -83,9 +89,19 @@ class AlertQueryService:
         else:
             query = {"match_all": {}}
 
+        # 构建排序
+        if sort_by == "level":
+            # 按等级排序
+            order = sort_order or "desc"
+            sort_clause = [{"rule.level": {"order": order, "missing": "_last"}}]
+        else:
+            # 默认按时间戳排序
+            order = sort_order if sort_order in ["asc", "desc"] else "desc"
+            sort_clause = [{"@timestamp": {"order": order}}]
+
         body = {
             "query": query,
-            "sort": [{"@timestamp": {"order": "desc"}}],
+            "sort": sort_clause,
             "from": offset,
             "size": limit,
             "track_total_hits": True,
@@ -125,10 +141,20 @@ class AlertQueryService:
         ip: str,
         offset: int = 0,
         limit: int = 50,
+        sort_by: str = None,
+        sort_order: str = None,
     ) -> Dict[str, Any]:
+        # 构建排序
+        if sort_by == "level":
+            order = sort_order or "desc"
+            sort_clause = [{"rule.level": {"order": order, "missing": "_last"}}]
+        else:
+            order = sort_order if sort_order in ["asc", "desc"] else "desc"
+            sort_clause = [{"@timestamp": {"order": order}}]
+
         body = {
             "query": {"match": {"agent.ip": ip}},
-            "sort": [{"@timestamp": {"order": "desc"}}],
+            "sort": sort_clause,
             "from": offset,
             "size": limit,
             "track_total_hits": True,
@@ -159,19 +185,26 @@ class AlertQueryService:
         self,
         start_time: datetime = None,
         end_time: datetime = None,
+        agent_id: str = None,
     ) -> Dict[str, Any]:
-        time_filter = {}
+        filters = []
+
+        # 时间过滤
         if start_time or end_time:
             time_range = {}
             if start_time:
                 time_range["gte"] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
             if end_time:
                 time_range["lte"] = end_time.strftime("%Y-%m-%dT%H:%M:%SZ")
-            time_filter = {"range": {"@timestamp": time_range}}
+            filters.append({"range": {"@timestamp": time_range}})
+
+        # Agent ID 过滤
+        if agent_id:
+            filters.append({"term": {"agent.id": agent_id}})
 
         body = {
             "size": 0,
-            "query": {"bool": {"filter": [time_filter]}} if time_filter else {"match_all": {}},
+            "query": {"bool": {"filter": filters}} if filters else {"match_all": {}},
             "aggs": {
                 "by_level": {"terms": {"field": "rule.level", "size": 20}},
                 "by_agent": {"terms": {"field": "agent.name", "size": 10}},

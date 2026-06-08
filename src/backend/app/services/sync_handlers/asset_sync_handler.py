@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _UPDATABLE_FIELDS = {
     "name", "asset_type", "asset_status", "mac_address",
     "network_zone", "criticality", "asset_description",
+    "data_source", "os_name", "os_version", "wazuh_agent_id",
 }
 
 
@@ -34,6 +35,8 @@ class AssetSyncHandler(BaseSyncHandler):
     """资产同步处理器"""
 
     def handle(self, source: str, items: list[dict], db: Session) -> dict:
+        print(f"[DEBUG] AssetSyncHandler.handle called: source={source}, items={len(items)}")
+        logger.info(f"AssetSyncHandler.handle called: source={source}, items={len(items)}")
         stats = {
             "total": len(items),
             "created": 0,
@@ -110,7 +113,10 @@ class AssetSyncHandler(BaseSyncHandler):
 
         item["last_synced_at"] = now
 
-        asset = Asset(**item)
+        # 过滤掉不属于 Asset 模型的字段（如 source_id，它属于 AssetSource）
+        asset_fields = {k: v for k, v in item.items() if k != "source_id"}
+
+        asset = Asset(**asset_fields)
         db.add(asset)
         db.flush()
 
@@ -122,7 +128,15 @@ class AssetSyncHandler(BaseSyncHandler):
         return "created"
 
     def _update_existing(self, asset: Asset, source: str, item: dict, sync_task_id, now: datetime, db: Session) -> str:
+        print(f"[DEBUG] _update_existing called for {asset.asset_ip}")
         changed_fields = []
+
+        print(f"[DEBUG] _UPDATABLE_FIELDS: {_UPDATABLE_FIELDS}")
+        print(f"[DEBUG] item keys: {list(item.keys())}")
+        print(f"[DEBUG] asset.data_source: {getattr(asset, 'data_source', None)}")
+
+        logger.info(f"Updating asset {asset.asset_ip}, item keys: {list(item.keys())}")
+        logger.info(f"Current asset data_source: {getattr(asset, 'data_source', None)}, os_name: {getattr(asset, 'os_name', None)}")
 
         for field in _UPDATABLE_FIELDS:
             new_value = item.get(field)
@@ -132,6 +146,8 @@ class AssetSyncHandler(BaseSyncHandler):
             old_str = str(old_value) if old_value is not None else None
             new_str = str(new_value) if not isinstance(new_value, str) else new_value
             if old_str != new_str:
+                logger.info(f"Field {field}: {old_str} -> {new_str}")
+                print(f"[DEBUG] Updating field {field}: {old_str} -> {new_str}")
                 setattr(asset, field, new_value)
                 changed_fields.append((field, old_str, new_str))
 

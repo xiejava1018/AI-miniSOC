@@ -38,6 +38,8 @@ async def sync_assets_from_wazuh(db: Session = Depends(get_db)):
 async def list_assets(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    asset_ip: Optional[str] = None,
+    name: Optional[str] = None,
     asset_type: Optional[str] = None,
     criticality: Optional[str] = None,
     asset_status: Optional[str] = None,
@@ -49,6 +51,10 @@ async def list_assets(
     query = db.query(Asset)
 
     # 筛选条件
+    if asset_ip:
+        query = query.filter(Asset.asset_ip.contains(asset_ip))
+    if name:
+        query = query.filter(Asset.name.contains(name))
     if asset_type:
         query = query.filter(Asset.asset_type == asset_type)
     if criticality:
@@ -89,10 +95,15 @@ async def list_assets(
             asset_status=asset.asset_status,
             network_segment=asset.network_segment,
             network_zone=asset.network_zone,
+            data_source=asset.data_source,
+            os_name=asset.os_name,
+            os_version=asset.os_version,
             created_at=asset.created_at,
             updated_at=asset.updated_at,
             status_updated_at=asset.status_updated_at,
             parent_id=asset.parent_id,
+            data_classification=asset.data_classification,
+            owner_contact=asset.owner_contact,
         ))
 
     return AssetListResponse(

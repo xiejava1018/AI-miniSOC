@@ -8,7 +8,7 @@ import type { HttpClient } from '@/utils/http'
 
 const httpClient = request as HttpClient
 
-const API_PREFIX = '/api/v1/alerts'
+const API_PREFIX = '/api/v1/alerts/'
 
 // ── 类型定义 ────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export interface TopAlertAsset {
 
 // ── 工具 ────────────────────────────────────────────
 
-/** 将前端分页参数(current/size)转为后端skip/limit */
+/** 将前端分页参数(current/size)转为后端skip/limit，保留排序参数 */
 const normalizePaginationParams = (params?: Record<string, any>) => {
   if (!params) return undefined
   const { current, size, page, pageSize, ...rest } = params
@@ -112,6 +112,18 @@ export const getAlertsByIp = (
   return httpClient.get({
     url: API_PREFIX,
     params: { ...normalizePaginationParams(params), ip },
+    keepFullResponse: true
+  })
+}
+
+/** 按 Wazuh Agent ID 查询告警（更准确） */
+export const getAlertsByAgentId = (
+  agentId: string,
+  params?: Record<string, any>
+): Promise<Http.BaseResponse<AlertListResponse>> => {
+  return httpClient.get({
+    url: API_PREFIX,
+    params: { ...normalizePaginationParams(params), agent_id: agentId },
     keepFullResponse: true
   })
 }

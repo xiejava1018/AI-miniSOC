@@ -22,6 +22,50 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  wazuh-collector:
+    build:
+      context: ./wazuh
+      dockerfile: Dockerfile
+    container_name: minisoc-wazuh-collector
+    restart: unless-stopped
+    environment:
+      - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
+      - MINISOC_API_KEY=${MINISOC_API_KEY}
+      - WAZUH_URL=${WAZUH_URL:-https://192.168.0.40:55000}
+      - WAZUH_USER=${WAZUH_USER:-wazuh-wui}
+      - WAZUH_PASSWORD=${WAZUH_PASSWORD}
+      - COLLECT_INTERVAL=${WAZUH_INTERVAL:-300}
+    volumes:
+      - ./wazuh/config.yaml:/etc/wazuh-collector/config.yaml:ro
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - minisoc-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: |
+        python -c "
+        import sys; sys.path.insert(0, '/app/src')
+        from wazuh_collector.collector import WazuhCollector
+        from collector_framework.config import CollectorConfig
+        import asyncio
+
+        async def test():
+            cfg = CollectorConfig.from_yaml('/etc/wazuh-collector/config.yaml')
+            c = WazuhCollector(cfg)
+            ok = await c.test_connection()
+            sys.exit(0 if ok else 1)
+        asyncio.run(test())
+        " || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 networks:
   minisoc-net:
     driver: bridge
