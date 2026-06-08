@@ -76,6 +76,21 @@ export interface TopAlertAsset {
   last_alert_at: string
 }
 
+// ── 工具 ────────────────────────────────────────────
+
+/** 将前端分页参数(current/size)转为后端skip/limit */
+const normalizePaginationParams = (params?: Record<string, any>) => {
+  if (!params) return undefined
+  const { current, size, page, pageSize, ...rest } = params
+  const p = page ?? current ?? 1
+  const ps = pageSize ?? size ?? 10
+  return {
+    ...rest,
+    skip: (p - 1) * ps,
+    limit: ps
+  }
+}
+
 // ── API 函数 ─────────────────────────────────────────
 
 /** 告警列表（分页+筛选） */
@@ -84,7 +99,7 @@ export const getAlertList = (
 ): Promise<Http.BaseResponse<AlertListResponse>> => {
   return httpClient.get({
     url: API_PREFIX,
-    params,
+    params: normalizePaginationParams(params),
     keepFullResponse: true
   })
 }
@@ -96,7 +111,7 @@ export const getAlertsByIp = (
 ): Promise<Http.BaseResponse<AlertListResponse>> => {
   return httpClient.get({
     url: API_PREFIX,
-    params: { ...params, ip },
+    params: { ...normalizePaginationParams(params), ip },
     keepFullResponse: true
   })
 }
