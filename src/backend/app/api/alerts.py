@@ -51,8 +51,8 @@ async def list_alerts(
         formatted_alerts = []
         for alert in alerts:
             formatted_alerts.append({
-                "id": alert.get("_id"),
-                "timestamp": alert.get("@timestamp"),
+                "id": alert.get("id") or alert.get("_id"),
+                "timestamp": alert.get("timestamp") or alert.get("@timestamp"),
                 "rule": {
                     "level": alert.get("rule", {}).get("level"),
                     "description": alert.get("rule", {}).get("description"),
@@ -67,9 +67,11 @@ async def list_alerts(
                 "full_log": alert.get("full_log")
             })
 
+        total_count = len(formatted_alerts)
+
         return {
             "items": formatted_alerts,
-            "total": len(formatted_alerts),
+            "total": total_count,
             "skip": skip,
             "limit": limit
         }
