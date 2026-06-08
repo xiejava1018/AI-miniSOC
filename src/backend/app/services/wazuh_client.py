@@ -60,6 +60,19 @@ class WazuhClient:
             json=data
         )
 
+        # Token 过期时(401)自动清除并重试一次
+        if response.status_code == 401:
+            self._token = None
+            token = self._get_token()
+            headers["Authorization"] = f"Bearer {token}"
+            response = self._client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=params,
+                json=data
+            )
+
         response.raise_for_status()
         return response.json()
 
