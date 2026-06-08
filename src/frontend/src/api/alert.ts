@@ -102,9 +102,7 @@ export const getAlertsByIp = (
 }
 
 /** 告警详情 */
-export const getAlertDetail = (
-  alertId: string
-): Promise<Http.BaseResponse<AlertItem>> => {
+export const getAlertDetail = (alertId: string): Promise<Http.BaseResponse<AlertItem>> => {
   return httpClient.get({
     url: `${API_PREFIX}/${alertId}`,
     keepFullResponse: true
