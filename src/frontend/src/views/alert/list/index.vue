@@ -270,7 +270,7 @@
       placeholder: '请输入Agent IP'
     },
     {
-      label: '时间范围(h)',
+      label: '时间范围',
       key: 'hours',
       type: 'select',
       span: 6,
@@ -341,13 +341,22 @@
       .stat-value {
         font-size: 28px;
         font-weight: 700;
-        color: var(--el-text-color-primary);
       }
       .stat-label {
         margin-top: 4px;
         font-size: 13px;
         color: var(--el-text-color-secondary);
       }
+    }
+
+    .stat-critical .stat-value {
+      color: var(--el-color-danger);
+    }
+    .stat-warning .stat-value {
+      color: var(--el-color-warning);
+    }
+    .stat-info .stat-value {
+      color: var(--el-color-info);
     }
 
     .total-info {
