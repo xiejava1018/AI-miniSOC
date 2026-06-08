@@ -165,6 +165,29 @@ export const asyncRoutes: AppRouteRecord[] = [
   },
 
   {
+    path: '/alert',
+    name: 'Alert',
+    component: RoutesAlias.Layout,
+    meta: {
+      title: '告警管理',
+      icon: '&#xe63a;',
+      roles: ['R_SUPER', 'R_ADMIN']
+    },
+    children: [
+      {
+        path: 'list',
+        name: 'AlertList',
+        component: RoutesAlias.Alerts,
+        meta: {
+          title: '告警列表',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      }
+    ]
+  },
+
+  {
     path: '/exception',
     name: 'Exception',
     component: RoutesAlias.Layout,

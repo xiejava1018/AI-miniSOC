@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     WAZUH_API_USERNAME: str
     WAZUH_API_PASSWORD: str
 
+    # OpenSearch 配置（Wazuh Indexer）
+    OPENSEARCH_URL: str = "https://192.168.0.40:9200"
+    OPENSEARCH_USER: str = "admin"
+    OPENSEARCH_PASSWORD: str = ""
+
     # Webhook配置
     WAZUH_WEBHOOK_KEY: str = "change-this-in-production"
     WAZUH_WEBHOOK_ALLOWED_IPS: str = "192.168.0.30,192.168.0.40,127.0.0.1"

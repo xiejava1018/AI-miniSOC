@@ -23,7 +23,7 @@ export enum RoutesAlias {
   AssetOverview = '/asset/overview/index', // 资产概览
   AssetDetail = '/asset/detail/index', // 资产详情
   Incidents = '/placeholder', // 事件管理（占位）
-  Alerts = '/placeholder', // 告警管理（占位）
+  Alerts = '/alert/list/index', // 告警管理
   Vulnerabilities = '/placeholder', // 脆弱性管理（占位）
   Placeholder = '/placeholder' // 占位页面
   // 已精简：示例与演示页面别名已移除
