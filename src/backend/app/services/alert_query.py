@@ -56,9 +56,9 @@ class AlertQueryService:
         agent_id: str = None,
         start_time: datetime = None,
         end_time: datetime = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
-        从 OpenSearch 查询告警列表
+        从 OpenSearch 查询告警列表，返回 {total, items}
         """
         must = []
         filters = []
@@ -93,8 +93,12 @@ class AlertQueryService:
 
         logger.debug("OpenSearch query: %s", body)
         result = self._os_search(body)
+        total = result.get("hits", {}).get("total", {}).get("value", 0)
         hits = result.get("hits", {}).get("hits", [])
-        return self._normalize_alerts(hits)
+        return {
+            "total": total,
+            "items": self._normalize_alerts(hits),
+        }
 
     def _normalize_alerts(self, hits: list) -> list:
         """将 OpenSearch hits 转为统一告警格式(与 Wazuh mock 结构兼容)"""
@@ -121,15 +125,20 @@ class AlertQueryService:
         ip: str,
         offset: int = 0,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         body = {
             "query": {"match": {"agent.ip": ip}},
             "sort": [{"@timestamp": {"order": "desc"}}],
             "from": offset,
             "size": limit,
+            "track_total_hits": True,
         }
         result = self._os_search(body)
-        return self._normalize_alerts(result.get("hits", {}).get("hits", []))
+        total = result.get("hits", {}).get("total", {}).get("value", 0)
+        return {
+            "total": total,
+            "items": self._normalize_alerts(result.get("hits", {}).get("hits", [])),
+        }
 
     # ── 单条告警详情 ──────────────────────────────────
 

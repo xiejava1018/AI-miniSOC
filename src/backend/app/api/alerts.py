@@ -30,15 +30,27 @@ async def list_alerts(
         end_time = datetime.utcnow()
         start_time = end_time - timedelta(hours=hours) if hours else None
 
-        # 根据 IP 查询
+        # 先查总数(limit=1)
+        result = alert_service.get_alerts(
+            offset=0,
+            limit=1,
+            level=level,
+            agent_id=agent_id,
+            start_time=start_time,
+            end_time=end_time,
+        )
+        total_count = result.get("total", 0) if isinstance(result, dict) else len(result)
+
+        # 根据 IP 查询实际数据
         if ip:
-            alerts = alert_service.get_alerts_by_ip(
+            result_data = alert_service.get_alerts_by_ip(
                 ip=ip,
                 offset=skip,
                 limit=limit
             )
+            alerts = result_data.get("items", []) if isinstance(result_data, dict) else result_data
         else:
-            alerts = alert_service.get_alerts(
+            result_data = alert_service.get_alerts(
                 offset=skip,
                 limit=limit,
                 level=level,
@@ -46,6 +58,7 @@ async def list_alerts(
                 start_time=start_time,
                 end_time=end_time
             )
+            alerts = result_data.get("items", []) if isinstance(result_data, dict) else result_data
 
         # 格式化响应
         formatted_alerts = []
@@ -66,8 +79,6 @@ async def list_alerts(
                 "location": alert.get("location"),
                 "full_log": alert.get("full_log")
             })
-
-        total_count = len(formatted_alerts)
 
         return {
             "items": formatted_alerts,
