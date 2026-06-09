@@ -14,6 +14,10 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "tplink_collector"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "base"))
 
+# 加载 .env 环境变量
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent / ".env")
+
 from collector_framework.config import CollectorConfig
 from collector_framework.sync_client import MiniSOCClient
 from collector_framework.base import DataType
