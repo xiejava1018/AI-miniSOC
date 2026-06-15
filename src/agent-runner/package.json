@@ -1,0 +1,25 @@
+{
+  "name": "@ai-minisoc/agent-runner",
+  "version": "0.1.0",
+  "description": "Pi Agent runtime bridge for AI-miniSOC. Spawns a Node.js child process that hosts the Pi agent and exchanges messages with the Python FastAPI backend over stdio (JSON-RPC).",
+  "private": true,
+  "type": "module",
+  "main": "src/pi-agent-runner.js",
+  "exports": {
+    ".": "./src/pi-agent-runner.js"
+  },
+  "bin": {
+    "pi-agent-runner": "src/pi-agent-runner.js"
+  },
+  "scripts": {
+    "start": "node src/pi-agent-runner.js --stdio",
+    "dev": "node --watch src/pi-agent-runner.js --stdio"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*"
+  }
+}

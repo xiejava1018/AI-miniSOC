@@ -9,6 +9,7 @@ from .ai_analysis import AIAnalysisService
 from .audit_service import AuditService
 from .encryption_service import EncryptionService
 from .user_service import UserService
+from .agent_process_manager import AgentProcessManager, AgentProcess, AgentProcessState
 
 __all__ = [
     "WazuhClient",
@@ -18,5 +19,8 @@ __all__ = [
     "AIAnalysisService",
     "AuditService",
     "EncryptionService",
-    "UserService"
+    "UserService",
+    "AgentProcessManager",
+    "AgentProcess",
+    "AgentProcessState",
 ]

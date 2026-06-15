@@ -37,6 +37,10 @@ app.add_middleware(
 # 注册路由
 app.include_router(api_router, prefix="/api/v1")
 
+# 注册可观测性路由（/metrics 等）
+from app.api.metrics import router as metrics_router
+app.include_router(metrics_router)
+
 
 @app.get("/")
 async def root():

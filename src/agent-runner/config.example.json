@@ -1,0 +1,15 @@
+{
+  "service_token": "YOUR_SERVICE_TOKEN_HERE",
+  "provider": {
+    "anthropic": {
+      "api_key": "YOUR_ANTHROPIC_API_KEY",
+      "model": "claude-sonnet-4-7"
+    },
+    "openai": {
+      "api_key": "YOUR_OPENAI_API_KEY",
+      "model": "gpt-4o"
+    }
+  },
+  "log_level": "info",
+  "log_file": "logs/agent-runner.log"
+}

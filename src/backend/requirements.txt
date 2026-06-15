@@ -28,6 +28,10 @@ python-dotenv==1.0.1
 
 # 日志
 loguru==0.7.2
+python-json-logger>=2.0.0
+
+# 可观测性
+prometheus-client==0.21.0
 
 # 工具
 python-dateutil==2.9.0
