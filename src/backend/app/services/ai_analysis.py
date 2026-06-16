@@ -1,5 +1,5 @@
 """
-智谱 AI 分析服务
+智谱 AI 分析服务 (支持 Pi Agent 集成)
 """
 
 from zhipuai import ZhipuAI
@@ -9,19 +9,30 @@ from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime, timedelta
+import asyncio
 import json
+import uuid
 
 logger = logging.getLogger(__name__)
 
 
 class AIAnalysisService:
-    """AI 分析服务"""
+    """AI 分析服务 (支持 Agent 降级)"""
 
     def __init__(self, db: Session):
         self.db = db
         self.client = ZhipuAI(api_key=settings.GLM_API_KEY)
+        # POC: 懒加载 AgentProcessManager
+        self._agent_manager = None
 
-    def analyze_alert(
+    def _get_agent_manager(self):
+        """获取全局 AgentProcessManager 单例"""
+        if self._agent_manager is None:
+            from app.api.ai_agent import get_agent_manager
+            self._agent_manager = get_agent_manager()
+        return self._agent_manager
+
+    async def analyze_alert(
         self,
         alert_id: str,
         rule_id: Optional[int] = None,
@@ -30,9 +41,14 @@ class AIAnalysisService:
         full_log: Optional[str] = None,
         agent_name: Optional[str] = None,
         agent_ip: Optional[str] = None,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        trace_id: Optional[str] = None
     ) -> AIAnalysis:
-        """分析告警并生成解释"""
+        """分析告警: 先查缓存 -> 尝试 Agent -> 降级 ZhipuAI"""
+
+        # 生成 trace_id
+        if not trace_id:
+            trace_id = str(uuid.uuid4())
 
         # 生成告警指纹用于缓存
         alert_fingerprint = self._generate_fingerprint(
@@ -52,24 +68,123 @@ class AIAnalysisService:
             full_log, agent_name, agent_ip
         )
 
-        # 调用智谱AI分析
+        # 优先尝试 Agent 分析
         try:
-            analysis_result = self._call_ai_analysis(prompt)
-
-            # 保存到数据库
-            analysis = self._save_analysis(
+            result = await self._analyze_with_agent(
                 alert_id=alert_id,
-                alert_fingerprint=alert_fingerprint,
-                explanation=analysis_result.get("explanation"),
-                risk_assessment=analysis_result.get("risk_assessment"),
-                recommendations=analysis_result.get("recommendations")
+                rule_id=rule_id,
+                rule_level=rule_level,
+                rule_description=rule_description,
+                full_log=full_log,
+                agent_name=agent_name,
+                agent_ip=agent_ip,
+                trace_id=trace_id
             )
-
-            return analysis
-
         except Exception as e:
-            logger.error(f"AI分析失败: {e}")
+            logger.warning(f"Agent 分析失败，降级到 ZhipuAI: {e}")
+            # 降级到原始 ZhipuAI
+            result = await self._analyze_with_zhipuai(prompt)
+
+        # 保存到数据库
+        analysis = self._save_analysis(
+            alert_id=alert_id,
+            alert_fingerprint=alert_fingerprint,
+            explanation=result.get("explanation"),
+            risk_assessment=result.get("risk_assessment"),
+            recommendations=result.get("recommendations")
+        )
+
+        return analysis
+
+    async def _analyze_with_agent(
+        self,
+        alert_id: str,
+        rule_id: Optional[int],
+        rule_level: Optional[int],
+        rule_description: Optional[str],
+        full_log: Optional[str],
+        agent_name: Optional[str],
+        agent_ip: Optional[str],
+        trace_id: str,
+    ) -> dict:
+        """用 Pi Agent 分析告警"""
+        import time
+        start_time = time.time()
+
+        manager = self._get_agent_manager()
+        session_id = f"alert-analysis-{alert_id}"
+
+        # 构建 prompt
+        prompt = self._build_analysis_prompt(
+            rule_id, rule_level, rule_description,
+            full_log, agent_name, agent_ip
+        )
+
+        # 调用 Agent
+        try:
+            result = await manager.call(session_id, "agent.prompt", {
+                "sessionId": session_id,
+                "userMessage": prompt,
+                "model": settings.GLM_MODEL or "glm-4-flash",
+                "trace_id": trace_id,
+            })
+
+            # 记录 Prometheus 埋点
+            duration = time.time() - start_time
+            logger.info(f"Agent 分析完成: alert_id={alert_id}, duration={duration:.2f}s")
+
+            # 解析 Agent 返回
+            # POC 阶段: 从 result 中提取文本再解析
+            text = result.get("text", "") if isinstance(result, dict) else str(result)
+
+            return self._parse_agent_response(text, alert_id)
+
+        except asyncio.TimeoutError:
+            logger.warning(f"Agent 调用超时: alert_id={alert_id}")
             raise
+        except Exception as e:
+            logger.error(f"Agent 调用异常: alert_id={alert_id}, error={e}")
+            raise
+
+    def _parse_agent_response(self, text: str, alert_id: str) -> dict:
+        """从 Agent 响应中解析分析结果"""
+        # POC: 尝试从文本中提取 JSON
+        try:
+            # 尝试提取 JSON 部分
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0].strip()
+            elif "```" in text:
+                text = text.split("```")[1].split("```")[0].strip()
+
+            data = json.loads(text)
+            return {
+                "explanation": data.get("explanation", ""),
+                "risk_assessment": data.get("risk_assessment", ""),
+                "recommendations": data.get("recommendations", "")
+            }
+        except json.JSONDecodeError:
+            # JSON 解析失败，尝试从文本中提取关键信息
+            logger.warning(f"Agent 响应 JSON 解析失败，使用备用解析: alert_id={alert_id}")
+            return {
+                "explanation": text[:500] if text else "Agent 分析结果解析失败",
+                "risk_assessment": f"规则级别 {self._get_rule_level(rule_id)}",
+                "recommendations": "请查看完整日志进行详细分析"
+            }
+
+    def _get_rule_level(self, rule_level: Optional[int]) -> str:
+        """根据规则级别返回风险描述"""
+        if rule_level is None:
+            return "未知风险"
+        if rule_level >= 12:
+            return "高风险 (严重)"
+        elif rule_level >= 7:
+            return "中风险"
+        else:
+            return "低风险"
+
+    async def _analyze_with_zhipuai(self, prompt: str) -> dict:
+        """降级: 直接调 ZhipuAI SDK"""
+        return self._call_ai_analysis(prompt)
 
     def _generate_fingerprint(
         self,
@@ -244,7 +359,7 @@ class AIAnalysisService:
 
         return analysis
 
-    def analyze_log(self, log_content: str) -> Dict[str, str]:
+    async def analyze_log(self, log_content: str) -> Dict[str, str]:
         """自然语言解释日志内容"""
 
         prompt = f"""请用简洁易懂的中文解释以下日志内容：

@@ -3,7 +3,10 @@ API 路由汇总
 """
 
 from fastapi import APIRouter
-from app.api import auth, users, assets, asset_ports, asset_tags, asset_incidents, incidents, alerts, ai, ai_chat, menus, roles, departments, audit_logs, sync, webhooks, dicts, system_configs, public, notifications, ws, data_sync
+from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
+    incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
+    audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
+    ws, data_sync, internal)
 
 api_router = APIRouter()
 
@@ -19,6 +22,8 @@ api_router.include_router(alerts.router, prefix="/alerts", tags=["告警管理"]
 api_router.include_router(ai.router, prefix="/ai", tags=["AI分析"])
 # Art Bot 聊天（SSE 流式）—— 挂在 /ai/chat 下，避免与 /ai/analyze-alert 冲突
 api_router.include_router(ai_chat.router, prefix="/ai", tags=["Art Bot"])
+# Pi Agent（SSE 流式）—— 挂在 /ai/agent 下
+api_router.include_router(ai_agent.router, prefix="/ai", tags=["Pi Agent"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(departments.router, prefix="/departments", tags=["部门管理"])
@@ -33,3 +38,5 @@ api_router.include_router(ws.router, tags=["WebSocket"])
 api_router.include_router(public.router, prefix="/public", tags=["公共信息"])
 # Collector 数据同步接口（API Key 认证，非 JWT）
 api_router.include_router(data_sync.router, prefix="/data", tags=["数据同步"])
+# 内部 Agent 工具（Service Token 认证，只读）
+api_router.include_router(internal.tools.router)

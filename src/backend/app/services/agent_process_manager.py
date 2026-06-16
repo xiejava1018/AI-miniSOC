@@ -13,11 +13,24 @@ POC 阶段说明:
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import signal
+import subprocess
 import time
 from enum import Enum
+from pathlib import Path
 from typing import AsyncIterator, Dict, Any, Optional
 
 from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# 常量
+# ---------------------------------------------------------------------------
+
+# Node 脚本路径: src/agent-runner/src/pi-agent-runner.js
+NODE_SCRIPT = Path(__file__).parent.parent.parent.parent / "agent-runner" / "src" / "pi-agent-runner.js"
 
 
 # ---------------------------------------------------------------------------
@@ -96,22 +109,143 @@ class AgentProcess:
         self,
         session_id: str,
         role: str,
-        # 以下参数在 POC 阶段由 Manager 持有, 进程本身暂不实例化
-        _proc: Optional[Any] = None,  # subprocess.Popen
-        _stdin_writer: Optional[asyncio.StreamWriter] = None,
-        _stdout_reader: Optional[asyncio.StreamReader] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.session_id = session_id
         self.role = role
-        self.state: AgentProcessState = "idle"
+        self.state: AgentProcessState = AgentProcessState.IDLE
         self.last_heartbeat: float = time.time()
-        self._proc = _proc
-        self._stdin_writer = _stdin_writer
-        self._stdout_reader = _stdout_reader
+        self._proc: Optional[asyncio.subprocess.Process] = None
+        self._stdin_writer: Optional[asyncio.StreamWriter] = None
+        self._stdout_reader: Optional[asyncio.StreamReader] = None
+        self._stderr_reader: Optional[asyncio.StreamReader] = None
         # 请求 ID → Future[JSONRPCResponse]
         self._pending_requests: Dict[str, asyncio.Future[JSONRPCResponse]] = {}
         # asyncio.Lock 防止并发写 stdin
         self._write_lock = asyncio.Lock()
+        # 事件队列
+        self._events: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        # 配置: env, model, trace_id 等
+        self._config: Dict[str, Any] = config or {}
+        # stdout 监听任务
+        self._listen_task: Optional[asyncio.Task[None]] = None
+
+    # -----------------------------------------------------------------------
+    # 生命周期
+    # -----------------------------------------------------------------------
+
+    async def _spawn(self) -> None:
+        """
+        用 asyncio.create_subprocess_exec 启动 Node 子进程。
+
+        流程:
+        1. 合并环境变量 + 用户配置 env
+        2. 设置 PI_MODEL 环境变量
+        3. spawn node --stdio ...
+        4. 启动 stdout 监听协程
+        """
+        if self._proc is not None and self._proc.returncode is None:
+            return  # 进程已启动
+
+        env: Dict[str, str] = {**os.environ, **{str(k): str(v) for k, v in self._config.get("env", {}).items()}}
+        env["PI_MODEL"] = self._config.get("model", "openai/gpt-4o-mini")
+        if self._config.get("trace_id"):
+            env["PI_TRACE_ID"] = self._config["trace_id"]
+
+        self._proc = await asyncio.create_subprocess_exec(
+            "node",
+            str(NODE_SCRIPT),
+            "--stdio",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+            # 不使用 SIGPIPE, 让 Python 端处理管道关闭
+            start_new_session=True,
+        )
+        self._stdin_writer = self._proc.stdin
+        self._stdout_reader = self._proc.stdout
+        self._stderr_reader = self._proc.stderr
+
+        self.state = AgentProcessState.IDLE
+        self.last_heartbeat = time.time()
+
+        # 启动 stdout 监听协程
+        self._listen_task = asyncio.create_task(self._listen_stdout())
+        # 可选: 启动 stderr 日志 (后台打印到日志)
+        if self._stderr_reader:
+            asyncio.create_task(self._log_stderr())
+
+    async def _log_stderr(self) -> None:
+        """后台读取 stderr 并打印 (调试用)"""
+        if self._stderr_reader is None:
+            return
+        try:
+            while self._proc and self._proc.returncode is None:
+                line = await self._stderr_reader.readline()
+                if not line:
+                    break
+                # 简单打印到 stderr, 避免阻塞
+                import sys
+                sys.stderr.write(f"[PiAgent:{self.session_id}] {line.decode('utf-8', errors='replace')}")
+                sys.stderr.flush()
+        except Exception:
+            pass
+
+    async def _listen_stdout(self) -> None:
+        """
+        持续读 stdout, 分派给 pending requests 或 yield events。
+
+        流程:
+        1. 循环读 stdout 直到进程退出
+        2. 解析 JSON 行
+        3. id == 'evt' → 推入 _events 队列
+        4. id in _pending_requests → 完成 future
+        """
+        while self._proc and self._proc.returncode is None:
+            try:
+                if self._stdout_reader is None:
+                    break
+                line = await self._stdout_reader.readline()
+                if not line:
+                    break
+
+                msg: Dict[str, Any] = json.loads(line.decode("utf-8"))
+                req_id = msg.get("id")
+
+                if req_id == "evt":
+                    # 事件: 解析并推入队列
+                    event_data = msg.get("params", {})
+                    # 添加 session_id 方便上层使用
+                    event_data["session_id"] = self.session_id
+                    await self._events.put(event_data)
+                elif req_id in self._pending_requests:
+                    # 响应: 完成 future
+                    future = self._pending_requests.pop(req_id)
+                    if not future.done():
+                        future.set_result(JSONRPCResponse.model_validate(msg))
+                    self.last_heartbeat = time.time()
+                else:
+                    # 未知消息, 忽略
+                    pass
+            except asyncio.CancelledError:
+                break
+            except json.JSONDecodeError:
+                # 非 JSON 行, 忽略
+                pass
+            except Exception:
+                # 其他异常, 继续循环
+                pass
+
+        # 进程已退出, 标记状态
+        self.state = AgentProcessState.DEAD
+
+        # 通知所有 pending futures 以错误结束
+        for req_id, future in list(self._pending_requests.items()):
+            if not future.done():
+                exc = RuntimeError(f"Process {self.session_id} exited unexpectedly")
+                future.set_exception(exc)
+        self._pending_requests.clear()
 
     # -----------------------------------------------------------------------
     # RPC 调用
@@ -123,37 +257,78 @@ class AgentProcess:
 
         流程:
         1. 生成 request_id, 创建 asyncio.Future
-        2. 写入 stdin (加锁, 防并发写)
-        3. await future until timeout
-        4. 返回 result 或 raise
+        2. 若进程未启动, 调用 _spawn
+        3. 写入 stdin (加锁, 防并发写)
+        4. await future until timeout
+        5. 返回 result 或 raise
 
         Raises:
-            NotImplementedError: POC 阶段不真正与进程通信
             asyncio.TimeoutError: 超时
+            RuntimeError: 进程异常或 RPC error
         """
-        raise NotImplementedError("POC 阶段: 未真正 spawn 进程")
+        # 确保进程已启动
+        if self._proc is None or self._proc.returncode is not None:
+            await self._spawn()
+
+        req_id = f"req-{int(time.time() * 1000)}-{id(self)}"
+        request = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
+
+        future: asyncio.Future[JSONRPCResponse] = asyncio.Future()
+        self._pending_requests[req_id] = future
+
+        self.state = AgentProcessState.RUNNING
+        self.last_heartbeat = time.time()
+
+        try:
+            # 写入 stdin (加锁)
+            async with self._write_lock:
+                self._stdin_writer.write(json.dumps(request, ensure_ascii=False).encode("utf-8") + b"\n")
+                await self._stdin_writer.drain()
+
+            # 等待响应
+            result = await asyncio.wait_for(future, timeout)
+
+            if result.error:
+                raise RuntimeError(f"RPC error: {result.error}")
+
+            return result.result or {}
+        except asyncio.TimeoutError:
+            # 超时后移除 pending
+            self._pending_requests.pop(req_id, None)
+            raise asyncio.TimeoutError(f"RPC call {method} timed out after {timeout}s")
+        finally:
+            self.state = AgentProcessState.IDLE
 
     # -----------------------------------------------------------------------
     # 事件流
     # -----------------------------------------------------------------------
 
-    async def stream_events(self) -> AsyncIterator[dict]:
+    async def stream_events(self) -> AsyncIterator[Dict[str, Any]]:
         """
-        监听 stdout 事件流, yeild AgentEvent。
+        从 _events 队列 yield 事件。
 
         流程:
-        1. 启动一个 asyncio.Task 持续读取 stdout
-        2. 解析 JSON 行, 过滤 id == 'evt' 的消息
-        3. yield AgentEvent 直到进程退出或取消
+        1. 从 _events 队列读取事件
+        2. yield 直到进程退出或超时
+        3. timeout=1s 检查进程是否存活
 
         Yields:
-            AgentEvent: 解析后的事件对象
+            Dict[str, Any]: 事件载荷
 
         Raises:
-            NotImplementedError: POC 阶段未建立进程管道
+            RuntimeError: 进程已退出
         """
-        raise NotImplementedError("POC 阶段: 未建立 stdout 监听管道")
-        yield  # noqa: 声明 AsyncIterator 必须有 yield
+        while True:
+            try:
+                event = await asyncio.wait_for(self._events.get(), timeout=1.0)
+                yield event
+            except asyncio.TimeoutError:
+                # 检查进程是否还活着
+                if self._proc is None or self._proc.returncode is not None:
+                    # 进程已退出, 退出循环
+                    break
+                # 超时但进程存活, 继续等待
+                continue
 
     # -----------------------------------------------------------------------
     # 生命周期
@@ -165,10 +340,51 @@ class AgentProcess:
         1. SIGTERM → 等待 grace_period
         2. 若仍存活 → SIGKILL
 
-        Raises:
-            NotImplementedError: POC 阶段无进程可杀
+        注意: subprocess.Process.terminate() 发送 SIGTERM,
+              但在 start_new_session=True 时需要自己处理信号。
         """
-        raise NotImplementedError("POC 阶段: 无进程可杀")
+        # 取消监听任务
+        if self._listen_task and not self._listen_task.done():
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+
+        if self._proc is None:
+            return
+
+        try:
+            # SIGTERM
+            self._proc.terminate()
+            try:
+                await asyncio.wait_for(self._proc.wait(), grace_period)
+            except asyncio.TimeoutError:
+                # SIGKILL
+                self._proc.kill()
+                await self._proc.wait()
+        except ProcessLookupError:
+            # 进程已不存在
+            pass
+
+        self._proc = None
+        self._stdin_writer = None
+        self._stdout_reader = None
+        self._stderr_reader = None
+        self.state = AgentProcessState.DEAD
+
+        # 清空 pending requests
+        for req_id, future in list(self._pending_requests.items()):
+            if not future.done():
+                future.set_exception(RuntimeError(f"Process {self.session_id} was killed"))
+        self._pending_requests.clear()
+
+        # 清空事件队列
+        while not self._events.empty():
+            try:
+                self._events.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
     # -----------------------------------------------------------------------
     # 内部工具
@@ -176,7 +392,7 @@ class AgentProcess:
 
     def _ensure_alive(self) -> None:
         """若进程已 DEAD, raise RuntimeError"""
-        if self.state == "dead":
+        if self.state == AgentProcessState.DEAD:
             raise RuntimeError(f"Process {self.session_id} is dead")
 
 
@@ -216,7 +432,12 @@ class AgentProcessManager:
     # 核心 API
     # -----------------------------------------------------------------------
 
-    async def get_or_create(self, session_id: str, role: str) -> AgentProcess:
+    async def get_or_create(
+        self,
+        session_id: str,
+        role: str,
+        config: Optional[Dict[str, Any]] = None,
+    ) -> AgentProcess:
         """
         获取或创建进程。
 
@@ -228,15 +449,30 @@ class AgentProcessManager:
         Args:
             session_id: 会话 ID (UUID)
             role:       Agent 角色 (alert-triage / chat / report-writer / ...)
+            config:     配置 dict (env, model, trace_id 等)
 
         Returns:
             AgentProcess 实例
 
         Raises:
-            NotImplementedError: POC 阶段不真正 spawn 进程
-            RuntimeError:       进程池已满
+            RuntimeError: 进程池已满
         """
-        raise NotImplementedError("POC 阶段: 不真正创建进程")
+        async with self._lock:
+            # 复用已有进程
+            if session_id in self._processes:
+                proc = self._processes[session_id]
+                proc.last_heartbeat = time.time()
+                return proc
+
+            # 检查池上限
+            if len(self._processes) >= self.max_concurrent:
+                raise RuntimeError(f"Agent pool full ({self.max_concurrent})")
+
+            # 创建新进程
+            proc = AgentProcess(session_id, role, config)
+            await proc._spawn()
+            self._processes[session_id] = proc
+            return proc
 
     async def call(self, session_id: str, method: str, params: dict) -> dict:
         """
@@ -251,23 +487,45 @@ class AgentProcessManager:
             JSON-RPC result dict
 
         Raises:
-            KeyError:            session 不存在且无法创建
-            NotImplementedError: POC 阶段
+            RuntimeError: session 不存在且无法创建
+            asyncio.TimeoutError: RPC 超时
         """
-        raise NotImplementedError("POC 阶段: 不真正调用 RPC")
+        proc = self._processes.get(session_id)
+        if not proc:
+            # 自动创建, role 从 params 提取
+            role = params.pop("role", "default") if "role" in params else "default"
+            proc = await self.get_or_create(session_id, role, params)
 
-    async def stream_events(self, session_id: str) -> AsyncIterator[dict]:
+        return await proc.call(method, params)
+
+    async def stream_events(self, session_id: str) -> AsyncIterator[Dict[str, Any]]:
         """
         流式监听 session 事件。
 
         Yields:
-            AgentEvent 字典 (转发到 SSE)
+            Dict[str, Any]: 事件载荷 (转发到 SSE)
 
         Raises:
-            NotImplementedError: POC 阶段无事件流
+            KeyError: session 不存在
         """
-        raise NotImplementedError("POC 阶段: 无事件流")
-        yield  # noqa
+        proc = self._processes.get(session_id)
+        if not proc:
+            raise KeyError(f"Session {session_id} not found")
+
+        async for event in proc.stream_events():
+            yield event
+
+    async def evict(self, session_id: str) -> None:
+        """
+        驱逐指定 session 的进程。
+
+        Args:
+            session_id: 要驱逐的会话 ID
+        """
+        async with self._lock:
+            proc = self._processes.pop(session_id, None)
+            if proc:
+                await proc.kill()
 
     # -----------------------------------------------------------------------
     # 统计 & 运维
@@ -284,11 +542,16 @@ class AgentProcessManager:
                 "by_role":  {"alert-triage": N, "chat": N, ...},
             }
         """
-        by_state: Dict[str, int] = {"idle": 0, "running": 0, "dead": 0}
+        by_state: Dict[str, int] = {
+            AgentProcessState.IDLE.value: 0,
+            AgentProcessState.RUNNING.value: 0,
+            AgentProcessState.DEAD.value: 0,
+        }
         by_role: Dict[str, int] = {}
 
         for proc in self._processes.values():
-            by_state[proc.state] = by_state.get(proc.state, 0) + 1
+            state_key = proc.state.value if isinstance(proc.state, AgentProcessState) else str(proc.state)
+            by_state[state_key] = by_state.get(state_key, 0) + 1
             by_role[proc.role] = by_role.get(proc.role, 0) + 1
 
         return {

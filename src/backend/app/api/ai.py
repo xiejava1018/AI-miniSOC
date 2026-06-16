@@ -2,13 +2,14 @@
 AI 分析 API (智谱AI集成)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from app.core.database import get_db
 from app.services.ai_analysis import AIAnalysisService
 from app.models import AIAnalysis
+import uuid
 
 router = APIRouter()
 
@@ -31,13 +32,18 @@ class LogExplainRequest(BaseModel):
 
 
 @router.post("/analyze-alert")
-async def analyze_alert(request: AlertAnalysisRequest, db: Session = Depends(get_db)):
+async def analyze_alert(
+    request: AlertAnalysisRequest,
+    x_trace_id: Optional[str] = Header(None, alias="X-Trace-Id"),
+    db: Session = Depends(get_db)
+):
     """使用 AI 分析告警"""
     try:
+        trace_id = x_trace_id or str(uuid.uuid4())
         ai_service = AIAnalysisService(db)
 
-        # 调用AI分析
-        analysis = ai_service.analyze_alert(
+        # 调用AI分析 (async)
+        analysis = await ai_service.analyze_alert(
             alert_id=request.alert_id,
             rule_id=request.rule_id,
             rule_level=request.rule_level,
@@ -45,7 +51,8 @@ async def analyze_alert(request: AlertAnalysisRequest, db: Session = Depends(get
             full_log=request.full_log,
             agent_name=request.agent_name,
             agent_ip=request.agent_ip,
-            force_refresh=request.force_refresh or False
+            force_refresh=request.force_refresh or False,
+            trace_id=trace_id
         )
 
         return {
@@ -56,7 +63,8 @@ async def analyze_alert(request: AlertAnalysisRequest, db: Session = Depends(get
             "recommendations": analysis.recommendations,
             "model_name": analysis.model_name,
             "created_at": analysis.created_at,
-            "expires_at": analysis.expires_at
+            "expires_at": analysis.expires_at,
+            "trace_id": trace_id
         }
 
     except Exception as e:
@@ -126,7 +134,7 @@ async def analyze_alerts_batch(
 
         for alert_request in alerts:
             try:
-                analysis = ai_service.analyze_alert(
+                analysis = await ai_service.analyze_alert(
                     alert_id=alert_request.alert_id,
                     rule_id=alert_request.rule_id,
                     rule_level=alert_request.rule_level,
