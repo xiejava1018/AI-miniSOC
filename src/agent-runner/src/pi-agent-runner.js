@@ -11,8 +11,9 @@
  */
 
 import { Agent } from '@earendil-works/pi-agent-core';
-import { getModel } from '@earendil-works/pi-ai';
+import { getModel, registerApiProvider } from '@earendil-works/pi-ai';
 import { randomUUID } from 'crypto';
+import OpenAI from 'openai';
 
 import {
   writeResponse,
@@ -22,6 +23,159 @@ import {
   parseRequest
 } from './rpc-protocol.js';
 import { createEventHandler } from './event-mapper.js';
+
+// ============================================================================
+// Agnes AI Provider Registration
+// ============================================================================
+
+// Agnes AI 模型配置 (带有自定义 baseUrl)
+const AGNES_MODELS = {
+  'agnes-1.5-flash': {
+    id: 'agnes-1.5-flash',
+    provider: 'agnes',
+    api: 'openai-responses',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  },
+  'agnes-2.0-flash': {
+    id: 'agnes-2.0-flash',
+    provider: 'agnes',
+    api: 'openai-responses',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  }
+};
+
+// Agnes AI OpenAI client
+let agnesClient = null;
+
+/**
+ * Initialize Agnes AI client and provider
+ */
+function initAgnesAIProvider() {
+  const apiKey = process.env.AGNES_API_KEY || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    console.error('[AgnesAI] No API key found (AGNES_API_KEY or OPENAI_API_KEY)');
+    return false;
+  }
+
+  // Create Agnes AI OpenAI client
+  agnesClient = new OpenAI({
+    apiKey,
+    baseURL: 'https://apihub.agnes-ai.com/v1',
+    dangerouslyAllowBrowser: false
+  });
+
+  console.log('[AgnesAI] Client initialized');
+  return true;
+}
+
+// Initialize on startup
+initAgnesAIProvider();
+
+/**
+ * Get Agnes AI model configuration
+ * @param {string} modelId - Model identifier
+ * @returns {Object} Model configuration with baseUrl
+ */
+function getAgnesModel(modelId) {
+  return AGNES_MODELS[modelId] || {
+    id: modelId,
+    provider: 'agnes',
+    api: 'openai-responses',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  };
+}
+
+/**
+ * Create Agnes AI stream function
+ * @param {Object} model - Model config with baseUrl
+ * @returns {AsyncGenerator} Stream of assistant message events
+ */
+async function* agnesStream(model, context, options) {
+  if (!agnesClient) {
+    throw new Error('Agnes AI client not initialized');
+  }
+
+  try {
+    // Format messages for Agnes AI
+    const messages = [];
+    if (context.systemPrompt) {
+      messages.push({ role: 'system', content: context.systemPrompt });
+    }
+    for (const msg of context.messages || []) {
+      if (msg.role === 'user') {
+        messages.push({ role: 'user', content: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('') });
+      } else if (msg.role === 'assistant') {
+        messages.push({ role: 'assistant', content: typeof msg.content === 'string' ? msg.content : msg.content.map(c => c.text || '').join('') });
+      }
+    }
+
+    const response = await agnesClient.responses.create({
+      model: model.id,
+      input: messages,
+      max_tokens: options?.maxTokens || 4096
+    }, { signal: options?.signal });
+
+    // Build partial message for start event
+    const partialMessage = {
+      role: 'assistant',
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      timestamp: Date.now()
+    };
+
+    // Yield start event with partial message
+    yield { type: 'start', partial: partialMessage };
+
+    // Process response - Agnes AI returns reasoning + message items
+    let fullText = '';
+    for (const item of response.output || []) {
+      // Skip reasoning items, only process message items
+      if (item.type === 'message' && item.role === 'assistant') {
+        for (const content of item.content || []) {
+          if (content.type === 'output_text') {
+            fullText += content.text;
+            // Yield text_delta for each text chunk (pi-agent-core expects this format)
+            yield { type: 'text_delta', delta: content.text };
+          }
+        }
+      }
+    }
+
+    // Yield done with final message
+    const finalMessage = {
+      ...partialMessage,
+      content: [{ type: 'text', text: fullText }],
+      stopReason: 'stop',
+      usage: response.usage ? {
+        input: response.usage.input_tokens || 0,
+        output: response.usage.output_tokens || 0,
+        cacheRead: response.usage.prompt_cache_hit_tokens || 0,
+        cacheWrite: response.usage.prompt_cache_miss_tokens || 0,
+        totalTokens: response.usage.total_tokens || 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+      } : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }
+    };
+
+    yield { type: 'done', message: finalMessage };
+  } catch (error) {
+    yield { type: 'error', error: error.message };
+  }
+}
+
+// Register Agnes AI as a custom provider
+if (agnesClient) {
+  registerApiProvider({
+    api: 'openai-responses',
+    stream: agnesStream,
+    streamSimple: agnesStream
+  }, 'agnes-ai');
+  console.log('[AgnesAI] Provider registered');
+}
 
 // ============================================================================
 // Global State
@@ -38,7 +192,7 @@ const pendingRequests = new Map();
 
 /** Configuration from environment */
 const config = {
-  defaultModel: process.env.PI_MODEL || 'openai/gpt-4o-mini',
+  defaultModel: process.env.PI_MODEL || 'agnes/agnes-1.5-flash',  // Agnes AI as default
   serviceToken: process.env.INTERNAL_SERVICE_TOKEN || '',
   baseUrl: process.env.PI_BASE_URL || null,  // For proxy/custom endpoints
   debug: process.env.DEBUG === 'true'
@@ -59,13 +213,23 @@ function getOrCreateAgent(sessionId, model = null, systemPrompt = null) {
   if (!agents.has(sessionId)) {
     const modelConfig = parseModelConfig(model || config.defaultModel);
 
+    // Use getAgnesModel for Agnes AI models, otherwise use getModel
+    let modelConfig_obj;
+    let streamFn = null;
+    if (modelConfig.provider === 'agnes') {
+      modelConfig_obj = getAgnesModel(modelConfig.model);
+      streamFn = agnesStream;  // Use Agnes stream function
+    } else {
+      modelConfig_obj = getModel(modelConfig.provider, modelConfig.model);
+    }
+
     const agent = new Agent({
       initialState: {
         systemPrompt: systemPrompt || 'You are a helpful SOC analyst assistant.',
-        model: getModel(modelConfig.provider, modelConfig.model)
+        model: modelConfig_obj
       },
-      // POC phase: no tools, just verify LLM streaming
-      tools: []
+      tools: [],
+      streamFn: streamFn  // Pass custom stream function for Agnes AI
     });
 
     agents.set(sessionId, agent);

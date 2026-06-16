@@ -50,7 +50,7 @@ class AgentPromptRequest(BaseModel):
     """Agent 对话请求"""
     session_id: Optional[str] = None  # 不传则创建新 session
     user_message: str
-    model: str = "glm-4-flash"  # 默认用 GLM
+    model: str = "agnes/agnes-1.5-flash"  # 默认用 Agnes AI
     skills: list[str] = []
     tools: list[str] = []
     system_prompt: Optional[str] = None

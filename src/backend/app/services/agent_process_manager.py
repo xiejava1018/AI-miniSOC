@@ -148,7 +148,12 @@ class AgentProcess:
             return  # 进程已启动
 
         env: Dict[str, str] = {**os.environ, **{str(k): str(v) for k, v in self._config.get("env", {}).items()}}
-        env["PI_MODEL"] = self._config.get("model", "openai/gpt-4o-mini")
+        env["PI_MODEL"] = self._config.get("model", "agnes/agnes-1.5-flash")  # Agnes AI as default
+        # Pass Agnes API key to Node process
+        if self._config.get("api_key"):
+            env["AGNES_API_KEY"] = self._config["api_key"]
+        elif os.getenv("AGNES_API_KEY"):
+            env["AGNES_API_KEY"] = os.getenv("AGNES_API_KEY")
         if self._config.get("trace_id"):
             env["PI_TRACE_ID"] = self._config["trace_id"]
 
