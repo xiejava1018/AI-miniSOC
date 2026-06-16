@@ -1,6 +1,11 @@
 """
 Art Bot 聊天 API
 
+支持两种后端：
+- Pi Agent + Agnes AI（默认）
+- Claude Code CLI（备选，通过环境变量切换）
+
+API 端点：
 - POST /ai/chat             新建会话 + 发起首轮对话（SSE 流式）
 - POST /ai/chat/{session_id}  继续对话（SSE 流式）
 - GET  /ai/chat/sessions    会话列表（分页）
@@ -8,9 +13,9 @@ Art Bot 聊天 API
 - DELETE /ai/chat/sessions/{id}  删除会话
 
 SSE 事件格式：
-    data: {"delta": "...", "session_id": "..."}\\n\\n
-    data: {"delta": "...", "session_id": "..."}\\n\\n
-    data: [DONE]\\n\\n
+    data: {"delta": "...", "session_id": "..."}\n\n
+    data: {"delta": "...", "session_id": "..."}\n\n
+    data: [DONE]\n\n
 
 注意：ResponseWrapperMiddleware 会放过非 `application/json` 响应，
 `text/event-stream` 自然不会进入包装逻辑。
@@ -19,6 +24,7 @@ SSE 事件格式：
 import asyncio
 import json
 import logging
+import os
 import uuid
 from typing import AsyncIterator
 
@@ -37,12 +43,24 @@ from app.schemas.chat import (
     ChatSessionListResponse,
     ChatSessionOut,
 )
-from app.services.chat_service import ChatService, ClaudeCLIError
 from app.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["art-bot"])
+
+# 决定使用哪种后端：pi_agent（默认）或 claude_cli
+CHAT_BACKEND = os.getenv("CHAT_BACKEND", "pi_agent").lower()
+logger.info(f"[Art Bot] Using chat backend: {CHAT_BACKEND}")
+
+if CHAT_BACKEND == "pi_agent":
+    from app.services.pi_agent_chat_service import PiAgentChatService as ChatService, PiAgentChatError as ChatError
+    logger.info("[Art Bot] Pi Agent + Agnes AI backend enabled")
+elif CHAT_BACKEND == "claude_cli":
+    from app.services.chat_service import ChatService, ClaudeCLIError as ChatError
+    logger.info("[Art Bot] Claude CLI backend enabled")
+else:
+    raise ValueError(f"Invalid CHAT_BACKEND: {CHAT_BACKEND}. Must be 'pi_agent' or 'claude_cli'")
 
 
 def _session_to_out(s) -> ChatSessionOut:
@@ -89,13 +107,13 @@ async def _sse_generator(
                 is_truncated=True,
             )
         raise
-    except ClaudeCLIError as e:
-        # Claude CLI 子进程异常：可执行不存在、超时、退出码非 0
-        logger.error("claude CLI error session=%s: %s", session_id, e)
+    except ChatError as e:
+        # AI 服务异常
+        logger.error("chat backend error session=%s: %s", session_id, e)
         err = json.dumps(
             {
                 "error": f"AI 服务暂不可用: {e}",
-                "code": "claude_cli_error",
+                "code": "chat_error",
                 "session_id": str(session_id),
             },
             ensure_ascii=False,
@@ -151,6 +169,7 @@ async def create_and_chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",  # 防 nginx 缓冲
             "X-Session-Id": str(session.id),
+            "X-Chat-Backend": CHAT_BACKEND,
         },
     )
 
@@ -175,6 +194,7 @@ async def continue_chat(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "X-Session-Id": str(session.id),
+            "X-Chat-Backend": CHAT_BACKEND,
         },
     )
 
