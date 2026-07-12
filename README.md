@@ -193,19 +193,21 @@ AI-miniSOC/
 │   ├── database/               # 数据库初始化 / 迁移 SQL
 │   └── poc/                    # PoC 脚本
 ├── docs/
-│   ├── design/                 # 架构设计
+│   ├── design/                 # 架构 / 功能设计（含 脆弱性管理 v0.2 / v1.0）
+│   ├── development/            # 开发 & 排错指南、日报
 │   ├── installation/           # 安装指南
 │   ├── api/                    # API 文档
 │   ├── plans/                  # 实施计划
 │   ├── skills/                 # 技能文档
 │   ├── superpowers/            # 高级主题
-│   └── wazuh-integration-manual.md
+│   ├── code-wiki.md            # 代码知识库
+│   ├── wazuh-integration-manual.md
+│   └── wazuh配置.md            # Wazuh 中文配置
 ├── tests/integration/          # 跨服务集成测试
 ├── .github/workflows/          # CI：unit-tests / e2e
 ├── .env.example                # 环境变量样例
 ├── docker-compose.yaml         # （位于 src/collectors/）
 ├── CLAUDE.md                   # Claude Code 协作指南
-├── CODE_WIKI.md                # 代码知识库
 ├── CHANGELOG.md
 ├── SECURITY.md
 └── README.md                   # ← 你正在看这里
@@ -441,7 +443,7 @@ pnpm test
 | 文档 | 路径 |
 |---|---|
 | Claude Code 协作指南 | [CLAUDE.md](CLAUDE.md) |
-| 代码知识库 | [CODE_WIKI.md](CODE_WIKI.md) |
+| 代码知识库 | [docs/code-wiki.md](docs/code-wiki.md) |
 | 变更日志 | [CHANGELOG.md](CHANGELOG.md) |
 | 安全策略 | [SECURITY.md](SECURITY.md) |
 | 环境变量样例 | [.env.example](.env.example) |
