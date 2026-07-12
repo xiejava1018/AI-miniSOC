@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>脆弱性管理 - 全状态设计参考</title>
+  <style>
+    :root {
+      /* 主色调 */
+      --accent-cyan: #00D4FF;
+      --accent-blue: #3B82F6;
+      --accent-purple: #8B5CF6;
+      --accent-cyan-dim: rgba(0, 212, 255, 0.1);
+
+      /* 状态色 */
+      --status-critical: #FF2A6D;
+      --status-high: #FF6B35;
+      --status-warning: #FFC107;
+      --status-success: #10B981;
+      --status-info: #06B6D4;
+
+      /* 背景色 */
+      --bg-primary: #0F1115;
+      --bg-secondary: #16171D;
+      --bg-tertiary: #1E2028;
+      --glass-bg: rgba(22, 23, 29, 0.8);
+      --glass-border: rgba(255, 255, 255, 0.08);
+
+      /* 文字色 */
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+
+      /* 边框 */
+      --border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+    }
+
+    .section {
+      margin-bottom: 60px;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 24px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 2px;
+    }
+
+    .state-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+
+    .state-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--accent-cyan);
+      margin-bottom: 20px;
+    }
+
+    .state-description {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 24px;
+      padding: 12px 16px;
+      background: var(--bg-tertiary);
+      border-left: 3px solid var(--accent-cyan);
+      border-radius: 6px;
+    }
+
+    /* 加载态 */
+    .loading-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 40px;
+      text-align: center;
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--bg-tertiary);
+      border-top-color: var(--accent-cyan);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .loading-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* 空态 */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 40px;
+      text-align: center;
+    }
+
+    .empty-icon {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      opacity: 0.5;
+      color: var(--text-muted);
+    }
+
+    .empty-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+
+    .empty-description {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      max-width: 400px;
+    }
+
+    .empty-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: white;
+      box-shadow: 0 4px 12px var(--accent-cyan-dim);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px var(--accent-cyan-dim);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    /* 错误态 */
+    .error-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 40px;
+      text-align: center;
+    }
+
+    .error-icon {
+      width: 80px;
+      height: 80px;
+      margin-bottom: 24px;
+      color: var(--status-critical);
+    }
+
+    .error-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+    }
+
+    .error-description {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      max-width: 500px;
+    }
+
+    .error-details {
+      padding: 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-align: left;
+      max-width: 500px;
+    }
+
+    /* Toast样式 */
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .toast {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      min-width: 320px;
+      max-width: 420px;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast.success {
+      border-left: 4px solid var(--status-success);
+    }
+
+    .toast.error {
+      border-left: 4px solid var(--status-critical);
+    }
+
+    .toast.warning {
+      border-left: 4px solid var(--status-warning);
+    }
+
+    .toast.info {
+      border-left: 4px solid var(--accent-cyan);
+    }
+
+    .toast-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toast.success .toast-icon {
+      color: var(--status-success);
+    }
+
+    .toast.error .toast-icon {
+      color: var(--status-critical);
+    }
+
+    .toast.warning .toast-icon {
+      color: var(--status-warning);
+    }
+
+    .toast.info .toast-icon {
+      color: var(--accent-cyan);
+    }
+
+    .toast-content {
+      flex: 1;
+    }
+
+    .toast-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .toast-message {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .toast-close {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+
+    .toast-close:hover {
+      color: var(--text-primary);
+    }
+
+    /* 交互行为规则表 */
+    .rules-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+    }
+
+    .rules-table th,
+    .rules-table td {
+      padding: 14px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .rules-table th {
+      background: var(--bg-tertiary);
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .rules-table td {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .rules-table tr:hover {
+      background: rgba(0, 212, 255, 0.03);
+    }
+
+    .trigger-tag {
+      display: inline-flex;
+      padding: 4px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .trigger-tag.user {
+      color: var(--accent-cyan);
+    }
+
+    .trigger-tag.system {
+      color: var(--accent-purple);
+    }
+
+    .trigger-tag.exception {
+      color: var(--status-critical);
+    }
+
+    /* 部分可用状态 */
+    .partial-state {
+      display: flex;
+      gap: 24px;
+    }
+
+    .partial-card {
+      flex: 1;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .partial-card.success {
+      border-color: var(--status-success);
+    }
+
+    .partial-card.error {
+      border-color: var(--status-critical);
+    }
+
+    .partial-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .partial-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .partial-card.success .partial-icon {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--status-success);
+    }
+
+    .partial-card.error .partial-icon {
+      background: rgba(255, 42, 109, 0.2);
+      color: var(--status-critical);
+    }
+
+    .partial-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .partial-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    /* 边界情况 */
+    .boundary-example {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .boundary-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .text-truncate {
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .long-text-wrapper {
+      max-height: 60px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .long-text-wrapper::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 30px;
+      background: linear-gradient(transparent, var(--bg-tertiary));
+    }
+
+    .badge-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      background: var(--status-critical);
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .badge-count.large {
+      font-size: 10px;
+    }
+
+    /* 目录 */
+    .toc {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 40px;
+    }
+
+    .toc-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+
+    .toc-list {
+      list-style: none;
+    }
+
+    .toc-list li {
+      margin-bottom: 8px;
+    }
+
+    .toc-list a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s ease;
+    }
+
+    .toc-list a:hover {
+      color: var(--accent-cyan);
+    }
+
+    .toc-list .toc-number {
+      color: var(--accent-cyan);
+      margin-right: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛡️ 脆弱性管理模块 - 全状态设计参考</h1>
+    <p class="subtitle">版本: v1.0 | 日期: 2026-03-25 | 设计师: Claude</p>
+
+    <!-- 目录 -->
+    <div class="toc">
+      <div class="toc-title">📑 目录</div>
+      <ul class="toc-list">
+        <li><a href="#section-1"><span class="toc-number">1.</span>页面状态</a></li>
+        <li><a href="#section-2"><span class="toc-number">2.</span>交互反馈</a></li>
+        <li><a href="#section-3"><span class="toc-number">3.</span>边界情况</a></li>
+        <li><a href="#section-4"><span class="toc-number">4.</span>交互行为规则表</a></li>
+      </ul>
+    </div>
+
+    <!-- 页面状态 -->
+    <div id="section-1" class="section">
+      <h2 class="section-title">页面状态</h2>
+
+      <!-- 正常态已在设计稿中展示，这里省略 -->
+
+      <!-- 加载态 -->
+      <div class="state-card">
+        <div class="state-label">加载态</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>页面初次加载、刷新数据、扫描任务进行中<br>
+          <strong>表现：</strong>显示加载动画 + 提示文字 + 可选的进度提示
+        </div>
+        <div class="loading-state">
+          <div class="loading-spinner"></div>
+          <div class="loading-text">正在加载漏洞数据...</div>
+          <div class="loading-hint">这可能需要几秒钟</div>
+        </div>
+      </div>
+
+      <!-- 空态 - 无漏洞 -->
+      <div class="state-card">
+        <div class="state-label">空态 - 无漏洞</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>系统从未进行过扫描，或所有漏洞已修复<br>
+          <strong>表现：</strong>友好的空状态插图 + 引导文案 + 操作按钮
+        </div>
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="empty-title">太棒了！暂无漏洞</div>
+          <div class="empty-description">
+            您的资产目前没有发现任何安全漏洞。建议定期运行扫描以保持系统安全。
+          </div>
+          <div class="empty-actions">
+            <button class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"/>
+                <path d="M12 8V12L15 15"/>
+              </svg>
+              立即扫描
+            </button>
+            <button class="btn btn-secondary">查看扫描历史</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 空态 - 无资产 -->
+      <div class="state-card">
+        <div class="state-label">空态 - 无资产</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>系统中还没有添加任何资产<br>
+          <strong>表现：</strong>提示用户先添加资产才能进行漏洞扫描
+        </div>
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="2"/>
+            <path d="M6 6H18M6 10H14M6 14H12M6 18H10"/>
+          </svg>
+          <div class="empty-title">还没有资产</div>
+          <div class="empty-description">
+            漏洞扫描需要先添加资产。请前往资产管理页面添加您的第一台服务器或设备。
+          </div>
+          <div class="empty-actions">
+            <button class="btn btn-primary">前往添加资产</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 搜索无结果 -->
+      <div class="state-card">
+        <div class="state-label">搜索/筛选无结果</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>用户搜索或筛选条件过于严格，没有匹配的结果<br>
+          <strong>表现：</strong>提示无结果 + 清空筛选按钮
+        </div>
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21L16.65 16.65"/>
+            <path d="M8 11H6" stroke-linecap="round"/>
+          </svg>
+          <div class="empty-title">未找到匹配的漏洞</div>
+          <div class="empty-description">
+            没有找到符合当前筛选条件的漏洞。尝试调整筛选条件或搜索关键词。
+          </div>
+          <div class="empty-actions">
+            <button class="btn btn-secondary">清空筛选条件</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 错误态 - 网络错误 -->
+      <div class="state-card">
+        <div class="state-label">错误态 - 网络错误</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>网络连接失败、API服务不可用<br>
+          <strong>表现：</strong>错误图标 + 错误信息 + 重试按钮
+        </div>
+        <div class="error-state">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+            <line x1="12" y1="2" x2="12" y2="12"/>
+          </svg>
+          <div class="error-title">连接失败</div>
+          <div class="error-description">
+            无法连接到服务器。请检查您的网络连接或稍后重试。
+          </div>
+          <div class="error-details">
+            Error: Network request failed<br>
+            Status: 503 Service Unavailable
+          </div>
+          <div class="empty-actions">
+            <button class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"/>
+                <path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              重试
+            </button>
+            <button class="btn btn-secondary">返回首页</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 错误态 - 扫描失败 -->
+      <div class="state-card">
+        <div class="state-label">错误态 - 扫描失败</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>Wazuh/OpenVAS扫描任务执行失败<br>
+          <strong>表现：</strong>具体的失败原因 + 建议操作
+        </div>
+        <div class="error-state">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div class="error-title">扫描任务失败</div>
+          <div class="error-description">
+            OpenVAS扫描任务执行失败，可能的原因：扫描器服务未启动、目标主机不可达、认证凭据无效。
+          </div>
+          <div class="error-details">
+            Task ID: scan-20250325-001<br>
+            Scanner: OpenVAS<br>
+            Error: Connection timeout - target unreachable
+          </div>
+          <div class="empty-actions">
+            <button class="btn btn-primary">重新扫描</button>
+            <button class="btn btn-secondary">查看扫描日志</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 部分可用 -->
+      <div class="state-card">
+        <div class="state-label">部分可用状态</div>
+        <div class="state-description">
+          <strong>触发条件：</strong>部分数据源可用，部分失败（如Wazuh正常，OpenVAS不可用）<br>
+          <strong>表现：</strong>同时展示成功和失败的状态，提供清晰的提示
+        </div>
+        <div class="partial-state">
+          <div class="partial-card success">
+            <div class="partial-header">
+              <div class="partial-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </div>
+              <div>
+                <div class="partial-title">Wazuh SCAP</div>
+                <div class="partial-description">扫描完成，发现23个漏洞</div>
+              </div>
+            </div>
+          </div>
+          <div class="partial-card error">
+            <div class="partial-header">
+              <div class="partial-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <div class="partial-title">OpenVAS</div>
+                <div class="partial-description">连接失败，服务未启动</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 交互反馈 -->
+    <div id="section-2" class="section">
+      <h2 class="section-title">交互反馈</h2>
+
+      <!-- Toast汇总 -->
+      <div class="state-card">
+        <div class="state-label">Toast 消息汇总</div>
+        <div class="state-description">
+          <strong>位置：</strong>页面右上角<br>
+          <strong>时长：</strong>成功3秒、失败5秒、警告4秒<br>
+          <strong>限制：</strong>同时最多显示3条
+        </div>
+
+        <div class="toast-container">
+          <!-- 成功Toast -->
+          <div class="toast success">
+            <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div class="toast-content">
+              <div class="toast-title">扫描任务已创建</div>
+              <div class="toast-message">Wazuh SCAP扫描已启动，预计10分钟完成</div>
+            </div>
+            <svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+
+          <!-- 错误Toast -->
+          <div class="toast error">
+            <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            <div class="toast-content">
+              <div class="toast-title">扫描失败</div>
+              <div class="toast-message">OpenVAS服务连接超时，请检查服务状态</div>
+            </div>
+            <svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+
+          <!-- 警告Toast -->
+          <div class="toast warning">
+            <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <div class="toast-content">
+              <div class="toast-title">发现5个严重漏洞</div>
+              <div class="toast-message">建议立即查看并处理这些高危漏洞</div>
+            </div>
+            <svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+
+          <!-- 信息Toast -->
+          <div class="toast info">
+            <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <div class="toast-content">
+              <div class="toast-title">扫描进行中</div>
+              <div class="toast-message">已完成45/100台资产，预计剩余15分钟</div>
+            </div>
+            <svg class="toast-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 边界情况 -->
+    <div id="section-3" class="section">
+      <h2 class="section-title">边界情况</h2>
+
+      <div class="state-card">
+        <div class="state-label">常见边界情况</div>
+        <div class="state-description">
+          处理各种极端数据和显示情况
+        </div>
+
+        <!-- 长文本截断 -->
+        <div class="boundary-example">
+          <div class="boundary-label">1. CVE编号过长</div>
+          <div class="text-truncate">CVE-2024-1234567890-abcdefghijklmnopqrstuvwxyz</div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">2. 漏洞描述过长</div>
+          <div class="long-text-wrapper">
+            <div style="font-size: 14px; color: var(--text-secondary);">
+              Apache Struts2 远程代码执行漏洞。当使用Jakarta multipart parser时，可能通过文件上传执行任意代码。此漏洞影响所有使用Struts2的Web应用程序，攻击者可以通过构造特殊的HTTP请求导致服务器执行任意命令，完全控制受影响系统。建议立即升级到安全版本。
+            </div>
+          </div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">3. 受影响资产过多</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; max-width: 400px;">
+            <span class="asset-tag">192.168.0.1</span>
+            <span class="asset-tag">192.168.0.2</span>
+            <span class="asset-tag">192.168.0.3</span>
+            <span class="asset-tag">192.168.0.4</span>
+            <span class="asset-tag">192.168.0.5</span>
+            <span style="padding: 4px 10px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 11px; color: var(--text-muted);">+45 more</span>
+          </div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">4. CVSS分数显示</div>
+          <div style="display: flex; gap: 16px;">
+            <div><span style="font-weight: 600; color: var(--status-critical);">0.0</span> (未评分)</div>
+            <div><span style="font-weight: 600; color: var(--status-success);">1.0</span> (低危)</div>
+            <div><span style="font-weight: 600; color: var(--status-critical);">10.0</span> (严重)</div>
+          </div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">5. 数字徽章显示</div>
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <div class="badge-count">5</div>
+            <div class="badge-count">99</div>
+            <div class="badge-count large">999+</div>
+          </div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">6. 修复建议为空</div>
+          <div style="font-size: 14px; color: var(--text-muted); font-style: italic;">暂无修复建议，请关注官方公告</div>
+        </div>
+
+        <div class="boundary-example">
+          <div class="boundary-label">7. 特殊字符显示</div>
+          <div style="font-size: 14px; color: var(--text-primary);">
+            CVE-2024-1234 &lt;XSS&gt; "注入" '单引号' $特殊 #符号
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 交互行为规则表 -->
+    <div id="section-4" class="section">
+      <h2 class="section-title">交互行为规则表</h2>
+
+      <div class="state-card">
+        <table class="rules-table">
+          <thead>
+            <tr>
+              <th style="width: 100px;">触发</th>
+              <th style="width: 150px;">用户操作</th>
+              <th>系统行为</th>
+              <th style="width: 150px;">反馈</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="trigger-tag user">用户</span></td>
+              <td>点击"立即扫描"</td>
+              <td>
+                1. 验证是否有可用资产<br>
+                2. 调用Wazuh SCAP API创建扫描任务<br>
+                3. 显示进度条<br>
+                4. 扫描完成后刷新列表
+              </td>
+              <td>
+                Toast: "扫描任务已创建" (成功)<br>
+                Toast: "没有可扫描的资产" (失败)
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag user">用户</span></td>
+              <td>点击"查看详情"</td>
+              <td>
+                1. 打开漏洞详情对话框<br>
+                2. 加载该CVE的完整信息<br>
+                3. 显示受影响资产列表
+              </td>
+              <td>
+                对话框打开动画<br>
+                加载中显示spinner
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag user">用户</span></td>
+              <td>使用搜索框</td>
+              <td>
+                1. 实时过滤漏洞列表<br>
+                2. 高亮匹配的文本<br>
+                3. 显示匹配数量
+              </td>
+              <td>
+                无结果时显示"未找到匹配的漏洞"<br>
+                有结果时显示"找到X个匹配项"
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag user">用户</span></td>
+              <td>使用筛选器</td>
+              <td>
+                1. 根据条件过滤列表<br>
+                2. 更新URL参数<br>
+                3. 更新统计数字
+              </td>
+              <td>
+                筛选器高亮当前选中项<br>
+                列表实时更新
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag user">用户</span></td>
+              <td>点击分页按钮</td>
+              <td>
+                1. 计算分页范围<br>
+                2. 加载对应页数据<br>
+                3. 滚动到顶部
+              </td>
+              <td>
+                按钮禁用状态更新<br>
+                页码指示器更新
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag system">系统</span></td>
+              <td>扫描任务完成</td>
+              <td>
+                1. 自动刷新漏洞列表<br>
+                2. 更新统计数字<br>
+                3. 生成AI建议
+              </td>
+              <td>
+                Toast: "发现X个新漏洞"<br>
+                AI建议面板闪烁提示
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag system">系统</span></td>
+              <td>发现严重漏洞</td>
+              <td>
+                1. 标记为紧急<br>
+                2. 发送通知<br>
+                3. 优先显示在列表顶部
+              </td>
+              <td>
+                Toast: "发现严重漏洞！"<br>
+                红色闪烁动画
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag exception">异常</span></td>
+              <td>网络请求失败</td>
+              <td>
+                1. 停止加载动画<br>
+                2. 显示错误状态<br>
+                3. 记录错误日志
+              </td>
+              <td>
+                Toast: "连接失败，请重试"<br>
+                错误页面显示详细信息
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag exception">异常</span></td>
+              <td>扫描器服务不可用</td>
+              <td>
+                1. 禁用扫描按钮<br>
+                2. 显示服务状态警告<br>
+                3. 提供重试机制
+              </td>
+              <td>
+                按钮置灰 + tooltip提示<br>
+                "OpenVAS服务离线"
+              </td>
+            </tr>
+            <tr>
+              <td><span class="trigger-tag exception">异常</span></td>
+              <td>数据格式错误</td>
+              <td>
+                1. 跳过错误数据<br>
+                2. 显示警告信息<br>
+                3. 继续加载其他数据
+              </td>
+              <td>
+                Toast: "部分数据加载失败"<br>
+                列表显示可用数据
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="text-align: center; padding: 40px 0; color: var(--text-muted); font-size: 13px;">
+      <p>📋 文档版本: v1.0 | 最后更新: 2026-03-25</p>
+      <p style="margin-top: 8px;">© 2026 AI-miniSOC 脆弱性管理模块设计规范</p>
+    </div>
+  </div>
+</body>
+</html>

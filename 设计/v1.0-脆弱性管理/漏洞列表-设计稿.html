@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>漏洞列表 - AI-miniSOC 脆弱性管理</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* 主题变量 - 支持明暗切换 */
+            --bg-primary: #0F1115;
+            --bg-secondary: #1A1D24;
+            --bg-tertiary: #252932;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A4B0;
+            --text-tertiary: #6B7280;
+            --accent-cyan: #00D4FF;
+            --accent-cyan-hover: #00B8E6;
+            --accent-cyan-10: rgba(0, 212, 255, 0.1);
+            --glass-bg: rgba(22, 23, 29, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --status-critical: #FF2A6D;
+            --status-critical-bg: rgba(255, 42, 109, 0.15);
+            --status-high: #FF6B35;
+            --status-high-bg: rgba(255, 107, 53, 0.15);
+            --status-medium: #FFB800;
+            --status-medium-bg: rgba(255, 184, 0, 0.15);
+            --status-low: #00D4FF;
+            --status-low-bg: rgba(0, 212, 255, 0.15);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --hover-bg: rgba(255, 255, 255, 0.05);
+        }
+
+        /* 明亮主题 */
+        [data-theme="light"] {
+            --bg-primary: #F5F7FA;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #E8EBF0;
+            --text-primary: #1A1D24;
+            --text-secondary: #6B7280;
+            --text-tertiary: #9CA3AF;
+            --glass-bg: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(0, 0, 0, 0.1);
+            --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --hover-bg: rgba(0, 0, 0, 0.03);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* 侧边栏导航 */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 240px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 20px 0;
+            z-index: 100;
+            backdrop-filter: blur(20px);
+        }
+
+        .sidebar-section {
+            padding: 0 16px;
+            margin-bottom: 24px;
+        }
+
+        .sidebar-section-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            padding: 0 12px;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            margin: 4px 0;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .sidebar-item:hover {
+            background: var(--hover-bg);
+            color: var(--text-primary);
+        }
+
+        .sidebar-item.active {
+            background: var(--accent-cyan-10);
+            color: var(--accent-cyan);
+        }
+
+        .sidebar-item-icon {
+            width: 18px;
+            height: 18px;
+            margin-right: 10px;
+            opacity: 0.8;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            margin-left: 240px;
+            padding: 32px;
+            min-height: 100vh;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* 扫描操作卡片 */
+        .scan-actions-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(20px);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .scan-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .scan-action-box {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .scan-action-box:hover {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.15);
+        }
+
+        .scan-action-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .scan-action-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent-cyan-10);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+        }
+
+        .scan-action-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--accent-cyan);
+        }
+
+        .scan-action-info h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .scan-action-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .scan-action-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .scan-action-button {
+            width: 100%;
+            padding: 12px 20px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-cyan-hover));
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+        }
+
+        .scan-action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+        }
+
+        .scan-action-button:active {
+            transform: translateY(0);
+        }
+
+        /* 筛选工具栏 */
+        .filter-toolbar {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 20px 24px;
+            margin-bottom: 24px;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(20px);
+        }
+
+        .filter-row {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .filter-select:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px var(--accent-cyan-10);
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 280px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px 10px 40px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 0 3px var(--accent-cyan-10);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            opacity: 0.5;
+        }
+
+        /* 漏洞列表表格 */
+        .vulnerability-table-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(20px);
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            padding: 16px 20px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        tbody tr:hover {
+            background: var(--hover-bg);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        td {
+            padding: 16px 20px;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        /* 严重程度标签 */
+        .severity-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .severity-critical {
+            background: var(--status-critical-bg);
+            color: var(--status-critical);
+        }
+
+        .severity-high {
+            background: var(--status-high-bg);
+            color: var(--status-high);
+        }
+
+        .severity-medium {
+            background: var(--status-medium-bg);
+            color: var(--status-medium);
+        }
+
+        .severity-low {
+            background: var(--status-low-bg);
+            color: var(--status-low);
+        }
+
+        /* CVE链接 */
+        .cve-link {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .cve-link:hover {
+            text-decoration: underline;
+        }
+
+        /* CVSS评分 */
+        .cvss-score {
+            display: inline-flex;
+            align-items: center;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .cvss-score.critical {
+            color: var(--status-critical);
+        }
+
+        .cvss-score.high {
+            color: var(--status-high);
+        }
+
+        .cvss-score.medium {
+            color: var(--status-medium);
+        }
+
+        .cvss-score.low {
+            color: var(--status-low);
+        }
+
+        /* 受影响资产 */
+        .affected-assets {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .asset-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* 扫描器标签 */
+        .scanner-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .scanner-badge svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
+        /* 状态标签 */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-open {
+            background: rgba(255, 42, 109, 0.1);
+            color: var(--status-critical);
+        }
+
+        .status-in_progress {
+            background: rgba(255, 184, 0, 0.15);
+            color: var(--status-medium);
+        }
+
+        .status-fixed {
+            background: rgba(0, 212, 255, 0.1);
+            color: var(--accent-cyan);
+        }
+
+        /* 操作按钮 */
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-button {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+        }
+
+        .icon-button:hover {
+            background: var(--accent-cyan-10);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .icon-button svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* 分页 */
+        .pagination-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .pagination-info {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .pagination-info strong {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .pagination-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .pagination-button {
+            padding: 8px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .pagination-button:hover:not(:disabled) {
+            background: var(--accent-cyan-10);
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .pagination-button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination-button.active {
+            background: var(--accent-cyan);
+            border-color: var(--accent-cyan);
+            color: #000;
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 44px;
+            height: 44px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--card-shadow);
+            z-index: 1000;
+        }
+
+        .theme-toggle:hover {
+            transform: scale(1.05);
+            border-color: var(--accent-cyan);
+        }
+
+        .theme-toggle svg {
+            width: 20px;
+            height: 20px;
+            fill: var(--text-primary);
+        }
+
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 80px;
+            }
+
+            .main-content {
+                margin-left: 80px;
+                padding: 24px;
+            }
+
+            .sidebar-section-title,
+            .sidebar-item span {
+                display: none;
+            }
+
+            .sidebar-item {
+                justify-content: center;
+                padding: 12px;
+            }
+
+            .sidebar-item-icon {
+                margin-right: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                margin-left: 0;
+                padding: 16px;
+            }
+
+            .sidebar {
+                display: none;
+            }
+
+            .scan-actions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-row {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                min-width: 100%;
+            }
+
+            .vulnerability-table-card {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body data-theme="dark">
+    <!-- 主题切换按钮 -->
+    <div class="theme-toggle" onclick="toggleTheme()">
+        <svg id="theme-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+        </svg>
+    </div>
+
+    <!-- 侧边栏导航 -->
+    <div class="sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">安全运营</div>
+            <a href="#" class="sidebar-item">
+                <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                <span>仪表板</span>
+            </a>
+            <a href="#" class="sidebar-item">
+                <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span>资产管理</span>
+            </a>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">脆弱性管理</div>
+            <a href="#" class="sidebar-item" onclick="showOverview()">
+                <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                </svg>
+                <span>脆弱性概览</span>
+            </a>
+            <a href="#" class="sidebar-item active">
+                <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                <span>漏洞列表</span>
+            </a>
+        </div>
+
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">系统</div>
+            <a href="#" class="sidebar-item">
+                <svg class="sidebar-item-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
+                </svg>
+                <span>设置</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <div class="page-header">
+            <h1 class="page-title">漏洞列表</h1>
+            <p class="page-subtitle">管理所有已发现的漏洞，发起扫描任务，追踪修复进度</p>
+        </div>
+
+        <!-- 扫描操作卡片 -->
+        <div class="scan-actions-card">
+            <div class="card-header">
+                <h2 class="card-title">启动漏洞扫描</h2>
+            </div>
+            <div class="scan-actions-grid">
+                <!-- Wazuh SCAP扫描 -->
+                <div class="scan-action-box">
+                    <div class="scan-action-header">
+                        <div class="scan-action-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                        </div>
+                        <div class="scan-action-info">
+                            <h3>Wazuh SCAP扫描</h3>
+                            <p>快速配置审计</p>
+                        </div>
+                    </div>
+                    <p class="scan-action-desc">
+                        利用Wazuh SCA模块检测系统配置漏洞和已安装软件包的安全问题，支持CIS Benchmarks和STIG合规标准。
+                    </p>
+                    <button class="scan-action-button">启动SCAP扫描</button>
+                </div>
+
+                <!-- OpenVAS深度扫描 -->
+                <div class="scan-action-box">
+                    <div class="scan-action-header">
+                        <div class="scan-action-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                            </svg>
+                        </div>
+                        <div class="scan-action-info">
+                            <h3>OpenVAS深度扫描</h3>
+                            <p>全面漏洞检测</p>
+                        </div>
+                    </div>
+                    <p class="scan-action-desc">
+                        使用OpenVAS进行深入的漏洞扫描，检测服务端漏洞、SSL/TLS问题、应用层漏洞等，提供详细的CVE信息。
+                    </p>
+                    <button class="scan-action-button">启动深度扫描</button>
+                </div>
+
+                <!-- 定时扫描任务 -->
+                <div class="scan-action-box">
+                    <div class="scan-action-header">
+                        <div class="scan-action-icon">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                            </svg>
+                        </div>
+                        <div class="scan-action-info">
+                            <h3>定时扫描任务</h3>
+                            <p>自动化巡检</p>
+                        </div>
+                    </div>
+                    <p class="scan-action-desc">
+                        配置定时扫描任务，按每日、每周或每月周期自动执行漏洞扫描，确保持续的安全监控。
+                    </p>
+                    <button class="scan-action-button">配置定时任务</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 筛选工具栏 -->
+        <div class="filter-toolbar">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label class="filter-label">严重程度</label>
+                    <select class="filter-select">
+                        <option value="">全部</option>
+                        <option value="critical">严重</option>
+                        <option value="high">高危</option>
+                        <option value="medium">中危</option>
+                        <option value="low">低危</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">扫描器</label>
+                    <select class="filter-select">
+                        <option value="">全部</option>
+                        <option value="wazuh">Wazuh SCAP</option>
+                        <option value="openvas">OpenVAS</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label class="filter-label">状态</label>
+                    <select class="filter-select">
+                        <option value="">全部</option>
+                        <option value="open">未修复</option>
+                        <option value="in_progress">修复中</option>
+                        <option value="fixed">已修复</option>
+                    </select>
+                </div>
+
+                <div class="search-box">
+                    <svg class="search-icon" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="搜索CVE、漏洞名称或受影响资产...">
+                </div>
+            </div>
+        </div>
+
+        <!-- 漏洞列表表格 -->
+        <div class="vulnerability-table-card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th width="12%">严重程度</th>
+                            <th width="18%">CVE编号</th>
+                            <th width="30%">漏洞名称</th>
+                            <th width="10%">CVSS评分</th>
+                            <th width="15%">受影响资产</th>
+                            <th width="10%">扫描器</th>
+                            <th width="10%">状态</th>
+                            <th width="5%">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <span class="severity-badge severity-critical">严重</span>
+                            </td>
+                            <td>
+                                <a href="#" class="cve-link">CVE-2024-1234</a>
+                            </td>
+                            <td>OpenSSH 远程代码执行漏洞</td>
+                            <td>
+                                <span class="cvss-score critical">9.8</span>
+                            </td>
+                            <td>
+                                <div class="affected-assets">
+                                    <span class="asset-tag">192.168.0.10</span>
+                                    <span class="asset-tag">192.168.0.15</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="scanner-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    OpenVAS
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-open">未修复</span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-button" title="查看详情">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                <span class="severity-badge severity-high">高危</span>
+                            </td>
+                            <td>
+                                <a href="#" class="cve-link">CVE-2024-2345</a>
+                            </td>
+                            <td>Apache Tomcat HTTP请求走私漏洞</td>
+                            <td>
+                                <span class="cvss-score high">8.2</span>
+                            </td>
+                            <td>
+                                <div class="affected-assets">
+                                    <span class="asset-tag">web-server-01</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="scanner-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    Wazuh
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-in_progress">修复中</span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-button" title="查看详情">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                <span class="severity-badge severity-medium">中危</span>
+                            </td>
+                            <td>
+                                <a href="#" class="cve-link">CVE-2024-3456</a>
+                            </td>
+                            <td>OpenSSL 拒绝服务漏洞</td>
+                            <td>
+                                <span class="cvss-score medium">5.3</span>
+                            </td>
+                            <td>
+                                <div class="affected-assets">
+                                    <span class="asset-tag">db-server-01</span>
+                                    <span class="asset-tag">db-server-02</span>
+                                    <span class="asset-tag">192.168.0.30</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="scanner-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    OpenVAS
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-open">未修复</span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-button" title="查看详情">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                <span class="severity-badge severity-low">低危</span>
+                            </td>
+                            <td>
+                                <a href="#" class="cve-link">CVE-2024-4567</a>
+                            </td>
+                            <td>nginx 信息泄露漏洞</td>
+                            <td>
+                                <span class="cvss-score low">3.1</span>
+                            </td>
+                            <td>
+                                <div class="affected-assets">
+                                    <span class="asset-tag">nginx-proxy</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="scanner-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    Wazuh
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-fixed">已修复</span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-button" title="查看详情">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                <span class="severity-badge severity-high">高危</span>
+                            </td>
+                            <td>
+                                <a href="#" class="cve-link">CVE-2024-5678</a>
+                            </td>
+                            <td>Linux内核权限提升漏洞</td>
+                            <td>
+                                <span class="cvss-score high">7.8</span>
+                            </td>
+                            <td>
+                                <div class="affected-assets">
+                                    <span class="asset-tag">192.168.0.5</span>
+                                    <span class="asset-tag">192.168.0.8</span>
+                                    <span class="asset-tag">192.168.0.12</span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="scanner-badge">
+                                    <svg viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    Wazuh
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-open">未修复</span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="icon-button" title="查看详情">
+                                        <svg viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <div class="pagination-container">
+                <div class="pagination-info">
+                    显示 <strong>1-5</strong> 条，共 <strong>128</strong> 条漏洞
+                </div>
+                <div class="pagination-controls">
+                    <button class="pagination-button" disabled>上一页</button>
+                    <button class="pagination-button active">1</button>
+                    <button class="pagination-button">2</button>
+                    <button class="pagination-button">3</button>
+                    <button class="pagination-button">...</button>
+                    <button class="pagination-button">26</button>
+                    <button class="pagination-button">下一页</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 主题切换功能
+        function toggleTheme() {
+            const body = document.body;
+            const currentTheme = body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', newTheme);
+
+            // 更新图标
+            const icon = document.getElementById('theme-icon');
+            if (newTheme === 'light') {
+                // 太阳图标
+                icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+                icon.setAttribute('stroke', 'currentColor');
+                icon.setAttribute('stroke-width', '2');
+                icon.setAttribute('fill', 'none');
+            } else {
+                // 月亮图标
+                icon.innerHTML = '<path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>';
+                icon.removeAttribute('stroke');
+                icon.removeAttribute('stroke-width');
+                icon.setAttribute('fill', 'currentColor');
+            }
+
+            // 保存主题偏好到localStorage
+            localStorage.setItem('theme', newTheme);
+        }
+
+        // 页面加载时应用保存的主题
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.setAttribute('data-theme', savedTheme);
+
+            // 更新图标
+            const icon = document.getElementById('theme-icon');
+            if (savedTheme === 'light') {
+                icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+                icon.setAttribute('stroke', 'currentColor');
+                icon.setAttribute('stroke-width', '2');
+                icon.setAttribute('fill', 'none');
+            }
+        });
+
+        // 导航到概览页面
+        function showOverview() {
+            // 在实际应用中，这里会导航到概览页面
+            alert('导航到脆弱性概览页面');
+        }
+    </script>
+</body>
+</html>

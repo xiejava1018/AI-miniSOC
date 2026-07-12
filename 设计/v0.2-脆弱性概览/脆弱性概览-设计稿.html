@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>脆弱性概览 - 设计稿</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%);
+            color: #e8eaed;
+            padding: 40px 60px;
+            min-height: 100vh;
+        }
+
+        /* CSS Variables */
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #e8eaed;
+            --text-secondary: #b0b3b8;
+            --text-muted: #80868b;
+            --accent-cyan: #00d4ff;
+            --status-critical: #ff2a6d;
+            --status-high: #ff6b35;
+            --status-warning: #ffc107;
+            --status-success: #10b981;
+            --status-info: #3b82f6;
+        }
+
+        .page-header {
+            margin-bottom: 32px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .page-subtitle {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        /* 主容器布局 */
+        .overview-container {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* 统计卡片 */
+        .stats-section {
+            grid-column: span 12;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            position: relative;
+            padding: 24px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(0, 212, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent-color), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-card.cve {
+            --accent-color: var(--status-critical);
+        }
+
+        .stat-card.sca {
+            --accent-color: var(--status-warning);
+        }
+
+        .stat-card.trend {
+            --accent-color: var(--accent-cyan);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .stat-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-badge {
+            padding: 4px 10px;
+            background: rgba(0, 212, 255, 0.15);
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .stat-total {
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+            margin-bottom: 16px;
+            font-family: 'JetBrains Mono', 'Monaco', monospace;
+        }
+
+        .stat-breakdown {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .breakdown-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .breakdown-item.critical {
+            color: var(--status-critical);
+        }
+
+        .breakdown-item.high {
+            color: var(--status-high);
+        }
+
+        .breakdown-item.medium {
+            color: var(--status-warning);
+        }
+
+        .breakdown-item.low {
+            color: var(--status-success);
+        }
+
+        .breakdot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .breakdot.critical {
+            background: var(--status-critical);
+        }
+
+        .breakdot.high {
+            background: var(--status-high);
+        }
+
+        .breakdot.medium {
+            background: var(--status-warning);
+        }
+
+        .breakdot.low {
+            background: var(--status-success);
+        }
+
+        /* 趋势卡片 */
+        .trend-container {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .trend-item {
+            flex: 1;
+        }
+
+        .trend-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .trend-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .trend-bar-container {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .trend-bar {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .trend-bar.cve {
+            background: linear-gradient(90deg, var(--status-critical), var(--status-high));
+        }
+
+        .trend-bar.sca {
+            background: linear-gradient(90deg, var(--status-warning), var(--status-info));
+        }
+
+        .trend-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .trend-change.positive {
+            color: var(--status-critical);
+        }
+
+        .trend-change.negative {
+            color: var(--status-success);
+        }
+
+        /* Panel */
+        .panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .panel-full {
+            grid-column: span 12;
+        }
+
+        .panel-half {
+            grid-column: span 6;
+        }
+
+        @media (max-width: 1200px) {
+            .panel-half {
+                grid-column: span 12;
+            }
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .panel-title svg {
+            width: 20px;
+            height: 20px;
+            color: var(--accent-cyan);
+        }
+
+        .panel-action {
+            font-size: 13px;
+            color: var(--accent-cyan);
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        .panel-action:hover {
+            color: var(--text-primary);
+        }
+
+        .panel-content {
+            padding: 20px 24px;
+        }
+
+        /* 高风险资产列表 */
+        .asset-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .asset-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .asset-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateX(4px);
+        }
+
+        .asset-rank {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(255, 42, 109, 0.2), rgba(255, 107, 53, 0.1));
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--status-critical);
+            flex-shrink: 0;
+        }
+
+        .asset-rank.top3 {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2), rgba(255, 193, 7, 0.1));
+            color: #ffd700;
+        }
+
+        .asset-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .asset-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .asset-ip {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .asset-stats {
+            display: flex;
+            gap: 16px;
+        }
+
+        .asset-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+        }
+
+        .asset-stat-value {
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .asset-stat.critical {
+            color: var(--status-critical);
+        }
+
+        .asset-stat.high {
+            color: var(--status-high);
+        }
+
+        .asset-stat.medium {
+            color: var(--status-warning);
+        }
+
+        /* 最近发现列表 */
+        .recent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .recent-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .recent-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .recent-icon {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            flex-shrink: 0;
+        }
+
+        .recent-icon.cve {
+            background: linear-gradient(135deg, rgba(255, 42, 109, 0.2), rgba(255, 107, 53, 0.1));
+            color: var(--status-critical);
+        }
+
+        .recent-icon.sca {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 107, 53, 0.1));
+            color: var(--status-warning);
+        }
+
+        .recent-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .recent-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .recent-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .recent-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        /* 设计标注 */
+        .design-note {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            font-size: 13px;
+            max-width: 300px;
+            line-height: 1.6;
+        }
+
+        .design-note h4 {
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .design-note ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .design-note li {
+            padding: 4px 0;
+            color: var(--text-secondary);
+        }
+
+        .design-note li::before {
+            content: '✓ ';
+            color: var(--status-success);
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1 class="page-title">脆弱性概览</h1>
+        <p class="page-subtitle">实时监控CVE漏洞和配置检查的整体安全态势</p>
+    </div>
+
+    <div class="overview-container">
+        <!-- 统计卡片区 -->
+        <div class="stats-section">
+            <!-- CVE漏洞统计 -->
+            <div class="stat-card cve">
+                <div class="stat-header">
+                    <span class="stat-title">CVE漏洞</span>
+                    <span class="stat-badge">SCAP</span>
+                </div>
+                <div class="stat-total">146</div>
+                <div class="stat-breakdown">
+                    <div class="breakdown-item critical">
+                        <div class="breakdot critical"></div>
+                        <span>严重 12</span>
+                    </div>
+                    <div class="breakdown-item high">
+                        <div class="breakdot high"></div>
+                        <span>高危 45</span>
+                    </div>
+                    <div class="breakdown-item medium">
+                        <div class="breakdot medium"></div>
+                        <span>中危 89</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 配置检查统计 -->
+            <div class="stat-card sca">
+                <div class="stat-header">
+                    <span class="stat-title">配置检查</span>
+                    <span class="stat-badge">SCA</span>
+                </div>
+                <div class="stat-total">87</div>
+                <div class="stat-breakdown">
+                    <div class="breakdown-item critical">
+                        <div class="breakdot critical"></div>
+                        <span>严重 8</span>
+                    </div>
+                    <div class="breakdown-item high">
+                        <div class="breakdot high"></div>
+                        <span>高危 23</span>
+                    </div>
+                    <div class="breakdown-item medium">
+                        <div class="breakdot medium"></div>
+                        <span>中危 56</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 本周趋势 -->
+            <div class="stat-card trend">
+                <div class="stat-header">
+                    <span class="stat-title">本周趋势</span>
+                </div>
+                <div class="trend-container">
+                    <div class="trend-item">
+                        <div class="trend-label">CVE漏洞</div>
+                        <div class="trend-value">
+                            146
+                            <span class="trend-change positive">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 19V5M5 12L12 5L19 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                +23
+                            </span>
+                        </div>
+                        <div class="trend-bar-container">
+                            <div class="trend-bar cve" style="width: 72%"></div>
+                        </div>
+                    </div>
+                    <div class="trend-item">
+                        <div class="trend-label">配置检查</div>
+                        <div class="trend-value">
+                            87
+                            <span class="trend-change negative">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                    <path d="M12 5V19M19 12L12 19L5 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                                -12
+                            </span>
+                        </div>
+                        <div class="trend-bar-container">
+                            <div class="trend-bar sca" style="width: 54%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 高风险资产排行 -->
+        <div class="panel panel-full">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>高风险资产排行 (Top 5)</span>
+                </div>
+                <a href="#" class="panel-action">查看完整排行 →</a>
+            </div>
+            <div class="panel-content">
+                <div class="asset-list">
+                    <div class="asset-item">
+                        <div class="asset-rank top3">1</div>
+                        <div class="asset-info">
+                            <div class="asset-name">web-server</div>
+                            <div class="asset-ip">192.168.0.10</div>
+                        </div>
+                        <div class="asset-stats">
+                            <div class="asset-stat critical">
+                                <span class="asset-stat-value">3</span>
+                                <span>严重</span>
+                            </div>
+                            <div class="asset-stat high">
+                                <span class="asset-stat-value">12</span>
+                                <span>高危</span>
+                            </div>
+                            <div class="asset-stat medium">
+                                <span class="asset-stat-value">8</span>
+                                <span>中危</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="asset-item">
+                        <div class="asset-rank top3">2</div>
+                        <div class="asset-info">
+                            <div class="asset-name">db-master</div>
+                            <div class="asset-ip">192.168.0.20</div>
+                        </div>
+                        <div class="asset-stats">
+                            <div class="asset-stat critical">
+                                <span class="asset-stat-value">1</span>
+                                <span>严重</span>
+                            </div>
+                            <div class="asset-stat high">
+                                <span class="asset-stat-value">8</span>
+                                <span>高危</span>
+                            </div>
+                            <div class="asset-stat medium">
+                                <span class="asset-stat-value">15</span>
+                                <span>中危</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="asset-item">
+                        <div class="asset-rank top3">3</div>
+                        <div class="asset-info">
+                            <div class="asset-name">app-server</div>
+                            <div class="asset-ip">192.168.0.30</div>
+                        </div>
+                        <div class="asset-stats">
+                            <div class="asset-stat critical">
+                                <span class="asset-stat-value">0</span>
+                                <span>严重</span>
+                            </div>
+                            <div class="asset-stat high">
+                                <span class="asset-stat-value">6</span>
+                                <span>高危</span>
+                            </div>
+                            <div class="asset-stat medium">
+                                <span class="asset-stat-value">9</span>
+                                <span>中危</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="asset-item">
+                        <div class="asset-rank">4</div>
+                        <div class="asset-info">
+                            <div class="asset-name">api-gateway</div>
+                            <div class="asset-ip">192.168.0.40</div>
+                        </div>
+                        <div class="asset-stats">
+                            <div class="asset-stat critical">
+                                <span class="asset-stat-value">0</span>
+                                <span>严重</span>
+                            </div>
+                            <div class="asset-stat high">
+                                <span class="asset-stat-value">5</span>
+                                <span>高危</span>
+                            </div>
+                            <div class="asset-stat medium">
+                                <span class="asset-stat-value">9</span>
+                                <span>中危</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最近发现 -->
+        <div class="panel panel-half">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 6V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>最近发现的CVE</span>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="recent-list">
+                    <div class="recent-item">
+                        <div class="recent-icon cve">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">CVE-2024-1234 严重漏洞</div>
+                            <div class="recent-meta">web-server • 2小时前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon cve">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">CVE-2024-5678 高危漏洞</div>
+                            <div class="recent-meta">app-server • 5小时前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon cve">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">CVE-2024-3456 高危漏洞</div>
+                            <div class="recent-meta">api-gateway • 2天前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon cve">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 8V12L15 15" stroke="currentColor" stroke-width="2"/>
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">CVE-2024-7890 中危漏洞</div>
+                            <div class="recent-meta">file-server • 3天前</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最近失败的配置检查 -->
+        <div class="panel panel-half">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>最近失败的配置检查</span>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="recent-list">
+                    <div class="recent-item">
+                        <div class="recent-icon sca">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 11H16" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">SSH 密码策略配置</div>
+                            <div class="recent-meta">db-master • 1小时前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon sca">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 11H16" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">NTP 时间同步配置</div>
+                            <div class="recent-meta">web-server • 3小时前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon sca">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 11H16" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">防火墙规则配置</div>
+                            <div class="recent-meta">app-server • 1天前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon sca">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 11H16" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">系统日志审计配置</div>
+                            <div class="recent-meta">api-gateway • 2天前</div>
+                        </div>
+                    </div>
+
+                    <div class="recent-item">
+                        <div class="recent-icon sca">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+                                <path d="M8 11H16" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="recent-content">
+                            <div class="recent-title">文件权限配置</div>
+                            <div class="recent-meta">file-server • 3天前</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设计标注 -->
+    <div class="design-note">
+        <h4>设计说明</h4>
+        <ul>
+            <li>基于方案E（紧凑型卡片）</li>
+            <li>遵循现有设计系统（玻璃态风格）</li>
+            <li>CVE和SCA清晰分开，独立统计</li>
+            <li>增加趋势和资产维度</li>
+            <li>一屏展示所有关键信息</li>
+            <li>点击卡片可跳转到对应详情页</li>
+        </ul>
+    </div>
+</body>
+</html>

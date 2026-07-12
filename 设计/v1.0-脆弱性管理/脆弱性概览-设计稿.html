@@ -1,0 +1,1343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>脆弱性概览 - AI-miniSOC</title>
+  <style>
+    :root {
+      /* 主色调 */
+      --accent-cyan: #00D4FF;
+      --accent-blue: #3B82F6;
+      --accent-purple: #8B5CF6;
+      --accent-cyan-dim: rgba(0, 212, 255, 0.1);
+
+      /* 状态色 */
+      --status-critical: #FF2A6D;
+      --status-high: #FF6B35;
+      --status-warning: #FFC107;
+      --status-success: #10B981;
+      --status-info: #06B6D4;
+
+      /* 背景色 - 暗色主题 */
+      --bg-primary: #0F1115;
+      --bg-secondary: #16171D;
+      --bg-tertiary: #1E2028;
+      --glass-bg: rgba(22, 23, 29, 0.8);
+      --glass-border: rgba(255, 255, 255, 0.08);
+
+      /* 文字色 */
+      --text-primary: #F3F4F6;
+      --text-secondary: #9CA3AF;
+      --text-muted: #6B7280;
+
+      /* 边框 */
+      --border-color: rgba(255, 255, 255, 0.1);
+
+      /* 阴影 */
+      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.4);
+
+      /* 动画 */
+      --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-fast: all 0.15s ease;
+    }
+
+    /* 明亮主题 */
+    [data-theme="light"] {
+      /* 背景色 - 明亮主题 */
+      --bg-primary: #F5F7FA;
+      --bg-secondary: #FFFFFF;
+      --bg-tertiary: #E8EBF0;
+      --glass-bg: rgba(255, 255, 255, 0.9);
+      --glass-border: rgba(0, 0, 0, 0.1);
+
+      /* 文字色 */
+      --text-primary: #1A1D24;
+      --text-secondary: #6B7280;
+      --text-muted: #9CA3AF;
+
+      /* 边框 */
+      --border-color: rgba(0, 0, 0, 0.08);
+
+      /* 阴影 */
+      --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    /* 主题切换按钮 */
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      width: 44px;
+      height: 44px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(20px);
+      box-shadow: var(--shadow-lg);
+      z-index: 1000;
+    }
+
+    .theme-toggle:hover {
+      transform: scale(1.05);
+      border-color: var(--accent-cyan);
+    }
+
+    .theme-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--text-primary);
+    }
+
+    /* 模拟侧边栏布局 */
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 260px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      padding: 24px 20px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header {
+      margin-bottom: 32px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 24px;
+      height: 24px;
+      color: white;
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .logo-tagline {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .nav-section {
+      margin-bottom: 24px;
+    }
+
+    .nav-section-title {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+      padding-left: 12px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      margin-bottom: 4px;
+      transition: var(--transition-base);
+      cursor: pointer;
+    }
+
+    .nav-item:hover {
+      background: rgba(0, 212, 255, 0.08);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: linear-gradient(135deg, var(--accent-cyan-dim), rgba(0, 212, 255, 0.05));
+      color: var(--accent-cyan);
+    }
+
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+    }
+
+    .nav-label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* 主内容区 */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      height: 72px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 32px;
+    }
+
+    .page-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .last-sync {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition-base);
+      border: none;
+      text-decoration: none;
+    }
+
+    .action-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .action-btn.primary {
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      color: white;
+      box-shadow: 0 4px 12px var(--accent-cyan-dim);
+    }
+
+    .action-btn.primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px var(--accent-cyan-dim);
+    }
+
+    .action-btn.secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+    }
+
+    .action-btn.secondary:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 212, 255, 0.05);
+    }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px;
+    }
+
+    .overview-page {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      max-width: 100%;
+    }
+
+    /* 统计卡片网格 */
+    .stats-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title svg {
+      width: 20px;
+      height: 20px;
+      color: var(--accent-cyan);
+    }
+
+    .section-action {
+      font-size: 13px;
+      color: var(--accent-cyan);
+      text-decoration: none;
+      transition: color var(--transition-fast);
+    }
+
+    .section-action:hover {
+      text-decoration: underline;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-card {
+      position: relative;
+      padding: 24px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: var(--transition-base);
+    }
+
+    .stat-card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, var(--accent-cyan-dim) 0%, transparent 70%);
+      opacity: 0.5;
+      pointer-events: none;
+      transition: opacity var(--transition-base);
+    }
+
+    .stat-card:hover::before {
+      opacity: 1;
+    }
+
+    .stat-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .stat-card.critical .stat-icon {
+      background: linear-gradient(135deg, rgba(255, 42, 109, 0.2), rgba(255, 42, 109, 0.05));
+      color: var(--status-critical);
+    }
+
+    .stat-card.high .stat-icon {
+      background: linear-gradient(135deg, rgba(255, 107, 53, 0.2), rgba(255, 107, 53, 0.05));
+      color: var(--status-high);
+    }
+
+    .stat-card.medium .stat-icon {
+      background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 193, 7, 0.05));
+      color: var(--status-warning);
+    }
+
+    .stat-card.low .stat-icon {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05));
+      color: var(--status-success);
+    }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value-container {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .stat-value {
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stat-change.positive {
+      color: var(--status-critical);
+      background: rgba(255, 42, 109, 0.15);
+    }
+
+    .stat-change.negative {
+      color: var(--status-success);
+      background: rgba(16, 185, 129, 0.15);
+    }
+
+    .stat-change svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .stat-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* AI建议面板 */
+    .ai-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .ai-panel {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(59, 130, 246, 0.1));
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .ai-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .ai-icon {
+      width: 24px;
+      height: 24px;
+      color: var(--accent-purple);
+    }
+
+    .ai-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--accent-purple);
+    }
+
+    .ai-badge {
+      margin-left: auto;
+      padding: 4px 12px;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .ai-suggestions {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .ai-suggestion-item {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      transition: var(--transition-base);
+    }
+
+    .ai-suggestion-item:hover {
+      border-color: var(--accent-purple);
+      transform: translateX(4px);
+    }
+
+    .suggestion-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .suggestion-rank {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .suggestion-content {
+      flex: 1;
+    }
+
+    .suggestion-cve {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .suggestion-cvss {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(255, 42, 109, 0.15);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--status-critical);
+    }
+
+    .suggestion-assets {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .suggestion-reason {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .suggestion-reason strong {
+      color: var(--status-critical);
+    }
+
+    .suggestion-fix {
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 8px;
+      font-size: 14px;
+      color: var(--status-success);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .suggestion-fix svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .suggestion-fix strong {
+      font-weight: 600;
+    }
+
+    /* 趋势图表区域 */
+    .trend-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .trend-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .trend-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .trend-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .trend-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .trend-title svg {
+      width: 18px;
+      height: 18px;
+      color: var(--accent-cyan);
+    }
+
+    .trend-period {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .trend-chart {
+      height: 120px;
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      padding: 20px 0;
+    }
+
+    .trend-bar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .trend-bar-visual {
+      width: 100%;
+      height: 80px;
+      background: var(--bg-tertiary);
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .trend-bar-fill {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-blue) 100%);
+      border-radius: 0 0 6px 6px;
+      transition: height 1s ease;
+    }
+
+    .trend-bar-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .trend-bar-value {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    /* 快速操作卡片 */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .action-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      padding: 24px;
+      cursor: pointer;
+      transition: var(--transition-base);
+    }
+
+    .action-card:hover {
+      border-color: var(--accent-cyan);
+      transform: translateY(-2px);
+    }
+
+    .action-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .action-card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 212, 255, 0.05));
+      color: var(--accent-cyan);
+    }
+
+    .action-card-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .action-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .action-card-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .action-card-btn {
+      width: 100%;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition-fast);
+      text-align: center;
+    }
+
+    .action-card-btn:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 212, 255, 0.1);
+    }
+
+    /* 响应式 */
+    @media (max-width: 1200px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        display: none;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .trend-cards,
+      .quick-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .section-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+      }
+    }
+  </style>
+</head>
+<body data-theme="dark">
+  <!-- 主题切换按钮 -->
+  <div class="theme-toggle" onclick="toggleTheme()">
+    <svg id="theme-icon" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>
+    </svg>
+  </div>
+
+  <div class="layout">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <div class="logo-text">AI-miniSOC</div>
+            <div class="logo-tagline">智能安全运营中心</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 脆弱性管理菜单组 -->
+      <div class="nav-section">
+        <div class="nav-section-title">脆弱性管理</div>
+
+        <a href="#" class="nav-item active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <path d="M3 9h18"/>
+            <path d="M9 21V9"/>
+          </svg>
+          <span class="nav-label">脆弱性概览</span>
+        </a>
+
+        <a href="#" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 9V11M12 15H12.01M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z"/>
+          </svg>
+          <span class="nav-label">漏洞列表</span>
+        </a>
+      </div>
+
+      <!-- 其他菜单 -->
+      <div class="nav-section">
+        <div class="nav-section-title">资产管理</div>
+        <a href="#" class="nav-item">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="2"/>
+            <path d="M6 6H18M6 10H14M6 14H12"/>
+          </svg>
+          <span class="nav-label">资产列表</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+      <header class="header">
+        <div class="page-title">脆弱性概览</div>
+        <div class="header-right">
+          <div class="last-sync">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            最后扫描: 2小时前
+          </div>
+          <a href="#" class="action-btn primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3"/>
+              <path d="M12 8v8"/>
+              <path d="M8 12h8"/>
+            </svg>
+            立即扫描
+          </a>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="overview-page">
+          <!-- 统计概览 -->
+          <section class="stats-section">
+            <div class="section-header">
+              <div class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <path d="M3 9h18"/>
+                  <path d="M9 21V9"/>
+                </svg>
+                漏洞统计
+              </div>
+              <a href="#" class="section-action">查看详情 →</a>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-card critical">
+                <div class="stat-header">
+                  <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v8"/>
+                    </svg>
+                  </div>
+                  <span class="stat-label">严重漏洞</span>
+                </div>
+                <div class="stat-value-container">
+                  <div class="stat-value">5</div>
+                  <div class="stat-change positive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 15L12 9L6 15"/>
+                    </svg>
+                    <span>+2</span>
+                  </div>
+                </div>
+                <div class="stat-footer">
+                  <span>需立即处理</span>
+                  <span>较上周</span>
+                </div>
+              </div>
+
+              <div class="stat-card high">
+                <div class="stat-header">
+                  <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </div>
+                  <span class="stat-label">高危漏洞</span>
+                </div>
+                <div class="stat-value-container">
+                  <div class="stat-value">23</div>
+                  <div class="stat-change positive">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 15L12 9L6 15"/>
+                    </svg>
+                    <span>+8</span>
+                  </div>
+                </div>
+                <div class="stat-footer">
+                  <span>尽快修复</span>
+                  <span>较上周</span>
+                </div>
+              </div>
+
+              <div class="stat-card medium">
+                <div class="stat-header">
+                  <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v4"/>
+                    </svg>
+                  </div>
+                  <span class="stat-label">中危漏洞</span>
+                </div>
+                <div class="stat-value-container">
+                  <div class="stat-value">67</div>
+                  <div class="stat-change negative">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 15L12 9L6 15"/>
+                    </svg>
+                    <span>-5</span>
+                  </div>
+                </div>
+                <div class="stat-footer">
+                  <span>计划修复</span>
+                  <span>较上周</span>
+                </div>
+              </div>
+
+              <div class="stat-card low">
+                <div class="stat-header">
+                  <div class="stat-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </div>
+                  <span class="stat-label">低危漏洞</span>
+                </div>
+                <div class="stat-value-container">
+                  <div class="stat-value">12</div>
+                  <div class="stat-change negative">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M18 15L12 9L6 15"/>
+                    </svg>
+                    <span>-3</span>
+                  </div>
+                </div>
+                <div class="stat-footer">
+                  <span>关注即可</span>
+                  <span>较上周</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- AI智能建议 -->
+          <section class="ai-section">
+            <div class="section-header">
+              <div class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9.87868 3.51472C11.0503 2.34315 12.9497 2.34315 14.1213 3.51472L20.4853 9.87868C21.6569 11.0503 21.6569 12.9497 20.4853 14.1213L14.1213 20.4853C12.9497 21.6569 11.0503 21.6569 9.87868 20.4853L3.51472 14.1213C2.34315 12.9497 2.34315 11.0503 3.51472 9.87868L9.87868 3.51472Z"/>
+                </svg>
+                AI 智能建议
+              </div>
+              <span class="ai-badge">AI Powered</span>
+            </div>
+
+            <div class="ai-panel">
+              <div class="ai-header">
+                <svg class="ai-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9.87868 3.51472C11.0503 2.34315 12.9497 2.34315 14.1213 3.51472L20.4853 9.87868C21.6569 11.0503 21.6569 12.9497 20.4853 14.1213L14.1213 20.4853C12.9497 21.6569 11.0503 21.6569 9.87868 20.4853L3.51472 14.1213C2.34315 12.9497 2.34315 11.0503 3.51472 9.87868L9.87868 3.51472Z"/>
+                </svg>
+                <span class="ai-title">基于多维度分析，AI建议你优先修复这5个漏洞</span>
+              </div>
+
+              <div class="ai-suggestions">
+                <div class="ai-suggestion-item">
+                  <div class="suggestion-header">
+                    <div class="suggestion-rank">1</div>
+                    <div class="suggestion-content">
+                      <div class="suggestion-cve">CVE-2025-1247</div>
+                      <div class="suggestion-cvss">CVSS 9.8 严重</div>
+                      <div class="suggestion-assets">影响: 3台资产 (192.168.0.2, 192.168.0.5, 192.168.0.10)</div>
+                    </div>
+                  </div>
+                  <div class="suggestion-reason">
+                    <strong>风险原因：</strong>OpenSSH远程代码执行漏洞，已有在野利用证据，且影响关键业务服务器
+                  </div>
+                  <div class="suggestion-fix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <strong>修复建议：</strong>升级OpenSSH到9.8p1版本
+                  </div>
+                </div>
+
+                <div class="ai-suggestion-item">
+                  <div class="suggestion-header">
+                    <div class="suggestion-rank">2</div>
+                    <div class="suggestion-content">
+                      <div class="suggestion-cve">CVE-2024-38456</div>
+                      <div class="suggestion-cvss">CVSS 8.5 高危</div>
+                      <div class="suggestion-assets">影响: 1台资产 (203.0.113.10 - 公网暴露)</div>
+                    </div>
+                  </div>
+                  <div class="suggestion-reason">
+                    <strong>风险原因：</strong>Apache Struts2漏洞，公网暴露，可能导致数据泄露，存在被攻击风险
+                  </div>
+                  <div class="suggestion-fix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <strong>修复建议：</strong>升级Apache Struts到2.5.33版本
+                  </div>
+                </div>
+
+                <div class="ai-suggestion-item">
+                  <div class="suggestion-header">
+                    <div class="suggestion-rank">3</div>
+                    <div class="suggestion-content">
+                      <div class="suggestion-cve">CVE-2024-29102</div>
+                      <div class="suggestion-cvss">CVSS 7.8 高危</div>
+                      <div class="suggestion-assets">影响: 5台资产</div>
+                    </div>
+                  </div>
+                  <div class="suggestion-reason">
+                    <strong>风险原因：</strong>Linux内核权限提升漏洞，影响多个内部服务器，可能导致提权攻击
+                  </div>
+                  <div class="suggestion-fix">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <strong>修复建议：</strong>升级内核到6.8.7版本
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 快速操作 -->
+          <section>
+            <div class="section-header">
+              <div class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M13 2L3 14v7"/>
+                  <path d="M13 2v7"/>
+                </svg>
+                快速操作
+              </div>
+            </div>
+
+            <div class="quick-actions">
+              <div class="action-card">
+                <div class="action-card-header">
+                  <div class="action-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3"/>
+                      <path d="M12 8v4l3 3"/>
+                    </svg>
+                  </div>
+                  <div class="action-card-title">启动全量扫描</div>
+                </div>
+                <div class="action-card-description">
+                  对所有资产执行Wazuh SCAP和OpenVAS深度扫描
+                </div>
+                <button class="action-card-btn">立即扫描</button>
+              </div>
+
+              <div class="action-card">
+                <div class="action-card-header">
+                  <div class="action-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M9 12L11 14L15 10M9 12L15 10"/>
+                    </svg>
+                  </div>
+                  <div class="action-card-title">查看漏洞列表</div>
+                </div>
+                <div class="action-card-description">
+                  查看所有漏洞的详细信息，支持筛选和搜索
+                </div>
+                <button class="action-card-btn">前往查看</button>
+              </div>
+
+              <div class="action-card">
+                <div class="action-card-header">
+                  <div class="action-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+                      <path d="M14 2v6l-4 4"/>
+                      <path d="M6 14l4 4"/>
+                      <path d="M10 18h4"/>
+                    </svg>
+                  </div>
+                  <div class="action-card-title">导出扫描报告</div>
+                </div>
+                <div class="action-card-description">
+                  生成包含所有漏洞信息的PDF报告
+                </div>
+                <button class="action-card-btn">导出报告</button>
+              </div>
+            </div>
+          </section>
+
+          <!-- 趋势图表（可选） -->
+          <section class="trend-section">
+            <div class="section-header">
+              <div class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 3v18h18"/>
+                  <path d="M18 9l-5-5"/>
+                  <path d="M13 9V3"/>
+                </svg>
+                30天漏洞趋势
+              </div>
+              <span class="trend-period">2025-02-24 至 2025-03-25</span>
+            </div>
+
+            <div class="trend-cards">
+              <div class="trend-card">
+                <div class="trend-header">
+                  <div class="trend-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 6v6"/>
+                    </svg>
+                    漏洞发现趋势
+                  </div>
+                </div>
+                <div class="trend-chart">
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 30%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周一</div>
+                    <div class="trend-bar-value">12</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 45%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周二</div>
+                    <div class="trend-bar-value">18</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 35%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周三</div>
+                    <div class="trend-bar-value">14</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 60%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周四</div>
+                    <div class="trend-bar-value">24</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 50%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周五</div>
+                    <div class="trend-bar-value">20</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 25%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周六</div>
+                    <div class="trend-bar-value">10</div>
+                  </div>
+                  <div class="trend-bar">
+                    <div class="trend-bar-visual">
+                      <div class="trend-bar-fill" style="height: 20%;"></div>
+                    </div>
+                    <div class="trend-bar-label">周日</div>
+                    <div class="trend-bar-value">8</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="trend-card">
+                <div class="trend-header">
+                  <div class="trend-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    修复进度
+                  </div>
+                </div>
+                <div style="padding: 20px 0;">
+                  <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                      <span style="color: var(--text-secondary);">本周修复</span>
+                      <span style="color: var(--status-success); font-weight: 600;">8个</span>
+                    </div>
+                    <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                      <div style="height: 100%; width: 40%; background: linear-gradient(90deg, var(--status-success), var(--status-info)); border-radius: 4px;"></div>
+                    </div>
+                  </div>
+                  <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px;">
+                      <span style="color: var(--text-secondary);">待修复</span>
+                      <span style="color: var(--status-critical); font-weight: 600;">87个</span>
+                    </div>
+                    <div style="height: 8px; background: var(--bg-tertiary); border-radius: 4px; overflow: hidden;">
+                      <div style="height: 100%; width: 85%; background: linear-gradient(90deg, var(--status-critical), var(--status-high)); border-radius: 4px;"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    // 主题切换功能
+    function toggleTheme() {
+      const body = document.body;
+      const currentTheme = body.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+
+      // 更新图标
+      const icon = document.getElementById('theme-icon');
+      if (newTheme === 'light') {
+        // 太阳图标
+        icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.setAttribute('fill', 'none');
+      } else {
+        // 月亮图标
+        icon.innerHTML = '<path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/>';
+        icon.removeAttribute('stroke');
+        icon.removeAttribute('stroke-width');
+        icon.setAttribute('fill', 'currentColor');
+      }
+
+      // 保存主题偏好到localStorage
+      localStorage.setItem('theme', newTheme);
+    }
+
+    // 页面加载时应用保存的主题
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedTheme = localStorage.getItem('theme') || 'dark';
+      document.body.setAttribute('data-theme', savedTheme);
+
+      // 更新图标
+      const icon = document.getElementById('theme-icon');
+      if (savedTheme === 'light') {
+        icon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>';
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.setAttribute('fill', 'none');
+      }
+    });
+  </script>
+</body>
+</html>
