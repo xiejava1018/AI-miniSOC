@@ -81,3 +81,18 @@ src/frontend/src/assets/images/safeguard/
 
 # 本地 ECC 工具副本（用户在 ~/.claude/skills 也有，不要污染项目仓库）
 scripts/harness-audit.js
+
+# 运行日志（含客户端 IP 等敏感信息）
+nohup.out
+
+# MCP 配置文件（可能含 token 等凭证）
+.mcp.json
+
+# Task Master AI 任务管理状态
+.taskmaster/
+
+# 临时调试文件
+diagnose-assets.html
+
+# 路径错误的孤儿目录（src/backend/src/backend/）
+src/backend/src/backend/

@@ -3,25 +3,25 @@
     <!-- 统计卡片 -->
     <ElRow :gutter="16" class="stats-row">
       <ElCol :span="6">
-        <ElCard shadow="hover" class="stat-card">
+        <ElCard shadow="hover" class="stat-card stat-clickable" @click="filterByLevel(null)">
           <div class="stat-value">{{ statsTotal }}</div>
           <div class="stat-label">总告警(24h)</div>
         </ElCard>
       </ElCol>
       <ElCol :span="6">
-        <ElCard shadow="hover" class="stat-card stat-critical">
+        <ElCard shadow="hover" class="stat-card stat-critical stat-clickable" @click="filterByLevel(12)">
           <div class="stat-value text-danger">{{ statsCritical }}</div>
           <div class="stat-label">高危(≥12)</div>
         </ElCard>
       </ElCol>
       <ElCol :span="6">
-        <ElCard shadow="hover" class="stat-card stat-warning">
+        <ElCard shadow="hover" class="stat-card stat-warning stat-clickable" @click="filterByLevel(8)">
           <div class="stat-value text-warning">{{ statsMedium }}</div>
           <div class="stat-label">中危(8-11)</div>
         </ElCard>
       </ElCol>
       <ElCol :span="6">
-        <ElCard shadow="hover" class="stat-card stat-info">
+        <ElCard shadow="hover" class="stat-card stat-info stat-clickable" @click="filterByLevel(0)">
           <div class="stat-value text-info">{{ statsLow }}</div>
           <div class="stat-label">低危(≤7)</div>
         </ElCard>
@@ -313,8 +313,8 @@
     return d.toLocaleString('zh-CN', { hour12: false })
   }
 
-  const getLevelType = (level?: number): 'danger' | 'warning' | 'info' | '' => {
-    if (!level && level !== 0) return ''
+  const getLevelType = (level?: number): 'danger' | 'warning' | 'info' | 'primary' => {
+    if (!level && level !== 0) return 'primary'
     if (level >= 12) return 'danger'
     if (level >= 8) return 'warning'
     return 'info'
@@ -323,6 +323,21 @@
   const handleRefresh = () => {
     loadStatistics()
     refreshAll()
+  }
+
+  // ── 点击统计卡片筛选 ─────────────────────────────────
+  const filterByLevel = (level: number | null) => {
+    if (level === null) {
+      // 点击总告警 - 清除等级筛选
+      searchState.level = undefined
+    } else if (level === 0) {
+      // 低危 - 使用 level=7 来筛选 ≤7
+      searchState.level = 7
+    } else {
+      // 高危/中危 - 直接使用该等级作为最小值
+      searchState.level = level
+    }
+    searchData()
   }
 
   onMounted(() => {
@@ -346,6 +361,14 @@
         margin-top: 4px;
         font-size: 13px;
         color: var(--el-text-color-secondary);
+      }
+      &.stat-clickable {
+        cursor: pointer;
+        transition: all 0.2s;
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
       }
     }
 

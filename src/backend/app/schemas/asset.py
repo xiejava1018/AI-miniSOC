@@ -24,6 +24,9 @@ class AssetBase(BaseModel):
     asset_status: Optional[str] = None
     data_classification: Optional[str] = "internal"
     owner_contact: Optional[str] = None
+    data_source: Optional[str] = "manual"
+    os_name: Optional[str] = None
+    os_version: Optional[str] = None
 
 
 class AssetCreate(AssetBase):
