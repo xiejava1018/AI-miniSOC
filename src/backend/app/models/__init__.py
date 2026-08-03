@@ -26,6 +26,9 @@ from .dict import Dict
 from .chat import ChatSession, ChatMessage
 from .notification import Notification
 from .asset_source import AssetSource
+from .browsing_event import BrowsingEvent
+from .browsing_blacklist import BrowsingBlacklist
+from .browsing_baseline import BrowsingBaseline
 
 __all__ = [
     "Base",
@@ -55,4 +58,7 @@ __all__ = [
     "ChatMessage",
     "Notification",
     "AssetSource",
+    "BrowsingEvent",
+    "BrowsingBlacklist",
+    "BrowsingBaseline",
 ]

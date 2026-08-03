@@ -222,7 +222,20 @@ export enum RoutesAlias {
 - **位置**: 192.168.0.30:55000
 - **功能**: 安全信息和事件管理
 - **数据源**: 多个主机的日志
-- **OpenSearch**: 192.168.0.30:9200
+- **OpenSearch**: 192.168.0.40:9200（详见下方 OpenSearch 小节）
+
+#### OpenSearch (Wazuh 索引后端)
+- **地址**: https://192.168.0.40:9200
+- **账号**: admin / 密码见 `.env` 的 `OPENSEARCH_PASSWORD`（示例：`xiejava*Happy99`）
+- **集群**: wazuh-cluster，状态 green，单节点
+- **用途**: 仅存 Wazuh 检测出的**结构化告警/脆弱性数据**，不存原始日志
+- **索引规模**（2026-08 实测）：
+  - `wazuh-alerts-4.x-*`：164 个，**103 万+ 告警文档**（按天分索引）
+  - `wazuh-states-vulnerabilities-*`：14 个，10.1 万脆弱性状态
+  - `wazuh-monitoring-*` / `wazuh-statistics-*`：Wazuh 自身监控/统计
+  - 合计 238 个索引、约 136 万文档
+- **告警字段**: `@timestamp` / `agent` / `rule` / `decoder` / `full_log` / `input` / `location` / `manager` 等
+- **数据流原则**: 原始日志进 Loki，仅检测出的告警/事件进 OpenSearch，再被 AI-miniSOC 消费
 
 #### Loki 日志系统
 - **位置**: http://192.168.0.30:3100
@@ -230,6 +243,11 @@ export enum RoutesAlias {
 - **保留策略**: 7天
 - **最大查询**: 500天 (12000小时)
 - **存储**: /data/loki
+- **实际数据**（2026-08 实测）:
+  - 唯一采集源 `exporter=OTLP`，`service_name=LAG/unknown_service`，`host=192.168.0.30`
+  - 内容为 **TP-Link TL-R479GP-AC 路由器上网行为日志**（syslog：访问网址 + 使用应用）
+  - `ip` 标签约 54 个（内网 192.168.0.x + 公网 IP），24h 日志量约 20 万+ 条
+  - 日志中域名已结构化提取可直接做行为分析（如 copilot.tencent.com / chatgpt.com / google.com 等）
 
 #### Grafana 可视化
 - **位置**: https://grafana.xiejava.dpdns.org
@@ -252,7 +270,7 @@ export enum RoutesAlias {
 - `ip`: IP地址
 - `job`: 任务类型 (wazuh-alerts, wazuh-test)
 - `exporter`: OTLP
-- `service_name`: 服务名称
+- `service_name`: 服务名称 (LAG / unknown_service)
 
 ## 开发规范
 

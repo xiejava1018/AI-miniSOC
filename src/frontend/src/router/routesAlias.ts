@@ -25,6 +25,9 @@ export enum RoutesAlias {
   Incidents = '/placeholder', // 事件管理（占位）
   Alerts = '/alert/list/index', // 告警管理
   Vulnerabilities = '/placeholder', // 脆弱性管理（占位）
+  BrowsingEvent = '/browsing/event/index', // 上网行为异常事件
+  BrowsingBlacklist = '/browsing/blacklist/index', // 上网行为黑名单
+  BrowsingConfig = '/browsing/config/index', // 上网行为规则配置
   Placeholder = '/placeholder' // 占位页面
   // 已精简：示例与演示页面别名已移除
 }

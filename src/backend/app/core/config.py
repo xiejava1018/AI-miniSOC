@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     # Loki配置
     LOKI_API_URL: str = "http://192.168.0.30:3100"
 
+    # 上网行为异常检测配置（运行时规则阈值走 soc_system_config，此处仅进程级开关）
+    BROWSING_DETECT_ENABLED: bool = True
+
+
     # 日志配置
     LOG_LEVEL: str = "INFO"
 

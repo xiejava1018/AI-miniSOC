@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
-    ws, data_sync, internal)
+    ws, data_sync, internal, browsing)
 
 api_router = APIRouter()
 
@@ -40,3 +40,5 @@ api_router.include_router(public.router, prefix="/public", tags=["公共信息"]
 api_router.include_router(data_sync.router, prefix="/data", tags=["数据同步"])
 # 内部 Agent 工具（Service Token 认证，只读）
 api_router.include_router(internal.tools.router)
+# 上网行为异常检测
+api_router.include_router(browsing.router, prefix="/browsing", tags=["行为检测"])
