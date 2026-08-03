@@ -152,6 +152,7 @@
   import { FormInstance } from 'element-plus'
   import { ElMessageBox, ElMessage } from 'element-plus'
   import { useTable } from '@/composables/useTable'
+  import { CacheInvalidationStrategy } from '@/utils/table/tableCache'
   import { SearchFormItem } from '@/types'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
 
@@ -271,6 +272,14 @@
     refreshAll
   } = tableApi as any
 
+  // 删除后使用 useTable 专用刷新，清理当前分页缓存并自动处理空页
+  const refreshAfterRemove = tableApi.refreshRemove
+
+  // 用户列表变更后清理表格缓存并重新请求后端
+  const refreshUserList = async () => {
+    tableApi.clearCache?.(CacheInvalidationStrategy.CLEAR_ALL, '用户数据变更')
+    await tableApi.fetchData?.()
+  }
   // 添加部门列表和角色列表的响应式数据
   const departmentList = ref<any[]>([])
   const roleList = ref<any[]>([])
@@ -469,9 +478,9 @@
           }
 
           const res = await apiDeleteUser(userId)
-          if (res.code === 200) {
+          if (res.code === 200 || res.code === 201) {
             ElMessage.success('删除用户成功')
-            refreshAll()
+            await refreshUserList()
           } else {
             ElMessage.error(res.message || '删除用户失败')
           }
@@ -573,10 +582,10 @@
             res = await updateUser(Number(submitData.id), submitData)
           }
 
-          if (res.code === 200) {
+          if (res.code === 200 || res.code === 201) {
             ElMessage.success(dialogType.value === 'add' ? '添加成功' : '更新成功')
             dialogVisible.value = false
-            refreshAll()
+            await refreshUserList()
           } else {
             ElMessage.error(res.message || (dialogType.value === 'add' ? '添加失败' : '更新失败'))
           }

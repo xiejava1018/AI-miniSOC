@@ -97,15 +97,15 @@ export const getUserList = (
 }
 
 export const addUser = (data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/users`, data })
+  return httpClient.post({ url: `${API_PREFIX}/users`, data, keepFullResponse: true })
 }
 
 export const updateUser = (id: number, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/users/${id}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/users/${id}`, data, keepFullResponse: true })
 }
 
 export const deleteUser = (id: number): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/users/${id}` })
+  return httpClient.del({ url: `${API_PREFIX}/users/${id}`, keepFullResponse: true })
 }
 
 // ========== 部门管理 ==========
