@@ -8,7 +8,7 @@ import type { HttpClient } from '@/utils/http'
 
 const httpClient = request as HttpClient
 
-const API_PREFIX = '/api/v1/alerts/'
+const API_PREFIX = '/api/v1/alerts'
 
 // ── 类型定义 ────────────────────────────────────────
 
@@ -98,7 +98,7 @@ export const getAlertList = (
   params?: Record<string, any>
 ): Promise<Http.BaseResponse<AlertListResponse>> => {
   return httpClient.get({
-    url: API_PREFIX,
+    url: `${API_PREFIX}/`,
     params: normalizePaginationParams(params),
     keepFullResponse: true
   })
@@ -110,7 +110,7 @@ export const getAlertsByIp = (
   params?: Record<string, any>
 ): Promise<Http.BaseResponse<AlertListResponse>> => {
   return httpClient.get({
-    url: API_PREFIX,
+    url: `${API_PREFIX}/`,
     params: { ...normalizePaginationParams(params), ip },
     keepFullResponse: true
   })
@@ -122,7 +122,7 @@ export const getAlertsByAgentId = (
   params?: Record<string, any>
 ): Promise<Http.BaseResponse<AlertListResponse>> => {
   return httpClient.get({
-    url: API_PREFIX,
+    url: `${API_PREFIX}/`,
     params: { ...normalizePaginationParams(params), agent_id: agentId },
     keepFullResponse: true
   })

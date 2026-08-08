@@ -32,8 +32,10 @@ PARENT = {
 # 子菜单
 CHILDREN = [
     {"name": "异常事件", "path": "event", "component": "/browsing/event/index", "sort_order": 1},
-    {"name": "黑名单管理", "path": "blacklist", "component": "/browsing/blacklist/index", "sort_order": 2},
-    {"name": "规则配置", "path": "config", "component": "/browsing/config/index", "sort_order": 3},
+    {"name": "行为统计", "path": "statistics", "component": "/browsing/statistics/index", "sort_order": 2},
+    {"name": "行为日志", "path": "logs", "component": "/browsing/logs/index", "sort_order": 3},
+    {"name": "黑名单管理", "path": "blacklist", "component": "/browsing/blacklist/index", "sort_order": 4},
+    {"name": "规则配置", "path": "config", "component": "/browsing/config/index", "sort_order": 5},
 ]
 
 

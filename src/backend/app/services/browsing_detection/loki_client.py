@@ -31,6 +31,7 @@ class LokiClient:
         end_ns: int,
         limit: int = 10000,
         direction: str = "forward",
+        step: str | None = None,
     ) -> List[dict]:
         """
         GET /loki/api/v1/query_range
@@ -52,6 +53,7 @@ class LokiClient:
                     "end": str(end_ns),
                     "limit": limit,
                     "direction": direction,
+                    **({"step": step} if step else {}),
                 },
             )
             resp.raise_for_status()
@@ -64,6 +66,29 @@ class LokiClient:
             logger.warning("Loki 返回非 success: %s", payload)
             return []
 
+        result = payload.get("data", {}).get("result", [])
+        return result if isinstance(result, list) else []
+
+    def query(self, query: str, time_ns: int | None = None) -> List[dict]:
+        """GET /loki/api/v1/query（瞬时查询），返回 vector 列表
+
+        用于聚合统计（sum by / topk / count_over_time 等的当前值）。
+        """
+        import time as _time
+        if time_ns is None:
+            time_ns = int(_time.time() * 1_000_000_000)
+        try:
+            resp = self._client.get(
+                "/loki/api/v1/query",
+                params={"query": query, "time": str(time_ns)},
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        except httpx.HTTPError as e:
+            logger.error("Loki 瞬时查询失败: %s query=%s", e, query)
+            raise
+        if payload.get("status") != "success":
+            return []
         result = payload.get("data", {}).get("result", [])
         return result if isinstance(result, list) else []
 

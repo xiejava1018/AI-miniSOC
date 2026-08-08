@@ -28,6 +28,8 @@ export enum RoutesAlias {
   BrowsingEvent = '/browsing/event/index', // 上网行为异常事件
   BrowsingBlacklist = '/browsing/blacklist/index', // 上网行为黑名单
   BrowsingConfig = '/browsing/config/index', // 上网行为规则配置
+  BrowsingLogs = '/browsing/logs/index', // 上网行为日志
+  BrowsingStatistics = '/browsing/statistics/index', // 行为统计概览
   Placeholder = '/placeholder' // 占位页面
   // 已精简：示例与演示页面别名已移除
 }

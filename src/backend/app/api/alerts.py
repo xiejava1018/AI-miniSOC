@@ -145,6 +145,36 @@ async def get_alert_statistics(
         raise HTTPException(status_code=500, detail=f"查询统计失败: {str(e)}")
 
 
+@router.get("/trend")
+async def get_alert_trend(
+    hours: int = Query(24, ge=1, le=720),
+    interval_hours: int = Query(1, ge=1, le=24),
+    db: Session = Depends(get_db)
+):
+    """告警趋势(小时级聚合)"""
+    try:
+        service = AlertQueryService(db)
+        trend = service.get_alert_trend(hours=hours, interval_hours=interval_hours)
+        return {"trend": trend}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询趋势失败: {str(e)}")
+
+
+@router.get("/top-assets")
+async def get_top_alert_assets(
+    hours: int = Query(24, ge=1, le=720),
+    limit: int = Query(10, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """告警最多的资产 Top N"""
+    try:
+        service = AlertQueryService(db)
+        assets = service.get_top_alert_assets(hours=hours, limit=limit)
+        return {"assets": assets}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"查询Top资产失败: {str(e)}")
+
+
 @router.get("/{alert_id}")
 async def get_alert(alert_id: str, db: Session = Depends(get_db)):
     """获取告警详情"""

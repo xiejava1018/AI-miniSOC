@@ -58,6 +58,23 @@ export const analyzeBrowsingEvent = (id: string): Promise<any> => {
   })
 }
 
+export const getBrowsingEventLogs = (id: string, limit: number = 100): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/browsing/events/${id}/logs`,
+    params: { limit },
+    keepFullResponse: true
+  })
+}
+
+/** 查询原始行为日志（多条件） */
+export const queryBrowsingLogs = (params: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/browsing/logs`,
+    params,
+    keepFullResponse: true
+  })
+}
+
 // ── 黑名单 ────────────────────────────────────────
 
 export const getBrowsingBlacklist = (params: Record<string, any>): Promise<any> => {
@@ -98,6 +115,15 @@ export const getBrowsingBaseline = (params: Record<string, any>): Promise<any> =
 export const getBrowsingStats = (): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/browsing/stats`,
+    keepFullResponse: true
+  })
+}
+
+/** 行为统计概览（多维度聚合） */
+export const getBrowsingStatistics = (hours: number = 24): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/browsing/statistics`,
+    params: { hours },
     keepFullResponse: true
   })
 }

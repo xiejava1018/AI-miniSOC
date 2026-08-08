@@ -75,7 +75,7 @@
           </ElDescriptionsItem>
           <ElDescriptionsItem label="窗口内记录数">{{ detail.source_count }}</ElDescriptionsItem>
           <ElDescriptionsItem label="检测窗口">
-            {{ detail.window_start }} ~ {{ detail.window_end }}
+            {{ fmtTime(detail.window_start) }} ~ {{ fmtTime(detail.window_end) }}
           </ElDescriptionsItem>
           <ElDescriptionsItem label="命中规则">
             <div v-for="h in detail.rule_hits" :key="h.rule" class="rule-hit">
@@ -97,6 +97,7 @@
           <ElButton @click="handleStatus(detail, 'ignored')" plain>忽略</ElButton>
           <ElButton @click="handleWhitelist(detail)" type="success" plain>加入白名单</ElButton>
           <ElButton @click="handleAnalyze(detail)" type="primary" :loading="analyzing">AI 研判</ElButton>
+          <ElButton @click="handleLoadLogs(detail)" type="info" :loading="loadingLogs">查看原始日志</ElButton>
         </div>
 
         <!-- AI 研判结果 -->
@@ -107,6 +108,15 @@
             <ElDescriptionsItem label="分析说明">{{ aiResult.explanation || '—' }}</ElDescriptionsItem>
             <ElDescriptionsItem label="处置建议">{{ aiResult.recommendations || '—' }}</ElDescriptionsItem>
           </ElDescriptions>
+        </div>
+
+        <!-- 原始日志 -->
+        <div v-if="rawLogs.length" class="raw-logs">
+          <ElDivider content-position="left">原始日志（{{ rawLogs.length }} 条）</ElDivider>
+          <ElTable :data="rawLogs" border size="small" max-height="360">
+            <ElTableColumn prop="ts" label="时间" width="170" />
+            <ElTableColumn prop="body" label="日志内容" show-overflow-tooltip />
+          </ElTable>
         </div>
       </template>
     </ElDrawer>
@@ -124,6 +134,7 @@
     updateBrowsingEvent,
     whitelistBrowsingEvent,
     analyzeBrowsingEvent,
+    getBrowsingEventLogs,
     getBrowsingStats
   } from '@/api/browsing'
   import type { SearchFormItem } from '@/types'
@@ -159,7 +170,7 @@
       apiParams: { ip: '', domain: '', severity: '', status: '' },
       columnsFactory: () => [
         { prop: 'created_at', label: '检测时间', align: 'center', width: 160,
-          formatter: (r: any) => (r.created_at || '').replace('T', ' ').slice(0, 19) },
+          formatter: (r: any) => fmtTime(r.created_at) },
         { prop: 'ip', label: '源 IP', align: 'center', width: 130 },
         { prop: 'domain', label: '目标域名', align: 'left', showOverflowTooltip: true,
           formatter: (r: any) => r.domain || '--' },
@@ -192,14 +203,14 @@
     { label: '目标域名', key: 'domain', type: 'input', span: 6, clearable: true, placeholder: '请输入域名' },
     {
       label: '等级', key: 'severity', type: 'select', span: 6, clearable: true, placeholder: '选择等级',
-      options: () => [
+      options: [
         { label: '严重', value: 'critical' }, { label: '高危', value: 'high' },
         { label: '中危', value: 'medium' }, { label: '低危', value: 'low' }
       ]
     },
     {
       label: '状态', key: 'status', type: 'select', span: 6, clearable: true, placeholder: '选择状态',
-      options: () => [
+      options: [
         { label: '新建', value: 'new' }, { label: '已确认', value: 'confirmed' },
         { label: '误报', value: 'false_positive' }, { label: '已解决', value: 'resolved' },
         { label: '已忽略', value: 'ignored' }
@@ -212,6 +223,7 @@
   const detail = ref<any>(null)
   const showDetail = async (row: any) => {
     aiResult.value = null
+    rawLogs.value = []
     try {
       const res = await getBrowsingEvent(row.id)
       detail.value = res?.data || row
@@ -277,6 +289,37 @@
     } finally {
       analyzing.value = false
     }
+  }
+
+  // 原始日志
+  const loadingLogs = ref(false)
+  const rawLogs = ref<any[]>([])
+  const handleLoadLogs = async (d: any) => {
+    loadingLogs.value = true
+    rawLogs.value = []
+    try {
+      const res = await getBrowsingEventLogs(d.id, 100)
+      if (res.code === 200 || res.code === 201) {
+        rawLogs.value = res.data?.logs || []
+        if (!rawLogs.value.length) ElMessage.info('窗口内未查到原始日志')
+      } else {
+        ElMessage.error(res.message || '查询失败')
+      }
+    } catch (e) {
+      console.error(e)
+      ElMessage.error('查询原始日志失败')
+    } finally {
+      loadingLogs.value = false
+    }
+  }
+
+  // 时间格式化（UTC ISO → 本地时间，浏览器自动转北京时间）
+  const fmtTime = (iso: string) => {
+    if (!iso) return '--'
+    const d = new Date(iso)
+    if (isNaN(d.getTime())) return iso
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
 
   // 工具函数
@@ -359,6 +402,10 @@
     }
 
     .ai-result {
+      margin-top: 16px;
+    }
+
+    .raw-logs {
       margin-top: 16px;
     }
   }
