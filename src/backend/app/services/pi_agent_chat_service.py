@@ -42,7 +42,7 @@ ART_BOT_SYSTEM_PROMPT = (
 )
 
 # 默认使用 Agnes AI
-DEFAULT_MODEL = "agnes/agnes-1.5-flash"
+DEFAULT_MODEL = "agnes/agnes-2.0-flash"
 
 
 class PiAgentChatError(Exception):

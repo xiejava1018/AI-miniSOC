@@ -35,11 +35,11 @@ export const getAllMenu = (): Promise<any> => {
 }
 
 export const addMenu = (data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/menus`, data })
+  return httpClient.post({ url: `${API_PREFIX}/menus`, data, keepFullResponse: true })
 }
 
 export const updateMenu = (id: number, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/menus/${id}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/menus/${id}`, data, keepFullResponse: true })
 }
 
 export const deleteMenu = (id: string | number): Promise<Http.BaseResponse<unknown>> => {
@@ -62,15 +62,15 @@ export const getRoleList = (
 }
 
 export const addRole = (data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/roles`, data })
+  return httpClient.post({ url: `${API_PREFIX}/roles`, data, keepFullResponse: true })
 }
 
 export const updateRole = (id: number, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/roles/${id}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/roles/${id}`, data, keepFullResponse: true })
 }
 
 export const deleteRole = (id: number): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/roles/${id}` })
+  return httpClient.del({ url: `${API_PREFIX}/roles/${id}`, keepFullResponse: true })
 }
 
 export const getRoleMenus = (roleID: number): Promise<Http.BaseResponse<any>> => {
@@ -81,7 +81,7 @@ export const getRoleMenus = (roleID: number): Promise<Http.BaseResponse<any>> =>
 }
 
 export const assignRoleMenus = (roleID: number, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/roles/${roleID}/menus`, data })
+  return httpClient.put({ url: `${API_PREFIX}/roles/${roleID}/menus`, data, keepFullResponse: true })
 }
 
 // ========== 用户管理 ==========

@@ -90,19 +90,19 @@ export const getAssetSources = (id: string): Promise<Http.BaseResponse<any[]>> =
 }
 
 export const addAsset = (data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}`, data })
+  return httpClient.post({ url: `${API_PREFIX}`, data, keepFullResponse: true })
 }
 
 export const updateAsset = (id: string, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/${id}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/${id}`, data, keepFullResponse: true })
 }
 
 export const deleteAsset = (id: string): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/${id}` })
+  return httpClient.del({ url: `${API_PREFIX}/${id}`, keepFullResponse: true })
 }
 
 export const syncFromWazuh = (): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/sync/from-wazuh` })
+  return httpClient.post({ url: `${API_PREFIX}/sync/from-wazuh`, keepFullResponse: true })
 }
 
 // ========== 端口管理 ==========
@@ -116,15 +116,15 @@ export const getAssetPorts = (assetId: string, params?: Record<string, any>): Pr
 }
 
 export const addAssetPort = (assetId: string, data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/${assetId}/ports`, data })
+  return httpClient.post({ url: `${API_PREFIX}/${assetId}/ports`, data, keepFullResponse: true })
 }
 
 export const updateAssetPort = (portId: string, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/ports/${portId}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/ports/${portId}`, data, keepFullResponse: true })
 }
 
 export const deleteAssetPort = (portId: string): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/ports/${portId}` })
+  return httpClient.del({ url: `${API_PREFIX}/ports/${portId}`, keepFullResponse: true })
 }
 
 // ========== 标签管理 ==========
@@ -138,15 +138,15 @@ export const getAssetTags = (assetId: string, params?: Record<string, any>): Pro
 }
 
 export const addAssetTag = (assetId: string, data: any): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/${assetId}/tags`, data })
+  return httpClient.post({ url: `${API_PREFIX}/${assetId}/tags`, data, keepFullResponse: true })
 }
 
 export const updateAssetTag = (tagId: string, data: any): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/tags/${tagId}`, data })
+  return httpClient.put({ url: `${API_PREFIX}/tags/${tagId}`, data, keepFullResponse: true })
 }
 
 export const deleteAssetTag = (tagId: string): Promise<any> => {
-  return httpClient.del({ url: `${API_PREFIX}/tags/${tagId}` })
+  return httpClient.del({ url: `${API_PREFIX}/tags/${tagId}`, keepFullResponse: true })
 }
 
 export const getCommonTagKeys = (): Promise<any> => {

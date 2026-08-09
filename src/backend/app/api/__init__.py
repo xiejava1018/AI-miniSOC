@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
-    ws, data_sync, internal, browsing)
+    ws, data_sync, internal, browsing, alert_digests)
 
 api_router = APIRouter()
 
@@ -18,6 +18,10 @@ api_router.include_router(asset_ports.router, prefix="/assets", tags=["资产端
 api_router.include_router(asset_tags.router, prefix="/assets", tags=["资产标签管理"])
 api_router.include_router(asset_incidents.router, prefix="/assets", tags=["资产-事件关联"])
 api_router.include_router(incidents.router, prefix="/incidents", tags=["事件管理"])
+# 注意：alert_digests 必须在 alerts 之前注册。
+# alerts 路由含 catch-all 的 GET /{alert_id}，若不先注册静态的 /groups、/digest，
+# 它们会被 /{alert_id} 抢匹配（Starlette 按注册顺序匹配）。
+api_router.include_router(alert_digests.router, prefix="/alerts", tags=["告警治理"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["告警管理"])
 api_router.include_router(ai.router, prefix="/ai", tags=["AI分析"])
 # Art Bot 聊天（SSE 流式）—— 挂在 /ai/chat 下，避免与 /ai/analyze-alert 冲突

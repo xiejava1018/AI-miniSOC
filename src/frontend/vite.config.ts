@@ -107,7 +107,9 @@ export default ({ mode }: { mode: string }) => {
         threshold: 10240, // 只有大小大于该值的资源会被处理 10240B = 10KB
         deleteOriginFile: false // 压缩后是否删除原文件
       }),
-      vueDevTools()
+      // vueDevTools()  // 临时禁用：其内置的 vue-inspector 会把 <script setup> 的 TS 误当 HTML 解析，
+      // 对本文件报 "Element is missing end tag" 并替换为错误模块，导致组件无法加载。
+      // 模板本身经 @vue/compiler-sfc 校验完全合法，故禁用该 dev 工具即可恢复正常。
       // 打包分析
       // visualizer({
       //   open: true,

@@ -26,6 +26,7 @@ class AlertQueryService:
 
     def __init__(self, db: Session):
         self.db = db
+        self._srcip_field_cached = None
         self._os = httpx.Client(
             base_url=settings.OPENSEARCH_URL.rstrip("/"),
             auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
@@ -324,6 +325,238 @@ class AlertQueryService:
         from app.services.wazuh_client import wazuh_client
 
         return wazuh_client.get_agents()
+
+    # ── 告警指纹聚合（去重为"告警簇"）────────────────
+
+    def _build_time_filter(
+        self,
+        hours: int = None,
+        start_time: datetime = None,
+        end_time: datetime = None,
+    ) -> list:
+        """构造 @timestamp 时间过滤（hours 或显式区间二选一）。"""
+        filters = []
+        if start_time or end_time:
+            tr: dict = {}
+            if start_time:
+                tr["gte"] = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            if end_time:
+                tr["lte"] = end_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            filters.append({"range": {"@timestamp": tr}})
+        elif hours:
+            now = datetime.utcnow()
+            start = (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            filters.append({"range": {"@timestamp": {"gte": start}}})
+        return filters
+
+    def _build_group_sub_aggs(self) -> dict:
+        """每个告警簇桶内的子聚合（不含 data.srcip，单独尽力而为查询）。"""
+        return {
+            "level_stats": {"stats": {"field": "rule.level"}},
+            "first_seen": {"min": {"field": "@timestamp"}},
+            "last_seen": {"max": {"field": "@timestamp"}},
+            "sample": {
+                "top_hits": {
+                    "size": 1,
+                    "sort": [{"@timestamp": {"order": "desc"}}],
+                    "_source": ["id", "rule", "agent", "location", "full_log", "data"],
+                }
+            },
+        }
+
+    def get_alert_groups(
+        self,
+        hours: int = 24,
+        min_count: int = 1,
+        level: int = None,
+        limit: int = 20,
+        max_pages: int = 20,
+        page_size: int = 100,
+    ) -> Dict[str, Any]:
+        """
+        将原始告警按 (rule.id, agent.id) 分桶聚合成有限个"告警簇"。
+
+        指纹(fingerprint) = "{rule_id}|{agent_id}"，可逆向解析，便于单簇查询。
+        返回 {total_groups, groups:[...]}，groups 按 doc_count 降序取 TopN。
+        OpenSearch composite 聚合天然支持百万级，不触发 1 万条上限。
+        """
+        must = []
+        if level is not None:
+            must.append({"range": {"rule.level": {"gte": level}}})
+        filters = self._build_time_filter(hours=hours)
+        query = {"bool": {"must": must or [{"match_all": {}}], "filter": filters}}
+
+        # 分页拉取 composite 桶（确保 TopN 准确，不受桶默认排序影响）
+        buckets: list = []
+        after_key = None
+        for _ in range(max(1, max_pages)):
+            body = {
+                "size": 0,
+                "query": query,
+                "aggs": {
+                    "groups": {
+                        "composite": {
+                            "size": page_size,
+                            "sources": [
+                                {"rule_id": {"terms": {"field": "rule.id"}}},
+                                {"agent_id": {"terms": {"field": "agent.id"}}},
+                            ],
+                            **({"after": after_key} if after_key else {}),
+                        },
+                        "aggs": self._build_group_sub_aggs(),
+                    }
+                },
+            }
+            result = self._os_search(body)
+            agg = result.get("aggregations", {}).get("groups", {})
+            buckets.extend(agg.get("buckets", []))
+            after_key = agg.get("after_key")
+            if not after_key:
+                break
+
+        normalized = []
+        for b in buckets:
+            key = b.get("key", {})
+            rule_id = key.get("rule_id")
+            agent_id = key.get("agent_id")
+            ls = b.get("level_stats", {})
+            sample_hit = (b.get("sample", {}).get("hits", {}).get("hits") or [{}])[0]
+            src = sample_hit.get("_source", {})
+            normalized.append({
+                "fingerprint": f"{rule_id}|{agent_id}",
+                "rule_id": rule_id,
+                "rule_description": (src.get("rule") or {}).get("description"),
+                "agent_id": agent_id,
+                "agent_name": (src.get("agent") or {}).get("name"),
+                "agent_ip": (src.get("agent") or {}).get("ip"),
+                "count": b.get("doc_count", 0),
+                "level_min": ls.get("min"),
+                "level_max": ls.get("max"),
+                "first_seen": (b.get("first_seen") or {}).get("value_as_string"),
+                "last_seen": (b.get("last_seen") or {}).get("value_as_string"),
+                "sample": self._normalize_alerts([sample_hit])[0]
+                if (sample_hit and sample_hit.get("_source")) else None,
+            })
+        normalized = [g for g in normalized if g["count"] >= min_count]
+        normalized.sort(key=lambda g: g["count"], reverse=True)
+        return {"total_groups": len(normalized), "groups": normalized[:limit]}
+
+    def get_alert_group_detail(
+        self,
+        fingerprint: str,
+        hours: int = 24,
+        sample_size: int = 5,
+    ) -> Dict[str, Any]:
+        """
+        单簇明细：解析指纹 -> 查该簇全部样本 + 等级/时间聚合 + 关联资产。
+        攻击者源 IP（data.srcip）为尽力而为：字段类型不确定时自动降级，不影响主结果。
+        """
+        if "|" not in fingerprint:
+            raise ValueError("指纹格式应为 'rule_id|agent_id'")
+        rule_id, agent_id = fingerprint.split("|", 1)
+        filters = self._build_time_filter(hours=hours)
+        filters.append({"term": {"rule.id": rule_id}})
+        filters.append({"term": {"agent.id": agent_id}})
+        body = {
+            "size": 0,
+            "query": {"bool": {"filter": filters}},
+            "aggs": {
+                "level_stats": {"stats": {"field": "rule.level"}},
+                "first_seen": {"min": {"field": "@timestamp"}},
+                "last_seen": {"max": {"field": "@timestamp"}},
+                "samples": {
+                    "top_hits": {
+                        "size": sample_size,
+                        "sort": [{"@timestamp": {"order": "desc"}}],
+                        "_source": ["id", "rule", "agent", "location", "full_log", "data"],
+                    }
+                },
+            },
+        }
+        result = self._os_search(body)
+        aggs = result.get("aggregations", {})
+        hits = aggs.get("samples", {}).get("hits", {}).get("hits", [])
+        samples = self._normalize_alerts(hits) if hits else []
+        agent_ip = (samples[0].get("agent") or {}).get("ip") if samples else None
+        agent_name = (samples[0].get("agent") or {}).get("name") if samples else None
+        rule_desc = (samples[0].get("rule") or {}).get("description") if samples else None
+        total = aggs.get("samples", {}).get("hits", {}).get("total", {}).get("value", 0)
+
+        # 攻击者源 IP：尽力而为，失败不影响主结果
+        top_srcips, distinct_srcips = self._best_effort_srcip(filters)
+
+        # IP -> 资产关联
+        linked_asset = self._find_asset(agent_id=agent_id, agent_ip=agent_ip)
+
+        return {
+            "fingerprint": fingerprint,
+            "rule_id": rule_id,
+            "rule_description": rule_desc,
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "agent_ip": agent_ip,
+            "count": total,
+            "level_min": (aggs.get("level_stats") or {}).get("min"),
+            "level_max": (aggs.get("level_stats") or {}).get("max"),
+            "first_seen": (aggs.get("first_seen") or {}).get("value_as_string"),
+            "last_seen": (aggs.get("last_seen") or {}).get("value_as_string"),
+            "top_srcips": top_srcips,
+            "distinct_srcips": distinct_srcips,
+            "linked_asset": linked_asset,
+            "samples": samples,
+        }
+
+    def _best_effort_srcip(self, filters: list) -> tuple:
+        """尽力而为地聚合攻击者源 IP。data.srcip 字段类型依赖索引映射，
+        先试 data.srcip，失败再试 .keyword，都失败则降级为空。"""
+        candidates = [self._srcip_field_cached] if self._srcip_field_cached else [
+            "data.srcip", "data.srcip.keyword",
+        ]
+        for field in candidates:
+            if not field:
+                continue
+            try:
+                body = {
+                    "size": 0,
+                    "query": {"bool": {"filter": filters}},
+                    "aggs": {
+                        "top_srcips": {"terms": {"field": field, "size": 10}},
+                        "distinct_srcips": {"cardinality": {"field": field}},
+                    },
+                }
+                res = self._os_search(body)
+                aggs = res.get("aggregations", {})
+                self._srcip_field_cached = field
+                return (
+                    [b["key"] for b in aggs.get("top_srcips", {}).get("buckets", [])],
+                    aggs.get("distinct_srcips", {}).get("value", 0),
+                )
+            except Exception as e:
+                logger.warning("srcip 聚合失败(field=%s): %s，尝试下一候选", field, e)
+                continue
+        return ([], 0)
+
+    def _find_asset(self, agent_id: str = None, agent_ip: str = None) -> Optional[Dict[str, Any]]:
+        """按 wazuh_agent_id 或 asset_ip 关联资产。"""
+        if not agent_id and not agent_ip:
+            return None
+        from app.models import Asset
+        q = self.db.query(Asset)
+        if agent_id:
+            q = q.filter(Asset.wazuh_agent_id == agent_id)
+        else:
+            q = q.filter(Asset.asset_ip == agent_ip)
+        asset = q.first()
+        if not asset:
+            return None
+        return {
+            "asset_id": str(asset.id),
+            "name": asset.name,
+            "asset_ip": asset.asset_ip,
+            "criticality": asset.criticality,
+            "owner": asset.owner,
+            "business_unit": asset.business_unit,
+        }
 
     def close(self):
         self._os.close()

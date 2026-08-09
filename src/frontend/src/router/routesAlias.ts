@@ -24,6 +24,7 @@ export enum RoutesAlias {
   AssetDetail = '/asset/detail/index', // 资产详情
   Incidents = '/placeholder', // 事件管理（占位）
   Alerts = '/alert/list/index', // 告警管理
+  AlertGovernance = '/alert/governance/index', // 告警治理
   Vulnerabilities = '/placeholder', // 脆弱性管理（占位）
   BrowsingEvent = '/browsing/event/index', // 上网行为异常事件
   BrowsingBlacklist = '/browsing/blacklist/index', // 上网行为黑名单

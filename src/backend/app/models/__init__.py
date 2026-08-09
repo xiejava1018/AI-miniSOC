@@ -29,6 +29,9 @@ from .asset_source import AssetSource
 from .browsing_event import BrowsingEvent
 from .browsing_blacklist import BrowsingBlacklist
 from .browsing_baseline import BrowsingBaseline
+from .alert_digest import AlertDigest
+from .alert_group_snapshot import AlertGroupSnapshot
+from .alert_group_analysis import AlertGroupAnalysis
 
 __all__ = [
     "Base",
@@ -61,4 +64,7 @@ __all__ = [
     "BrowsingEvent",
     "BrowsingBlacklist",
     "BrowsingBaseline",
+    "AlertDigest",
+    "AlertGroupSnapshot",
+    "AlertGroupAnalysis",
 ]

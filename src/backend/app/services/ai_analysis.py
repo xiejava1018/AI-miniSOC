@@ -4,7 +4,7 @@
 
 from zhipuai import ZhipuAI
 from app.core.config import settings
-from app.models import AIAnalysis
+from app.models import AIAnalysis, AlertGroupAnalysis
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
 import logging
@@ -21,7 +21,13 @@ class AIAnalysisService:
 
     def __init__(self, db: Session):
         self.db = db
-        self.client = ZhipuAI(api_key=settings.GLM_API_KEY)
+        # 容错：智谱客户端初始化失败（如未配密钥）不应阻断整个服务，
+        # 后续簇研判会自动降级到启发式兜底。
+        try:
+            self.client = ZhipuAI(api_key=settings.GLM_API_KEY)
+        except Exception as e:
+            logger.warning("ZhipuAI 初始化失败，将仅走启发式兜底: %s", e)
+            self.client = None
         # POC: 懒加载 AgentProcessManager
         self._agent_manager = None
 
@@ -358,6 +364,254 @@ class AIAnalysisService:
         self.db.refresh(analysis)
 
         return analysis
+
+    # ── 告警簇级研判（Phase 1）──────────────────────────
+    #
+    # 与单条告警 analyze_alert 不同，这里把"一簇 N 条同类告警"当作整体，
+    # 输出结构化 verdict：{priority, is_noise, confidence, rationale,
+    # recommended_action, suggest_incident, source, model_name, ...}
+    # 落库到独立的 soc_alert_group_analyses（按 fingerprint 唯一缓存 + 7 天 TTL）。
+    # 降级链：缓存 -> Pi Agent -> 智谱 -> 启发式兜底（source='heuristic'）。
+
+    async def triage_alert_group(
+        self, signature: dict, force_refresh: bool = False
+    ) -> dict:
+        """对一个告警簇做结构化 AI 研判。
+
+        signature 需含：fingerprint, rule_id, agent_id, rule_description,
+        rule_id/agent_id/level_min/level_max/count/first_seen/last_seen/
+        distinct_srcips/top_srcips/agent_name/agent_ip/linked_asset/
+        sample_full_log/window_hours/linked_asset_id。
+        """
+        fp = signature.get("fingerprint")
+        if not force_refresh:
+            cached = self._get_cached_group_analysis(fp)
+            if cached:
+                logger.info("使用缓存的告警簇研判: %s", fp)
+                return cached.to_dict()
+
+        prompt = self._build_group_triage_prompt(signature)
+        trace_id = str(uuid.uuid4())
+        source = "heuristic"
+        try:
+            text, source = await self._llm_text_for_group(prompt, trace_id)
+            verdict = self._parse_verdict_json(text)
+            verdict["source"] = source
+        except Exception as e:
+            logger.warning("告警簇研判 AI 失败，启发式兜底: %s", e)
+            verdict = self._heuristic_verdict(signature)
+
+        # 关联元数据
+        verdict["fingerprint"] = fp
+        verdict["rule_id"] = signature.get("rule_id")
+        verdict["agent_id"] = signature.get("agent_id")
+        verdict["rule_description"] = signature.get("rule_description")
+        verdict["window_hours"] = signature.get("window_hours")
+        verdict["linked_asset_id"] = signature.get("linked_asset_id")
+        if not verdict.get("model_name"):
+            verdict["model_name"] = (
+                settings.GLM_MODEL if verdict["source"] != "heuristic" else "heuristic"
+            )
+
+        self._save_group_analysis(verdict)
+        return verdict
+
+    async def _llm_text_for_group(self, prompt: str, trace_id: str):
+        """优先 Pi Agent，失败降级智谱，返回 (text, source)。"""
+        # 1. Pi Agent
+        try:
+            manager = self._get_agent_manager()
+            session_id = f"group-triage-{trace_id}"
+            result = await manager.call(
+                session_id,
+                "agent.prompt",
+                {
+                    "sessionId": session_id,
+                    "userMessage": prompt,
+                    "model": settings.GLM_MODEL or "glm-4-flash",
+                    "trace_id": trace_id,
+                },
+            )
+            text = result.get("text", "") if isinstance(result, dict) else str(result)
+            if text and text.strip():
+                return text, "agent"
+        except Exception as e:
+            logger.warning("Agent 簇研判失败，降级智谱: %s", e)
+
+        # 2. 智谱
+        if self.client is None:
+            raise RuntimeError("智谱客户端未初始化")
+        resp = self.client.chat.completions.create(
+            model=settings.GLM_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "你是一个资深网络安全分析师，擅长对一批同类安全告警做整体研判与优先级排序。",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+        )
+        text = resp.choices[0].message.content.strip()
+        return text, "zhipu"
+
+    def _build_group_triage_prompt(self, signature: dict) -> str:
+        """构建告警簇研判提示词（强调"这是 N 条同类告警的聚合"）。"""
+        linked = signature.get("linked_asset") or {}
+        criticality = linked.get("criticality") or "未知"
+        top_srcips = signature.get("top_srcips") or []
+        srcip_hint = ", ".join(str(ip) for ip in top_srcips[:5]) or "无"
+
+        return f"""你是一个网络安全专家。下面是一批**同类安全告警聚合而成的告警簇**（不是单条告警），请综合研判并给出处置优先级。
+
+## 告警簇信息
+- 指纹: {signature.get('fingerprint')}
+- 规则: {signature.get('rule_id')} {signature.get('rule_description') or ''}
+- 受影响资产: {signature.get('agent_name') or signature.get('agent_id')} (IP: {signature.get('agent_ip') or '未知'})
+- 告警总量: {signature.get('count')} 条
+- 等级跨度: L{signature.get('level_min')} ~ L{signature.get('level_max')}
+- 首次/最近出现: {signature.get('first_seen')} ~ {signature.get('last_seen')}
+- 不同攻击源 IP 数: {signature.get('distinct_srcips')}（Top: {srcip_hint}）
+- 关联资产重要度: {criticality}
+- 样本日志: {(signature.get('sample_full_log') or '无')[:800]}
+
+## 研判要求
+请综合 **量级、等级跨度、受影响资产重要度、攻击源多样性、时间持续性** 给出结论，并以**严格 JSON** 返回（不要任何多余文本/解释）：
+{{
+  "priority": "P0|P1|P2|P3",
+  "is_noise": true|false,
+  "confidence": 0.0~1.0,
+  "rationale": "为什么是这个优先级（2-3 句）",
+  "recommended_action": "处置步骤1\\n处置步骤2\\n处置步骤3",
+  "suggest_incident": true|false
+}}
+注：P0=需立即处置的重大事件；P1=高优先级需尽快处理；P2=中优先级可排期；P3=低优先级/观察。is_noise=true 表示可判定为良性噪声，可移出必处理清单。
+"""
+
+    def _parse_verdict_json(self, text: str) -> dict:
+        """从 LLM 返回中解析 verdict JSON；失败抛异常交由调用方启发式兜底。"""
+        raw = text or ""
+        try:
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0].strip()
+            elif "```" in raw:
+                raw = raw.split("```")[1].split("```")[0].strip()
+            data = json.loads(raw)
+        except Exception:
+            logger.warning("告警簇研判 JSON 解析失败，启发式兜底")
+            raise ValueError("无法解析为 JSON")
+
+        priority = str(data.get("priority", "P3")).upper()
+        if priority not in ("P0", "P1", "P2", "P3"):
+            priority = "P3"
+        try:
+            confidence = float(data.get("confidence", 0.6) or 0.6)
+        except (TypeError, ValueError):
+            confidence = 0.6
+        return {
+            "priority": priority,
+            "is_noise": bool(data.get("is_noise", False)),
+            "confidence": confidence,
+            "rationale": data.get("rationale", ""),
+            "recommended_action": data.get("recommended_action", ""),
+            "suggest_incident": bool(data.get("suggest_incident", False)),
+            "source": "unknown",  # 由调用方覆盖
+            "model_name": None,
+        }
+
+    def _heuristic_verdict(self, signature: dict, reason: str = "模型不可用（启发式兜底）") -> dict:
+        """无 AI 时的启发式 verdict：按最高等级 + 量级给 P 级，source='heuristic'。"""
+        level_max = signature.get("level_max") or 0
+        count = signature.get("count") or 0
+        if level_max >= 12:
+            priority = "P1"
+        elif level_max >= 8:
+            priority = "P2"
+        else:
+            priority = "P3"
+        return {
+            "priority": priority,
+            "is_noise": False,
+            "confidence": 0.4,
+            "rationale": f"{reason}：按最高等级 L{level_max}、告警量 {count} 给 {priority}。",
+            "recommended_action": "建议人工复核该簇日志，确认是否需要处置或加白。",
+            "suggest_incident": priority == "P1",
+            "source": "heuristic",
+            "model_name": "heuristic",
+        }
+
+    def _get_cached_group_analysis(self, fingerprint: str) -> Optional[AlertGroupAnalysis]:
+        """按 fingerprint 取未过期的簇研判缓存。"""
+        from datetime import timezone
+
+        obj = (
+            self.db.query(AlertGroupAnalysis)
+            .filter(AlertGroupAnalysis.fingerprint == fingerprint)
+            .first()
+        )
+        if not obj:
+            return None
+        if obj.expires_at:
+            exp = (
+                obj.expires_at.replace(tzinfo=timezone.utc)
+                if obj.expires_at.tzinfo is None
+                else obj.expires_at
+            )
+            if exp <= datetime.now(timezone.utc):
+                return None
+        return obj
+
+    def _save_group_analysis(self, verdict: dict) -> AlertGroupAnalysis:
+        """upsert 一条告警簇研判（按 fingerprint 唯一）。"""
+        from uuid import UUID as _UUID
+
+        linked = verdict.get("linked_asset_id")
+        if linked and not isinstance(linked, _UUID):
+            try:
+                linked = _UUID(str(linked))
+            except Exception:
+                linked = None
+
+        obj = AlertGroupAnalysis(
+            fingerprint=verdict.get("fingerprint"),
+            rule_id=str(verdict.get("rule_id")) if verdict.get("rule_id") is not None else None,
+            agent_id=verdict.get("agent_id"),
+            rule_description=verdict.get("rule_description"),
+            priority=verdict.get("priority", "P3"),
+            is_noise=bool(verdict.get("is_noise", False)),
+            confidence=float(verdict.get("confidence", 0.0) or 0.0),
+            rationale=verdict.get("rationale"),
+            recommended_action=verdict.get("recommended_action"),
+            suggest_incident=bool(verdict.get("suggest_incident", False)),
+            source=verdict.get("source", "heuristic"),
+            model_name=verdict.get("model_name"),
+            window_hours=verdict.get("window_hours"),
+            linked_asset_id=linked,
+            created_at=datetime.utcnow(),
+            expires_at=datetime.utcnow() + timedelta(days=7),
+        )
+
+        existing = (
+            self.db.query(AlertGroupAnalysis)
+            .filter(AlertGroupAnalysis.fingerprint == obj.fingerprint)
+            .first()
+        )
+        if existing:
+            for attr in (
+                "rule_id", "agent_id", "rule_description", "priority", "is_noise",
+                "confidence", "rationale", "recommended_action", "suggest_incident",
+                "source", "model_name", "window_hours", "linked_asset_id",
+                "created_at", "expires_at",
+            ):
+                setattr(existing, attr, getattr(obj, attr))
+            self.db.commit()
+            self.db.refresh(existing)
+            return existing
+
+        self.db.add(obj)
+        self.db.commit()
+        self.db.refresh(obj)
+        return obj
 
     async def analyze_log(self, log_content: str) -> Dict[str, str]:
         """自然语言解释日志内容"""

@@ -69,3 +69,20 @@ class WebhookResponse(BaseModel):
     success: bool
     message: str
     asset_id: Optional[str] = None
+
+
+class RouterSyncRequest(BaseModel):
+    """路由器同步请求"""
+    host: str = Field(..., description="路由器IP地址")
+    username: str = Field(..., description="路由器管理用户名")
+    password: str = Field(..., description="路由器管理密码")
+    port: int = Field(default=80, description="路由器管理端口")
+
+
+class RouterSyncResponse(BaseModel):
+    """路由器同步响应"""
+    message: str
+    total: int
+    created: int
+    updated: int
+    failed: int

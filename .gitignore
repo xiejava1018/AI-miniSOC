@@ -3,6 +3,9 @@
 .env.local
 .env.*
 
+# 项目本地记忆（不入库）
+.workbuddy/
+
 # Python
 __pycache__/
 *.pyc

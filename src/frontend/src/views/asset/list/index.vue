@@ -626,7 +626,8 @@
             res = await updateAsset(submitData.id, submitData)
           }
 
-          if (res.code === 200) {
+          // addAsset/updateAsset 已传 keepFullResponse: true，返回 {code, msg, data}
+          if (res.code === 200 || res.code === 201) {
             ElMessage.success(dialogType.value === 'add' ? '添加成功' : '更新成功')
             dialogVisible.value = false
             refreshAll()

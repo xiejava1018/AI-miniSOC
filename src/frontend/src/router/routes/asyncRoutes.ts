@@ -183,6 +183,16 @@ export const asyncRoutes: AppRouteRecord[] = [
           keepAlive: true,
           roles: ['R_SUPER', 'R_ADMIN']
         }
+      },
+      {
+        path: 'governance',
+        name: 'AlertGovernance',
+        component: RoutesAlias.AlertGovernance,
+        meta: {
+          title: '告警治理',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
       }
     ]
   },
