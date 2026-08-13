@@ -8,7 +8,7 @@
   GET  /alerts/digest/latest    -> 最近一条摘要
   GET  /alerts/digest?date=     -> 按日期取摘要
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -147,6 +147,33 @@ async def triage_alert_group(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"单簇研判失败: {str(e)}")
+
+
+@router.post("/groups/{fingerprint}/create-incident")
+async def create_incident_from_group(
+    fingerprint: str,
+    body: Optional[dict] = Body(default=None),
+    hours: int = Query(24, ge=1, le=720, description="簇统计窗口(小时)"),
+    db: Session = Depends(get_db),
+):
+    """从告警簇创建事件（优先用 AI verdict；按 agent_ip 关联资产）。
+
+    可选 body: {created_by?}；severity 由 verdict.priority 或 rule.level 推导。
+    """
+    from app.services.alert_incident_service import build_incident_from_group, incident_to_dict
+    data = body or {}
+    try:
+        inc = build_incident_from_group(
+            db,
+            fingerprint,
+            hours=hours,
+            created_by=data.get("created_by") or "system",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"从告警簇创建事件失败: {str(e)}")
+    return incident_to_dict(inc)
 
 
 @router.post("/digest/generate")

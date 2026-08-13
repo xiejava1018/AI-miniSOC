@@ -17,7 +17,11 @@ import app.models  # noqa: F401  确保模型注册
 from app.models import AlertDigest, AlertGroupAnalysis
 from app.services.alert_query import AlertQueryService
 from app.services.alert_group_triage_service import AlertGroupTriageService
-from app.services.alert_governance_config import get_triage_top_n
+from app.services.alert_governance_config import (
+    get_triage_top_n,
+    get_min_group_count,
+    filter_noise_groups,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,11 @@ class AlertDigestService:
             groups = await triage_svc.triage_top_groups(hours=hours, top_n=top_n)
         except Exception as e:
             logger.warning("AI 研判失败，降级为纯聚合: %s", e)
-            groups = svc.get_alert_groups(hours=hours, min_count=1, limit=top_n).get("groups", [])
+            min_count = get_min_group_count(self.db)
+            groups = svc.get_alert_groups(hours=hours, min_count=min_count, limit=top_n).get("groups", [])
+            groups, suppressed = filter_noise_groups(groups, self.db)
+            if suppressed:
+                logger.info("噪声抑制：摘要降级分支移除 %s 个簇", suppressed)
 
         # 2. 高频资产 + 资产关联
         top_assets = svc.get_top_alert_assets(hours=hours, limit=10)
@@ -108,6 +116,8 @@ class AlertDigestService:
         self.db.commit()
         self.db.refresh(digest)
         logger.info("告警摘要已生成: total=%s groups=%s ai_model=%s", total, len(groups), ai_model)
+        # Phase 2：向 admin/超管推送站内通知 + WS（失败不阻断主流程）
+        await self._push_notification(digest)
         return digest
 
     # ── 查询 ─────────────────────────────────────────
@@ -135,6 +145,43 @@ class AlertDigestService:
         )
 
     # ── 内部辅助 ─────────────────────────────────────
+
+    async def _push_notification(self, digest: AlertDigest) -> None:
+        """Phase 2：摘要生成后向 admin/超管推送站内通知 + WS。失败不阻断主流程。"""
+        try:
+            from app.models import User, Role
+            from app.models.user import UserStatus
+            from app.services.notification_service import NotificationService
+
+            recipient_ids = [
+                uid
+                for (uid,) in self.db.query(User.id)
+                .outerjoin(Role, User.role_id == Role.id)
+                .filter(User.status == UserStatus.ACTIVE)
+                .filter((User.is_superuser.is_(True)) | (Role.code == "admin"))
+                .all()
+            ]
+            if not recipient_ids:
+                logger.info("告警摘要推送：无 admin 收件人，跳过")
+                return
+            notif_svc = NotificationService(self.db)
+            title = (
+                f"告警治理日报已生成（{digest.total_alerts} 条 / "
+                f"{len(digest.top_groups or [])} 簇）"
+            )
+            content = (digest.summary_text or "")[:500]
+            link = f"/alert/governance?digest={digest.id}"
+            for uid in recipient_ids:
+                await notif_svc.create(
+                    user_id=uid,
+                    type="alert_digest",
+                    title=title,
+                    content=content,
+                    link=link,
+                )
+            logger.info("告警摘要已推送给 %s 位 admin: digest=%s", len(recipient_ids), digest.id)
+        except Exception as e:
+            logger.warning("告警摘要通知推送失败（不影响主流程）: %s", e)
 
     def _enrich_assets(self, top_assets: List[dict]) -> List[dict]:
         """在高频资产上补充资产名/重要度（按 IP 关联 soc_assets）。"""

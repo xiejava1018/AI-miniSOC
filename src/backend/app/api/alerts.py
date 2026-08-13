@@ -199,9 +199,23 @@ async def get_alert(alert_id: str, db: Session = Depends(get_db)):
 @router.post("/{alert_id}/create-incident")
 async def create_incident_from_alert(
     alert_id: str,
-    incident_data: dict,
-    db: Session = Depends(get_db)
+    incident_data: Optional[dict] = None,
+    db: Session = Depends(get_db),
 ):
-    """从告警创建事件"""
-    # TODO: 实现从告警创建事件
-    return {"message": "从告警创建事件 API", "alert_id": alert_id}
+    """从单条告警创建事件（写 soc_incidents，按 agent.ip 关联 soc_asset_incidents）。
+
+    可选 body: {severity?, assigned_to?, created_by?}；severity 缺省由 rule.level 推导。
+    """
+    from app.services.alert_incident_service import build_incident_from_alert, incident_to_dict
+    body = incident_data or {}
+    try:
+        inc = build_incident_from_alert(
+            db,
+            alert_id,
+            created_by=body.get("created_by") or "system",
+            severity=body.get("severity"),
+            assigned_to=body.get("assigned_to"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return incident_to_dict(inc)

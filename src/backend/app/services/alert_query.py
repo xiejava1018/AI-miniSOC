@@ -170,8 +170,18 @@ class AlertQueryService:
     # ── 单条告警详情 ──────────────────────────────────
 
     def get_alert_by_id(self, alert_id: str) -> Dict[str, Any]:
+        # 兼容两种 id：OpenSearch 内部 _id，以及 _source.id（Wazuh 逻辑 id，
+        # 即 list/normalize 端点对外暴露的 id）。两者常不一致，故用 should 合并查询。
         body = {
-            "query": {"ids": {"values": [alert_id]}},
+            "query": {
+                "bool": {
+                    "should": [
+                        {"term": {"id": alert_id}},
+                        {"ids": {"values": [alert_id]}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            },
             "size": 1,
         }
         result = self._os_search(body)

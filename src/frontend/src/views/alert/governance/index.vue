@@ -457,6 +457,21 @@
             </div>
           </div>
 
+          <!-- 一键建事件（Phase 3） -->
+          <div class="detail-block">
+            <div class="block-title">事件处置</div>
+            <ElSpace align="center">
+              <ElButton
+                type="danger"
+                :loading="incidentCreating"
+                @click="createIncident"
+              >
+                {{ triageVerdict?.suggest_incident ? '按 AI 建议建事件' : '一键建事件' }}
+              </ElButton>
+              <span style="color: #909399; font-size: 12px;">基于该告警簇生成事件单（含 AI 研判结论，自动关联资产）</span>
+            </ElSpace>
+          </div>
+
           <!-- 攻击者源 IP -->
           <div v-if="detail.top_srcips?.length" class="detail-block">
             <div class="block-title">攻击源 IP Top（共 {{ detail.distinct_srcips }} 个不同）</div>
@@ -512,6 +527,7 @@
     getAlertTriageTop,
     triageAlertGroup,
     getAlertGroupTriage,
+    createIncidentFromGroup,
     type AlertGroup,
     type AlertGroupDetail,
     type AlertDigest,
@@ -520,8 +536,12 @@
     type AlertGroupTriage
   } from '@/api/alert'
   import { ElMessage } from 'element-plus'
+  import { useRouter } from 'vue-router'
+  import { RoutesAlias } from '@/router/routesAlias'
 
   defineOptions({ name: 'AlertGovernancePage' })
+
+  const router = useRouter()
 
   // ── 视图模式：实时(方案A) / 历史(方案B) ─────────────
   const viewMode = ref<'realtime' | 'history'>('realtime')
@@ -541,6 +561,7 @@
   const triageLoading = ref(false)
   const triageVerdict = ref<AlertGroupTriage | null>(null)
   const triageVerdictLoading = ref(false)
+  const incidentCreating = ref(false)
 
   const filters = reactive({
     hours: 24,
@@ -674,6 +695,25 @@
       ElMessage.error(e?.message || '研判失败')
     } finally {
       triageVerdictLoading.value = false
+    }
+  }
+
+  // ── 一键建事件（Phase 3） ─────────────────────────
+  const createIncident = async () => {
+    if (!detail.value) return
+    incidentCreating.value = true
+    try {
+      const res: any = await createIncidentFromGroup(detail.value.fingerprint, {
+        hours: filters.hours
+      })
+      const inc = res?.data || res
+      ElMessage.success(`已创建事件：${inc?.title}（${inc?.severity}）`)
+      drawerVisible.value = false
+      router.push(RoutesAlias.Incidents)
+    } catch (e: any) {
+      ElMessage.error(e?.message || '建事件失败')
+    } finally {
+      incidentCreating.value = false
     }
   }
 

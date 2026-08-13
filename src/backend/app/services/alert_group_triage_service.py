@@ -19,7 +19,11 @@ from app.models.base import Base
 from app.models import AlertGroupAnalysis
 from app.services.alert_query import AlertQueryService
 from app.services.ai_analysis import AIAnalysisService
-from app.services.alert_governance_config import get_triage_top_n
+from app.services.alert_governance_config import (
+    get_triage_top_n,
+    get_min_group_count,
+    filter_noise_groups,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +52,13 @@ class AlertGroupTriageService:
             top_n = get_triage_top_n(self.db)
 
         svc = AlertQueryService(self.db)
-        groups = svc.get_alert_groups(hours=hours, min_count=1, limit=top_n).get("groups", [])
+        groups = svc.get_alert_groups(
+            hours=hours, min_count=get_min_group_count(self.db), limit=top_n
+        ).get("groups", [])
+        # Phase 2 噪声抑制：研判前移除命中 suppress 名单的簇（省 AI 配额）
+        groups, suppressed = filter_noise_groups(groups, self.db)
+        if suppressed:
+            logger.info("噪声抑制：研判前移除 %s 个簇（省 AI 配额）", suppressed)
         ai = AIAnalysisService(self.db)
 
         sem = asyncio.Semaphore(_TRIAGE_SEMAPHORE)

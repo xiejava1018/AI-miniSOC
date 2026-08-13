@@ -408,3 +408,42 @@ export const getAlertGroupTriage = (
     keepFullResponse: true
   })
 }
+
+// ── 告警簇/告警 → 事件 (Phase 3) ──────────────────────
+
+/** 从告警簇/单条告警创建的事件 */
+export interface AlertIncident {
+  id: string
+  title: string
+  description?: string | null
+  status: string
+  severity: string
+  wazuh_alert_id?: string | null
+  assigned_to?: string | null
+  created_by: string
+  created_at: string
+}
+
+/** 从告警簇一键创建事件（含 AI 研判结论，按 agent_ip 关联资产） */
+export const createIncidentFromGroup = (
+  fingerprint: string,
+  params?: Record<string, any>
+): Promise<Http.BaseResponse<AlertIncident>> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/groups/${fingerprint}/create-incident`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 从单条告警创建事件 */
+export const createIncidentFromAlert = (
+  alertId: string,
+  data?: Record<string, any>
+): Promise<Http.BaseResponse<AlertIncident>> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/${alertId}/create-incident`,
+    data,
+    keepFullResponse: true
+  })
+}

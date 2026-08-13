@@ -22,7 +22,7 @@ export enum RoutesAlias {
   Assets = '/asset/list/index', // 资产管理
   AssetOverview = '/asset/overview/index', // 资产概览
   AssetDetail = '/asset/detail/index', // 资产详情
-  Incidents = '/placeholder', // 事件管理（占位）
+  Incidents = '/incidents/list', // 事件管理
   Alerts = '/alert/list/index', // 告警管理
   AlertGovernance = '/alert/governance/index', // 告警治理
   Vulnerabilities = '/placeholder', // 脆弱性管理（占位）

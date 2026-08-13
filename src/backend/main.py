@@ -28,6 +28,10 @@ from app.services.alert_group_snapshot_scheduler import (
     start_alert_group_snapshot,
     stop_alert_group_snapshot,
 )
+from app.services.alert_digest_scheduler import (
+    start_alert_digest_scheduler,
+    stop_alert_digest_scheduler,
+)
 
 
 @asynccontextmanager
@@ -35,11 +39,13 @@ async def lifespan(app: FastAPI):
     """应用生命周期：启动/停止后台任务"""
     start_browsing_detector()
     start_alert_group_snapshot()
+    start_alert_digest_scheduler()
     try:
         yield
     finally:
         await stop_browsing_detector()
         await stop_alert_group_snapshot()
+        await stop_alert_digest_scheduler()
 
 
 # 创建 FastAPI 应用实例

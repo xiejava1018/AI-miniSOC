@@ -4,6 +4,7 @@
 
 from pydantic import BaseModel
 from typing import Optional
+from uuid import UUID
 from datetime import datetime
 
 
@@ -33,7 +34,7 @@ class IncidentUpdate(BaseModel):
 
 class IncidentResponse(IncidentBase):
     """事件响应"""
-    id: str
+    id: UUID
     status: str
     wazuh_alert_id: Optional[str] = None
     created_by: str
@@ -41,7 +42,7 @@ class IncidentResponse(IncidentBase):
     updated_at: datetime
     resolved_at: Optional[datetime] = None
     resolution_notes: Optional[str] = None
-    ai_analysis_id: Optional[str] = None
+    ai_analysis_id: Optional[UUID] = None
 
     class Config:
         from_attributes = True

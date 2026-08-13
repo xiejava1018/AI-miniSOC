@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     # 上网行为异常检测配置（运行时规则阈值走 soc_system_config，此处仅进程级开关）
     BROWSING_DETECT_ENABLED: bool = True
 
+    # 告警治理摘要自动调度（每日定时生成 + 通知推送；
+    # 运行时阈值/噪声名单走 soc_system_config[alert_governance]）
+    ALERT_DIGEST_SCHEDULER_ENABLED: bool = True
+    ALERT_DIGEST_SCHEDULER_HOUR: int = 8  # 每日生成摘要的整点小时（0-23）
+
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

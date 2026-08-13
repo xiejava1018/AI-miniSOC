@@ -227,16 +227,16 @@ fingerprint = hash( rule.id + "|" + agent.id + "|" + src_ip )
 - [ ] **P1.8** 前端：实时页加"AI 研判"列（优先级徽标 + 噪声标签）+ 详情抽屉加 AI 研判块（理由/动作/建事件）；摘要面板展示 AI 综述。
 - ✅ **验收**："今天最该处理的 Top5"每条带 AI 优先级 + 理由 + 动作 + 是否噪声；单簇可手动触发研判；离线（无 AI 配额）时仍有启发式 verdict 兜底，不影响界面与 MCP。
 
-### Phase 2 —— 定时调度 + 通知闭环（自动化）
-- [ ] **P2.1** 新建 `services/alert_digest/scheduler.py`，**严格复用 `browsing_detection/scheduler.py` 范式**：`start/stop` 幂等、`run_digest_once()`、`_ensure_tables()`、受 `ALERT_DIGEST_ENABLED` + `ALERT_DIGEST_HOUR` 控制；在 `main.py` lifespan 中与 `start_browsing_detector()` 并列启停。
-- [ ] **P2.2** 摘要生成后调用 `NotificationService.create(type="alert_digest", ...)` 推送给活跃分析师（或 admin），并 WS 实时推送。
-- [ ] **P2.3** 噪声抑制：`soc_system_config` 键 `alert_digest.suppress_rule_ids` / `alert_digest.min_group_count`，生成时过滤。
-- ✅ **验收**：每日 08:00 自动产出摘要并推送；无需人工触发。
+### Phase 2 —— 定时调度 + 通知闭环（自动化）— ✅ 已完成（2026-08-13）
+- [x] **P2.1** 新建调度器（**实现偏差**：放 `services/alert_digest_scheduler.py` 而非子目录，与 `alert_group_snapshot_scheduler.py` 并列，风格统一）。严格复用 snapshot scheduler 范式：`start/stop` 幂等、`run_digest_once()` 可手动触发、受进程级 `ALERT_DIGEST_SCHEDULER_ENABLED` + `ALERT_DIGEST_SCHEDULER_HOUR`（默认 8）控制、每日定点（计算到下一个目标整点的秒数 sleep）；在 `main.py` lifespan 与其余后台任务并列启停。
+- [x] **P2.2** `AlertDigestService.generate()` 末尾调用 `NotificationService.create(type="alert_digest", ...)` 向 admin/超管（`is_superuser` 或 `role.code='admin'` 且 active）推送站内通知 + WS，失败不阻断主流程。
+- [x] **P2.3** 噪声抑制（**实现偏差**：配置 category 用 `alert_governance`、键名 `suppress_rule_ids` / `min_group_count`，与 `triage_top_n` 同类统一管理）。`alert_governance_config` 扩展为多键缓存（首次读取自动建全 3 项默认行）+ `filter_noise_groups()` 统一过滤；digest 降级分支与 triage 研判前共用，研判前过滤省 AI 配额。
+- ✅ **验收**：每日 08:00 自动产出摘要并推送；`run_digest_once` 手动触发链路已端到端验证（见 §10.6）。
 
-### Phase 3 —— 事件交接 + 轻量 UI（收口闭环，可后置）
-- [ ] **P3.1** 实现现有空 stub `POST /alerts/{alert_id}/create-incident` + 新增 `create_incident_from_group(fingerprint)`，让摘要/研判可一键建事件（接 P1 的 `suggest_incident`）。
-- [ ] **P3.2** 轻量前端摘要页（先列表+详情，重交互延后），或在现有通知中心展示摘要链接。
-- ✅ **验收**：从"告警簇 → 研判 → 建事件"全链路打通。
+### Phase 3 —— 事件交接 + 轻量 UI（收口闭环）— ✅ 已完成（2026-08-13）
+- [x] **P3.1** 实现原空 stub `POST /alerts/{alert_id}/create-incident`（新增 `services/alert_incident_service.py::build_incident_from_alert`）+ 新增 `POST /alerts/groups/{fingerprint}/create-incident`（`build_incident_from_group`，优先用缓存 AI verdict 推导 severity）。顺带修复 pre-existing：`get_alert_by_id` 原只用 `_id` 查询、与 list 暴露的 `_source.id` 不一致导致长期 404，改为 `bool.should(term.id, ids._id)` 合并查询。
+- [x] **P3.2** 轻量 UI（未做独立摘要页，选了更轻的形式）：告警簇下钻抽屉新增"事件处置"区 + "一键建事件 / 按 AI 建议建事件"按钮（文案随 `suggest_incident` 切换），成功后提示事件标题与 severity。
+- ✅ **验收**：从"告警簇 / 单条告警 → 研判 → 建事件"全链路端到端打通（见 §10.7）。
 
 ---
 
@@ -330,6 +330,65 @@ fingerprint = hash( rule.id + "|" + agent.id + "|" + src_ip )
 
 **关于 `source=heuristic`**：本环境 `.env` 的 `GLM_API_KEY` 原为占位符 `your_glm_api_key_here`（调用返回 `401 令牌已过期或验证不正确`），Pi Agent 亦不可用，故全部簇研判走启发式兜底并如实标注 `source=heuristic`。降级链路本身正确、无报错。配置有效 `GLM_API_KEY`（或启用 Pi Agent）后**无需改代码**即自动切换为真实 AI verdict（`source=agent`/`zhipu`）。
 - **2026-08-09 实测确认**：填入有效智谱密钥后，`force_refresh` 单簇与 `triage-top?force_refresh=true` 均返回 `source=zhipu` / `model_name=glm-4-flash`（如 `31101|008×946→P1`、`554|022×300→P1`），`digest/generate` 的 `ai_model=glm-4-flash`、`top_groups` 全为真实研判，快照回填 `ai_triaged=20`。真实 AI 路径完全打通。
+
+---
+
+## 10.6 Phase 2（定时调度 + 通知闭环 + 噪声抑制）— 已完成（2026-08-13）
+
+Phase 2 三项一次性落地，补齐"每日自动产出摘要并推送"的自动化闭环。
+
+**落地内容**
+- **P2.3 噪声抑制（config 层）**：`alert_governance_config.py` 由单键缓存重构为整个 `alert_governance` category 的多键缓存（60s TTL）。新增 `get_min_group_count` / `get_suppress_rule_ids` 及 setter；首次读取任一项即 `_load_all()` 一次性补全 `triage_top_n`/`suppress_rule_ids`/`min_group_count` 三项默认行（系统配置界面立即可见可改）。新增统一 helper `filter_noise_groups(groups, db) -> (kept, suppressed_count)`。
+- **P2.1 摘要自动调度器**：新建 `services/alert_digest_scheduler.py`，复用 `alert_group_snapshot_scheduler` 范式。`_seconds_until_next(hour)` 计算到下一个目标整点的秒数作为 sleep（错过则推到次日，不错过定点）；受 `ALERT_DIGEST_SCHEDULER_ENABLED`（默认 True）+ `ALERT_DIGEST_SCHEDULER_HOUR`（默认 8）进程级开关控制；`run_digest_once(hours)` 可手动触发；`main.py` lifespan 与 browsing/snapshot 并列启停。
+- **P2.2 通知推送**：`AlertDigestService._push_notification(digest)` 在 `generate()` commit 后调用，查收件人（`is_superuser` 或 `role.code='admin'` 且 `status=active`）逐个 `NotificationService.create(type='alert_digest', title, content=summary[:500], link)`，WS 实时推送由 `NotificationService` 内部完成；`try/except` 包裹，失败只 warning 不阻断。
+- **config.py**：新增 `ALERT_DIGEST_SCHEDULER_ENABLED: bool = True` / `ALERT_DIGEST_SCHEDULER_HOUR: int = 8`。
+- **过滤接入点**：`AlertDigestService.generate()` 主路径走 `triage_top_groups`（内部已过滤），降级分支手动 `filter_noise_groups`；`AlertGroupTriageService.triage_top_groups()` 取簇后、研判前过滤（`get_min_group_count` 传给 `get_alert_groups(min_count=)`，suppress 命中的簇移除），省 AI 配额。
+
+**端到端验证**（自签 admin JWT + httpx，全部通过）
+1. `GET` 触发配置自动建行 → DB 出现 3 行：`triage_top_n=20/number`、`suppress_rule_ids=''/string`、`min_group_count=1/number`。
+2. `POST /alerts/digest/generate?hours=24` → 200，`total_alerts=2360`、`groups=20`、`ai_model=glm-4-flash`（真实 AI），summary 首行"…已 AI 研判 Top20"。
+3. 查 `soc_notifications` → 新增 `type=alert_digest` 通知 1 条，`user_id=1`（admin），title="告警治理日报已生成（2360 条 / 20 簇）"。
+4. 写库设 `suppress_rule_ids='31120'` → 重启后端清缓存 → 重生成：**20 簇 → 19 簇，规则 31120 已移出必处理清单**（`✓ True`）→ 还原 suppress 为空。
+
+**说明**
+- `alert_governance` 配置 60s 缓存：系统配置 UI 改 suppress/min_count 后最长 60s 生效（与 `triage_top_n` 既有行为一致）。进程级开关（`ALERT_DIGEST_SCHEDULER_*`）改 `.env` 后需重启。
+- 调度器每日定点跑：若启动时已过当日 08:00，则等到次日 08:00；急需可 `POST /alerts/digest/generate` 手动触发或调 `run_digest_once`。
+- 摘要内部已含 AI 研判 + 通知推送，调度器只负责"定时触发"，不重复编排。
+
+---
+
+## 10.7 Phase 3（告警/簇 → 事件一键交接）— 已完成（2026-08-13）
+
+打通"告警簇/单条告警 → AI 研判 → 一键建事件"的收口闭环。
+
+**落地内容**
+- **告警→事件转换服务** `services/alert_incident_service.py`（新建）：
+  - `build_incident_from_alert(alert_id)`：单条告警 → 事件，severity 由 rule.level 推导（>=12 critical / >=9 high / >=6 medium / else low），按 agent.ip 关联 soc_assets。
+  - `build_incident_from_group(fingerprint, hours)`：告警簇 → 事件，**优先用缓存 AI verdict**（priority P0-P3 → severity）推导 severity/description；无 verdict 时告警等级启发式。description 含簇指纹/规则/数量/首末出现/源 IP 数 + AI 研判理由/处置建议 + 样本日志。按 linked_asset 或 agent_ip 关联资产。
+  - created_by 默认 "system"（告警 API 当前无鉴权，pre-existing），可由 body 覆盖。
+- **REST**：`POST /alerts/{alert_id}/create-incident`（原空 stub 已实现）+ `POST /alerts/groups/{fingerprint}/create-incident`（新增，挂在 alert_digests.py，两层路径在 /groups/{fingerprint} catch-all 之后注册）。
+- **修复 pre-existing bug**：`AlertQueryService.get_alert_by_id` 原只用 OpenSearch `_id` 查询，但 list/_normalize 对外暴露的 id 是 `_source.id`（Wazuh 逻辑 epoch id，如 `1786630604.1078547`），两者不一致 → `GET /alerts/{alert_id}`、MCP `get_alert_detail`、单条建事件长期 404。改为 `bool.should(term.id, ids._id)` 合并查询，两种 id 均可命中。
+- **前端**：`api/alert.ts` 新增 `createIncidentFromGroup` / `createIncidentFromAlert` + `AlertIncident` 类型；`governance/index.vue` 单簇下钻抽屉新增"事件处置"区 + "一键建事件 / 按 AI 建议建事件"按钮（文案随 `triageVerdict.suggest_incident` 切换），成功后 ElMessage 提示事件标题与 severity。
+
+**端到端验证**（自签 admin JWT + httpx，全绿）
+- 簇→事件：`POST /alerts/groups/31101|008/create-incident` → 200，事件落库（severity=low，title "[告警簇] Web server 400 error code. ×939"），`soc_incidents` +1、`soc_asset_incidents` 关联 1、created_by=system。
+- 单条→事件：`POST /alerts/1786630604.1078547/create-incident` → 200，事件落库（title "[告警] Web server 400 error code."，wazuh_alert_id 正确记录）。
+- GET triage 端点恢复（修复调试中误删）：200。
+- 前端 `vue-tsc`：governance/alert 无新增报错。
+
+**说明**
+- 单条/簇建事件均不触发新的 AI 调用（簇用缓存 verdict；无缓存则等级启发式）。如需 AI 结论，先点"研判"再"建事件"。
+- `incidents.py` 通用 CRUD 的 `created_by` 仍为 pre-existing 未填（本次未改 incidents API，避免越界）；本服务建事件端点已正确填 created_by。
+
+**补充：事件管理前端页（2026-08-13）**
+
+建事件落地后，前端原"事件管理"为占位（`Incidents='/placeholder'`），界面上无处可查。补齐轻量事件管理页让闭环可见：
+- **修复 pre-existing**：`GET /api/v1/incidents/` 原 500（`IncidentResponse.id:str` 与模型 `UUID` 不匹配，事件页从未用过未暴露）。按项目惯例（browsing/notification）改 `id/ai_analysis_id: UUID`，list/get/create/update 四端点全恢复。
+- **前端**：新建 `api/incident.ts`（列表/详情/更新 + 状态·严重度选项与配色）+ `views/incident/index.vue`（筛选 + 表格 + 详情抽屉 + 状态流转 open→in_progress→resolved→closed + 处理说明）。路由别名 `Incidents='/incidents/list'`。
+- **菜单**：激活占位菜单 id=21（`incident-list`，component `/placeholder`→`/incident/index`，挂父菜单"事件管理" id=3）。
+- **闭环跳转**：告警治理页"一键建事件"成功后 `router.push` 跳事件列表。
+- 验证：列表/详情/状态流转（open→in_progress）端到端 200；vue-tsc 零新增报错。
+- 注：菜单持久化在 pinia/localStorage，需重新登录触发菜单树重拉后侧边栏才出现"事件管理 > 事件列表"。
 
 ---
 
