@@ -1,10 +1,10 @@
 # AI-miniSOC Backend Requirements
 
 # FastAPI 核心依赖
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-pydantic==2.10.1
-pydantic-settings==2.6.0
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
 
 # 数据库
 sqlalchemy==2.0.36
@@ -21,7 +21,9 @@ httpx==0.27.2
 requests==2.32.3
 
 # MCP (Model Context Protocol) — 让 Agent 通过 MCP 调用 FastAPI
-mcp>=1.0.0
+# 注意：mcp>=1.0 在旧版(如1.12)有 issubclass(param.annotation, Context) 启动崩溃，需 >=1.29
+mcp==1.29.0
+sse-starlette==3.4.8
 
 # AI SDK (智谱AI)
 zhipuai>=2.1.5
