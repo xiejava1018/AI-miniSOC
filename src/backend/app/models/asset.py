@@ -2,7 +2,7 @@
 资产模型
 """
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, MACADDR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -14,6 +14,9 @@ class Asset(Base):
     __tablename__ = "soc_assets"
     __table_args__ = (
         UniqueConstraint('network_segment', 'asset_ip', name='uq_network_segment_ip'),
+        # T0a：wazuh_agent_id 唯一部分索引（NULL 不受约束），防 agent 双挂串数据
+        Index('uq_soc_assets_agent_id', 'wazuh_agent_id', unique=True,
+              postgresql_where='wazuh_agent_id IS NOT NULL'),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())

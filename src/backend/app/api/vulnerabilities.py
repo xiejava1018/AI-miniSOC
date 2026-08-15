@@ -518,6 +518,7 @@ async def list_asset_vulnerabilities(
     severity: Optional[SeverityEnum] = None,
     status: Optional[VulnerabilityStatusEnum] = None,
     scanner: Optional[ScannerEnum] = None,
+    vuln_type: Optional[VulnerabilityTypeEnum] = Query(None, description="按漏洞类型过滤(scap=CVE漏洞/sca=基线)，与 scanner 正交"),
     db: Session = Depends(get_db)
 ):
     """获取资产-漏洞关联列表（含 SLA 状态，运行时计算）"""
@@ -552,6 +553,8 @@ async def list_asset_vulnerabilities(
         query = query.filter(AssetVulnerability.status == status)
     if scanner:
         query = query.filter(AssetVulnerability.scanner == scanner)
+    if vuln_type:
+        query = query.filter(Vulnerability.type == vuln_type)
 
     # 总数
     total = query.count()
@@ -561,6 +564,15 @@ async def list_asset_vulnerabilities(
 
     items = []
     for av, vuln, asset in results:
+        # M1/T4：AI 风险评分（与主列表同口径：calculate_risk_score + 资产关键度/暴露面）
+        risk_score = None
+        if vuln.cvss_score is not None:
+            risk_score = VulnerabilityAIService.calculate_risk_score(
+                cvss_score=float(vuln.cvss_score) if vuln.cvss_score else 0.0,
+                asset_criticality=asset.criticality or 'medium',
+                exposure_level=asset.exposure_level or 'internal',
+                has_exploit=bool(vuln.has_exploit)
+            )
         items.append({
             "id": str(av.id),
             "asset_id": str(av.asset_id),
@@ -578,6 +590,10 @@ async def list_asset_vulnerabilities(
             # T11：SLA（运行时计算，不落库）
             "due_date": av.due_date,
             "sla_status": AssetVulnerability.sla_status_of(av.status, av.due_date),
+            # M1/T4：AI 风险评分
+            "risk_score": risk_score,
+            # M2/T5：基线展示字段（SCA 检查项专用，SCAP 为 None）
+            "fix_suggestion": vuln.fix_suggestion,
         })
 
     return AssetVulnerabilityListResponse(

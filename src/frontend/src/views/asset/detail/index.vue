@@ -109,12 +109,13 @@
           sub-label="Wazuh packages"
         />
         <MetricCard
-          label="SCA 合规率"
-          :value="summary.sca_pass_rate !== null ? Math.round(summary.sca_pass_rate * 100) : '-'"
-          :type="scaPassRateType"
-          :clickable="false"
-          :suffix="summary.sca_pass_rate !== null ? '%' : ''"
-          :sub-label="summary.sca_total > 0 ? `失败 ${summary.sca_failed}/${summary.sca_total}` : '待接入'"
+          :label="summary.sca_pass_rate !== null ? 'SCA 合规率' : 'SCA 不合规'"
+          :value="summary.sca_pass_rate !== null ? Math.round(summary.sca_pass_rate * 100) : (summary.sca_failed ?? 0)"
+          :type="summary.sca_pass_rate !== null ? scaPassRateType : (summary.sca_failed > 0 ? 'warning' : 'info')"
+          :clickable="summary.sca_pass_rate === null && summary.sca_failed > 0"
+          @click="activeTab = 'baseline'"
+          :suffix="summary.sca_pass_rate !== null ? '%' : ' 项'"
+          :sub-label="summary.sca_pass_rate !== null ? '' : '合规率待接入(P5)'"
         />
         <MetricCard
           label="在线状态"
@@ -138,13 +139,73 @@
           </ElEmpty>
         </ElTabPane>
 
-        <!-- 2. 漏洞(Phase 2 接入) -->
+        <!-- 2. 漏洞(M1/T3: 接通 soc_asset_vulnerabilities 真实数据) -->
         <ElTabPane label="漏洞" name="vulnerabilities">
-          <ElEmpty description="漏洞数据待 Phase 2 接入 Wazuh 漏洞缓存表后填充">
-            <template #image>
-              <ElIcon :size="48" color="#909399"><Warning /></ElIcon>
-            </template>
-          </ElEmpty>
+          <template v-if="!hasWazuhAgent">
+            <ElEmpty description="该资产无 Wazuh Agent，漏洞数据不适用">
+              <template #image>
+                <ElIcon :size="48" color="#909399"><Warning /></ElIcon>
+              </template>
+            </ElEmpty>
+          </template>
+          <template v-else>
+            <div class="tab-header">
+              <span class="tab-header-title">未修复漏洞（SCAP）
+                <ElTag v-if="vulnsData.length" size="small" type="danger" effect="plain" class="ml-2">{{ vulnsData.length }} 项</ElTag>
+              </span>
+              <ElButton type="primary" size="small" :icon="Refresh" @click="loadVulns" :loading="vulnsLoading">刷新</ElButton>
+            </div>
+            <ElTable :data="vulnsData" v-loading="vulnsLoading" border stripe style="width: 100%">
+              <ElTableColumn prop="cve_id" label="CVE 编号" width="160" fixed>
+                <template #default="{ row }">
+                  <span class="cve-id-text">{{ row.cve_id }}</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="title" label="漏洞标题" min-width="220" show-overflow-tooltip />
+              <ElTableColumn label="严重程度" width="90" align="center">
+                <template #default="{ row }">
+                  <ElTag :type="vulnSeverityType(row.severity)" size="small" effect="dark">{{ vulnSeverityLabel(row.severity) }}</ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="cvss_score" label="CVSS" width="75" align="center">
+                <template #default="{ row }">{{ row.cvss_score ?? '-' }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="AI 风险" width="95" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.risk_score != null" :class="['risk-score', riskLevelClass(row.risk_score)]">
+                    {{ row.risk_score.toFixed(1) }}
+                  </span>
+                  <span v-else>-</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="状态" width="85" align="center">
+                <template #default="{ row }">
+                  <ElTag :type="row.status === 'open' ? 'danger' : row.status === 'in_progress' ? 'warning' : 'success'" size="small" effect="light">
+                    {{ avStatusLabel(row.status) }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="SLA" width="90" align="center">
+                <template #default="{ row }">
+                  <ElTag v-if="row.sla_status === 'overdue'" type="danger" size="small" effect="plain">已逾期</ElTag>
+                  <ElTag v-else-if="row.sla_status === 'warning'" type="warning" size="small" effect="plain">临期</ElTag>
+                  <ElTag v-else-if="row.sla_status" type="info" size="small" effect="plain">正常</ElTag>
+                  <span v-else>-</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="检测时间" width="150" align="center">
+                <template #default="{ row }">
+                  <span :title="formatTime(row.detected_at)">{{ formatTime(row.detected_at) }}</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="操作" width="100" align="center" fixed="right">
+                <template #default="{ row }">
+                  <ElButton type="warning" link size="small" :loading="incidentCreatingId === row.id" @click="handleCreateIncident(row)">生成事件</ElButton>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+            <ElEmpty v-if="!vulnsLoading && vulnsData.length === 0" description="该资产暂无未修复漏洞" />
+          </template>
         </ElTabPane>
 
         <!-- 3. 端口管理(现有,增强) -->
@@ -205,13 +266,43 @@
           <ElEmpty v-if="!portsLoading && portsData.length === 0" description="暂无端口数据" />
         </ElTabPane>
 
-        <!-- 4. 基线(Phase 4 接入) -->
+        <!-- 4. 基线(M2/T5: SCA 不合规配置项, vuln_type=sca) -->
         <ElTabPane label="基线" name="baseline">
-          <ElEmpty description="SCA 基线数据待 Phase 4 接入 Wazuh SCA 缓存表后填充">
-            <template #image>
-              <ElIcon :size="48" color="#909399"><Document /></ElIcon>
-            </template>
-          </ElEmpty>
+          <template v-if="!hasWazuhAgent">
+            <ElEmpty description="该资产无 Wazuh Agent，基线数据不适用">
+              <template #image>
+                <ElIcon :size="48" color="#909399"><Document /></ElIcon>
+              </template>
+            </ElEmpty>
+          </template>
+          <template v-else>
+            <div class="tab-header">
+              <span class="tab-header-title">不合规安全配置项（SCA 基线核查）
+                <ElTag v-if="baselineData.length" size="small" type="warning" effect="plain" class="ml-2">{{ baselineData.length }} 项</ElTag>
+              </span>
+              <ElButton type="primary" size="small" :icon="Refresh" @click="loadBaseline" :loading="baselineLoading">刷新</ElButton>
+            </div>
+            <ElTable :data="baselineData" v-loading="baselineLoading" border stripe style="width: 100%">
+              <ElTableColumn prop="cve_id" label="检查项 ID" width="220" fixed show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="cve-id-text">{{ row.cve_id }}</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="title" label="基线要求" min-width="220" show-overflow-tooltip />
+              <ElTableColumn label="严重程度" width="90" align="center">
+                <template #default="{ row }">
+                  <ElTag :type="vulnSeverityType(row.severity)" size="small" effect="dark">{{ vulnSeverityLabel(row.severity) }}</ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="fix_suggestion" label="修复建议 / Remediation" min-width="260" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.fix_suggestion || '—' }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="检测时间" width="150" align="center">
+                <template #default="{ row }">{{ formatTime(row.detected_at) }}</template>
+              </ElTableColumn>
+            </ElTable>
+            <ElEmpty v-if="!baselineLoading && baselineData.length === 0" description="该资产基线检查全部合规" />
+          </template>
         </ElTabPane>
 
         <!-- 5. 告警 -->
@@ -369,10 +460,11 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+  import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ArrowLeft, Refresh, Plus, Box, Warning, Document } from '@element-plus/icons-vue'
   import { FormInstance, ElMessageBox, ElMessage } from 'element-plus'
+  import { getAssetVulnerabilities, createIncidentFromVulnerability } from '@/api/vulnerabilities'
   import {
     getAssetDetail,
     getAssetPorts,
@@ -705,6 +797,90 @@
       .catch(() => {})
   }
 
+  // ========== 漏洞/基线 Tab（M1/M2：接 soc_asset_vulnerabilities） ==========
+  const hasWazuhAgent = computed(() => !!assetDetail.value.wazuh_agent_id)
+
+  const vulnsLoading = ref(false)
+  const vulnsData = ref<any[]>([])
+  const baselineLoading = ref(false)
+  const baselineData = ref<any[]>([])
+  const incidentCreatingId = ref('')
+
+  const loadVulns = async () => {
+    if (!assetId.value || !hasWazuhAgent.value) return
+    vulnsLoading.value = true
+    try {
+      const r: any = await getAssetVulnerabilities({
+        asset_id: assetId.value,
+        vuln_type: 'scap',
+        status: 'open',
+        skip: 0,
+        limit: 100
+      })
+      const d = r?.data
+      vulnsData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
+    } catch {
+      vulnsData.value = []
+    } finally {
+      vulnsLoading.value = false
+    }
+  }
+
+  const loadBaseline = async () => {
+    if (!assetId.value || !hasWazuhAgent.value) return
+    baselineLoading.value = true
+    try {
+      const r: any = await getAssetVulnerabilities({
+        asset_id: assetId.value,
+        vuln_type: 'sca',
+        status: 'open',
+        skip: 0,
+        limit: 100
+      })
+      const d = r?.data
+      baselineData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
+    } catch {
+      baselineData.value = []
+    } finally {
+      baselineLoading.value = false
+    }
+  }
+
+  // severity 中文化（与漏洞列表页同语义）
+  const vulnSeverityLabel = (s: string) =>
+    ({ critical: '严重', high: '高危', medium: '中危', low: '低危' } as Record<string, string>)[s] || s || '-'
+  const vulnSeverityType = (s: string): 'danger' | 'warning' | 'info' | 'success' =>
+    ({ critical: 'danger', high: 'danger', medium: 'warning', low: 'info' } as Record<string, any>)[s] || 'info'
+  const avStatusLabel = (s: string) =>
+    ({ open: '未修复', in_progress: '修复中', fixed: '已修复' } as Record<string, string>)[s] || s
+
+  // AI 风险分级配色（与漏洞列表页同口径 0-100 四档）
+  const riskLevelClass = (score: number) =>
+    score >= 80 ? 'risk-critical' : score >= 60 ? 'risk-high' : score >= 40 ? 'risk-medium' : 'risk-low'
+
+  // 生成事件（漏洞→事件闭环，复用 vulnerabilities API）
+  const handleCreateIncident = async (row: any) => {
+    try {
+      await ElMessageBox.confirm(
+        `确认为漏洞 ${row.cve_id} 生成安全事件？`,
+        '生成事件',
+        { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      return
+    }
+    incidentCreatingId.value = row.id
+    try {
+      const r: any = await createIncidentFromVulnerability(row.id)
+      const d = r?.data
+      ElMessage.success(`事件已创建：${d?.incident?.title || row.cve_id}（可在事件管理页处理）`)
+    } catch (err) {
+      ElMessage.error('生成事件失败')
+    } finally {
+      incidentCreatingId.value = ''
+    }
+  }
+
   // ========== 告警 Tab ==========
   const alertsLoading = ref(false)
   const alertsData = ref<any[]>([])
@@ -793,13 +969,25 @@
     router.push('/assets/list')
   }
 
+  // 详情返回后触发依赖 assetDetail 的懒加载（修复既有问题：onMounted 时 assetDetail 为空，
+  // loadAlerts/loadVulns/loadBaseline 的 hasAgent/IP 判断会直接 return）
+  watch(
+    () => assetDetail.value,
+    (nv) => {
+      if (nv && nv.id) {
+        loadAlerts()
+        loadVulns()
+        loadBaseline()
+      }
+    }
+  )
+
   // 加载数据
   onMounted(() => {
     loadDetail()
     loadSummary()
     loadPorts()
     loadTags()
-    loadAlerts()
     loadDataSources()
   })
 </script>
@@ -869,7 +1057,35 @@
     .tab-header {
       margin-bottom: 12px;
       display: flex;
-      justify-content: flex-end;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .tab-header-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--el-text-color-regular, #606266);
+    }
+
+    .ml-2 {
+      margin-left: 8px;
+    }
+
+    /* 漏洞/基线 Tab（M1/M2）：CVE 编号 + AI 风险分级配色（与漏洞列表页同口径） */
+    .cve-id-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .risk-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+
+      &.risk-critical { color: var(--el-color-danger, #f56c6c); }
+      &.risk-high { color: var(--el-color-warning, #e6a23c); }
+      &.risk-medium { color: var(--el-color-primary, #409eff); }
+      &.risk-low { color: var(--el-color-success, #67c23a); }
     }
 
     .text-placeholder {

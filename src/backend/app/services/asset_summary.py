@@ -16,6 +16,7 @@ from app.models.asset_port import AssetPort
 from app.models.asset_tag import AssetTag
 from app.models.asset_incident import AssetIncident
 from app.models.incident import Incident
+from app.models.vulnerability import AssetVulnerability, Vulnerability
 from app.services.alert_query import AlertQueryService
 
 logger = logging.getLogger(__name__)
@@ -98,20 +99,45 @@ class AssetSummaryService:
         # 5. 标签数据
         tags = self._get_tags(asset.id)
 
-        # 6. Wazuh 缓存字段(Phase 2 接入后填充,当前占位)
-        # - applications: 来自 soc_wazuh_packages
-        # - vuln_critical/high/total: 来自 soc_wazuh_vulnerabilities
-        # - sca_pass_rate: 来自 soc_wazuh_sca_results
-        # - last_vuln_scan / last_sca_scan: 来自上述表的 max(scan_time)
+        # 6. 漏洞/SCA 真实统计（M0 去伪：查 soc_asset_vulnerabilities JOIN soc_vulnerabilities）
+        # - vuln_*: 仅 SCAP 类(CVE漏洞)，status=open
+        # - sca_failed: SCA 类不合规项（同步语义只存 failed 项，pass_rate 本期不算见方案 §5）
+        # - last_vuln_scan / last_sca_scan: 取关联表 max(detected_at)
+        # - applications: 保持 0（M3 应用清单接入后回填）
         applications = 0
-        vuln_critical = 0
-        vuln_high = 0
-        vuln_total = 0
         sca_pass_rate: Optional[float] = None
         sca_total = 0
-        sca_failed = 0
-        last_vuln_scan: Optional[str] = None
-        last_sca_scan: Optional[str] = None
+
+        vuln_base = (
+            self.db.query(AssetVulnerability)
+            .join(Vulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id)
+            .filter(
+                AssetVulnerability.asset_id == asset.id,
+                AssetVulnerability.status == 'open',
+            )
+        )
+        vuln_q = vuln_base.filter(Vulnerability.type == 'scap')
+        vuln_total = vuln_q.count() or 0
+        vuln_critical = vuln_q.filter(Vulnerability.severity == 'critical').count() or 0
+        vuln_high = vuln_q.filter(Vulnerability.severity == 'high').count() or 0
+
+        sca_q = vuln_base.filter(Vulnerability.type == 'sca')
+        sca_failed = sca_q.count() or 0
+
+        last_vuln_scan_dt = self.db.query(func.max(AssetVulnerability.detected_at)).filter(
+            AssetVulnerability.asset_id == asset.id,
+            AssetVulnerability.vulnerability_id.in_(
+                self.db.query(Vulnerability.id).filter(Vulnerability.type == 'scap')
+            )
+        ).scalar()
+        last_sca_scan_dt = self.db.query(func.max(AssetVulnerability.detected_at)).filter(
+            AssetVulnerability.asset_id == asset.id,
+            AssetVulnerability.vulnerability_id.in_(
+                self.db.query(Vulnerability.id).filter(Vulnerability.type == 'sca')
+            )
+        ).scalar()
+        last_vuln_scan = last_vuln_scan_dt.isoformat() if last_vuln_scan_dt else None
+        last_sca_scan = last_sca_scan_dt.isoformat() if last_sca_scan_dt else None
 
         return {
             "asset_id": str(asset.id),

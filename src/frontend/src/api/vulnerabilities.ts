@@ -69,6 +69,8 @@ export interface AssetVulnerability {
   fixed_at: string | null
   due_date?: string | null
   sla_status?: 'normal' | 'warning' | 'overdue' | null
+  risk_score?: number | null
+  fix_suggestion?: string | null
 }
 
 export interface VulnerabilityListResponse {
@@ -255,6 +257,7 @@ export function getAssetVulnerabilities(params: {
   severity?: string
   status?: string
   scanner?: string
+  vuln_type?: string
 }): Promise<{ items: AssetVulnerability[]; total: number; skip: number; limit: number }> {
   return request.get<{ items: AssetVulnerability[]; total: number; skip: number; limit: number }>({
     url: `${API_PREFIX}/asset-vulnerabilities`,
