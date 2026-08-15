@@ -157,15 +157,21 @@ def init_menus(db: Session):
         {"name": "资产管理", "path": "/assets", "icon": "ri:computer-line", "sort_order": 2, "is_visible": True},
         {"name": "事件管理", "path": "/incidents", "icon": "ri:alert-line", "sort_order": 3, "is_visible": True},
         {"name": "告警管理", "path": "/alerts", "icon": "ri:notification-3-line", "sort_order": 4, "is_visible": True},
-        {"name": "系统管理", "path": "", "icon": "ri:settings-3-line", "sort_order": 5, "is_visible": True}
+        # T10（2026-08-15 脆弱性管理点亮）：新增一级菜单，排在告警之后、系统管理之前
+        {"name": "脆弱性管理", "path": "/vulnerabilities", "icon": "ri:shield-check-line", "sort_order": 5, "is_visible": True},
+        {"name": "系统管理", "path": "", "icon": "ri:settings-3-line", "sort_order": 6, "is_visible": True}
     ]
 
     for menu_data in menus:
-        existing = db.query(Menu).filter(Menu.path == menu_data["path"]).first()
+        existing = db.query(Menu).filter(Menu.path == menu_data["path"], Menu.parent_id.is_(None)).first() if menu_data["path"] else db.query(Menu).filter(Menu.name == menu_data["name"], Menu.parent_id.is_(None)).first()
         if not existing:
             menu = Menu(**menu_data)
             db.add(menu)
             print(f"  ✅ 创建菜单: {menu_data['name']}")
+        elif existing.sort_order != menu_data["sort_order"]:
+            # 系统管理 5→6 等排序调整（幂等）
+            existing.sort_order = menu_data["sort_order"]
+            print(f"  ↻ 调整菜单排序: {menu_data['name']} → {menu_data['sort_order']}")
 
     db.commit()
 
@@ -185,6 +191,22 @@ def init_menus(db: Session):
                 menu = Menu(**menu_data)
                 db.add(menu)
                 print(f"  ✅ 创建资产管理子菜单: {menu_data['name']}")
+
+    db.commit()
+
+    # 创建脆弱性管理子菜单（T10，2026-08-15）
+    vuln_menu = db.query(Menu).filter(Menu.name == "脆弱性管理", Menu.parent_id.is_(None)).first()
+    if vuln_menu:
+        vuln_sub_menus = [
+            {"parent_id": vuln_menu.id, "name": "脆弱性概览", "path": "overview", "icon": "ri:dashboard-2-line", "sort_order": 1, "is_visible": True, "component": "/vulnerability/overview/index"},
+            {"parent_id": vuln_menu.id, "name": "脆弱性列表", "path": "list", "icon": "ri:list-unordered", "sort_order": 2, "is_visible": True, "component": "/vulnerability/list/index", "permissions": [{"title": "查看", "authMark": "view"}, {"title": "同步", "authMark": "sync"}, {"title": "修复状态更新", "authMark": "edit"}]}
+        ]
+        for menu_data in vuln_sub_menus:
+            existing = db.query(Menu).filter(Menu.path == menu_data["path"], Menu.parent_id == vuln_menu.id).first()
+            if not existing:
+                menu = Menu(**menu_data)
+                db.add(menu)
+                print(f"  ✅ 创建脆弱性管理子菜单: {menu_data['name']}")
 
     db.commit()
 

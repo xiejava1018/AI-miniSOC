@@ -393,7 +393,7 @@
     network_segment: 'default',
     network_zone: 'other',
     asset_type: 'other',
-    criticality: 'normal',
+    criticality: 'medium',
     asset_status: '',
     owner: '',
     business_unit: '',
@@ -509,7 +509,7 @@
       formData.network_segment = row.network_segment || 'default'
       formData.network_zone = row.network_zone || 'other'
       formData.asset_type = row.asset_type || 'other'
-      formData.criticality = row.criticality || 'normal'
+      formData.criticality = row.criticality || 'medium'
       formData.asset_status = row.asset_status || ''
       formData.owner = row.owner || ''
       formData.business_unit = row.business_unit || ''
@@ -522,7 +522,7 @@
       formData.network_segment = 'default'
       formData.network_zone = 'other'
       formData.asset_type = 'other'
-      formData.criticality = 'normal'
+      formData.criticality = 'medium'
       formData.asset_status = ''
       formData.owner = ''
       formData.business_unit = ''

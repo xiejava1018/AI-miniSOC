@@ -115,6 +115,39 @@ export const asyncRoutes: AppRouteRecord[] = [
   },
 
   {
+    path: '/vulnerabilities',
+    name: 'Vulnerability',
+    component: RoutesAlias.Layout,
+    meta: {
+      title: '脆弱性管理',
+      icon: '&#xe66f;',
+      roles: ['R_SUPER', 'R_ADMIN']
+    },
+    children: [
+      {
+        path: 'overview',
+        name: 'VulnerabilityOverview',
+        component: RoutesAlias.VulnerabilityOverview,
+        meta: {
+          title: '脆弱性概览',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      },
+      {
+        path: 'list',
+        name: 'VulnerabilityList',
+        component: RoutesAlias.Vulnerabilities,
+        meta: {
+          title: '脆弱性列表',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
+      }
+    ]
+  },
+
+  {
     path: '/assets',
     name: 'Asset',
     component: RoutesAlias.Layout,

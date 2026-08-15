@@ -25,7 +25,8 @@ export enum RoutesAlias {
   Incidents = '/incidents/list', // 事件管理
   Alerts = '/alert/list/index', // 告警管理
   AlertGovernance = '/alert/governance/index', // 告警治理
-  Vulnerabilities = '/placeholder', // 脆弱性管理（占位）
+  Vulnerabilities = '/vulnerability/list/index', // 脆弱性管理-列表（T10 点亮）
+  VulnerabilityOverview = '/vulnerability/overview/index', // 脆弱性管理-概览（T10 点亮）
   BrowsingEvent = '/browsing/event/index', // 上网行为异常事件
   BrowsingBlacklist = '/browsing/blacklist/index', // 上网行为黑名单
   BrowsingConfig = '/browsing/config/index', // 上网行为规则配置

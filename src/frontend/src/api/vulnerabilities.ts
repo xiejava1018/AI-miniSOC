@@ -1,8 +1,15 @@
 /**
  * 脆弱性管理 API
+ *
+ * T13（2026-08-15 评审修订 §14.1-P2/§14.3）：
+ * - 补 `/api/v1` 前缀（原裸 `/vulnerabilities/...` 过不了 vite dev proxy，全 404）；
+ * - 状态更新 PUT → PATCH（对齐后端 @router.patch）；
+ * - 同步参数 body → Query params（对齐后端 Query 收参）。
  */
 
 import request from '@/utils/http'
+
+const API_PREFIX = '/api/v1/vulnerabilities'
 
 export interface VulnerabilityStats {
   critical: number
@@ -21,6 +28,7 @@ export interface AIVulnerabilitySuggestion {
   severity: string
   affected_asset_count: number
   risk_score: number
+  has_exploit: boolean
   risk_reason: string
   fix_suggestion: string
 }
@@ -57,6 +65,8 @@ export interface AssetVulnerability {
   scanner: string
   detected_at: string
   fixed_at: string | null
+  due_date?: string | null
+  sla_status?: 'normal' | 'warning' | 'overdue' | null
 }
 
 export interface VulnerabilityListResponse {
@@ -76,18 +86,52 @@ export interface VulnerabilityListParams {
   search?: string
 }
 
+export interface ScoreBreakdown {
+  vulnerability_id: string
+  total_score: number
+  weights: { cvss: number; criticality: number; exposure: number; exploit: number }
+  asset_scores: {
+    asset_name: string
+    asset_ip: string
+    criticality: string
+    exposure_level: string
+    score: number
+    score_breakdown: {
+      cvss_contribution: number
+      criticality_contribution: number
+      exposure_contribution: number
+      exploit_bonus: number
+    }
+  }[]
+}
+
+export interface SyncStats {
+  total_agents: number
+  processed_agents: number
+  new_vulnerabilities: number
+  new_associations: number
+  revived_associations?: number
+  updated_associations: number
+  skipped_no_asset?: number
+  errors: number
+  kev_enriched?: number
+}
+
 /**
  * 获取漏洞统计概览（仅CVE漏洞）
  */
 export function getVulnerabilityStats(): Promise<VulnerabilityStats> {
-  return request.get<VulnerabilityStats>({ url: '/vulnerabilities/stats/overview' })
+  return request.get<VulnerabilityStats>({ url: `${API_PREFIX}/stats/overview` })
 }
 
 /**
  * 获取配置检查统计概览（仅SCA配置检查）
+ *
+ * §14.2 选型 (b)：概览页 SCA 卡数据源从 /sca/stats/overview（sca.py，未注册）
+ * 切换到本接口（Vulnerability(type=sca) 口径，仅严重度分布）。
  */
 export function getSCAStats(): Promise<VulnerabilityStats> {
-  return request.get<VulnerabilityStats>({ url: '/vulnerabilities/stats/sca-overview' })
+  return request.get<VulnerabilityStats>({ url: `${API_PREFIX}/stats/sca-overview` })
 }
 
 /**
@@ -100,7 +144,7 @@ export function getVulnerabilityTrend(days: number = 7): Promise<{
   return request.get<{
     cve: { current: number; change: number; change_percent: number }
     sca: { current: number; change: number; change_percent: number }
-  }>({ url: '/vulnerabilities/stats/trend', params: { days } })
+  }>({ url: `${API_PREFIX}/stats/trend`, params: { days } })
 }
 
 /**
@@ -123,7 +167,7 @@ export function getTopRiskyAssets(limit: number = 5): Promise<{
     critical_count: number
     high_count: number
     medium_count: number
-}[]>({ url: '/vulnerabilities/stats/top-assets', params: { limit } })
+  }[]>({ url: `${API_PREFIX}/stats/top-assets`, params: { limit } })
 }
 
 /**
@@ -146,7 +190,7 @@ export function getRecentDiscoveries(type: 'cve' | 'sca', limit: number = 5): Pr
     asset_name: string
     asset_ip: string
     discovered_at: string
-  }[]>({ url: '/vulnerabilities/stats/recent', params: { vuln_type: type, limit } })
+  }[]>({ url: `${API_PREFIX}/stats/recent`, params: { vuln_type: type, limit } })
 }
 
 /**
@@ -157,21 +201,45 @@ export function getAISuggestions(limit = 5, minSeverity?: string): Promise<AIVul
   if (minSeverity) {
     params.min_severity = minSeverity
   }
-  return request.get<AIVulnerabilitySuggestion[]>({ url: '/vulnerabilities/stats/ai-suggestions', params })
+  return request.get<AIVulnerabilitySuggestion[]>({ url: `${API_PREFIX}/stats/ai-suggestions`, params })
+}
+
+/**
+ * 获取在野利用（CISA KEV）统计（T6）
+ */
+export function getExploitStats(): Promise<{
+  kev_catalog_total: number
+  kev_ransomware_related: number
+  vulnerabilities_with_exploit: number
+  open_associations_with_exploit: number
+}> {
+  return request.get<{
+    kev_catalog_total: number
+    kev_ransomware_related: number
+    vulnerabilities_with_exploit: number
+    open_associations_with_exploit: number
+  }>({ url: `${API_PREFIX}/stats/exploit` })
 }
 
 /**
  * 获取漏洞列表
  */
 export function getVulnerabilities(params: VulnerabilityListParams): Promise<VulnerabilityListResponse> {
-  return request.get<VulnerabilityListResponse>({ url: '/vulnerabilities/vulnerabilities', params })
+  return request.get<VulnerabilityListResponse>({ url: `${API_PREFIX}/vulnerabilities`, params })
 }
 
 /**
  * 获取漏洞详情
  */
 export function getVulnerability(id: string): Promise<Vulnerability> {
-  return request.get<Vulnerability>({ url: `/vulnerabilities/vulnerabilities/${id}` })
+  return request.get<Vulnerability>({ url: `${API_PREFIX}/vulnerabilities/${id}` })
+}
+
+/**
+ * 获取漏洞 AI 评分分解
+ */
+export function getScoreBreakdown(id: string): Promise<ScoreBreakdown> {
+  return request.get<ScoreBreakdown>({ url: `${API_PREFIX}/vulnerabilities/${id}/score-breakdown` })
 }
 
 /**
@@ -181,86 +249,97 @@ export function getAssetVulnerabilities(params: {
   skip?: number
   limit?: number
   asset_id?: string
+  vulnerability_id?: string
   severity?: string
   status?: string
   scanner?: string
 }): Promise<{ items: AssetVulnerability[]; total: number; skip: number; limit: number }> {
   return request.get<{ items: AssetVulnerability[]; total: number; skip: number; limit: number }>({
-    url: '/vulnerabilities/asset-vulnerabilities',
+    url: `${API_PREFIX}/asset-vulnerabilities`,
     params
   })
 }
 
 /**
- * 更新漏洞状态
+ * 更新漏洞状态（C1：PATCH + JSON body）
  */
 export function updateVulnerabilityStatus(
   id: string,
   status: string,
   notes?: string
 ): Promise<{ message: string; status: string }> {
-  return request.put<{ message: string; status: string }>({
-    url: `/vulnerabilities/asset-vulnerabilities/${id}/status`,
+  return request.patch<{ message: string; status: string }>({
+    url: `${API_PREFIX}/asset-vulnerabilities/${id}/status`,
     data: { status, notes }
   })
 }
 
 /**
- * 同步Wazuh SCAP数据
+ * 漏洞→事件：一键生成安全事件（T11 / Phase 4.1）
+ */
+export function createIncidentFromVulnerability(
+  assetVulnerabilityId: string
+): Promise<{
+  message: string
+  incident: {
+    id: string
+    title: string
+    severity: string
+    status: string
+    created_by: string
+  }
+}> {
+  return request.post<{
+    message: string
+    incident: {
+      id: string
+      title: string
+      severity: string
+      status: string
+      created_by: string
+    }
+  }>({ url: `${API_PREFIX}/asset-vulnerabilities/${assetVulnerabilityId}/create-incident` })
+}
+
+/**
+ * 同步 SCAP（CVE）数据（T5：OpenSearch 源；C2：参数走 Query）
  */
 export function syncWazuhVulnerabilities(limit = 1000, useMock = false): Promise<{
   message: string
   mode: string
-  stats: {
-    total_agents: number
-    processed_agents: number
-    new_vulnerabilities: number
-    new_associations: number
-    updated_associations: number
-    errors: number
-  }
+  source?: string
+  stats: SyncStats
 }> {
   return request.post<{
     message: string
     mode: string
-    stats: {
-      total_agents: number
-      processed_agents: number
-      new_vulnerabilities: number
-      new_associations: number
-      updated_associations: number
-      errors: number
-    }
-  }>({ url: '/vulnerabilities/sync/wazuh', data: { limit, use_mock: useMock } })
+    source?: string
+    stats: SyncStats
+  }>({ url: `${API_PREFIX}/sync/wazuh`, params: { limit, use_mock: useMock } })
 }
 
 /**
- * 同步Wazuh SCA配置检查数据
+ * 同步 SCA 配置检查数据（C2：参数走 Query）
  */
 export function syncWazuhSCAChecks(limit = 1000): Promise<{
   message: string
   type: string
-  stats: {
-    total_agents: number
-    processed_agents: number
-    new_vulnerabilities: number
-    new_associations: number
-    updated_associations: number
-    errors: number
-  }
+  stats: SyncStats
 }> {
   return request.post<{
     message: string
     type: string
-    stats: {
-      total_agents: number
-      processed_agents: number
-      new_vulnerabilities: number
-      new_associations: number
-      updated_associations: number
-      errors: number
-    }
-  }>({ url: '/vulnerabilities/sync/wazuh/sca', data: { limit } })
+    stats: SyncStats
+  }>({ url: `${API_PREFIX}/sync/wazuh/sca`, params: { limit } })
+}
+
+/**
+ * 手动同步 CISA KEV 目录 + 存量富化（T6）
+ */
+export function syncCisaKev(): Promise<{ message: string; result: { total: number; upserted: number; source: string; enriched: number } }> {
+  return request.post<{ message: string; result: { total: number; upserted: number; source: string; enriched: number } }>({
+    url: `${API_PREFIX}/sync/kev`
+  })
 }
 
 /**
@@ -277,5 +356,5 @@ export function getSyncStatus(): Promise<{
     total_associations: number
     severity_distribution: Record<string, number>
     last_sync: string | null
-  }>({ url: '/vulnerabilities/sync/wazuh/status' })
+  }>({ url: `${API_PREFIX}/sync/wazuh/status` })
 }

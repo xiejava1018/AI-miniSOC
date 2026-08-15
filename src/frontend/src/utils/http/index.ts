@@ -26,6 +26,7 @@ export interface HttpClient {
   get<T>(config: ExtendedAxiosRequestConfig): Promise<T>
   post<T>(config: ExtendedAxiosRequestConfig): Promise<T>
   put<T>(config: ExtendedAxiosRequestConfig): Promise<T>
+  patch<T>(config: ExtendedAxiosRequestConfig): Promise<T>
   del<T>(config: ExtendedAxiosRequestConfig): Promise<T>
   request<T>(config: ExtendedAxiosRequestConfig): Promise<T>
 }
@@ -212,6 +213,9 @@ const request: HttpClient = {
   },
   put<T>(config: ExtendedAxiosRequestConfig): Promise<T> {
     return retryRequest<T>({ ...config, method: 'PUT' })
+  },
+  patch<T>(config: ExtendedAxiosRequestConfig): Promise<T> {
+    return retryRequest<T>({ ...config, method: 'PATCH' })
   },
   del<T>(config: ExtendedAxiosRequestConfig): Promise<T> {
     return retryRequest<T>({ ...config, method: 'DELETE' })
