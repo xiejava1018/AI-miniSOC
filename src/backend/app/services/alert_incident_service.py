@@ -142,6 +142,68 @@ def build_incident_from_alert(
     )
 
 
+def build_incident_from_vulnerability(
+    db: Session,
+    asset_vulnerability_id,
+    *,
+    created_by: str = "system",
+) -> Incident:
+    """从资产-漏洞关联创建事件（T11 / Phase 4.1，2026-08-15）。
+
+    - 标题 = CVE + 资产；severity 由漏洞 severity 直接映射（同构枚举）；
+    - 关联机制（§14.5-4）：复用 _persist_incident 现成 asset_ids 走 AssetIncident
+      关联 + 描述内嵌 CVE/av_id，零 schema 变更（Incident 表无 asset_vulnerability_id 字段，勿加列）；
+    - av 不存在抛 ValueError。
+    """
+    from app.models.vulnerability import AssetVulnerability, Vulnerability
+
+    av = (
+        db.query(AssetVulnerability)
+        .filter(AssetVulnerability.id == asset_vulnerability_id)
+        .first()
+    )
+    if not av:
+        raise ValueError(f"资产-漏洞关联不存在: {asset_vulnerability_id}")
+
+    vuln = db.query(Vulnerability).filter(Vulnerability.id == av.vulnerability_id).first()
+    if not vuln:
+        raise ValueError(f"漏洞定义不存在: {av.vulnerability_id}")
+
+    asset = db.query(Asset).filter(Asset.id == av.asset_id).first()
+    asset_label = f"{asset.name} ({asset.asset_ip})" if asset else str(av.asset_id)
+
+    vuln_type_label = "配置弱点(SCA)" if vuln.type == "sca" else "CVE漏洞"
+    title = f"[漏洞] {vuln.cve_id} @ {asset.name or asset.asset_ip if asset else av.asset_id}"
+
+    lines = [
+        f"来源: 脆弱性管理（{vuln_type_label}）",
+        f"漏洞: {vuln.cve_id} - {(vuln.title or '')[:120]}",
+        f"严重度: {vuln.severity}  CVSS: {vuln.cvss_score if vuln.cvss_score is not None else '未知'}",
+        f"在野利用(CISA KEV): {'是' if vuln.has_exploit else '否'}",
+        f"受影响资产: {asset_label}",
+        f"资产-漏洞关联 ID: {av.id}",
+        f"检出时间: {av.detected_at}",
+        f"扫描器: {av.scanner}",
+    ]
+    if vuln.affected_packages:
+        pkg = vuln.affected_packages
+        lines.append(f"受影响软件包: {pkg.get('name')} {pkg.get('version') or ''}".rstrip())
+    if vuln.fix_suggestion:
+        lines.append(f"修复建议: {str(vuln.fix_suggestion)[:300]}")
+    if av.notes:
+        lines.append(f"备注: {str(av.notes)[:300]}")
+    description = "\n".join(lines)
+
+    return _persist_incident(
+        db,
+        title=title,
+        description=description,
+        severity=str(vuln.severity),
+        created_by=created_by,
+        asset_ids=[av.asset_id],
+    )
+
+
 def build_incident_from_group(
     db: Session,
     fingerprint: str,

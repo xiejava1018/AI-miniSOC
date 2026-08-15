@@ -250,9 +250,13 @@ class WazuhSCASyncService:
                             status=VulnerabilityStatusEnum.OPEN,
                             detected_at=policy_data.get("start_scan"),
                             # T7（评审修订）：scanner 必须用枚举值 wazuh_sca，
-                        # 字面量 'wazuh-sca' 不在 ScannerEnum 内，会导致
-                        # GET /asset-vulnerabilities 的 response_model 校验 500
-                        scanner=ScannerEnum.WAZUH_SCA
+                            # 字面量 'wazuh-sca' 不在 ScannerEnum 内，会导致
+                            # GET /asset-vulnerabilities 的 response_model 校验 500
+                            scanner=ScannerEnum.WAZUH_SCA,
+                            # T11：按严重度设修复时限（Phase 4.2 SLA）
+                            due_date=AssetVulnerability.compute_due_date(
+                                vulnerability.severity, policy_data.get("start_scan")
+                            ),
                         )
 
                         db.add(association)

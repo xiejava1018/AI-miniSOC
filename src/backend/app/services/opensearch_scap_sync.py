@@ -334,15 +334,17 @@ class OpenSearchSCAPSyncService:
                             scanner=ScannerEnum.WAZUH,
                             status=VulnerabilityStatusEnum.OPEN,
                             detected_at=detected_at,
+                            due_date=AssetVulnerability.compute_due_date(vuln.severity, detected_at),
                         )
                         db.add(new_assoc)
                         assoc_cache[key] = new_assoc
                         stats["new_associations"] += 1
                     elif association.status == VulnerabilityStatusEnum.FIXED:
-                        # 修复后再次检出 → 复活
+                        # 修复后再次检出 → 复活（并按严重度重设修复时限）
                         association.status = VulnerabilityStatusEnum.OPEN
                         association.detected_at = detected_at
                         association.fixed_at = None
+                        association.due_date = AssetVulnerability.compute_due_date(vuln.severity, detected_at)
                         stats["revived_associations"] += 1
                     else:
                         association.detected_at = detected_at

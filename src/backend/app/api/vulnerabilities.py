@@ -479,12 +479,13 @@ async def list_asset_vulnerabilities(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     asset_id: Optional[str] = None,
+    vulnerability_id: Optional[str] = Query(None, description="按漏洞定义过滤（T11 详情弹窗用）"),
     severity: Optional[SeverityEnum] = None,
     status: Optional[VulnerabilityStatusEnum] = None,
     scanner: Optional[ScannerEnum] = None,
     db: Session = Depends(get_db)
 ):
-    """获取资产-漏洞关联列表"""
+    """获取资产-漏洞关联列表（含 SLA 状态，运行时计算）"""
     query = db.query(
         AssetVulnerability,
         Vulnerability,
@@ -502,6 +503,13 @@ async def list_asset_vulnerabilities(
             query = query.filter(AssetVulnerability.asset_id == asset_id_uuid)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的资产ID格式")
+
+    if vulnerability_id:
+        try:
+            vuln_id_uuid = uuid.UUID(vulnerability_id)
+            query = query.filter(AssetVulnerability.vulnerability_id == vuln_id_uuid)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="无效的漏洞ID格式")
 
     if severity:
         query = query.filter(Vulnerability.severity == severity)
@@ -531,7 +539,10 @@ async def list_asset_vulnerabilities(
             "status": av.status,
             "scanner": av.scanner,
             "detected_at": av.detected_at,
-            "fixed_at": av.fixed_at
+            "fixed_at": av.fixed_at,
+            # T11：SLA（运行时计算，不落库）
+            "due_date": av.due_date,
+            "sla_status": AssetVulnerability.sla_status_of(av.status, av.due_date),
         })
 
     return AssetVulnerabilityListResponse(
@@ -586,6 +597,35 @@ async def update_asset_vulnerability_status(
     db.refresh(av)
 
     return {"message": "状态更新成功", "status": status.value}
+
+
+@router.post("/asset-vulnerabilities/{av_id}/create-incident")
+async def create_incident_from_vulnerability(
+    av_id: str,
+    db: Session = Depends(get_db)
+):
+    """漏洞→事件：一键生成安全事件（T11 / Phase 4.1，仅手动触发）
+
+    复用 alert_incident_service 的 _persist_incident 范式：
+    - 标题 = CVE + 资产；severity 由漏洞 severity 直接映射；
+    - 资产关联走 AssetIncident（asset_ids），描述内嵌 CVE / av_id，零 schema 变更（§14.5-4）。
+    """
+    from app.services.alert_incident_service import build_incident_from_vulnerability, incident_to_dict
+
+    try:
+        av_id_uuid = uuid.UUID(av_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的关联ID格式")
+
+    try:
+        incident = build_incident_from_vulnerability(db, av_id_uuid, created_by="vulnerability-console")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return {
+        "message": "事件创建成功",
+        "incident": incident_to_dict(incident),
+    }
 
 
 # ==================== 扫描任务 ====================
