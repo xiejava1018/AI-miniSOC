@@ -32,6 +32,10 @@ from app.services.alert_digest_scheduler import (
     start_alert_digest_scheduler,
     stop_alert_digest_scheduler,
 )
+from app.services.cisa_kev_service import (
+    start_cisa_kev_scheduler,
+    stop_cisa_kev_scheduler,
+)
 
 
 @asynccontextmanager
@@ -40,12 +44,14 @@ async def lifespan(app: FastAPI):
     start_browsing_detector()
     start_alert_group_snapshot()
     start_alert_digest_scheduler()
+    start_cisa_kev_scheduler()
     try:
         yield
     finally:
         await stop_browsing_detector()
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
+        await stop_cisa_kev_scheduler()
 
 
 # 创建 FastAPI 应用实例

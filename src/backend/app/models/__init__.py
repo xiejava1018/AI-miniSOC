@@ -32,6 +32,7 @@ from .browsing_baseline import BrowsingBaseline
 from .alert_digest import AlertDigest
 from .alert_group_snapshot import AlertGroupSnapshot
 from .alert_group_analysis import AlertGroupAnalysis
+from .cisa_kev import CisaKev
 
 __all__ = [
     "Base",

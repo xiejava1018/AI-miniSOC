@@ -96,12 +96,14 @@ def init_dicts(db: Session):
         {"dict_type": "data_source", "dict_code": "wazuh", "dict_label": "Wazuh", "color": "success", "sort_order": 1},
         {"dict_type": "data_source", "dict_code": "manual", "dict_label": "手动录入", "color": "info", "sort_order": 2},
 
-        # 资产重要性（criticality）—— 3 级
-        # 与 severity 解耦: 严重性用于事件/告警/漏洞,重要性用于资产支撑业务的程度
-        # dict_code 与 soc_assets.criticality 现存值一致 (core/important/normal)
-        {"dict_type": "asset_criticality", "dict_code": "core", "dict_label": "核心", "color": "danger", "sort_order": 1},
-        {"dict_type": "asset_criticality", "dict_code": "important", "dict_label": "重要", "color": "warning", "sort_order": 2},
-        {"dict_type": "asset_criticality", "dict_code": "normal", "dict_label": "普通", "color": "info", "sort_order": 3},
+        # 资产关键度（criticality）—— 4 级（决策1，2026-08-15）
+        # 与 vulnerability_ai.CRITICALITY_SCORES 对齐：critical/high/medium/low
+        # 存量 'normal' 已回填为 'medium'（scripts/backfill_vulnerability_contract.py）
+        # 旧 3 级（core/important/normal）已废弃，回填脚本会清理存量字典项
+        {"dict_type": "asset_criticality", "dict_code": "critical", "dict_label": "严重", "color": "danger", "sort_order": 1},
+        {"dict_type": "asset_criticality", "dict_code": "high", "dict_label": "高", "color": "danger", "sort_order": 2},
+        {"dict_type": "asset_criticality", "dict_code": "medium", "dict_label": "中", "color": "warning", "sort_order": 3},
+        {"dict_type": "asset_criticality", "dict_code": "low", "dict_label": "低", "color": "info", "sort_order": 4},
 
         # 事件严重性（severity）—— 留给未来事件/告警前端用
         {"dict_type": "severity", "dict_code": "critical", "dict_label": "严重", "color": "danger", "sort_order": 1},

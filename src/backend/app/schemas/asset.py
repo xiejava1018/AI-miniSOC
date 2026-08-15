@@ -15,7 +15,7 @@ class AssetBase(BaseModel):
     network_zone: Optional[str] = "other"
     asset_ip: str
     asset_type: Optional[str] = "other"
-    criticality: Optional[str] = "normal"
+    criticality: Optional[str] = "medium"  # 决策1：四档 critical/high/medium/low（存量 normal 已回填 medium）
     owner: Optional[str] = None
     business_unit: Optional[str] = None
     asset_description: Optional[str] = None

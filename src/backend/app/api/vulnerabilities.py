@@ -454,6 +454,7 @@ async def get_vulnerability(
 
     return VulnerabilityResponse(
         id=str(vulnerability.id),
+        type=vulnerability.type,  # C4 修复（评审 §14.3）：原先漏传 → SCA 漏洞被误标为默认 'scap'
         cve_id=vulnerability.cve_id,
         title=vulnerability.title,
         description=vulnerability.description,
@@ -545,15 +546,30 @@ async def list_asset_vulnerabilities(
 @router.patch("/asset-vulnerabilities/{av_id}/status/")
 async def update_asset_vulnerability_status(
     av_id: str,
-    status: VulnerabilityStatusEnum,
-    notes: Optional[str] = None,
+    payload: dict,
     db: Session = Depends(get_db)
 ):
-    """更新漏洞状态"""
+    """更新漏洞状态
+
+    C1 修复（评审 §14.3）：改收 JSON body {status, notes?}，
+    与前端 request.patch 对齐（原先 Query 收参 + 前端 PUT 双重不匹配）。
+    """
+    from app.schemas.vulnerability import VulnerabilityStatusEnum as VSE
+
     try:
         av_id_uuid = uuid.UUID(av_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的关联ID格式")
+
+    raw_status = payload.get("status")
+    try:
+        status = VSE(str(raw_status).lower())
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"无效状态: {raw_status}（合法: open/in_progress/fixed）",
+        )
+    notes = payload.get("notes")
 
     av = db.query(AssetVulnerability).filter(AssetVulnerability.id == av_id_uuid).first()
 
@@ -561,7 +577,7 @@ async def update_asset_vulnerability_status(
         raise HTTPException(status_code=404, detail="资产-漏洞关联不存在")
 
     av.status = status
-    if status == VulnerabilityStatusEnum.FIXED:
+    if status == VSE.FIXED:
         av.fixed_at = func.now()
     if notes:
         av.notes = notes
@@ -569,7 +585,7 @@ async def update_asset_vulnerability_status(
     db.commit()
     db.refresh(av)
 
-    return {"message": "状态更新成功", "status": status}
+    return {"message": "状态更新成功", "status": status.value}
 
 
 # ==================== 扫描任务 ====================
@@ -720,7 +736,7 @@ async def cancel_scan_task(
     return {"message": "任务已取消"}
 
 
-# ==================== Wazuh SCAP 同步 ====================
+# ==================== Wazuh / OpenSearch SCAP 同步 ====================
 
 @router.post("/sync/wazuh")
 async def sync_wazuh_vulnerabilities(
@@ -729,23 +745,30 @@ async def sync_wazuh_vulnerabilities(
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db)
 ):
-    """同步Wazuh SCAP漏洞数据"""
-    from app.services.wazuh_scap_sync import WazuhSCAPSyncService
-    from app.services.wazuh_client import wazuh_client
+    """同步 SCAP（CVE）漏洞数据
 
-    # 设置是否使用模拟数据
-    original_use_mock = wazuh_client.use_mock_data
-    wazuh_client.use_mock_data = use_mock
+    T5（2026-08-15）：真实数据源由 Wazuh API 改为 OpenSearch
+    `wazuh-states-vulnerabilities-*`（POC-1 证实 Wazuh API /vulnerability 全 404）。
+    同步完成后自动触发 CISA KEV 存量富化（T6）。
+    """
+    from app.services.opensearch_scap_sync import OpenSearchSCAPSyncService
+    from app.services.cisa_kev_service import CisaKevService
 
     try:
-        stats = WazuhSCAPSyncService.sync_all_vulnerabilities(
-            db=db,
-            limit=limit
+        stats = OpenSearchSCAPSyncService.sync_all_vulnerabilities(
+            db=db, limit=limit, use_mock=use_mock
         )
+        # T6：同步后富化在野利用标记（真实分支才有意义；mock 数据自带 has_exploit）
+        if not use_mock:
+            try:
+                stats["kev_enriched"] = CisaKevService.enrich_has_exploit(db)
+            except Exception as e:
+                stats["kev_enriched"] = f"error: {e}"
 
         return {
             "message": "同步完成" if not use_mock else "模拟数据同步完成",
             "mode": "mock" if use_mock else "production",
+            "source": "opensearch:wazuh-states-vulnerabilities",
             "stats": stats
         }
 
@@ -754,9 +777,6 @@ async def sync_wazuh_vulnerabilities(
             status_code=500,
             detail=f"同步失败: {str(e)}"
         )
-    finally:
-        # 恢复原始设置
-        wazuh_client.use_mock_data = original_use_mock
 
 
 @router.get("/sync/wazuh/status")
@@ -764,7 +784,7 @@ async def sync_wazuh_vulnerabilities(
 async def get_wazuh_sync_status(
     db: Session = Depends(get_db)
 ):
-    """获取Wazuh同步状态"""
+    """获取SCAP同步状态"""
     from app.services.wazuh_scap_sync import WazuhSCAPSyncService
 
     status = WazuhSCAPSyncService.get_sync_status(db=db)
@@ -778,27 +798,19 @@ async def sync_agent_vulnerabilities(
     limit: int = Query(500, ge=1, le=5000, description="同步数量限制"),
     db: Session = Depends(get_db)
 ):
-    """同步单个Agent的SCAP漏洞数据"""
-    from app.services.wazuh_scap_sync import WazuhSCAPSyncService
+    """同步单个Agent的SCAP漏洞数据（T5：OpenSearch 源）"""
+    from app.services.opensearch_scap_sync import OpenSearchSCAPSyncService
 
     try:
-        # 获取agent信息
-        from app.services.wazuh_client import wazuh_client
-        agent_info = wazuh_client.get_agent_info(agent_id)
-
-        agent_name = agent_info.get("name", agent_id)
-
-        stats = WazuhSCAPSyncService.sync_agent_vulnerabilities(
+        stats = OpenSearchSCAPSyncService.sync_agent_vulnerabilities(
             db=db,
             agent_id=agent_id,
-            agent_name=agent_name,
             limit=limit
         )
 
         return {
-            "message": f"Agent {agent_name} 同步完成",
+            "message": f"Agent {agent_id} 同步完成",
             "agent_id": agent_id,
-            "agent_name": agent_name,
             "stats": stats
         }
 
@@ -807,6 +819,51 @@ async def sync_agent_vulnerabilities(
             status_code=500,
             detail=f"同步失败: {str(e)}"
         )
+
+
+# ==================== CISA KEV 同步（T6，决策2） ====================
+
+@router.post("/sync/kev")
+async def sync_cisa_kev(
+    db: Session = Depends(get_db)
+):
+    """手动触发 CISA KEV 目录同步 + 存量 has_exploit 富化"""
+    from app.services.cisa_kev_service import CisaKevService
+
+    try:
+        result = CisaKevService.sync_kev(db)
+        result["enriched"] = CisaKevService.enrich_has_exploit(db)
+        return {"message": "CISA KEV 同步完成", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"KEV 同步失败: {str(e)}")
+
+
+@router.get("/stats/exploit")
+async def get_exploit_stats(
+    db: Session = Depends(get_db)
+):
+    """在野利用（KEV）统计：目录规模 / 命中漏洞 / 影响资产关联 / 勒索相关"""
+    from app.models.cisa_kev import CisaKev
+
+    kev_total = db.query(CisaKev).count()
+    kev_ransom = db.query(CisaKev).filter(CisaKev.known_ransomware.is_(True)).count()
+
+    hit_vulns = db.query(Vulnerability).filter(Vulnerability.has_exploit.is_(True)).count()
+
+    from app.models.vulnerability import AssetVulnerability as AV
+    hit_open_assocs = (
+        db.query(AV)
+        .join(Vulnerability, AV.vulnerability_id == Vulnerability.id)
+        .filter(Vulnerability.has_exploit.is_(True), AV.status == "open")
+        .count()
+    )
+
+    return {
+        "kev_catalog_total": kev_total,
+        "kev_ransomware_related": kev_ransom,
+        "vulnerabilities_with_exploit": hit_vulns,
+        "open_associations_with_exploit": hit_open_assocs,
+    }
 
 
 

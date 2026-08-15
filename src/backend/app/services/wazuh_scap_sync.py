@@ -1,5 +1,12 @@
 """
-Wazuh SCAP漏洞数据同步服务
+Wazuh SCAP漏洞数据同步服务（DEPRECATED：真实数据源已由 opensearch_scap_sync.py 接管）
+
+T5（2026-08-15）：POC-1 证实 Wazuh API 无 /vulnerability 路由，本服务的真实同步路径
+已废弃（POST /sync/wazuh 已改指 OpenSearchSCAPSyncService）。保留原因：
+- mock 分支（MockSCAPDataGenerator 同构落库）仍被 OpenSearchSCAPSyncService._sync_mock 复用；
+- get_sync_status（纯 DB 统计）仍被 GET /sync/wazuh/status 使用；
+- 保留代码便于回滚（设计 §6）。
+不要新增对本服务真实同步路径的依赖。
 """
 
 import logging
@@ -241,7 +248,7 @@ class WazuhSCAPSyncService:
         # 如果不存在，创建新漏洞
         is_new_vuln = False
         if not vulnerability:
-            vulnerability = cls._create_vulnerability_from_wazuh(vuln_data)
+            vulnerability = cls._create_vulnerability_from_wazuh(vuln_data, db=db)
             db.add(vulnerability)
             db.flush()  # 获取生成的ID
             is_new_vuln = True
@@ -272,13 +279,15 @@ class WazuhSCAPSyncService:
     @classmethod
     def _create_vulnerability_from_wazuh(
         cls,
-        vuln_data: Dict[str, Any]
+        vuln_data: Dict[str, Any],
+        db: Session = None
     ) -> Vulnerability:
         """
         从Wazuh漏洞数据创建Vulnerability对象
 
         Args:
-            vuln_data: Wazuh漏洞数据
+            vuln_data: Wazuh漏洞数据（mock 生成器同构）
+            db: 可选 DB 会话（传入时 _check_exploit 查 CISA KEV 表，T6）
 
         Returns:
             Vulnerability对象
@@ -327,27 +336,27 @@ class WazuhSCAPSyncService:
             fix_suggestion=vuln_data.get("fix", {}).get("version"),
             references=reference_list if reference_list else None,
             published_date=published if published else None,
-            has_exploit=cls._check_exploit(cve_id),
+            has_exploit=cls._check_exploit(cve_id, db=db),
             discovered_at=datetime.utcnow()
         )
 
         return vulnerability
 
     @classmethod
-    def _check_exploit(cls, cve_id: str) -> bool:
+    def _check_exploit(cls, cve_id: str, db: Session = None) -> bool:
         """
-        检查CVE是否有在野利用
+        检查CVE是否有在野利用（T6 决策2：接入 CISA KEV）
 
-        Args:
-            cve_id: CVE编号
-
-        Returns:
-            是否有在野利用
+        有 DB 会话时查本地 soc_cisa_kev 缓存表（由 cisa_kev_service 24h 同步）；
+        无会话/查询失败时返回 False（保守）。配置弱点类无 CVE，不适用。
         """
-        # TODO: 集成威胁情报源（如CISA KEV, ExploitDB等）
-        # 简化实现：根据CVE编号判断
-        # 高危且较新的CVE更有可能有在野利用
-        return False
+        if db is None or not cve_id:
+            return False
+        try:
+            from app.services.cisa_kev_service import CisaKevService
+            return CisaKevService.is_known_exploit(db, cve_id)
+        except Exception:
+            return False
 
     @classmethod
     def get_sync_status(cls, db: Session) -> Dict[str, Any]:

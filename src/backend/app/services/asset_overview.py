@@ -231,7 +231,7 @@ class AssetOverviewService:
         评分前 N 的高危资产
 
         评分公式(D7):
-        - criticality='core' → +100
+        - criticality in ('critical','core') → +100  （决策1：core 为遗留值兼容保留）
         - open_incidents(该资产) × 30
         - high_risk_ports(该资产) × 20
         - open_ports >= 5 → +10
@@ -262,10 +262,10 @@ class AssetOverviewService:
                     factors: List[str] = []
                     score = 0
 
-                    # criticality 权重
-                    if asset.criticality == "core":
+                    # criticality 权重（决策1：四档枚举；'core' 为字典遗留值，兼容保留）
+                    if asset.criticality in ("critical", "core"):
                         score += self.SCORE_WEIGHT_CRITICAL_CORE
-                        factors.append("core 资产")
+                        factors.append("关键资产")
 
                     # 端口相关
                     p_stat = port_stats.get(str(asset.id), {"open": 0, "high_risk": 0})
@@ -325,7 +325,7 @@ class AssetOverviewService:
     ) -> bool:
         """
         D6 高危资产定义:5 条件命中任一
-        1. criticality='core' AND (alert_24h>0 OR high_risk_ports>0 OR open_incidents>0)
+        1. criticality in ('critical','core') AND (alert_24h>0 OR high_risk_ports>0 OR open_incidents>0)
         2. open_incidents>0
         3. alert_24h>=10
         """
@@ -333,7 +333,7 @@ class AssetOverviewService:
             return True
         if alert_24h >= self.HIGH_RISK_ALERT_THRESHOLD:
             return True
-        if criticality == "core" and (alert_24h > 0 or high_risk_ports > 0 or open_incidents > 0):
+        if criticality in ("critical", "core") and (alert_24h > 0 or high_risk_ports > 0 or open_incidents > 0):
             return True
         return False
 

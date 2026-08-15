@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     ALERT_DIGEST_SCHEDULER_ENABLED: bool = True
     ALERT_DIGEST_SCHEDULER_HOUR: int = 8  # 每日生成摘要的整点小时（0-23）
 
+    # CISA KEV（在野利用威胁情报，T6 决策2：点亮 AI 评分 15% 权重）
+    CISA_KEV_URL: str = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+    CISA_KEV_SCHEDULER_ENABLED: bool = True  # 24h 自动同步（启动后首次延迟 120s）
+
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

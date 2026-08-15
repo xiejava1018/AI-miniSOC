@@ -104,7 +104,7 @@ class WazuhAgentSyncService:
                     "network_segment": "default",
                     "network_zone": network_zone,
                     "asset_type": "server",  # Wazuh agents 通常是服务器
-                    "criticality": "normal",
+                    "criticality": "medium",
                     "data_source": "wazuh",
                     "source_id": agent_info.get("id"),  # Wazuh agent ID
                     "wazuh_agent_id": agent_info.get("id"),

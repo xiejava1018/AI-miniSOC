@@ -1,0 +1,443 @@
+{
+ "title": "CISA Catalog of Known Exploited Vulnerabilities",
+ "catalogVersion": "2026.08.14",
+ "dateReleased": "2026-08-14T16:34:49.0391Z",
+ "vulnerabilities": [
+  {
+   "cveID": "CVE-2024-21413",
+   "vendorProject": "Microsoft",
+   "product": "Office Outlook",
+   "vulnerabilityName": "Microsoft Outlook Improper Input Validation Vulnerability",
+   "dateAdded": "2025-02-06",
+   "shortDescription": "Microsoft Outlook contains an improper input validation vulnerability that allows for remote code execution. Successful exploitation of this vulnerability would allow an attacker to bypass the Office Protected View and open in editing mode rather than protected mode.",
+   "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+   "dueDate": "2025-02-27",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2024-21413 ; https://nvd.nist.gov/vuln/detail/CVE-2024-21413",
+   "cwes": [
+    "CWE-20"
+   ]
+  },
+  {
+   "cveID": "CVE-2024-47575",
+   "vendorProject": "Fortinet",
+   "product": "FortiManager",
+   "vulnerabilityName": "Fortinet FortiManager Missing Authentication Vulnerability",
+   "dateAdded": "2024-10-23",
+   "shortDescription": "Fortinet FortiManager contains a missing authentication vulnerability in the fgfmd daemon that allows a remote, unauthenticated attacker to execute arbitrary code or commands via specially crafted requests.",
+   "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+   "dueDate": "2024-11-13",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://fortiguard.fortinet.com/psirt/FG-IR-24-423 ; https://nvd.nist.gov/vuln/detail/CVE-2024-47575",
+   "cwes": [
+    "CWE-306"
+   ]
+  },
+  {
+   "cveID": "CVE-2024-3400",
+   "vendorProject": "Palo Alto Networks",
+   "product": "PAN-OS",
+   "vulnerabilityName": "Palo Alto Networks PAN-OS Command Injection Vulnerability",
+   "dateAdded": "2024-04-12",
+   "shortDescription": "Palo Alto Networks PAN-OS GlobalProtect feature contains a command injection vulnerability that allows an unauthenticated attacker to execute commands with root privileges on the firewall.",
+   "requiredAction": "Apply mitigations per vendor instructions as they become available. Otherwise, users with vulnerable versions of affected devices should enable Threat Prevention IDs available from the vendor. See the vendor bulletin for more details and a patch release schedule.",
+   "dueDate": "2024-04-19",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://security.paloaltonetworks.com/CVE-2024-3400 ;   https://nvd.nist.gov/vuln/detail/CVE-2024-3400",
+   "cwes": [
+    "CWE-20",
+    "CWE-77"
+   ]
+  },
+  {
+   "cveID": "CVE-2024-1709",
+   "vendorProject": "ConnectWise",
+   "product": "ScreenConnect",
+   "vulnerabilityName": "ConnectWise ScreenConnect Authentication Bypass Vulnerability",
+   "dateAdded": "2024-02-22",
+   "shortDescription": "ConnectWise ScreenConnect contains an authentication bypass vulnerability that allows an attacker with network access to the management interface to create a new, administrator-level account on affected devices.",
+   "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+   "dueDate": "2024-02-29",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://www.connectwise.com/company/trust/security-bulletins/connectwise-screenconnect-23.9.8; https://nvd.nist.gov/vuln/detail/CVE-2024-1709",
+   "cwes": [
+    "CWE-288"
+   ]
+  },
+  {
+   "cveID": "CVE-2023-46604",
+   "vendorProject": "Apache",
+   "product": "ActiveMQ",
+   "vulnerabilityName": "Apache ActiveMQ Deserialization of Untrusted Data Vulnerability",
+   "dateAdded": "2023-11-02",
+   "shortDescription": "Apache ActiveMQ contains a deserialization of untrusted data vulnerability that may allow a remote attacker with network access to a broker to run shell commands by manipulating serialized class types in the OpenWire protocol to cause the broker to instantiate any class on the classpath.",
+   "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable.",
+   "dueDate": "2023-11-23",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://activemq.apache.org/security-advisories.data/CVE-2023-46604-announcement.txt; https://nvd.nist.gov/vuln/detail/CVE-2023-46604",
+   "cwes": [
+    "CWE-502"
+   ]
+  },
+  {
+   "cveID": "CVE-2023-4966",
+   "vendorProject": "Citrix",
+   "product": "NetScaler ADC and NetScaler Gateway",
+   "vulnerabilityName": "Citrix NetScaler ADC and NetScaler Gateway Buffer Overflow Vulnerability",
+   "dateAdded": "2023-10-18",
+   "shortDescription": "Citrix NetScaler ADC and NetScaler Gateway contain a buffer overflow vulnerability that allows for sensitive information disclosure when configured as a Gateway (VPN virtual server, ICA Proxy, CVPN, RDP Proxy) or AAA virtual server.",
+   "requiredAction": "Apply mitigations and kill all active and persistent sessions per vendor instructions [https://www.netscaler.com/blog/news/cve-2023-4966-critical-security-update-now-available-for-netscaler-adc-and-netscaler-gateway/] OR discontinue use of the product if mitigations are unavailable.",
+   "dueDate": "2023-11-08",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://www.netscaler.com/blog/news/cve-2023-4966-critical-security-update-now-available-for-netscaler-adc-and-netscaler-gateway/, https://support.citrix.com/article/CTX579459/netscaler-adc-and-netscaler-gateway-security-bulletin-for-cve20234966-and-cve20234967 ;  https://nvd.nist.gov/vuln/detail/CVE-2023-4966",
+   "cwes": [
+    "CWE-119"
+   ]
+  },
+  {
+   "cveID": "CVE-2023-20198",
+   "vendorProject": "Cisco",
+   "product": "IOS XE Web UI",
+   "vulnerabilityName": "Cisco IOS XE Web UI Privilege Escalation Vulnerability",
+   "dateAdded": "2023-10-16",
+   "shortDescription": "Cisco IOS XE Web UI contains a privilege escalation vulnerability in the web user interface that could allow a remote, unauthenticated attacker to create an account with privilege level 15 access. The attacker can then use that account to gain control of the affected device.",
+   "requiredAction": "Verify that instances of Cisco IOS XE Web UI are in compliance with BOD 23-02 and apply mitigations per vendor instructions. For affected products (Cisco IOS XE Web UI exposed to the internet or to untrusted networks), follow vendor instructions to determine if a system may have been compromised and immediately report positive findings to CISA.",
+   "dueDate": "2023-10-20",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://www.cisco.com/c/en/us/support/docs/ios-nx-os-software/ios-xe-dublin-17121/221128-software-fix-availability-for-cisco-ios.html;  https://nvd.nist.gov/vuln/detail/CVE-2023-20198",
+   "cwes": [
+    "CWE-420"
+   ]
+  },
+  {
+   "cveID": "CVE-2023-22515",
+   "vendorProject": "Atlassian",
+   "product": "Confluence Data Center and Server",
+   "vulnerabilityName": "Atlassian Confluence Data Center and Server Broken Access Control Vulnerability",
+   "dateAdded": "2023-10-05",
+   "shortDescription": "Atlassian Confluence Data Center and Server contains a broken access control vulnerability that allows an attacker to create unauthorized Confluence administrator accounts and access Confluence.",
+   "requiredAction": "Apply mitigations per vendor instructions or discontinue use of the product if mitigations are unavailable. Check all affected Confluence instances for evidence of compromise per vendor instructions and report any positive findings to CISA.",
+   "dueDate": "2023-10-13",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://confluence.atlassian.com/security/cve-2023-22515-privilege-escalation-vulnerability-in-confluence-data-center-and-server-1295682276.html;  https://nvd.nist.gov/vuln/detail/CVE-2023-22515",
+   "cwes": []
+  },
+  {
+   "cveID": "CVE-2023-34362",
+   "vendorProject": "Progress",
+   "product": "MOVEit Transfer",
+   "vulnerabilityName": "Progress MOVEit Transfer SQL Injection Vulnerability",
+   "dateAdded": "2023-06-02",
+   "shortDescription": "Progress MOVEit Transfer contains a SQL injection vulnerability that could allow an unauthenticated attacker to gain unauthorized access to MOVEit Transfer's database. Depending on the database engine being used (MySQL, Microsoft SQL Server, or Azure SQL), an attacker may be able to infer information about the structure and contents of the database in addition to executing SQL statements that alter or delete database elements.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2023-06-23",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "This CVE has a CISA AA located here: https://www.cisa.gov/news-events/cybersecurity-advisories/aa23-158a. Please see the AA for associated IOCs. Additional information is available at: https://community.progress.com/s/article/MOVEit-Transfer-Critical-Vulnerability-31May2023.;  https://nvd.nist.gov/vuln/detail/CVE-2023-34362",
+   "cwes": [
+    "CWE-89"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-45046",
+   "vendorProject": "Apache",
+   "product": "Log4j2",
+   "vulnerabilityName": "Apache Log4j2 Deserialization of Untrusted Data Vulnerability",
+   "dateAdded": "2023-05-01",
+   "shortDescription": "Apache Log4j2 contains a deserialization of untrusted data vulnerability due to the incomplete fix of CVE-2021-44228, where the Thread Context Lookup Pattern is vulnerable to remote code execution in certain non-default configurations.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2023-05-22",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://logging.apache.org/log4j/2.x/security.html; https://nvd.nist.gov/vuln/detail/CVE-2021-45046",
+   "cwes": [
+    "CWE-917"
+   ]
+  },
+  {
+   "cveID": "CVE-2023-23397",
+   "vendorProject": "Microsoft",
+   "product": "Office",
+   "vulnerabilityName": "Microsoft Office Outlook Privilege Escalation Vulnerability",
+   "dateAdded": "2023-03-14",
+   "shortDescription": "Microsoft Office Outlook contains a privilege escalation vulnerability that allows for a NTLM Relay attack against another service to authenticate as the user.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2023-04-04",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://msrc.microsoft.com/update-guide/en-US/vulnerability/CVE-2023-23397, https://msrc.microsoft.com/blog/2023/03/microsoft-mitigates-outlook-elevation-of-privilege-vulnerability/, ;  https://nvd.nist.gov/vuln/detail/CVE-2023-23397",
+   "cwes": [
+    "CWE-294"
+   ]
+  },
+  {
+   "cveID": "CVE-2022-30190",
+   "vendorProject": "Microsoft",
+   "product": "Windows",
+   "vulnerabilityName": "Microsoft Windows Support Diagnostic Tool (MSDT) Remote Code Execution Vulnerability",
+   "dateAdded": "2022-06-14",
+   "shortDescription": "A remote code execution vulnerability exists when MSDT is called using the URL protocol from a calling application such as Word. An attacker who successfully exploits this vulnerability can run code with the privileges of the calling application.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-07-05",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2022-30190",
+   "cwes": [
+    "CWE-610"
+   ]
+  },
+  {
+   "cveID": "CVE-2022-26134",
+   "vendorProject": "Atlassian",
+   "product": "Confluence Server/Data Center",
+   "vulnerabilityName": "Atlassian Confluence Server and Data Center Remote Code Execution Vulnerability",
+   "dateAdded": "2022-06-02",
+   "shortDescription": "Atlassian Confluence Server and Data Center contain a remote code execution vulnerability that allows for an unauthenticated attacker to perform remote code execution.",
+   "requiredAction": "Immediately block all internet traffic to and from affected products AND apply the update per vendor instructions [https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html] OR remove the affected products by the due date on the right. Note: Once the update is successfully deployed, agencies can reassess the internet blocking rules.",
+   "dueDate": "2022-06-06",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2022-26134",
+   "cwes": [
+    "CWE-917"
+   ]
+  },
+  {
+   "cveID": "CVE-2022-22965",
+   "vendorProject": "VMware",
+   "product": "Spring Framework",
+   "vulnerabilityName": "Spring Framework JDK 9+ Remote Code Execution Vulnerability",
+   "dateAdded": "2022-04-04",
+   "shortDescription": "Spring MVC or Spring WebFlux application running on JDK 9+ may be vulnerable to remote code execution (RCE) via data binding.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-04-25",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
+   "cwes": [
+    "CWE-94"
+   ]
+  },
+  {
+   "cveID": "CVE-2017-0144",
+   "vendorProject": "Microsoft",
+   "product": "SMBv1",
+   "vulnerabilityName": "Microsoft SMBv1 Remote Code Execution Vulnerability",
+   "dateAdded": "2022-02-10",
+   "shortDescription": "The SMBv1 server in multiple Microsoft Windows versions allows remote attackers to execute arbitrary code via crafted packets.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-08-10",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2017-0144",
+   "cwes": [
+    "CWE-20"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-44228",
+   "vendorProject": "Apache",
+   "product": "Log4j2",
+   "vulnerabilityName": "Apache Log4j2 Remote Code Execution Vulnerability",
+   "dateAdded": "2021-12-10",
+   "shortDescription": "Apache Log4j2 contains a vulnerability where JNDI features do not protect against attacker-controlled JNDI-related endpoints, allowing for remote code execution.",
+   "requiredAction": "For all affected software assets for which updates exist, the only acceptable remediation actions are: 1) Apply updates; OR 2) remove affected assets from agency networks. Temporary mitigations using one of the measures provided at https://www.cisa.gov/uscert/ed-22-02-apache-log4j-recommended-mitigation-measures are only acceptable until updates are available.",
+   "dueDate": "2021-12-24",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228",
+   "cwes": [
+    "CWE-20",
+    "CWE-400",
+    "CWE-502"
+   ]
+  },
+  {
+   "cveID": "CVE-2019-19781",
+   "vendorProject": "Citrix",
+   "product": "Application Delivery Controller (ADC), Gateway, and SD-WAN WANOP Appliance",
+   "vulnerabilityName": "Citrix ADC, Gateway, and SD-WAN WANOP Appliance Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Citrix ADC, Citrix Gateway, and multiple Citrix SD-WAN WANOP appliance models contain an unspecified vulnerability that could allow an unauthenticated attacker to perform code execution.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2019-19781",
+   "cwes": [
+    "CWE-22"
+   ]
+  },
+  {
+   "cveID": "CVE-2020-5902",
+   "vendorProject": "F5",
+   "product": "BIG-IP",
+   "vulnerabilityName": "F5 BIG-IP Traffic Management User Interface (TMUI) Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "F5 BIG-IP Traffic Management User Interface (TMUI) contains a remote code execution vulnerability in undisclosed pages.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2020-5902",
+   "cwes": [
+    "CWE-22"
+   ]
+  },
+  {
+   "cveID": "CVE-2018-13379",
+   "vendorProject": "Fortinet",
+   "product": "FortiOS",
+   "vulnerabilityName": "Fortinet FortiOS SSL VPN Path Traversal Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Fortinet FortiOS SSL VPN web portal contains a path traversal vulnerability that may allow an unauthenticated attacker to download FortiOS system files through specially crafted HTTP resource requests.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2018-13379",
+   "cwes": [
+    "CWE-22"
+   ]
+  },
+  {
+   "cveID": "CVE-2020-15505",
+   "vendorProject": "Ivanti",
+   "product": "MobileIron Multiple Products",
+   "vulnerabilityName": "Ivanti MobileIron Multiple Products Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Ivanti MobileIron's Core & Connector, Sentry, and Monitor and Reporting Database (RDB) products contain an unspecified vulnerability that allows for remote code execution.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Unknown",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2020-15505",
+   "cwes": [
+    "CWE-706"
+   ]
+  },
+  {
+   "cveID": "CVE-2019-0708",
+   "vendorProject": "Microsoft",
+   "product": "Remote Desktop Services",
+   "vulnerabilityName": "Microsoft Remote Desktop Services Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft Remote Desktop Services, formerly known as Terminal Service, contains an unspecified vulnerability that allows an unauthenticated attacker to connect to the target system using RDP and send specially crafted requests. Successful exploitation allows for remote code execution. The vulnerability is also known under the moniker of BlueKeep.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2019-0708",
+   "cwes": [
+    "CWE-416"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-34473",
+   "vendorProject": "Microsoft",
+   "product": "Exchange Server",
+   "vulnerabilityName": "Microsoft Exchange Server Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft Exchange Server contains an unspecified vulnerability that allows for remote code execution.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2021-11-17",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2021-34473",
+   "cwes": [
+    "CWE-918"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-34527",
+   "vendorProject": "Microsoft",
+   "product": "Windows",
+   "vulnerabilityName": "Microsoft Windows Print Spooler Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft Windows Print Spooler contains an unspecified vulnerability due to the Windows Print Spooler service improperly performing privileged file operations. Successful exploitation allows an attacker to perform remote code execution with SYSTEM privileges. The vulnerability is also known under the moniker of PrintNightmare.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "Reference CISA's ED 21-04 (https://www.cisa.gov/news-events/directives/ed-21-04-mitigate-windows-print-spooler-service-vulnerability) for further guidance and requirements. Note: The due date for addressing this vulnerability aligns with the requirements outlined in ED 21-04. https://nvd.nist.gov/vuln/detail/CVE-2021-34527",
+   "cwes": [
+    "CWE-269"
+   ]
+  },
+  {
+   "cveID": "CVE-2020-1472",
+   "vendorProject": "Microsoft",
+   "product": "Netlogon",
+   "vulnerabilityName": "Microsoft Netlogon Privilege Escalation Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft's Netlogon Remote Protocol (MS-NRPC) contains a privilege escalation vulnerability when an attacker establishes a vulnerable Netlogon secure channel connection to a domain controller. An attacker who successfully exploits the vulnerability could run a specially crafted application on a device on the network. The vulnerability is also known under the moniker of Zerologon.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "Reference CISA's ED 20-04 (https://www.cisa.gov/news-events/directives/ed-20-04-mitigate-netlogon-elevation-privilege-vulnerability-august-2020-patch-tuesday) for further guidance and requirements. Note: The due date for addressing this vulnerability aligns with the requirements outlined in ED 20-04. https://nvd.nist.gov/vuln/detail/CVE-2020-1472",
+   "cwes": [
+    "CWE-330"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-26855",
+   "vendorProject": "Microsoft",
+   "product": "Exchange Server",
+   "vulnerabilityName": "Microsoft Exchange Server Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft Exchange Server contains an unspecified vulnerability that allows for remote code execution. This vulnerability is part of the ProxyLogon exploit chain.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "Reference CISA's ED 21-02 (https://www.cisa.gov/news-events/directives/ed-21-02-mitigate-microsoft-exchange-premises-product-vulnerabilities) for further guidance and requirements. Note: The due date for addressing this vulnerability aligns with the requirements outlined in ED 21-02. https://nvd.nist.gov/vuln/detail/CVE-2021-26855",
+   "cwes": [
+    "CWE-918"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-26858",
+   "vendorProject": "Microsoft",
+   "product": "Exchange Server",
+   "vulnerabilityName": "Microsoft Exchange Server Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Microsoft Exchange Server contains an unspecified vulnerability that allows for remote code execution. This vulnerability is part of the ProxyLogon exploit chain.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "Reference CISA's ED 21-02 (https://www.cisa.gov/news-events/directives/ed-21-02-mitigate-microsoft-exchange-premises-product-vulnerabilities) for further guidance and requirements. Note: The due date for addressing this vulnerability aligns with the requirements outlined in ED 21-02. https://nvd.nist.gov/vuln/detail/CVE-2021-26858",
+   "cwes": []
+  },
+  {
+   "cveID": "CVE-2019-11510",
+   "vendorProject": "Ivanti",
+   "product": "Pulse Connect Secure",
+   "vulnerabilityName": "Ivanti Pulse Connect Secure Arbitrary File Read Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "Ivanti Pulse Connect Secure contains an arbitrary file read vulnerability that allows an unauthenticated remote attacker with network access via HTTPS to send a specially crafted URI.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2022-05-03",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "Reference CISA's ED 21-03 (https://www.cisa.gov/news-events/directives/ed-21-03-mitigate-pulse-connect-secure-product-vulnerabilities) for further guidance and requirements. Note: The due date for addressing this vulnerability aligns with the requirements outlined in ED 21-03. https://nvd.nist.gov/vuln/detail/CVE-2019-11510",
+   "cwes": [
+    "CWE-22"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-21972",
+   "vendorProject": "VMware",
+   "product": "vCenter Server",
+   "vulnerabilityName": "VMware vCenter Server Remote Code Execution Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "VMware vCenter Server vSphere Client contains a remote code execution vulnerability in a vCenter Server plugin which allows an attacker with network access to port 443 to execute commands with unrestricted privileges on the underlying operating system.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2021-11-17",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2021-21972",
+   "cwes": [
+    "CWE-23"
+   ]
+  },
+  {
+   "cveID": "CVE-2021-21985",
+   "vendorProject": "VMware",
+   "product": "vCenter Server",
+   "vulnerabilityName": "VMware vCenter Server Improper Input Validation Vulnerability",
+   "dateAdded": "2021-11-03",
+   "shortDescription": "VMware vSphere Client contains an improper input validation vulnerability in the Virtual SAN Health Check plug-in, which is enabled by default in vCenter Server, which allows for remote code execution.",
+   "requiredAction": "Apply updates per vendor instructions.",
+   "dueDate": "2021-11-17",
+   "knownRansomwareCampaignUse": "Known",
+   "notes": "https://nvd.nist.gov/vuln/detail/CVE-2021-21985",
+   "cwes": [
+    "CWE-20",
+    "CWE-470",
+    "CWE-918"
+   ]
+  }
+ ]
+}

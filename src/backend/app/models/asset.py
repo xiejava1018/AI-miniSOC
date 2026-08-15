@@ -37,7 +37,9 @@ class Asset(Base):
     name = Column(String(255))
     mac_address = Column(MACADDR)
     asset_type = Column(String(50), default="other")
-    criticality = Column(String(20), default="normal")
+    # 决策1（2026-08-15）：criticality 统一四档 critical/high/medium/low（存量 'normal' 已回填 'medium'）
+    # 前端展示经字典 asset_criticality 中文化（严重/高/中/低），与 vulnerability_ai.CRITICALITY_SCORES 对齐
+    criticality = Column(String(20), default="medium")
     owner = Column(String(255))
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))
@@ -45,6 +47,12 @@ class Asset(Base):
     # 合规 + 应急联系字段(详情页 v2 引入)
     data_classification = Column(String(20), default="internal")  # public/internal/confidential/secret
     owner_contact = Column(String(50))  # 负责人联系电话
+
+    # T3（2026-08-15）：暴露面等级，供漏洞 AI 评分（vulnerability_ai.EXPOSURE_SCORES）使用。
+    # DB 列已由迁移 b2c4d6e7f8a9 建好（NOT NULL 默认 'internal'），此处仅为 ORM 补声明，
+    # 否则 ai-suggestions / score-breakdown 访问 Asset.exposure_level 即 AttributeError → 500。
+    # 取值：public（公网暴露）/ internal（内网）/ isolated（隔离网络）
+    exposure_level = Column(String(20), default="internal", server_default="internal")
 
     # 关系
     ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")

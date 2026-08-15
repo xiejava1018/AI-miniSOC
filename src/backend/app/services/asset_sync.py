@@ -82,7 +82,7 @@ class AssetSyncService:
             "asset_type": "server",  # Wazuh agent 通常是服务器
             "asset_status": asset_status,
             "wazuh_agent_id": agent_id,
-            "criticality": "normal",
+            "criticality": "medium",
             "data_source": "wazuh",
             "asset_description": f"Wazuh Agent: {name}",
             "is_new": False,  # 标记是否为新资产
