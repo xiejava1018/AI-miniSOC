@@ -49,6 +49,8 @@ export interface Vulnerability {
   has_exploit: boolean
   discovered_at: string
   updated_at: string
+  affected_asset_count?: number
+  risk_score?: number | null
 }
 
 export interface AssetVulnerability {

@@ -407,6 +407,39 @@ async def list_vulnerabilities(
     # 分页
     vulnerabilities = query.offset(skip).limit(limit).all()
 
+    # 批量计算受影响资产数 + AI风险评分（取关联资产中的最高分，与 score-breakdown 口径一致）
+    vuln_ids = [v.id for v in vulnerabilities]
+    asset_rows = []
+    if vuln_ids:
+        asset_rows = db.query(
+            AssetVulnerability.vulnerability_id,
+            Vulnerability.cvss_score,
+            Vulnerability.has_exploit,
+            Asset.criticality,
+            Asset.exposure_level
+        ).join(
+            Vulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id
+        ).join(
+            Asset, AssetVulnerability.asset_id == Asset.id
+        ).filter(
+            AssetVulnerability.vulnerability_id.in_(vuln_ids),
+            AssetVulnerability.status == VulnerabilityStatusEnum.OPEN
+        ).all()
+
+    asset_count_map: dict = {}
+    risk_score_map: dict = {}
+    for row in asset_rows:
+        vid = row.vulnerability_id
+        asset_count_map[vid] = asset_count_map.get(vid, 0) + 1
+        score = VulnerabilityAIService.calculate_risk_score(
+            cvss_score=float(row.cvss_score) if row.cvss_score else 0.0,
+            asset_criticality=row.criticality or 'medium',
+            exposure_level=row.exposure_level or 'internal',
+            has_exploit=row.has_exploit or False
+        )
+        if vid not in risk_score_map or score > risk_score_map[vid]:
+            risk_score_map[vid] = score
+
     items = [
         VulnerabilityResponse(
             id=str(v.id),
@@ -423,7 +456,9 @@ async def list_vulnerabilities(
             published_date=v.published_date,
             has_exploit=v.has_exploit,
             discovered_at=v.discovered_at,
-            updated_at=v.updated_at
+            updated_at=v.updated_at,
+            affected_asset_count=asset_count_map.get(v.id, 0),
+            risk_score=risk_score_map.get(v.id)
         ) for v in vulnerabilities
     ]
 
