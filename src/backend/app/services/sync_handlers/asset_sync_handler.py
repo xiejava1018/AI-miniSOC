@@ -24,9 +24,12 @@ from app.services.sync_handlers.base import BaseSyncHandler
 logger = logging.getLogger(__name__)
 
 # Asset 模型上允许 Collector 写入的字段白名单
+# T4（决策1，2026-08-15）：移除 criticality —— 关键度是业务属性，
+# 只能由安全运营人工维护（资产页/手动提升），采集器无权覆盖；
+# 否则 TP-Link 每 5 分钟推送会把回填后的 medium 覆盖回旧值。
 _UPDATABLE_FIELDS = {
     "name", "asset_type", "asset_status", "mac_address",
-    "network_zone", "criticality", "asset_description",
+    "network_zone", "asset_description",
     "data_source", "os_name", "os_version", "wazuh_agent_id",
 }
 
@@ -115,6 +118,9 @@ class AssetSyncHandler(BaseSyncHandler):
 
         # 过滤掉不属于 Asset 模型的字段（如 source_id，它属于 AssetSource）
         asset_fields = {k: v for k, v in item.items() if k != "source_id"}
+        # T4（决策1）：criticality 不变采集器控制 —— 新建时也忽略 payload 值，
+        # 用模型默认 medium（保持与人工维护口径一致）
+        asset_fields.pop("criticality", None)
 
         asset = Asset(**asset_fields)
         db.add(asset)

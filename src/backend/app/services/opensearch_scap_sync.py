@@ -189,7 +189,9 @@ class OpenSearchSCAPSyncService:
         """OpenSearch 文档 → Vulnerability ORM 对象（不含 has_exploit，由 KEV 服务富化）"""
         v = src.get("vulnerability") or {}
         pkg = src.get("package") or {}
-        cve = (v.get("id") or "").strip()
+        # CVE 编号统一大写（OpenSearch 偶有小写 id；避免 unique 约束区分大小写重复，
+        # 也保证 CISA KEV 命中匹配）
+        cve = (v.get("id") or "").strip().upper()
         severity = self.SEVERITY_MAPPING.get(v.get("severity"))
         if not cve or not severity:
             return None
