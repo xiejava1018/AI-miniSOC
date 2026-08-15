@@ -130,13 +130,62 @@
     <!-- Tab 区域 -->
     <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
-        <!-- 1. 应用清单(Phase 2 接入) -->
+        <!-- 1. 应用清单(M3: OpenSearch states-inventory-packages 直查) -->
         <ElTabPane label="应用清单" name="applications">
-          <ElEmpty description="应用清单数据待 Phase 2 接入 Wazuh 同步服务后填充">
-            <template #image>
-              <ElIcon :size="48" color="#909399"><Box /></ElIcon>
-            </template>
-          </ElEmpty>
+          <template v-if="!hasWazuhAgent">
+            <ElEmpty description="该资产无 Wazuh Agent，应用清单数据不适用">
+              <template #image>
+                <ElIcon :size="48" color="#909399"><Box /></ElIcon>
+              </template>
+            </ElEmpty>
+          </template>
+          <template v-else>
+            <div class="tab-header">
+              <span class="tab-header-title">已安装软件包
+                <ElTag v-if="appsTotal" size="small" effect="plain" class="ml-2">{{ appsTotal }} 个</ElTag>
+              </span>
+              <div class="tab-header-actions">
+                <ElInput
+                  v-model="appsSearch"
+                  placeholder="搜索包名"
+                  clearable
+                  style="width: 200px"
+                  @keyup.enter="handleAppsSearch"
+                  @clear="handleAppsSearch"
+                />
+                <ElButton type="primary" size="small" :icon="Refresh" @click="loadApplications" :loading="appsLoading">刷新</ElButton>
+              </div>
+            </div>
+            <ElTable :data="appsData" v-loading="appsLoading" border stripe style="width: 100%">
+              <ElTableColumn prop="name" label="软件名" min-width="180" fixed show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span class="cve-id-text">{{ row.name }}</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="version" label="版本" min-width="180" show-overflow-tooltip />
+              <ElTableColumn prop="type" label="类型" width="80" align="center">
+                <template #default="{ row }">
+                  <ElTag size="small" effect="plain" :type="row.type === 'deb' ? 'primary' : 'success'">{{ row.type || '-' }}</ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="大小" width="90" align="center">
+                <template #default="{ row }">{{ formatSize(row.size) }}</template>
+              </ElTableColumn>
+              <ElTableColumn prop="path" label="安装路径" min-width="220" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.path || '—' }}</template>
+              </ElTableColumn>
+            </ElTable>
+            <div v-if="appsTotal > appsPageSize" class="apps-pagination">
+              <ElPagination
+                v-model:current-page="appsPage"
+                :page-size="appsPageSize"
+                :total="appsTotal"
+                layout="total, prev, pager, next"
+                @current-change="loadApplications"
+              />
+            </div>
+            <ElEmpty v-if="!appsLoading && appsData.length === 0" :description="appsSearch ? '未找到匹配的软件包' : 'Agent 未开启软件包清点或暂无数据'" />
+          </template>
         </ElTabPane>
 
         <!-- 2. 漏洞(M1/T3: 接通 soc_asset_vulnerabilities 真实数据) -->
@@ -208,28 +257,43 @@
           </template>
         </ElTabPane>
 
-        <!-- 3. 端口管理(现有,增强) -->
+        <!-- 3. 端口管理(M4: 本地 CRUD + Wazuh 实时端口双源合并, 漏洞列接真实数据) -->
         <ElTabPane label="端口" name="ports">
           <div class="tab-header">
+            <span class="tab-header-title">端口信息
+              <ElTag v-if="wazuhPortsData.length" size="small" type="success" effect="plain" class="ml-2">Wazuh 实时 {{ wazuhPortsData.length }} 条</ElTag>
+            </span>
             <ElButton type="primary" size="small" @click="showPortDialog">添加端口</ElButton>
           </div>
-          <ElTable :data="portsData" v-loading="portsLoading" border stripe style="width: 100%">
-            <ElTableColumn prop="port" label="端口" width="80" align="center">
+          <ElTable :data="mergedPortsData" v-loading="portsLoading" border stripe style="width: 100%">
+            <ElTableColumn prop="port" label="端口" width="70" align="center">
               <template #default="{ row }">
                 <span :class="{ 'high-risk-port': isHighRisk(row.port) }">{{ row.port }}</span>
               </template>
             </ElTableColumn>
-            <ElTableColumn prop="protocol" label="协议" width="80" align="center" />
-            <ElTableColumn prop="state" label="状态" width="90" align="center">
+            <ElTableColumn prop="protocol" label="协议" width="75" align="center" />
+            <ElTableColumn label="来源" width="85" align="center">
               <template #default="{ row }">
-                <ElTag :type="row.state === 'open' ? 'success' : row.state === 'closed' ? 'danger' : 'warning'" size="small" effect="light">
+                <ElTag :type="row.source === 'wazuh' ? 'success' : 'info'" size="small" effect="plain">
+                  {{ row.source === 'wazuh' ? 'Wazuh' : '本地' }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="state" label="状态" width="85" align="center">
+              <template #default="{ row }">
+                <ElTag :type="row.state === 'open' || row.state === 'listening' ? 'success' : row.state === 'closed' ? 'danger' : 'warning'" size="small" effect="light">
                   {{ row.state || '--' }}
                 </ElTag>
               </template>
             </ElTableColumn>
-            <ElTableColumn prop="service" label="服务" width="120" align="center" />
-            <ElTableColumn prop="version" label="版本" min-width="140" align="center" />
-            <ElTableColumn label="风险等级" width="180" align="center">
+            <ElTableColumn label="服务/进程" min-width="140" align="left" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span v-if="row.process">{{ row.process }}<span v-if="row.pid" class="pid-text"> ({{ row.pid }})</span></span>
+                <span v-else>{{ row.service || '--' }}</span>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn prop="version" label="版本" min-width="130" align="center" show-overflow-tooltip />
+            <ElTableColumn label="风险等级" width="170" align="center">
               <template #default="{ row }">
                 <ElTag v-if="isHighRisk(row.port)" :type="riskTagType(row.port)" size="small" effect="dark">
                   {{ riskLabel(row.port) }}
@@ -237,33 +301,38 @@
                 <span v-else class="text-placeholder">--</span>
               </template>
             </ElTableColumn>
-            <ElTableColumn label="漏洞" min-width="180" align="center">
+            <ElTableColumn label="关联漏洞" min-width="180" align="left">
               <template #default="{ row }">
-                <ElTag
-                  v-for="(vuln, idx) in parseVulns(row.vulnerability)"
-                  :key="idx"
-                  type="danger"
-                  size="small"
-                  effect="plain"
-                  class="mr-1 mb-1"
-                >
-                  {{ vuln }}
-                </ElTag>
-                <span v-if="!row.vulnerability" class="text-placeholder">--</span>
+                <template v-if="matchedVulns(row).length">
+                  <ElTag
+                    v-for="v in matchedVulns(row)"
+                    :key="v.cve_id"
+                    type="danger"
+                    size="small"
+                    effect="plain"
+                    class="mr-1 mb-1 cursor-pointer"
+                    @click="activeTab = 'vulnerabilities'"
+                  >
+                    {{ v.cve_id }}
+                  </ElTag>
+                </template>
+                <span v-else class="text-placeholder">--</span>
               </template>
             </ElTableColumn>
-            <ElTableColumn prop="scan_time" label="扫描时间" width="170" align="center">
+            <ElTableColumn label="扫描时间" width="160" align="center">
               <template #default="{ row }">
-                <span :title="formatTime(row.scan_time)">{{ relativeTime.format(row.scan_time) }}</span>
+                <span v-if="row.scan_time" :title="formatTime(row.scan_time)">{{ relativeTime.format(row.scan_time) }}</span>
+                <span v-else class="text-placeholder">实时</span>
               </template>
             </ElTableColumn>
-            <ElTableColumn label="操作" width="100" align="center" fixed="right">
+            <ElTableColumn label="操作" width="80" align="center" fixed="right">
               <template #default="{ row }">
-                <ElButton type="danger" link size="small" @click="handleDeletePort(row)">删除</ElButton>
+                <ElButton v-if="row.source === 'local'" type="danger" link size="small" @click="handleDeletePort(row)">删除</ElButton>
+                <span v-else class="text-placeholder">—</span>
               </template>
             </ElTableColumn>
           </ElTable>
-          <ElEmpty v-if="!portsLoading && portsData.length === 0" description="暂无端口数据" />
+          <ElEmpty v-if="!portsLoading && mergedPortsData.length === 0" description="暂无端口数据" />
         </ElTabPane>
 
         <!-- 4. 基线(M2/T5: SCA 不合规配置项, vuln_type=sca) -->
@@ -305,16 +374,28 @@
           </template>
         </ElTabPane>
 
-        <!-- 5. 告警 -->
+        <!-- 5. 告警(M5: 时间范围/等级筛选/分页增强) -->
         <ElTabPane label="告警" name="alerts">
           <div class="tab-header">
+            <div class="tab-header-actions">
+              <ElSelect v-model="alertsHours" style="width: 110px" @change="handleAlertsQuery">
+                <ElOption label="最近 24h" :value="24" />
+                <ElOption label="最近 7d" :value="168" />
+                <ElOption label="最近 30d" :value="720" />
+              </ElSelect>
+              <ElSelect v-model="alertsMinLevel" placeholder="全部等级" clearable style="width: 120px" @change="handleAlertsQuery">
+                <ElOption label="L12+ 严重" :value="12" />
+                <ElOption label="L8+ 高危" :value="8" />
+                <ElOption label="L4+ 中危" :value="4" />
+              </ElSelect>
+            </div>
             <ElButton type="primary" size="small" :icon="Refresh" @click="loadAlerts" :loading="alertsLoading">刷新</ElButton>
           </div>
           <ElTable :data="alertsData" v-loading="alertsLoading" border stripe style="width: 100%">
-            <ElTableColumn label="时间" width="170" align="center">
+            <ElTableColumn label="时间" width="165" align="center">
               <template #default="{ row }">{{ formatTime(row.timestamp) }}</template>
             </ElTableColumn>
-            <ElTableColumn label="等级" width="100" align="center">
+            <ElTableColumn label="等级" width="85" align="center">
               <template #default="{ row }">
                 <ElTag :type="getAlertLevelType(row.rule?.level)" size="small" effect="dark">
                   L{{ row.rule?.level ?? '-' }}
@@ -322,11 +403,20 @@
               </template>
             </ElTableColumn>
             <ElTableColumn prop="rule.description" label="规则描述" min-width="280" align="left" show-overflow-tooltip />
-            <ElTableColumn prop="agent.id" label="Agent" width="100" align="center" />
+            <ElTableColumn prop="agent.id" label="Agent" width="85" align="center" />
             <ElTableColumn prop="location" label="位置" width="120" align="center" show-overflow-tooltip />
-            <ElTableColumn prop="rule.id" label="规则ID" width="100" align="center" />
+            <ElTableColumn prop="rule.id" label="规则ID" width="95" align="center" />
           </ElTable>
-          <ElEmpty v-if="!alertsLoading && alertsData.length === 0" description="暂无告警(默认查询最近 24h)" />
+          <div v-if="alertsTotal > alertsPageSize" class="apps-pagination">
+            <ElPagination
+              v-model:current-page="alertsPage"
+              :page-size="alertsPageSize"
+              :total="alertsTotal"
+              layout="total, prev, pager, next"
+              @current-change="loadAlerts"
+            />
+          </div>
+          <ElEmpty v-if="!alertsLoading && alertsData.length === 0" :description="`暂无告警（默认查询最近 ${alertsHours}h）`" />
         </ElTabPane>
 
         <!-- 6. 数据来源 -->
@@ -478,6 +568,7 @@
     getAssetSources
   } from '@/api/asset'
   import { getAlertsByIp, getAlertsByAgentId } from '@/api/alert'
+  import { getAssetApplications, getAssetWazuhPorts } from '@/api/asset'
   import { useDictStore } from '@/store/modules/dict'
   import { useRelativeTime } from '@/composables/useRelativeTime'
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
@@ -617,13 +708,7 @@
     return 'warning'
   }
 
-  const parseVulns = (v?: string | null): string[] => {
-    if (!v) return []
-    return v
-      .split(/[,;]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  }
+  // （旧 parseVulns 自由文本解析已由 M4 matchedVulns 真实数据匹配替代）
 
   const loadPorts = async () => {
     if (!assetId.value) return
@@ -881,9 +966,109 @@
     }
   }
 
-  // ========== 告警 Tab ==========
+  // ========== 应用清单 Tab（M3：OpenSearch 直查） ==========
+  const appsLoading = ref(false)
+  const appsData = ref<any[]>([])
+  const appsTotal = ref(0)
+  const appsPage = ref(1)
+  const appsPageSize = 50
+  const appsSearch = ref('')
+
+  const formatSize = (bytes: number) => {
+    if (!bytes || bytes <= 0) return '—'
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+  }
+
+  const handleAppsSearch = () => {
+    appsPage.value = 1
+    loadApplications()
+  }
+
+  const loadApplications = async () => {
+    if (!assetId.value || !hasWazuhAgent.value) return
+    appsLoading.value = true
+    try {
+      const r: any = await getAssetApplications(assetId.value, {
+        search: appsSearch.value || undefined,
+        skip: (appsPage.value - 1) * appsPageSize,
+        limit: appsPageSize
+      })
+      const d = r?.data
+      appsData.value = d?.items || []
+      appsTotal.value = d?.total || 0
+    } catch {
+      appsData.value = []
+      appsTotal.value = 0
+      ElMessage.error('应用清单数据源暂不可用')
+    } finally {
+      appsLoading.value = false
+    }
+  }
+
+  // ========== Wazuh 实时端口（M4：双源合并） ==========
+  const wazuhPortsData = ref<any[]>([])
+  const wazuhPortsLoading = ref(false)
+
+  const loadWazuhPorts = async () => {
+    if (!assetId.value || !hasWazuhAgent.value) return
+    wazuhPortsLoading.value = true
+    try {
+      const r: any = await getAssetWazuhPorts(assetId.value)
+      const d = r?.data
+      wazuhPortsData.value = d?.items || []
+    } catch {
+      wazuhPortsData.value = []
+    } finally {
+      wazuhPortsLoading.value = false
+    }
+  }
+
+  // 双源合并：本地(手动/nmap, 可删) + Wazuh(实时, 带进程)。同端口同协议时本地优先展示、合并进程信息
+  const mergedPortsData = computed(() => {
+    const local = portsData.value.map((p: any) => ({ ...p, source: 'local' }))
+    const localKeys = new Set(local.map((p: any) => `${p.port}/${p.protocol}`))
+    const wazuh = wazuhPortsData.value
+      .filter((p: any) => !localKeys.has(`${p.port}/${p.protocol}`))
+      .map((p: any) => ({
+        id: `wazuh-${p.port}-${p.protocol}`,
+        port: p.port,
+        protocol: p.protocol,
+        state: p.state,
+        process: p.process,
+        pid: p.pid,
+        service: p.process,
+        version: '',
+        scan_time: null,
+        source: 'wazuh'
+      }))
+    return [...local, ...wazuh]
+  })
+
+  // 端口↔漏洞 best-effort 匹配（M4：service/process 与漏洞标题/包名匹配，点击跳漏洞 Tab）
+  const matchedVulns = (portRow: any) => {
+    const svc = (portRow.process || portRow.service || '').toLowerCase().replace(/\d+$/, '')
+    if (!svc || svc.length < 3) return []
+    return vulnsData.value.filter((v: any) => {
+      const t = `${v.title || ''} ${v.cve_id || ''}`.toLowerCase()
+      return t.includes(svc)
+    }).slice(0, 3)
+  }
+
+  // ========== 告警 Tab（M5：时间范围/等级筛选/分页增强） ==========
   const alertsLoading = ref(false)
   const alertsData = ref<any[]>([])
+  const alertsHours = ref(24)
+  const alertsMinLevel = ref<number | undefined>(undefined)
+  const alertsPage = ref(1)
+  const alertsPageSize = 20
+  const alertsTotal = ref(0)
+
+  const handleAlertsQuery = () => {
+    alertsPage.value = 1
+    loadAlerts()
+  }
 
   const loadAlerts = async () => {
     if (!assetId.value || !assetDetail.value.asset_ip) return
@@ -892,9 +1077,10 @@
       // 优先使用 wazuh_agent_id 查询，更准确
       const agentId = assetDetail.value.wazuh_agent_id
       const params = {
-        hours: 24,
-        skip: 0,
-        limit: 20
+        hours: alertsHours.value,
+        level: alertsMinLevel.value || undefined,
+        skip: (alertsPage.value - 1) * alertsPageSize,
+        limit: alertsPageSize
       }
 
       let res
@@ -909,8 +1095,10 @@
       const r: any = res
       const d = r?.data
       alertsData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
+      alertsTotal.value = d?.total ?? alertsData.value.length
     } catch {
       alertsData.value = []
+      alertsTotal.value = 0
     } finally {
       alertsLoading.value = false
     }
@@ -978,6 +1166,8 @@
         loadAlerts()
         loadVulns()
         loadBaseline()
+        loadApplications()
+        loadWazuhPorts()
       }
     }
   )
@@ -1086,6 +1276,27 @@
       &.risk-high { color: var(--el-color-warning, #e6a23c); }
       &.risk-medium { color: var(--el-color-primary, #409eff); }
       &.risk-low { color: var(--el-color-success, #67c23a); }
+    }
+
+    .tab-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .apps-pagination {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .pid-text {
+      color: var(--el-text-color-secondary, #909399);
+      font-size: 12px;
+    }
+
+    .cursor-pointer {
+      cursor: pointer;
     }
 
     .text-placeholder {

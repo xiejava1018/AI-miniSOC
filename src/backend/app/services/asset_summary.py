@@ -21,6 +21,17 @@ from app.services.alert_query import AlertQueryService
 
 logger = logging.getLogger(__name__)
 
+# M3/T8：摘要卡 applications 计数服务实例（模块级单例，共享 5 分钟 _count 缓存）
+_inventory_service = None
+
+
+def _get_inventory_service():
+    global _inventory_service
+    if _inventory_service is None:
+        from app.services.wazuh_inventory_service import WazuhInventoryService
+        _inventory_service = WazuhInventoryService()
+    return _inventory_service
+
 
 # 资产详情页 v2 引入:高危端口常量(与前端 src/frontend/src/constants/highRiskPorts.ts 保持一致)
 # SOC 看端口表最关心"哪些是高危的、能不能关"
@@ -103,8 +114,7 @@ class AssetSummaryService:
         # - vuln_*: 仅 SCAP 类(CVE漏洞)，status=open
         # - sca_failed: SCA 类不合规项（同步语义只存 failed 项，pass_rate 本期不算见方案 §5）
         # - last_vuln_scan / last_sca_scan: 取关联表 max(detected_at)
-        # - applications: 保持 0（M3 应用清单接入后回填）
-        applications = 0
+        # - applications: M3 接入——OpenSearch states-inventory _count + 5分钟缓存，失败降级 0
         sca_pass_rate: Optional[float] = None
         sca_total = 0
 
@@ -138,6 +148,14 @@ class AssetSummaryService:
         ).scalar()
         last_vuln_scan = last_vuln_scan_dt.isoformat() if last_vuln_scan_dt else None
         last_sca_scan = last_sca_scan_dt.isoformat() if last_sca_scan_dt else None
+
+        # M3/T8：应用计数（仅 Wazuh agent 资产；OpenSearch 失败降级 0，不阻塞摘要）
+        applications = 0
+        if asset.wazuh_agent_id:
+            try:
+                applications = _get_inventory_service().count_applications(asset.wazuh_agent_id)
+            except Exception:
+                logger.warning("applications 计数失败（OpenSearch 不可达），降级 0: %s", asset.asset_ip)
 
         return {
             "asset_id": str(asset.id),

@@ -12,6 +12,7 @@ from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetList
 from app.services.asset_sync import AssetSyncService
 from app.services.asset_summary import AssetSummaryService
 from app.services.asset_overview import AssetOverviewService
+from app.services.wazuh_inventory_service import WazuhInventoryService
 import uuid
 
 router = APIRouter()
@@ -141,6 +142,77 @@ async def get_asset_sources(asset_id: str, db: Session = Depends(get_db)):
         }
         for s in sources
     ]
+
+
+@router.get("/{asset_id}/applications")
+@router.get("/{asset_id}/applications/")
+async def get_asset_applications(
+    asset_id: str,
+    search: Optional[str] = Query(None, description="包名模糊搜索"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db)
+):
+    """
+    获取资产已安装应用清单（M3：OpenSearch wazuh-states-inventory-packages 直查）
+
+    - 资产无 wazuh_agent_id → not_applicable（前端显专用空态）
+    - agent 未开启包清点/索引无数据 → 空列表
+    - OpenSearch 不可用 → 503 业务码（与告警 Tab 同降级语义）
+    """
+    try:
+        asset_uuid = uuid.UUID(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的资产ID格式")
+
+    asset = db.query(Asset).filter(Asset.id == asset_uuid).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="资产不存在")
+
+    if not asset.wazuh_agent_id:
+        return {"not_applicable": True, "items": [], "total": 0,
+                "reason": "该资产无 Wazuh Agent，应用清单数据不适用"}
+
+    service = WazuhInventoryService()
+    try:
+        return service.get_applications(asset.wazuh_agent_id, search=search, skip=skip, limit=limit)
+    except Exception:
+        raise HTTPException(status_code=503, detail="应用清单数据源(OpenSearch)暂不可用")
+    finally:
+        service.close()
+
+
+@router.get("/{asset_id}/wazuh-ports")
+@router.get("/{asset_id}/wazuh-ports/")
+async def get_asset_wazuh_ports(
+    asset_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    获取资产 Wazuh 实时监听端口（M4：OpenSearch states-inventory-ports，带进程信息）
+
+    与本地 soc_asset_ports（手动/nmap）双源合并展示的 Wazuh 侧数据源。
+    """
+    try:
+        asset_uuid = uuid.UUID(asset_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="无效的资产ID格式")
+
+    asset = db.query(Asset).filter(Asset.id == asset_uuid).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="资产不存在")
+
+    if not asset.wazuh_agent_id:
+        return {"not_applicable": True, "items": [],
+                "reason": "该资产无 Wazuh Agent，实时端口数据不适用"}
+
+    service = WazuhInventoryService()
+    try:
+        return {"items": service.get_ports(asset.wazuh_agent_id)}
+    except Exception:
+        raise HTTPException(status_code=503, detail="端口数据源(OpenSearch)暂不可用")
+    finally:
+        service.close()
 
 
 @router.get("/overview")

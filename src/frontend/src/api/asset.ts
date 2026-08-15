@@ -115,6 +115,44 @@ export const getAssetPorts = (assetId: string, params?: Record<string, any>): Pr
   })
 }
 
+// M3：应用清单（OpenSearch states-inventory-packages 直查）
+export interface AssetApplication {
+  name: string
+  version: string | null
+  type: string | null
+  size: number
+  path: string | null
+}
+
+export const getAssetApplications = (
+  assetId: string,
+  params?: { search?: string; skip?: number; limit?: number }
+): Promise<{
+  items: AssetApplication[]
+  total: number
+  not_applicable?: boolean
+  reason?: string
+}> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${assetId}/applications`,
+    params
+  })
+}
+
+// M4：Wazuh 实时监听端口（带进程信息，与本地端口双源合并）
+export interface WazuhPort {
+  port: number
+  protocol: string | null
+  state: string | null
+  local_ip: string | null
+  process: string | null
+  pid: number | null
+}
+
+export const getAssetWazuhPorts = (assetId: string): Promise<{ items: WazuhPort[]; not_applicable?: boolean; reason?: string }> => {
+  return httpClient.get({ url: `${API_PREFIX}/${assetId}/wazuh-ports` })
+}
+
 export const addAssetPort = (assetId: string, data: any): Promise<any> => {
   return httpClient.post({ url: `${API_PREFIX}/${assetId}/ports`, data, keepFullResponse: true })
 }
