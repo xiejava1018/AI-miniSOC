@@ -1,4 +1,8 @@
 """
+DEPRECATED（T8 / 决策3，2026-08-15）：本模块已废弃。
+- 路由/模型不被注册使用（sca.py 不 include；wazuh_sca_sync_v2 不运行）；
+- SCA 数据统一由 Vulnerability(type=sca) 单表示承载（wazuh_sca_sync + /api/v1/vulnerabilities/*）；
+- 保留仅为回滚便利（设计 §6），勿新增引用；「通过项/合规率」属 P5 独立特性再议。
 SCA基线核查同步 API
 """
 

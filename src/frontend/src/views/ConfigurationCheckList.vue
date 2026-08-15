@@ -1,3 +1,8 @@
+<!--
+  DEPRECATED（T8 / 决策3，2026-08-15）：本页面未挂路由/菜单，勿启用。
+  SCA 数据统一由 /vulnerability/list/index.vue（type=sca 模式）承载；
+  保留仅为回滚便利（设计 §6）。
+-->
 <template>
   <div class="sca-list">
     <!-- 页面头部 -->

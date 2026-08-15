@@ -636,8 +636,18 @@ async def create_scan_task(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """创建扫描任务"""
-    # TODO: 实现扫描任务创建和执行逻辑
+    """创建扫描任务（T9 / 决策4："Wazuh 持续扫描"的手动重评估封装）
+
+    定位：Wazuh（SCAP+SCA）已是持续扫描源，本接口 = 按需立即触发一次
+    重新拉取 + 落库，不重复造扫描引擎；OpenVAS 深度扫描属 P2/P5 增强，
+    不在本期（task_type 收敛为 wazuh_scap / wazuh_sca / manual）。
+    """
+    if task.task_type not in ("wazuh_scap", "wazuh_sca", "manual"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的 task_type: {task.task_type}（合法: wazuh_scap/wazuh_sca/manual）",
+        )
+
     scan_task = ScanTask(
         task_type=task.task_type,
         name=task.name,
@@ -650,8 +660,8 @@ async def create_scan_task(
     db.commit()
     db.refresh(scan_task)
 
-    # TODO: 启动后台任务执行扫描
-    # background_tasks.add_task(execute_scan_task, scan_task.id, db)
+    # T9：真实后台执行（原 TODO）——重评估 + 进度/结果回写
+    background_tasks.add_task(_execute_scan_task, str(scan_task.id), task.task_type)
 
     return ScanTaskResponse(
         id=str(scan_task.id),
@@ -668,6 +678,71 @@ async def create_scan_task(
         started_at=scan_task.started_at,
         completed_at=scan_task.completed_at
     )
+
+
+def _execute_scan_task(task_id: str, task_type: str):
+    """后台执行扫描任务（BackgroundTasks 线程）：拉取 → 回写状态/进度/结果
+
+    注意：BackgroundTasks 的函数运行在独立线程，需自建 DB 会话；
+    每阶段（SCAP / SCA / KEV）完成后回写一次进度，便于前端轮询观感。
+    """
+    import logging as _logging
+    from datetime import datetime as _dt
+    from app.core.database import SessionLocal
+
+    _logger = _logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        t = db.query(ScanTask).filter(ScanTask.id == uuid.UUID(task_id)).first()
+        if not t:
+            return
+        t.status = TaskStatusEnum.RUNNING
+        t.started_at = _dt.utcnow()
+        t.progress = 5
+        db.commit()
+
+        result_summary = {}
+
+        # 阶段 1：SCAP（OpenSearch 源重评估）
+        if task_type in ("wazuh_scap", "manual"):
+            from app.services.opensearch_scap_sync import OpenSearchSCAPSyncService
+            stats = OpenSearchSCAPSyncService.sync_all_vulnerabilities(db, limit=1000)
+            result_summary["scap"] = stats
+            t.progress = 50
+            db.commit()
+
+        # 阶段 2：SCA（Wazuh API /sca 重评估）
+        if task_type in ("wazuh_sca", "manual"):
+            from app.services.wazuh_sca_sync import WazuhSCASyncService
+            stats = WazuhSCASyncService.sync_all_sca_checks(db, limit=1000)
+            result_summary["sca"] = stats
+            t.progress = 80
+            db.commit()
+
+        # 阶段 3：KEV 富化
+        try:
+            from app.services.cisa_kev_service import CisaKevService
+            result_summary["kev_enriched"] = CisaKevService.enrich_has_exploit(db)
+        except Exception as e:
+            result_summary["kev_enriched"] = f"error: {e}"
+
+        t.result_summary = result_summary
+        t.status = TaskStatusEnum.COMPLETED
+        t.progress = 100
+        t.completed_at = _dt.utcnow()
+        db.commit()
+        _logger.info("scan task %s completed: %s", task_id, result_summary)
+    except Exception as e:
+        db.rollback()
+        t = db.query(ScanTask).filter(ScanTask.id == uuid.UUID(task_id)).first()
+        if t:
+            t.status = TaskStatusEnum.FAILED
+            t.error_message = str(e)[:2000]
+            t.completed_at = _dt.utcnow()
+            db.commit()
+        _logger.error("scan task %s failed: %s", task_id, e)
+    finally:
+        db.close()
 
 
 @router.get("/scan-tasks", response_model=ScanTaskListResponse)

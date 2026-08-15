@@ -1,8 +1,16 @@
 /**
- * SCA基线核查 API
+ * SCA基线核查 API（DEPRECATED，T8 / 决策3，2026-08-15）
+ *
+ * 后端 sca.py 路由不注册，wazuh_sca_sync_v2 不再运行：SCA 数据统一由
+ * Vulnerability(type=sca) 单表示承载（wazuh_sca_sync + /vulnerabilities/* 接口）。
+ * 本文件保留仅为回滚便利（§6），勿新增引用；脆弱性页面已全部改用
+ * @/api/vulnerabilities（含 getSCAStats / getRecentDiscoveries('sca')）。
+ * 原裸路径已补 /api/v1 前缀（T13），万一临时启用不再 404。
  */
 
 import request from '@/utils/http'
+
+const API_PREFIX = '/api/v1/sca'
 
 export interface ScaStats {
   total_checks: number
@@ -53,7 +61,7 @@ export interface AssetScaResultsResponse {
  * 获取SCA统计数据
  */
 export function getSCAStatistics(): Promise<ScaStats> {
-  return request.get<ScaStats>({ url: '/sca/stats/overview' })
+  return request.get<ScaStats>({ url: `${API_PREFIX}/stats/overview` })
 }
 
 /**
@@ -74,7 +82,7 @@ export function syncAllSCAChecks(): Promise<{
     new_results: number
     updated_results: number
     errors: number
-  }>({ url: '/sca/sync/all' })
+  }>({ url: `${API_PREFIX}/sync/all` })
 }
 
 /**
@@ -89,7 +97,7 @@ export function syncAgentSCAChecks(agentId: string): Promise<{
     new_checks: number
     new_results: number
     updated_results: number
-  }>({ url: `/sca/sync/agent/${agentId}` })
+  }>({ url: `${API_PREFIX}/sync/agent/${agentId}` })
 }
 
 /**
@@ -100,7 +108,7 @@ export function getSCAChecks(params?: {
   limit?: number
   policy_id?: string
 }): Promise<ScaChecksResponse> {
-  return request.get<ScaChecksResponse>({ url: '/sca/checks', params })
+  return request.get<ScaChecksResponse>({ url: `${API_PREFIX}/checks`, params })
 }
 
 /**
@@ -112,5 +120,5 @@ export function getAssetSCAResults(params?: {
   asset_id?: string
   result?: 'passed' | 'failed' | 'not applicable'
 }): Promise<AssetScaResultsResponse> {
-  return request.get<AssetScaResultsResponse>({ url: '/sca/results', params })
+  return request.get<AssetScaResultsResponse>({ url: `${API_PREFIX}/results`, params })
 }

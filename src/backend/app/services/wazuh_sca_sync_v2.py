@@ -1,4 +1,8 @@
 """
+DEPRECATED（T8 / 决策3，2026-08-15）：本服务不再运行。
+SCA 数据统一由 Vulnerability(type=sca) 单表示承载（wazuh_sca_sync.WazuhSCASyncService）；
+保留仅为回滚便利（设计 §6），勿新增调用。
+
 Wazuh SCA (Security Configuration Assessment) 数据同步服务 v2
 使用新的 SCA 专用表结构
 """
