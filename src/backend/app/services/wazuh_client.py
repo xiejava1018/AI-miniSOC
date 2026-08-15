@@ -1,5 +1,13 @@
 """
 Wazuh API 服务
+
+T0（2026-08-15 脆弱性管理点亮计划）：
+- 新增 `use_mock_data` 开关（构造参数，默认 False），供 /sync/wazuh?use_mock=true 冒烟使用；
+- mock 模式下 get_agents / get_agent_info / get_vulnerabilities 返回 `mock_scap_data.MockSCAPDataGenerator`
+  生成的模拟数据，不发真实请求；
+- `get_vulnerabilities`：真实模式抛 NotImplementedError —— POC-1 已证实本环境 Wazuh API
+  无 /vulnerability 路由（全 404），CVE 真实数据源为 OpenSearch `wazuh-states-vulnerabilities-*`，
+  由 `services/opensearch_scap_sync.py`（T5）接管。
 """
 
 import httpx
@@ -14,11 +22,14 @@ class WazuhClient:
         self,
         base_url: str = None,
         username: str = None,
-        password: str = None
+        password: str = None,
+        use_mock_data: bool = False
     ):
         self.base_url = base_url or settings.WAZUH_API_URL
         self.username = username or settings.WAZUH_API_USERNAME
         self.password = password or settings.WAZUH_API_PASSWORD
+        # T0: mock 开关（POST /vulnerabilities/sync/wazuh?use_mock=true 时置 True）
+        self.use_mock_data = use_mock_data
         self._token: Optional[str] = None
         self._client = httpx.Client(verify=False)  # Wazuh 使用自签名证书
 
@@ -77,14 +88,47 @@ class WazuhClient:
         return response.json()
 
     def get_agents(self) -> List[Dict[str, Any]]:
-        """获取所有 agents"""
+        """获取所有 agents（mock 模式返回模拟 agent 列表）"""
+        if self.use_mock_data:
+            from app.services.mock_scap_data import MockSCAPDataGenerator
+            return MockSCAPDataGenerator.get_all_agents()
         data = self._request("GET", "/agents")
         return data.get("data", {}).get("affected_items", [])
 
     def get_agent_info(self, agent_id: str) -> Dict[str, Any]:
-        """获取单个 agent 信息"""
+        """获取单个 agent 信息（mock 模式返回模拟信息）"""
+        if self.use_mock_data:
+            from app.services.mock_scap_data import MockSCAPDataGenerator
+            for agent in MockSCAPDataGenerator.get_all_agents():
+                if agent.get("id") == agent_id:
+                    return agent
+            return {}
         data = self._request("GET", f"/agents/{agent_id}")
         return data.get("data", {})
+
+    def get_vulnerabilities(
+        self,
+        agent_id: str,
+        limit: int = 500
+    ) -> List[Dict[str, Any]]:
+        """
+        获取指定 agent 的 SCAP（CVE）漏洞数据
+
+        - mock 模式：返回 MockSCAPDataGenerator 生成的模拟漏洞（结构兼容
+          wazuh_scap_sync._create_vulnerability_from_wazuh）；
+        - 真实模式：POC-1（2026-08-15）证实本环境 Wazuh API 无 /vulnerability 路由
+          （6 种变体全部 404），CVE 数据实际在 OpenSearch wazuh-states-vulnerabilities-*。
+          真实同步由 services/opensearch_scap_sync.py 的 OpenSearchSCAPSyncService 接管，
+          本方法不再尝试调用 Wazuh API。
+        """
+        if self.use_mock_data:
+            from app.services.mock_scap_data import MockSCAPDataGenerator
+            vulns = MockSCAPDataGenerator.generate_agent_vulnerabilities(agent_id)
+            return vulns[:limit] if limit else vulns
+        raise NotImplementedError(
+            "本环境 Wazuh API 无 /vulnerability 端点（POC-1 证实 404）；"
+            "真实 CVE 同步请使用 OpenSearchSCAPSyncService（services/opensearch_scap_sync.py）"
+        )
 
     def get_alerts(
         self,

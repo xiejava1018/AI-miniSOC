@@ -2,11 +2,12 @@
 API 路由汇总
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
-    ws, data_sync, internal, browsing, alert_digests)
+    ws, data_sync, internal, browsing, alert_digests, vulnerabilities)
+from app.api.deps import get_current_user
 
 api_router = APIRouter()
 
@@ -46,3 +47,10 @@ api_router.include_router(data_sync.router, prefix="/data", tags=["数据同步"
 api_router.include_router(internal.tools.router)
 # 上网行为异常检测
 api_router.include_router(browsing.router, prefix="/browsing", tags=["行为检测"])
+# 脆弱性管理（T1，2026-08-15 点亮：原端点零鉴权，且含写操作，注册时统一加鉴权依赖）
+api_router.include_router(
+    vulnerabilities.router,
+    prefix="/vulnerabilities",
+    tags=["脆弱性管理"],
+    dependencies=[Depends(get_current_user)],
+)

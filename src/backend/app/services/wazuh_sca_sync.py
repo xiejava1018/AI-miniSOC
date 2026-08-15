@@ -249,7 +249,10 @@ class WazuhSCASyncService:
                             vulnerability_id=vulnerability.id,
                             status=VulnerabilityStatusEnum.OPEN,
                             detected_at=policy_data.get("start_scan"),
-                            scanner="wazuh-sca"
+                            # T7（评审修订）：scanner 必须用枚举值 wazuh_sca，
+                        # 字面量 'wazuh-sca' 不在 ScannerEnum 内，会导致
+                        # GET /asset-vulnerabilities 的 response_model 校验 500
+                        scanner=ScannerEnum.WAZUH_SCA
                         )
 
                         db.add(association)
