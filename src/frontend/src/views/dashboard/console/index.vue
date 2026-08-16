@@ -242,10 +242,11 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount, onActivated, nextTick } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, onActivated, nextTick, watch } from 'vue'
   import { useRouter } from 'vue-router'
   import { echarts, type EChartsOption } from '@/plugins/echarts'
   import { RoutesAlias } from '@/router/routesAlias'
+  import { useSettingStore } from '@/store/modules/setting'
   import {
     getDashboardSummary,
     getDashboardTrend,
@@ -269,6 +270,10 @@
     low: '#1890FF',
     success: '#52C41A'
   } as const
+
+  // 深色模式（echarts 轴/提示框配色需跟随，切换时重绘）
+  const settingStore = useSettingStore()
+  const isDark = computed(() => settingStore.isDark)
 
   // ── 数据状态 ────────────────────────────────────────
   const summary = ref<DashboardSummary | null>(null)
@@ -582,12 +587,16 @@
     if (trendChart) trendChart.dispose()
     trendChart = echarts.init(trendChartRef.value)
     const days = trendDays.value
+    const axisColor = isDark.value ? '#8f8fa3' : '#8C8C8C' // 深色用 art-gray-600
     // 峰值标注：markPoint max（趋势接口仅含 clusters 总量，无分级别数据，
     // 故先画总量柱状 + 峰值标注，图注说明 distinct 指纹口径）
     trendChart.setOption({
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
+        backgroundColor: isDark.value ? '#161618' : '#fff',
+        borderColor: isDark.value ? '#363843' : '#e8e8e8',
+        textStyle: { color: isDark.value ? '#e3e3e8' : '#1f1f1f', fontSize: 12 },
         formatter: (params: any) => {
           const p = Array.isArray(params) ? params[0] : params
           return `${p?.name}<br/>告警簇：<b>${p?.value}</b>（distinct 指纹）`
@@ -597,10 +606,15 @@
       xAxis: {
         type: 'category',
         data: days.map((d) => shortDate(d.date)),
-        axisLabel: { fontSize: 11, color: '#8C8C8C' },
+        axisLabel: { fontSize: 11, color: axisColor },
         axisTick: { show: false }
       },
-      yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 11, color: '#8C8C8C' } },
+      yAxis: {
+        type: 'value',
+        minInterval: 1,
+        axisLabel: { fontSize: 11, color: axisColor },
+        splitLine: { lineStyle: { color: isDark.value ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' } }
+      },
       series: [
         {
           name: '告警簇',
@@ -665,6 +679,11 @@
   // ── 生命周期（echarts init/resize/dispose，同 vulnerability/overview 范式）──
   const handleResize = () => trendChart?.resize()
 
+  // 深浅色切换时重绘图表（轴/提示框配色跟随主题）
+  watch(isDark, () => {
+    if (trendDays.value.length) renderTrendChart()
+  })
+
   onMounted(() => {
     loadSummary()
     loadTrend()
@@ -687,27 +706,21 @@
 </script>
 
 <style lang="scss" scoped>
-  /* 视觉令牌照 UI 权威稿（2026-08-16-概览仪表板-UI实现.html）CSS 变量 */
+  /* 主题化视觉令牌：语义色固定，结构色全部走 Element Plus / 项目主题变量，
+     深浅色模式自动切换（对齐资产概览/脆弱性概览的做法，不硬编码背景） */
   .console-page {
-    --soc-primary: #5d87ff;
-    --soc-critical: #f5222d;
-    --soc-high: #fa8c16;
-    --soc-medium: #faad14;
-    --soc-low: #1890ff;
-    --soc-success: #52c41a;
-    --soc-text: #1f1f1f;
-    --soc-text-2: #8c8c8c;
-    --soc-border: #e8e8e8;
-    --soc-posture-bg: #0e1b33;
-    --soc-shadow:
-      0 1px 2px rgba(16, 24, 40, 0.06),
-      0 4px 12px rgba(16, 24, 40, 0.06);
+    --soc-primary: var(--el-color-primary);
+    --soc-critical: var(--el-color-danger);
+    --soc-high: var(--el-color-warning);
+    --soc-medium: var(--el-color-warning-light-3);
+    --soc-low: var(--el-color-primary);
+    --soc-success: var(--el-color-success);
 
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 18px;
-    color: var(--soc-text);
+    color: var(--el-text-color-primary);
   }
 
   .console-alert {
@@ -718,10 +731,11 @@
     }
   }
 
-  /* ═══ a. 态势条 ═══ */
+  /* ═══ a. 态势条 ═══（主题化卡片：浅色白底 / 深色随 --default-box-color，
+     与资产概览 metric-card 同范式；不再用硬编码深蓝） */
   .posture {
-    background: var(--soc-posture-bg);
-    color: #e6f0ff;
+    background: var(--default-box-color);
+    border: 1px solid var(--art-card-border);
     border-radius: 12px;
     padding: 14px 20px;
     display: flex;
@@ -733,10 +747,11 @@
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
+      color: var(--el-text-color-primary);
 
       b {
         font-size: 22px;
-        color: #fff;
+        color: var(--el-color-danger);
         margin-right: 4px;
       }
 
@@ -747,12 +762,12 @@
 
     .fresh {
       font-size: 12px;
-      color: #9db2d6;
+      color: var(--el-text-color-secondary);
       display: flex;
       flex-direction: column;
 
       b {
-        color: #fff;
+        color: var(--el-text-color-primary);
         font-weight: 600;
         font-size: 13px;
       }
@@ -770,12 +785,12 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: var(--art-el-active-color);
+      border: 1px solid var(--art-card-border);
       padding: 5px 11px;
       border-radius: 20px;
       font-size: 12px;
-      color: #9db2d6;
+      color: var(--el-text-color-secondary);
       cursor: default;
 
       .dot {
@@ -788,26 +803,26 @@
       }
 
       &.warn .dot {
-        background: var(--soc-medium);
-        box-shadow: 0 0 0 3px rgba(250, 173, 20, 0.25);
+        background: var(--el-color-warning);
+        box-shadow: 0 0 0 3px rgba(230, 162, 60, 0.25);
       }
 
       &.off .dot {
         background: var(--soc-critical);
-        box-shadow: 0 0 0 3px rgba(245, 34, 45, 0.25);
+        box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.25);
       }
     }
 
     .seg {
       display: inline-flex;
-      background: rgba(255, 255, 255, 0.08);
+      background: var(--art-el-active-color);
       border-radius: 8px;
       padding: 3px;
 
       button {
         border: 0;
         background: transparent;
-        color: #9db2d6;
+        color: var(--el-text-color-secondary);
         font-size: 12px;
         padding: 5px 12px;
         border-radius: 6px;
@@ -829,25 +844,25 @@
   }
 
   .kpi {
-    background: #fff;
-    border: 1px solid var(--soc-border);
+    background: var(--default-box-color);
+    border: 1px solid var(--art-card-border);
     border-radius: 12px;
     padding: 16px;
-    box-shadow: var(--soc-shadow);
     position: relative;
     overflow: hidden;
     cursor: pointer;
-    transition: box-shadow 0.15s;
+    transition:
+      box-shadow 0.15s,
+      border-color 0.15s;
 
     &:hover {
-      box-shadow:
-        0 4px 8px rgba(16, 24, 40, 0.08),
-        0 8px 20px rgba(16, 24, 40, 0.1);
+      border-color: var(--el-color-primary-light-5);
+      box-shadow: var(--el-box-shadow-light);
     }
 
     .t {
       font-size: 12.5px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
       margin-bottom: 8px;
       display: flex;
       align-items: center;
@@ -864,20 +879,20 @@
 
     .sub {
       font-size: 12px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
       margin-top: 8px;
       line-height: 1.5;
     }
 
     .note-orange {
       font-style: normal;
-      color: var(--soc-high);
+      color: var(--el-color-warning);
     }
 
     .delta {
       font-size: 11px;
       margin-top: 6px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
 
       .up {
         color: var(--soc-critical);
@@ -890,7 +905,7 @@
       }
 
       .flat {
-        color: var(--soc-text-2);
+        color: var(--el-text-color-secondary);
       }
     }
 
@@ -903,8 +918,9 @@
     }
 
     &.danger {
-      border-color: #ffd6d6;
-      background: linear-gradient(180deg, #fff, #fff5f5);
+      // light-N 变量由 EP dark css-vars 在深色下自动重映射为暗色，无需手动分支
+      border-color: var(--el-color-danger-light-7);
+      background: var(--el-color-danger-light-9);
 
       .n {
         color: var(--soc-critical);
@@ -923,7 +939,7 @@
 
   .badge-kev {
     font-size: 10px;
-    background: #ebf0ff;
+    background: var(--el-color-primary-light-9);
     color: var(--soc-primary);
     border-radius: 4px;
     padding: 1px 6px;
@@ -950,11 +966,10 @@
   }
 
   .panel {
-    background: #fff;
-    border: 1px solid var(--soc-border);
+    background: var(--default-box-color);
+    border: 1px solid var(--art-card-border);
     border-radius: 12px;
     padding: 16px;
-    box-shadow: var(--soc-shadow);
     display: flex;
     flex-direction: column;
 
@@ -962,13 +977,13 @@
       font-size: 13px;
       font-weight: 600;
       margin: 0 0 14px;
-      color: var(--soc-text);
+      color: var(--el-text-color-primary);
     }
   }
 
   .panel-note {
     font-size: 11px;
-    color: var(--soc-text-2);
+    color: var(--el-text-color-secondary);
     margin-top: 10px;
     line-height: 1.7;
   }
@@ -990,7 +1005,7 @@
     justify-content: center;
     gap: 10px;
     padding: 40px 0;
-    color: var(--soc-text-2);
+    color: var(--el-text-color-secondary);
     font-size: 13px;
   }
 
@@ -1007,7 +1022,7 @@
     flex-wrap: wrap;
     gap: 10px 18px;
     font-size: 12px;
-    color: var(--soc-text);
+    color: var(--el-text-color-primary);
 
     i {
       display: inline-block;
@@ -1065,7 +1080,7 @@
 
     .fn-lab {
       font-size: 12px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
       flex-shrink: 0;
     }
   }
@@ -1075,12 +1090,15 @@
     display: grid;
     grid-template-columns: 1.4fr 1fr;
     gap: 14px;
-    align-items: start;
+    align-items: stretch; // 两卡底部对齐（grid 默认拉伸；此前误设 start 导致不齐）
   }
 
+  /* 夜间摘要：主题化强调卡（浅色=主色浅底 / 深色自动跟随），
+     不再用硬编码深蓝横幅，与系统风格一致 */
   .night {
-    background: linear-gradient(90deg, #0e1b33, #1b2c4d);
-    color: #fff;
+    background: var(--el-color-primary-light-9);
+    border: 1px solid var(--el-color-primary-light-8);
+    color: var(--el-text-color-primary);
     border-radius: 10px;
     padding: 14px 16px;
     margin-bottom: 14px;
@@ -1091,11 +1109,12 @@
     align-items: center;
 
     b {
-      color: #fff;
+      color: var(--soc-primary);
+      font-variant-numeric: tabular-nums;
     }
 
     .k {
-      color: #9db2d6;
+      color: var(--el-text-color-secondary);
       margin-right: 5px;
     }
   }
@@ -1111,9 +1130,9 @@
     align-items: flex-start;
     gap: 12px;
     padding: 12px 14px;
-    border: 1px solid var(--soc-border);
+    border: 1px solid var(--art-card-border);
     border-radius: 10px;
-    background: #fff;
+    background: var(--art-el-active-color);
     transition: border-color 0.15s;
     cursor: pointer;
 
@@ -1135,12 +1154,12 @@
       }
 
       &--p1 {
-        background: var(--soc-high);
+        background: var(--el-color-warning);
       }
 
       &--p2 {
-        background: var(--soc-medium);
-        color: #3d2c00;
+        background: var(--el-color-warning-light-5);
+        color: var(--el-text-color-primary);
       }
     }
 
@@ -1152,7 +1171,7 @@
 
       .d {
         font-size: 12px;
-        color: var(--soc-text-2);
+        color: var(--el-text-color-secondary);
         margin-top: 3px;
       }
     }
@@ -1175,20 +1194,20 @@
     margin-bottom: 6px;
 
     &--ok {
-      background: #eaf7e8;
+      background: var(--el-color-success-light-9);
       color: var(--soc-success);
     }
 
     &--warn {
-      background: #fff7e6;
-      color: var(--soc-high);
+      background: var(--el-color-warning-light-9);
+      color: var(--el-color-warning);
     }
   }
 
   .ai-summary {
     font-size: 13px;
-    background: #f7f9ff;
-    border: 1px solid var(--soc-border);
+    background: var(--el-color-primary-light-9);
+    border: 1px solid var(--art-card-border);
     border-radius: 10px;
     padding: 14px;
     margin: 12px 0;
@@ -1208,7 +1227,7 @@
     gap: 10px;
 
     li {
-      border: 1px solid var(--soc-border);
+      border: 1px solid var(--art-card-border);
       border-radius: 10px;
       padding: 10px 12px;
       font-size: 12.5px;
@@ -1238,35 +1257,36 @@
       }
 
       &--p1 {
-        background: var(--soc-high);
+        background: var(--el-color-warning);
       }
 
       &--p2 {
-        background: var(--soc-medium);
-        color: #3d2c00;
+        background: var(--el-color-warning-light-5);
+        color: var(--el-text-color-primary);
       }
 
       &--p3 {
-        background: var(--soc-low);
+        background: var(--el-color-primary-light-5);
+        color: var(--el-text-color-primary);
       }
     }
 
     .ai-conf {
       font-size: 11px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
       font-variant-numeric: tabular-nums;
     }
 
     .ai-item-meta {
       font-size: 11.5px;
-      color: var(--soc-text-2);
+      color: var(--el-text-color-secondary);
       margin-top: 3px;
     }
 
     .ai-item-action {
       font-size: 12px;
       margin-top: 5px;
-      color: var(--soc-text);
+      color: var(--el-text-color-primary);
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
