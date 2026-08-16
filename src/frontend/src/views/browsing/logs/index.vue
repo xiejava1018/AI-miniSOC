@@ -9,63 +9,77 @@
     />
 
     <ElCard shadow="never" class="art-table-card">
-      <!-- 日志表格（当前页数据） -->
-      <ElTable
-        :data="pagedLogs"
-        v-loading="loading"
-        border
-        style="width: 100%"
-        size="small"
+      <ArtTableHeader
+        v-model:columns="columnChecks"
+        title="行为日志"
+        @refresh="handleSearch"
       >
-        <ElTableColumn prop="ts" label="时间" width="170" align="center" />
-        <ElTableColumn prop="ip" label="源 IP" width="130" align="center" />
-        <ElTableColumn label="类型" width="80" align="center">
-          <template #default="{ row }">
-            <ElTag :type="row.action === 'url' ? 'primary' : 'success'" size="small">
-              {{ row.action === 'url' ? '网址' : row.action === 'app' ? '应用' : '—' }}
-            </ElTag>
-          </template>
-        </ElTableColumn>
-        <ElTableColumn label="域名/应用" width="220" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.domain || row.apptype || '—' }}</template>
-        </ElTableColumn>
-        <ElTableColumn prop="body" label="原始日志" show-overflow-tooltip />
-      </ElTable>
+        <template #right>
+          <span class="logs-meta" v-if="logs.length">
+            命中 {{ logs.length }} 条<template v-if="logs.length >= currentLimit">（已达上限，建议缩小范围）</template>
+          </span>
+        </template>
+      </ArtTableHeader>
 
-      <!-- 客户端分页 -->
-      <div class="pagination-bar">
-        <ElPagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="logs.length"
-          :page-sizes="[20, 50, 100, 200]"
-          layout="total, sizes, prev, pager, next, jumper"
-          background
-          @size-change="handleSizeChange"
-        />
-      </div>
+      <ArtTable
+        :loading="loading"
+        :data="pagedLogs"
+        :columns="columns"
+        :pagination="clientPagination"
+        table-layout="fixed"
+        :layout="{ marginTop: 10 }"
+        @pagination:size-change="handleSizeChange"
+        @pagination:current-change="handleCurrentChange"
+      />
     </ElCard>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed } from 'vue'
-  import { ElMessage } from 'element-plus'
+  import { ref, reactive, computed, h } from 'vue'
+  import { ElMessage, ElTag } from 'element-plus'
+  import { useTableColumns } from '@/hooks/core/useTableColumns'
   import { queryBrowsingLogs } from '@/api/browsing'
   import type { SearchFormItem } from '@/types'
 
   const loading = ref(false)
   const logs = ref<any[]>([])
 
-  // 客户端分页
+  // Loki 单次查询上限（随时间范围自适应）
+  const currentLimit = ref(500)
+
+  // 列配置（ArtTable 体系，与基线/黑名单页风格一致）
+  const { columns, columnChecks } = useTableColumns<any>(() => [
+    { prop: 'ts', label: '时间', align: 'center', width: 170,
+      formatter: (r: any) => (r.ts || '').replace('T', ' ').slice(0, 19) },
+    { prop: 'ip', label: '源 IP', align: 'center', width: 130 },
+    { prop: 'action', label: '类型', align: 'center', width: 90,
+      formatter: (r: any) =>
+        h(ElTag, { type: r.action === 'url' ? 'primary' : 'success', size: 'small' },
+          () => (r.action === 'url' ? '网址' : r.action === 'app' ? '应用' : '—')) },
+    { prop: 'domain', label: '域名/应用', align: 'left', width: 240, showOverflowTooltip: true,
+      formatter: (r: any) => r.domain || r.apptype || '—' },
+    { prop: 'body', label: '原始日志', align: 'left', showOverflowTooltip: true }
+  ])
+
+  // 客户端分页（Loki 一次性拉回后前端切片，适配 ArtTable 分页协议）
   const currentPage = ref(1)
   const pageSize = ref(20)
   const pagedLogs = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value
     return logs.value.slice(start, start + pageSize.value)
   })
-  const handleSizeChange = () => {
+  const clientPagination = computed(() => ({
+    current: currentPage.value,
+    size: pageSize.value,
+    total: logs.value.length
+  }))
+  const handleSizeChange = (size: number) => {
+    pageSize.value = size
     currentPage.value = 1
+  }
+  const handleCurrentChange = (page: number) => {
+    currentPage.value = page
   }
 
   const searchParams = reactive({
@@ -121,6 +135,7 @@
     loading.value = true
     try {
       const limit = limitByHours(searchParams.hours)
+      currentLimit.value = limit
       const params: Record<string, any> = {
         ip: searchParams.ip || undefined,
         domain: searchParams.domain || undefined,
@@ -141,8 +156,6 @@
         currentPage.value = 1  // 查询后回到第一页
         if (!logs.value.length) {
           ElMessage.info('未查到日志，可尝试扩大时间范围')
-        } else if (logs.value.length >= limit) {
-          ElMessage.warning(`结果已达上限 ${limit} 条，可能不完整，建议缩小时间范围或添加筛选条件`)
         }
       } else {
         ElMessage.error(res.message || '查询失败')
@@ -171,10 +184,10 @@
     display: flex;
     flex-direction: column;
 
-    .pagination-bar {
-      display: flex;
-      justify-content: center;
-      margin-top: 12px;
+    .logs-meta {
+      font-size: 12px;
+      color: var(--el-text-color-secondary, #909399);
+      margin-right: 8px;
     }
   }
 </style>
