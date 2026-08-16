@@ -1338,7 +1338,7 @@
     .apps-pagination {
       margin-top: 12px;
       display: flex;
-      justify-content: flex-end;
+      justify-content: center;
     }
 
     .pid-text {
