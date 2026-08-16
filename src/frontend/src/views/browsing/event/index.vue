@@ -193,7 +193,7 @@
 
   const {
     data, loading, columns, columnChecks, pagination,
-    searchParams, getDataByPage, resetSearchParams,
+    searchParams, getData: getDataByPage, resetSearchParams,
     handleSizeChange, handleCurrentChange, refresh
   } = tableApi as any
 
