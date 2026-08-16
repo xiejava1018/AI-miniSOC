@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI-miniSOC · 安全运营概览</title>
+<style>
+  :root{
+    --primary:#5D87FF; --primary-soft:#EBF0FF;
+    --critical:#F5222D; --high:#FA8C16; --medium:#FAAD14; --low:#1890FF; --success:#52C41A;
+    --bg:#F0F2F5; --card:#FFFFFF; --text:#1F1F1F; --text-2:#8C8C8C; --border:#E8E8E8;
+    --posture-bg:#0E1B33; --posture-text:#E6F0FF; --posture-sub:#9DB2D6;
+    --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 12px rgba(16,24,40,.06);
+    --radius:12px;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1320px;margin:0 auto;padding:0 20px 40px}
+  a{text-decoration:none;color:inherit}
+
+  /* ============ 态势条 ============ */
+  .posture{background:var(--posture-bg);color:var(--posture-text);border-radius:0 0 var(--radius) var(--radius);padding:16px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-bottom:22px}
+  .posture .need{font-size:15px;font-weight:600}
+  .posture .need b{font-size:22px;color:#fff;margin-right:4px}
+  .posture .fresh{font-size:12px;color:var(--posture-sub);display:flex;flex-direction:column}
+  .posture .fresh b{color:#fff;font-weight:600;font-size:13px}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);padding:5px 11px;border-radius:20px;font-size:12px;color:var(--posture-sub)}
+  .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px rgba(82,196,26,.25)}
+  .pill.warn .dot{background:var(--medium);box-shadow:0 0 0 3px rgba(250,173,20,.25)}
+  .seg{display:inline-flex;background:rgba(255,255,255,.08);border-radius:8px;padding:3px}
+  .seg button{border:0;background:transparent;color:var(--posture-sub);font-size:12px;padding:5px 12px;border-radius:6px;cursor:pointer;font-family:var(--font)}
+  .seg button.on{background:var(--primary);color:#fff}
+
+  /* ============ KPI ============ */
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);position:relative;overflow:hidden;cursor:pointer;transition:box-shadow .15s}
+  .kpi:hover{box-shadow:0 4px 8px rgba(16,24,40,.08),0 8px 20px rgba(16,24,40,.1)}
+  .kpi .t{font-size:12.5px;color:var(--text-2);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .kpi .n{font-size:30px;font-weight:700;letter-spacing:-.5px;line-height:1}
+  .kpi .sub{font-size:12px;color:var(--text-2);margin-top:8px}
+  .kpi .delta{font-size:11px;margin-top:6px;color:var(--text-2)}
+  .kpi .delta .up{color:var(--critical)} .kpi .delta .down{color:var(--success)}
+  .kpi .flag{position:absolute;top:0;right:0;width:4px;height:100%;}
+  .kpi.danger{border-color:#ffd6d6;background:linear-gradient(180deg,#fff,#fff5f5)}
+  .kpi.danger .n{color:var(--critical)}
+  .kpi.danger .flag{background:var(--critical)}
+  .badge-kev{font-size:10px;background:var(--primary-soft);color:var(--primary);border-radius:4px;padding:1px 6px;font-weight:600}
+
+  /* ============ 区块标题 ============ */
+  .sec-title{font-size:15px;font-weight:600;margin:6px 0 12px;display:flex;align-items:center;gap:8px}
+  .sec-title::before{content:"";width:4px;height:15px;background:var(--primary);border-radius:2px}
+  .grid-3{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:14px;margin-bottom:22px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+  .panel h4{font-size:13px;font-weight:600;margin-bottom:14px;color:var(--text)}
+  .panel .note{font-size:11px;color:var(--text-2);margin-top:8px}
+
+  /* 告警趋势柱状（级别堆叠） */
+  .bars{display:flex;align-items:flex-end;gap:12px;height:150px;padding-top:10px}
+  .bars .col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .bar{width:60%;max-width:34px;border-radius:5px 5px 0 0;min-height:3px}
+  .bar.c{background:var(--critical)} .bar.h{background:var(--high)}
+  .bar.m{background:var(--medium)} .bar.l{background:var(--low)}
+  .bars .v{font-size:11px;font-weight:600;margin-bottom:4px}
+  .bars .l{font-size:11px;color:var(--text-2);margin-top:6px}
+  .bars .l.gap{color:var(--text-2);font-weight:400}
+
+  /* 漏洞分布堆叠条 */
+  .stack{height:26px;width:100%;border-radius:6px;overflow:hidden;display:flex;margin:6px 0 14px}
+  .stack span{height:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:12px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+
+  /* 漏斗 */
+  .funnel{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+  .fn{display:flex;align-items:center;gap:10px}
+  .fn .bar{height:34px;border-radius:6px;display:flex;align-items:center;padding:0 12px;color:#fff;font-size:13px;font-weight:600;min-width:54px}
+  .fn .lab{font-size:12px;color:var(--text-2)}
+
+  /* ============ 待办 + AI ============ */
+  .grid-2{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
+  .night{background:linear-gradient(90deg,#0E1B33,#1b2c4d);color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:16px}
+  .night b{color:#fff} .night .k{color:#9DB2D6;margin-right:5px}
+  .todo{display:flex;flex-direction:column;gap:10px}
+  .ti{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:#fff;transition:border-color .15s}
+  .ti:hover{border-color:var(--primary)}
+  .ti .pri{flex-shrink:0;font-size:11px;font-weight:700;color:#fff;border-radius:6px;padding:3px 9px;margin-top:2px}
+  .pri.p0{background:var(--critical)} .pri.p1{background:var(--high)} .pri.p2{background:var(--medium);color:#3d2c00}
+  .ti .body .h{font-size:13.5px;font-weight:600}
+  .ti .body .d{font-size:12px;color:var(--text-2);margin-top:3px}
+  .ti .go{margin-left:auto;font-size:12px;color:var(--primary);white-space:nowrap;align-self:center}
+  .ai .tag{display:inline-block;font-size:11px;padding:3px 9px;border-radius:6px;margin-right:6px;margin-bottom:6px}
+  .tag.ok{background:#eaf7e8;color:var(--success)} .tag.warn{background:#fff7e6;color:var(--high)}
+  .ai .summary{font-size:13px;background:#f7f9ff;border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;line-height:1.7}
+  .ai .summary b{color:var(--primary)}
+  .ai ul{font-size:12.5px;color:var(--text);padding-left:18px;margin-top:4px}
+  .ai ul li{margin:6px 0}
+
+  .foot{margin-top:26px;font-size:11.5px;color:var(--text-2);border-top:1px dashed var(--border);padding-top:12px;line-height:1.7}
+  .foot code{background:#eef1f6;padding:1px 5px;border-radius:4px;font-size:11px}
+
+  @media(max-width:1080px){.kpis{grid-template-columns:repeat(3,1fr)}.grid-3{grid-template-columns:1fr}.grid-2{grid-template-columns:1fr}}
+  @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}.posture{gap:12px}.pills{margin-left:0}}
+</style>
+</head>
+<body>
+  <!-- 态势条 -->
+  <div class="posture">
+    <div class="need">今日需关注 <b>4</b> 项</div>
+    <div class="fresh">数据截至<b>2026-08-16 12:38</b>（北京时间）</div>
+    <div class="pills">
+      <span class="pill"><span class="dot"></span>Wazuh 在线</span>
+      <span class="pill"><span class="dot"></span>Loki 在线</span>
+      <span class="pill"><span class="dot"></span>OpenSearch 在线</span>
+      <span class="pill warn"><span class="dot"></span>采集器 22/74 纳管</span>
+      <span class="seg"><button class="on">近 24h</button><button>近 7 天</button></span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- KPI 卡（整卡可点击下钻） -->
+    <div class="kpis">
+      <a class="kpi" href="#" title="告警治理页">
+        <div class="t">活跃告警簇 <span class="badge-kev">已降噪</span></div>
+        <div class="n">31</div>
+        <div class="sub">实时聚合 · 历史快照累计 1524 行（仅趋势用）</div>
+        <div class="delta"><span class="down">↓ 1</span> vs 昨日 32（快照 distinct 指纹）</div>
+      </a>
+      <a class="kpi" href="#" title="事件管理页">
+        <div class="t">待处置事件</div>
+        <div class="n">11</div>
+        <div class="sub">闭环率 8% · open 11 / 处理中 1 / 关闭 1</div>
+        <div class="delta"><span class="up">↑</span> 最老 open 已 2 天未处理</div>
+      </a>
+      <a class="kpi" href="#" title="脆弱性管理页">
+        <div class="t">高危漏洞（未修复） <span class="badge-kev">KEV</span></div>
+        <div class="n">1704</div>
+        <div class="sub">critical 202 + high 1502（open/SCAP）· KEV 命中 0 <i style="font-style:normal;color:var(--high)">同步丢老CVE，待修</i></div>
+        <div class="delta">口径：仅统计未修复 + SCAP，含 10 条 mock 遗留待清理</div>
+      </a>
+      <a class="kpi" href="#" title="行为事件页">
+        <div class="t">行为异常（24h）</div>
+        <div class="n">83</div>
+        <div class="sub">累计 1040 · 评分回填 100% · 全部待研判（status=new）</div>
+        <div class="delta"><span class="up">↑ 1</span> vs 前 24h 82（真实）</div>
+      </a>
+      <a class="kpi danger" href="#" title="未纳管资产清单">
+        <div class="t">资产纳管率</div>
+        <div class="n">30%</div>
+        <div class="sub">22/74 已装 agent · 52 台失察（high 1 / medium 34 / normal 17）</div>
+        <div class="delta">最大风险敞口 · 红色预警</div>
+        <div class="flag"></div>
+      </a>
+      <a class="kpi" href="#" title="事件管理页">
+        <div class="t">今日新增事件</div>
+        <div class="n">0</div>
+        <div class="sub">近 7 天 12 起</div>
+        <div class="delta">今日无新事发</div>
+      </a>
+    </div>
+
+    <!-- 趋势与分布 -->
+    <div class="sec-title">趋势与分布</div>
+    <div class="grid-3">
+      <div class="panel">
+        <h4>告警簇趋势（按级别 · distinct 指纹/日）</h4>
+        <div class="bars">
+          <div class="col"><div class="v">33</div><div class="bar c" style="height:0"></div><div class="bar h" style="height:11px"></div><div class="bar m" style="height:17px"></div><div class="bar l" style="height:5px"></div><div class="l">8/9</div></div>
+          <div class="col"><div class="l gap" style="margin:0 0 6px">—</div><div class="l gap">8/10–12 无快照</div></div>
+          <div class="col"><div class="v">29</div><div class="bar c" style="height:0"></div><div class="bar h" style="height:11px"></div><div class="bar m" style="height:13px"></div><div class="bar l" style="height:5px"></div><div class="l">8/13</div></div>
+          <div class="col"><div class="v">30</div><div class="bar c" style="height:0"></div><div class="bar h" style="height:11px"></div><div class="bar m" style="height:14px"></div><div class="bar l" style="height:5px"></div><div class="l">8/14</div></div>
+          <div class="col"><div class="v">35</div><div class="bar c" style="height:0"></div><div class="bar h" style="height:13px"></div><div class="bar m" style="height:16px"></div><div class="bar l" style="height:6px"></div><div class="l">8/15</div></div>
+          <div class="col"><div class="v">32</div><div class="bar c" style="height:0"></div><div class="bar h" style="height:9px"></div><div class="bar m" style="height:16px"></div><div class="bar l" style="height:7px"></div><div class="l">8/16</div></div>
+        </div>
+        <div class="legend" style="margin-top:10px">
+          <span><i style="background:var(--critical)"></i>严重(≥12) 0</span>
+          <span><i style="background:var(--high)"></i>高(7–11) 9–13/日</span>
+          <span><i style="background:var(--medium)"></i>中(4–6) 13–17/日</span>
+          <span><i style="background:var(--low)"></i>低(≤3) 5–7/日</span>
+        </div>
+        <div class="note">数据来自 PG 快照表（soc_alert_groups）按 distinct fingerprint 聚合，不受 Loki 7 天限制。8/15 曾因快照调度跑 23 次出现"行数 696"假尖峰——get_trend() 已修复为去重口径，本图趋势平稳为真实状态。</div>
+      </div>
+
+      <div class="panel">
+        <h4>漏洞严重度分布（未修复 · open/SCAP）</h4>
+        <div class="stack">
+          <span style="width:11.9%;background:var(--critical)"></span>
+          <span style="width:88%;background:var(--high)"></span>
+          <span style="width:0.1%;background:var(--medium)"></span>
+          <span style="width:0%;background:var(--low)"></span>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--critical)"></i>Critical 202</span>
+          <span><i style="background:var(--high)"></i>High 1502</span>
+          <span><i style="background:var(--medium)"></i>Medium 1325（不占卡）</span>
+          <span><i style="background:var(--low)"></i>Low 11</span>
+        </div>
+        <div class="note">KEV 命中当前为 0，根因：OS→PG 同步链路丢失老 CVE（OS 实测 15389 CVE 中 33 个命中 KEV，如 CVE-2023-4911/Log4Shell 类，但 PG 中一条都没有）——修复同步后此处 KEV 项标红展示。</div>
+      </div>
+
+      <div class="panel">
+        <h4>事件处置漏斗</h4>
+        <div class="funnel">
+          <div class="fn"><div class="bar" style="width:100%;background:var(--primary)">11 open</div><div class="lab">待处置</div></div>
+          <div class="fn"><div class="bar" style="width:18%;background:var(--high)">1</div><div class="lab">处理中</div></div>
+          <div class="fn"><div class="bar" style="width:18%;background:var(--success)">1</div><div class="lab">已关闭</div></div>
+        </div>
+        <div class="note">闭环率 8%（1/13）——"检测到了但处置不动"，漏斗底部几乎无转化，暴露流程瓶颈。</div>
+      </div>
+    </div>
+
+    <!-- 待办 + AI 洞察 -->
+    <div class="grid-2">
+      <div class="panel">
+        <div class="sec-title">我的待办</div>
+        <div class="night">
+          <span><span class="k">夜间摘要 18:00→09:00</span><b>新增告警簇 32</b></span>
+          <span><span class="k">新增事件</span><b>0</b></span>
+          <span><span class="k">高危行为</span><b>83</b></span>
+          <span><span class="k">KEV 漏洞新增</span><b>0</b></span>
+        </div>
+        <div class="todo">
+          <a class="ti" href="#"><div class="pri p0">紧急</div><div class="body"><div class="h">高关键资产未纳管 + 中关键资产未纳管</div><div class="d">1 台 high + 34 台 medium 无 agent，按 criticality 排序排程补装</div></div><div class="go">未纳管清单 →</div></a>
+          <a class="ti" href="#"><div class="pri p1">高</div><div class="body"><div class="h">事件积压</div><div class="d">11 起 open，最老已 2 天未处理（8/13 22:32 创建），按 created_at 升序清理</div></div><div class="go">事件列表 →</div></a>
+          <a class="ti" href="#"><div class="pri p2">中</div><div class="body"><div class="h">行为偏离待复核</div><div class="d">近 24h 83 起异常，1040 条全部 status=new 从未研判流转</div></div><div class="go">行为事件页 →</div></a>
+          <a class="ti" href="#"><div class="pri p2">中</div><div class="body"><div class="h">个警 AI 研判覆盖低</div><div class="d">仅 1 条 vs 群体 37 簇，单告警自动研判近乎空白</div></div><div class="go">告警治理页 →</div></a>
+        </div>
+      </div>
+
+      <div class="panel ai">
+        <div class="sec-title">AI 洞察</div>
+        <div>
+          <span class="tag ok">群体研判 37 簇 ✓（P1×19 / P2×7 / P3×11）</span>
+          <span class="tag warn">个警研判 1 条 ⚠</span>
+        </div>
+        <div class="summary">
+          过去 7 天完成 <b>37 个告警簇</b>的群体 AI 研判。以下为库内真实记录的 P1 级建议（按优先级取自 soc_alert_group_analyses，非噪声簇）：
+          <ul>
+            <li><b>AlienVault 威胁情报命中</b>（agent 002 · fnos-vm-ubuntu01 / 192.168.0.30）：源 IP 出现在 OTX 信誉库，置信度 0.9，建议追踪并阻断攻击源 IP。</li>
+            <li><b>防火墙主动响应拦截/解封</b>（agent 002 · fnos-vm-ubuntu01）：Host Blocked / Unblocked 连发，建议隔离资产并核查攻击链。</li>
+            <li><b>rootcheck 主机异常检测</b>（agent 024 · pve-LXC-ubuntu02）+ <b>端口监听变更</b>（agent 020 · pve-ubuntu-defence / 192.168.0.41，新端口 41750）：建议核查新端口服务合法性。</li>
+          </ul>
+        </div>
+        <div class="note">覆盖率小标签如实暴露"群体强、个警弱"，为后续 P3 AI 资产增强指明方向。Top 建议由 dashboard/summary 按 priority asc + is_noise=false 从研判表实时取数。</div>
+      </div>
+    </div>
+
+    <div class="foot">
+      本页面为 <b>AI-miniSOC 概览仪表板</b> 的可落地 UI 设计稿（自包含 HTML/CSS，无外部依赖，可直接浏览器打开）。
+      数字均来自真实库（PG <code>111.228.57.2:25432</code>）+ OpenSearch 于 2026-08-16 实测：
+      资产 74 / 纳管 22（high 1 / medium 34 / normal 17 未纳管）、事件 13（闭环 1/13=8%）、活跃告警簇 31（实时）/ 33→32（每日 distinct 快照）、
+      未修复 SCAP 漏洞 critical 202 + high 1502、行为异常 1040（24h 83 vs 前 24h 82）、AI 群体研判 37 / 个警 1。
+      <br/>· KPI 卡 Δ 环比与夜间摘要由 <code>GET /api/v1/dashboard/summary</code> 聚合接口提供（需历史基线，见设计文档 §5.2）；趋势数据来自已修复的 <code>/alert-digests/groups/trend</code>（distinct 指纹口径）。
+      · 漏洞 KEV 命中显示 0 的根因是 OS→PG 同步丢老 CVE（OS 侧实测 33 个 KEV 命中），修复同步后才有真实 KEV 数。
+      · 落地实现复用现有前端主题令牌（主色 <code>#5D87FF</code>，config/index.ts systemMainColor[0]），由 dashboard/summary 单接口驱动五区块。
+    </div>
+  </div>
+</body>
+</html>
