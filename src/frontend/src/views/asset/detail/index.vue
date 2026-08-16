@@ -200,7 +200,7 @@
           <template v-else>
             <div class="tab-header">
               <span class="tab-header-title">未修复漏洞（SCAP）
-                <ElTag v-if="vulnsData.length" size="small" type="danger" effect="plain" class="ml-2">{{ vulnsData.length }} 项</ElTag>
+                <ElTag v-if="vulnsTotal" size="small" type="danger" effect="plain" class="ml-2">{{ vulnsTotal }} 项</ElTag>
               </span>
               <ElButton type="primary" size="small" :icon="Refresh" @click="loadVulns" :loading="vulnsLoading">刷新</ElButton>
             </div>
@@ -254,6 +254,15 @@
               </ElTableColumn>
             </ElTable>
             <ElEmpty v-if="!vulnsLoading && vulnsData.length === 0" description="该资产暂无未修复漏洞" />
+            <div v-if="vulnsTotal > vulnsPageSize" class="apps-pagination">
+              <ElPagination
+                v-model:current-page="vulnsPage"
+                :page-size="vulnsPageSize"
+                :total="vulnsTotal"
+                layout="total, prev, pager, next"
+                @current-change="loadVulns"
+              />
+            </div>
           </template>
         </ElTabPane>
 
@@ -265,7 +274,7 @@
             </span>
             <ElButton type="primary" size="small" @click="showPortDialog">添加端口</ElButton>
           </div>
-          <ElTable :data="mergedPortsData" v-loading="portsLoading" border stripe style="width: 100%">
+          <ElTable :data="pagedPortsData" v-loading="portsLoading" border stripe style="width: 100%">
             <ElTableColumn prop="port" label="端口" width="70" align="center">
               <template #default="{ row }">
                 <span :class="{ 'high-risk-port': isHighRisk(row.port) }">{{ row.port }}</span>
@@ -333,6 +342,14 @@
             </ElTableColumn>
           </ElTable>
           <ElEmpty v-if="!portsLoading && mergedPortsData.length === 0" description="暂无端口数据" />
+          <div v-if="mergedPortsData.length > portsPageSize" class="apps-pagination">
+            <ElPagination
+              v-model:current-page="portsPage"
+              :page-size="portsPageSize"
+              :total="mergedPortsData.length"
+              layout="total, prev, pager, next"
+            />
+          </div>
         </ElTabPane>
 
         <!-- 4. 基线(M2/T5: SCA 不合规配置项, vuln_type=sca) -->
@@ -347,7 +364,7 @@
           <template v-else>
             <div class="tab-header">
               <span class="tab-header-title">不合规安全配置项（SCA 基线核查）
-                <ElTag v-if="baselineData.length" size="small" type="warning" effect="plain" class="ml-2">{{ baselineData.length }} 项</ElTag>
+                <ElTag v-if="baselineTotal" size="small" type="warning" effect="plain" class="ml-2">{{ baselineTotal }} 项</ElTag>
               </span>
               <ElButton type="primary" size="small" :icon="Refresh" @click="loadBaseline" :loading="baselineLoading">刷新</ElButton>
             </div>
@@ -371,6 +388,15 @@
               </ElTableColumn>
             </ElTable>
             <ElEmpty v-if="!baselineLoading && baselineData.length === 0" description="该资产基线检查全部合规" />
+            <div v-if="baselineTotal > baselinePageSize" class="apps-pagination">
+              <ElPagination
+                v-model:current-page="baselinePage"
+                :page-size="baselinePageSize"
+                :total="baselineTotal"
+                layout="total, prev, pager, next"
+                @current-change="loadBaseline"
+              />
+            </div>
           </template>
         </ElTabPane>
 
@@ -747,6 +773,7 @@
           if ((res as any)?.code === 200 || res) {
             ElMessage.success('端口添加成功')
             portDialogVisible.value = false
+            portsPage.value = 1
             loadPorts()
           } else {
             ElMessage.error((res as any)?.msg || '添加失败')
@@ -887,8 +914,14 @@
 
   const vulnsLoading = ref(false)
   const vulnsData = ref<any[]>([])
+  const vulnsTotal = ref(0)
+  const vulnsPage = ref(1)
+  const vulnsPageSize = 10
   const baselineLoading = ref(false)
   const baselineData = ref<any[]>([])
+  const baselineTotal = ref(0)
+  const baselinePage = ref(1)
+  const baselinePageSize = 10
   const incidentCreatingId = ref('')
 
   const loadVulns = async () => {
@@ -900,12 +933,14 @@
         asset_id: assetId.value,
         vuln_type: 'scap',
         status: 'open',
-        skip: 0,
-        limit: 100
+        skip: (vulnsPage.value - 1) * vulnsPageSize,
+        limit: vulnsPageSize
       })
       vulnsData.value = Array.isArray(d?.items) ? d.items : []
+      vulnsTotal.value = d?.total || 0
     } catch {
       vulnsData.value = []
+      vulnsTotal.value = 0
     } finally {
       vulnsLoading.value = false
     }
@@ -919,12 +954,14 @@
         asset_id: assetId.value,
         vuln_type: 'sca',
         status: 'open',
-        skip: 0,
-        limit: 100
+        skip: (baselinePage.value - 1) * baselinePageSize,
+        limit: baselinePageSize
       })
       baselineData.value = Array.isArray(d?.items) ? d.items : []
+      baselineTotal.value = d?.total || 0
     } catch {
       baselineData.value = []
+      baselineTotal.value = 0
     } finally {
       baselineLoading.value = false
     }
@@ -970,7 +1007,7 @@
   const appsData = ref<any[]>([])
   const appsTotal = ref(0)
   const appsPage = ref(1)
-  const appsPageSize = 50
+  const appsPageSize = 10
   const appsSearch = ref('')
 
   const formatSize = (bytes: number) => {
@@ -1009,6 +1046,8 @@
   // ========== Wazuh 实时端口（M4：双源合并） ==========
   const wazuhPortsData = ref<any[]>([])
   const wazuhPortsLoading = ref(false)
+  const portsPage = ref(1)
+  const portsPageSize = 10
 
   const loadWazuhPorts = async () => {
     if (!assetId.value || !hasWazuhAgent.value) return
@@ -1052,6 +1091,12 @@
     return [...local, ...wazuh]
   })
 
+  // 端口内存分页（双源合并后前端切片）
+  const pagedPortsData = computed(() => {
+    const start = (portsPage.value - 1) * portsPageSize
+    return mergedPortsData.value.slice(start, start + portsPageSize)
+  })
+
   // 端口↔漏洞 best-effort 匹配（M4：service/process 与漏洞标题/包名匹配，点击跳漏洞 Tab）
   const matchedVulns = (portRow: any) => {
     const svc = (portRow.process || portRow.service || '').toLowerCase().replace(/\d+$/, '')
@@ -1068,7 +1113,7 @@
   const alertsHours = ref(24)
   const alertsMinLevel = ref<number | undefined>(undefined)
   const alertsPage = ref(1)
-  const alertsPageSize = 20
+  const alertsPageSize = 10
   const alertsTotal = ref(0)
 
   const handleAlertsQuery = () => {
