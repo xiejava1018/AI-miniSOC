@@ -951,7 +951,7 @@
   .sec-title {
     font-size: 15px;
     font-weight: 600;
-    margin: 2px 0 0;
+    margin: 2px 0 14px; // 底距与 .panel h4 的 14px 对齐，标题→内容间距统一
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1025,7 +1025,8 @@
     display: grid;
     grid-template-columns: 1.3fr 1fr 1fr;
     gap: 14px;
-    margin-top: -6px; // 抵消 sec-title 与 grid 间多余空隙（外层已 gap:18px）
+    // sec-title 现有 14px 底距 + 外层 gap 18px，反补偿保持总间距 ~18px
+    margin-top: -10px;
   }
 
   .legend {
@@ -1221,7 +1222,7 @@
     border: 1px solid var(--art-card-border);
     border-radius: 10px;
     padding: 14px;
-    margin: 12px 0;
+    margin: 0 0 12px; // 顶距由 sec-title 统一底距接管（flex 内 margin 不塌陷，避免叠加）
     line-height: 1.7;
 
     b {
