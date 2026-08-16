@@ -34,8 +34,7 @@
         今日需关注 <b>{{ todoCount }}</b> 项
       </div>
       <div class="fresh">
-        数据截至
-        <b>{{ generatedAtText }}</b>（北京时间）
+        数据截至 <b>{{ generatedAtText }}</b>（北京时间）
       </div>
       <div class="pills">
         <span
@@ -160,46 +159,8 @@
       </div>
     </div>
 
-    <!-- ═══ d/e. 我的待办 + AI 洞察 ═══ -->
+    <!-- ═══ d/e. AI 洞察（左，1.4fr）+ 我的待办（右，1fr）═══ -->
     <div class="grid-2">
-      <!-- d. 我的待办 -->
-      <div ref="todosSectionRef" class="panel">
-        <div class="sec-title">我的待办</div>
-
-        <!-- 夜间摘要（昨晚 18:00 → 今晨 09:00），文案照 UI 权威稿 -->
-        <div v-if="nightItems.length" class="night">
-          <span v-for="item in nightItems" :key="item.label">
-            <span class="k">{{ item.prefix }}</span>
-            <b>{{ item.text }}</b>
-          </span>
-        </div>
-
-        <div v-if="summaryLoading && !summary" class="chart-skeleton">
-          <ElSkeleton animated :rows="4" />
-        </div>
-        <div v-else-if="todos.length" class="todo">
-          <div
-            v-for="todo in todos"
-            :key="todo.id"
-            class="ti"
-            role="button"
-            tabindex="0"
-            @click="goTodo(todo.id)"
-            @keydown.enter="goTodo(todo.id)"
-          >
-            <div class="pri" :class="`pri--${todo.priority}`">
-              {{ TODO_PRIORITY_LABEL[todo.priority] || todo.priority }}
-            </div>
-            <div class="ti-body">
-              <div class="h">{{ todo.title }}</div>
-              <div class="d">{{ todo.detail }}</div>
-            </div>
-            <div class="go">{{ todo.action }} →</div>
-          </div>
-        </div>
-        <div v-else class="chart-fallback"><span>当前无待办事项</span></div>
-      </div>
-
       <!-- e. AI 洞察 -->
       <div class="panel panel--ai">
         <div class="sec-title">AI 洞察</div>
@@ -236,6 +197,44 @@
           <ElSkeleton animated :rows="4" />
         </div>
         <div v-else class="chart-fallback"><span>暂无 AI 洞察数据</span></div>
+      </div>
+
+      <!-- d. 我的待办 -->
+      <div ref="todosSectionRef" class="panel">
+        <div class="sec-title">我的待办</div>
+
+        <!-- 夜间摘要（昨晚 18:00 → 今晨 09:00），文案照 UI 权威稿 -->
+        <div v-if="nightItems.length" class="night">
+          <span v-for="item in nightItems" :key="item.label">
+            <span class="k">{{ item.prefix }}</span>
+            <b>{{ item.text }}</b>
+          </span>
+        </div>
+
+        <div v-if="summaryLoading && !summary" class="chart-skeleton">
+          <ElSkeleton animated :rows="4" />
+        </div>
+        <div v-else-if="todos.length" class="todo">
+          <div
+            v-for="todo in todos"
+            :key="todo.id"
+            class="ti"
+            role="button"
+            tabindex="0"
+            @click="goTodo(todo.id)"
+            @keydown.enter="goTodo(todo.id)"
+          >
+            <div class="pri" :class="`pri--${todo.priority}`">
+              {{ TODO_PRIORITY_LABEL[todo.priority] || todo.priority }}
+            </div>
+            <div class="ti-body">
+              <div class="h">{{ todo.title }}</div>
+              <div class="d">{{ todo.detail }}</div>
+            </div>
+            <div class="go">{{ todo.action }} →</div>
+          </div>
+        </div>
+        <div v-else class="chart-fallback"><span>当前无待办事项</span></div>
       </div>
     </div>
   </div>
@@ -764,7 +763,9 @@
       font-size: 12px;
       color: var(--el-text-color-secondary);
       display: flex;
-      flex-direction: column;
+      align-items: baseline;
+      gap: 2px;
+      white-space: nowrap; // 单行显示，不折行
 
       b {
         color: var(--el-text-color-primary);
@@ -1088,7 +1089,7 @@
   /* ═══ d/e. 待办 + AI 洞察 ═══ */
   .grid-2 {
     display: grid;
-    grid-template-columns: 1.4fr 1fr;
+    grid-template-columns: 1.4fr 1fr; // 左 AI 洞察（内容多占宽列）右 我的待办
     gap: 14px;
     align-items: stretch; // 两卡底部对齐（grid 默认拉伸；此前误设 start 导致不齐）
   }
