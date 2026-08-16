@@ -32,6 +32,7 @@ export enum RoutesAlias {
   BrowsingConfig = '/browsing/config/index', // 上网行为规则配置
   BrowsingLogs = '/browsing/logs/index', // 上网行为日志
   BrowsingStatistics = '/browsing/statistics/index', // 行为统计概览
+  BrowsingBaseline = '/browsing/baseline/index', // 行为基线查看
   Placeholder = '/placeholder' // 占位页面
   // 已精简：示例与演示页面别名已移除
 }
