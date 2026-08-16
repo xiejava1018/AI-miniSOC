@@ -163,12 +163,14 @@
     <div class="grid-2">
       <!-- e. AI 洞察 -->
       <div class="panel panel--ai">
-        <div class="sec-title">AI 洞察</div>
-        <template v-if="aiInsight">
-          <div>
+        <div class="sec-title">
+          AI 洞察
+          <template v-if="aiInsight">
             <span class="tag tag--ok">群体研判 {{ aiInsight.coverage.group_analyses }} 簇 ✓</span>
             <span class="tag tag--warn">个警研判 {{ aiInsight.coverage.single_analyses }} 条 ⚠</span>
-          </div>
+          </template>
+        </div>
+        <template v-if="aiInsight">
           <div class="ai-summary">
             过去 7 天完成 <b>{{ aiInsight.coverage.group_analyses }} 个告警簇</b>的群体 AI
             研判。以下为库内非噪声簇的优先建议（按 priority + 置信度取自研判表）：
@@ -189,9 +191,6 @@
             </li>
           </ul>
           <div v-else class="chart-fallback"><span>暂无非噪声簇研判记录</span></div>
-          <div class="panel-note">
-            覆盖率小标签如实暴露"群体强、个警弱"，为后续 P3 AI 资产增强指明方向。
-          </div>
         </template>
         <div v-else-if="summaryLoading && !summary" class="chart-skeleton">
           <ElSkeleton animated :rows="4" />
@@ -963,6 +962,17 @@
       height: 15px;
       background: var(--soc-primary);
       border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    // 标题行内的覆盖率标签（AI 洞察）：推到行尾、去底部 margin 避免撑高标题
+    .tag {
+      margin-bottom: 0;
+      margin-left: auto;
+
+      & + .tag {
+        margin-left: 6px;
+      }
     }
   }
 
