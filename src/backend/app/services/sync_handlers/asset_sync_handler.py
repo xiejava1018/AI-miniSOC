@@ -35,20 +35,13 @@ _UPDATABLE_FIELDS = {
 
 
 class AssetSyncHandler(BaseSyncHandler):
-    """资产同步处理器"""
+    """资产同步处理器（P2-T4：失败走死信）"""
+
+    data_type = "asset"
 
     def handle(self, source: str, items: list[dict], db: Session) -> dict:
-        print(f"[DEBUG] AssetSyncHandler.handle called: source={source}, items={len(items)}")
-        logger.info(f"AssetSyncHandler.handle called: source={source}, items={len(items)}")
-        stats = {
-            "total": len(items),
-            "created": 0,
-            "updated": 0,
-            "skipped": 0,
-            "failed": 0,
-            "errors": [],
-        }
-
+        # P2-T4：创建批次 sync_task（保留 sync_tasks 跟踪能力），
+        # 然后逐条调 _handle_one（base 已 try/except，失败入死信）。
         sync_task = SyncTask(
             sync_type="collector",
             status="running",
@@ -58,34 +51,45 @@ class AssetSyncHandler(BaseSyncHandler):
         db.add(sync_task)
         db.flush()
 
-        for item in items:
-            try:
-                result = self._upsert_asset(source, item, sync_task.id, db)
-                stats[result] += 1
-            except Exception as e:
-                stats["failed"] += 1
-                ip = item.get("asset_ip", "?")
-                stats["errors"].append(f"{ip}: {str(e)}")
-                logger.warning(f"同步资产失败 {ip}: {e}")
-
-        db.flush()
-
+        # 调 base.handle（逐条 try/except + 死信）
+        stats = super().handle(source, items, db)
+        # 同步任务状态更新
         sync_task.status = "completed"
         sync_task.created_count = stats["created"]
         sync_task.updated_count = stats["updated"]
         sync_task.failed_count = stats["failed"]
         sync_task.completed_at = datetime.now(timezone.utc)
-        if stats["errors"]:
-            sync_task.error_message = "\n".join(stats["errors"])
-
+        if stats["failed"] > 0:
+            sync_task.error_message = (
+                f"{stats['failed']} items failed; "
+                f"see dead_letter batch={stats['dead_letter_batch_id']}"
+            )
         db.commit()
-        logger.info(
-            f"资产同步完成: source={source}, "
-            f"total={stats['total']}, created={stats['created']}, "
-            f"updated={stats['updated']}, skipped={stats['skipped']}, "
-            f"failed={stats['failed']}"
-        )
         return stats
+
+    def _item_key(self, item: dict) -> str:
+        """用于死信 item_key 字段（便于按 IP 排查）。"""
+        return item.get("asset_ip", "?")
+
+    def _validate_one(self, item: dict) -> None:
+        """资产必须含 asset_ip 字段。"""
+        if not item.get("asset_ip"):
+            raise ValueError("缺少 asset_ip 字段")
+
+    def _handle_one(self, source: str, item: dict, db: Session) -> dict:
+        """单条 upsert，返回 {"created"|"updated"|"skipped"}。"""
+        # 取出当前批次 sync_task_id（在 handle 中创建的；base 调 _handle_one 时同步可见）
+        from app.models.sync_task import SyncTask as _ST
+        sync_task = (
+            db.query(_ST)
+            .filter(_ST.sync_type == "collector", _ST.status == "running")
+            .order_by(_ST.started_at.desc())
+            .first()
+        )
+        sync_task_id = sync_task.id if sync_task else None
+
+        result = self._upsert_asset(source, item, sync_task_id, db)
+        return {result: 1}
 
     def _upsert_asset(self, source: str, item: dict, sync_task_id, db: Session) -> str:
         asset_ip = item.get("asset_ip")

@@ -41,6 +41,10 @@ from app.services.cisa_kev_service import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动/停止后台任务"""
+    # P3-T4：检测单 worker 部署约束（多 worker 会导致调度重复与状态漂移）
+    from app.services.single_worker_guard import check_single_worker_or_warn
+    check_single_worker_or_warn()
+
     start_browsing_detector()
     start_alert_group_snapshot()
     start_alert_digest_scheduler()

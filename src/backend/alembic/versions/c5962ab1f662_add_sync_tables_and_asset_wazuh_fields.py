@@ -272,10 +272,11 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['user_id'], ['soc_users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.drop_index(op.f('idx_soc_incident_timeline_action_type'), table_name='soc_incident_timeline')
-    op.drop_index(op.f('idx_soc_incident_timeline_created_at'), table_name='soc_incident_timeline')
-    op.drop_index(op.f('idx_soc_incident_timeline_incident'), table_name='soc_incident_timeline')
-    op.drop_table('soc_incident_timeline')
+    # P4：使用 IF EXISTS 避免新库初始化时该索引不存在而报错（alembic 1.10 以后 op.drop_index 支持 if_exists）
+    op.drop_index(op.f('idx_soc_incident_timeline_action_type'), table_name='soc_incident_timeline', if_exists=True)
+    op.drop_index(op.f('idx_soc_incident_timeline_created_at'), table_name='soc_incident_timeline', if_exists=True)
+    op.drop_index(op.f('idx_soc_incident_timeline_incident'), table_name='soc_incident_timeline', if_exists=True)
+    op.drop_table('soc_incident_timeline', if_exists=True)
     # ### end Alembic commands ###
 
 

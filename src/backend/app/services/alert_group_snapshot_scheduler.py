@@ -10,8 +10,7 @@
 import asyncio
 import logging
 
-from app.core.database import SessionLocal, engine
-from app.models.base import Base
+from app.core.database import SessionLocal
 import app.models  # noqa: F401  确保模型注册（含 soc_alert_groups）
 from app.services.alert_group_snapshot_service import (
     AlertGroupSnapshotService,
@@ -20,16 +19,13 @@ from app.services.alert_group_snapshot_service import (
 
 logger = logging.getLogger(__name__)
 
-_SNAPSHOT_TABLES = {"soc_alert_groups"}
 INTERVAL_SECONDS = 6 * 3600  # 每 6 小时
 _FIRST_RUN_DELAY = 60         # 启动后 60s 首次跑
 
 _task = None
 
-
-def _ensure_tables() -> None:
-    tables = [t for n, t in Base.metadata.tables.items() if n in _SNAPSHOT_TABLES]
-    Base.metadata.create_all(bind=engine, tables=tables)
+# P1-T2：原 _ensure_tables() 已迁移化（迁移 d1e2f3a4b5c6 / e2f3a4b5c6d7 创建
+# soc_alert_groups / soc_alert_group_analyses）。生产启动路径不再有 create_all。
 
 
 async def run_snapshot_once(hours: int = 24) -> dict:
@@ -51,7 +47,7 @@ async def run_snapshot_once(hours: int = 24) -> dict:
 
 async def _loop() -> None:
     logger.info("alert group snapshot loop started, interval=%ds", INTERVAL_SECONDS)
-    _ensure_tables()
+    # P1-T2：原 _ensure_tables() 已移除，表由迁移 d1e2f3a4b5c6 / e2f3a4b5c6d7 保障
     await asyncio.sleep(_FIRST_RUN_DELAY)
     while True:
         try:
@@ -66,7 +62,7 @@ def start_alert_group_snapshot() -> None:
     global _task
     if _task is not None and not _task.done():
         return
-    _ensure_tables()
+    # P1-T2：原 _ensure_tables() 已移除，表由迁移 d1e2f3a4b5c6 / e2f3a4b5c6d7 保障
     _task = asyncio.create_task(_loop())
     logger.info("alert group snapshot task started")
 

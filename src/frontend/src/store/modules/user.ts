@@ -126,8 +126,12 @@ export const useUserStore = defineStore(
       // 重置路由状态
       resetRouterState(500)
       // 跳转到登录页，携带当前路由作为 redirect 参数
+      // P4 修复：判断当前路径不是登录页本身（路径为 '/auth/login'，原代码误判 '/login'），
+      // 避免在登录页上再次跳转带 redirect 参数导致 URL 累加 ?redirect=/auth/login?redirect=...
       const currentRoute = router.currentRoute.value
-      const redirect = currentRoute.path !== '/login' ? currentRoute.fullPath : undefined
+      const LOGIN_PATH = '/auth/login'
+      const isOnLoginPage = currentRoute.path === LOGIN_PATH || currentRoute.name === 'Login'
+      const redirect = !isOnLoginPage ? currentRoute.fullPath : undefined
       router.push({
         name: 'Login',
         query: redirect ? { redirect } : undefined

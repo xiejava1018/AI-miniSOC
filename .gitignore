@@ -59,7 +59,19 @@ test-results/
 playwright-report/
 
 # 数据库备份 - 包含敏感数据，绝不提交
+# Database backups contain production data — never commit
 dbbackup/
+src/backend/backups/
+**/backups/
+# 数据 dump 文件（任意后缀与位置）
+*.dump
+*.pgdump
+# 一次性迁移 / 备份脚本
+**/migrations_backup_*.sql
+**/migration_backup_*.sql
+# schema-only 备份允许入库（约定路径）
+!src/backend/migrations/postgresql/*.sql
+!scripts/database/*.sql
 
 # 临时截图文件
 *.png
@@ -99,3 +111,7 @@ diagnose-assets.html
 
 # 路径错误的孤儿目录（src/backend/src/backend/）
 src/backend/src/backend/
+
+# === 一次性事故处理快照（不入库）===
+.git-backup-pre-dump-cleanup/
+.git-state-snapshot/

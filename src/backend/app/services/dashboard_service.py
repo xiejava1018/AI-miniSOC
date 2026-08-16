@@ -116,10 +116,11 @@ class DashboardService:
     # ── 数据源健康（探活）────────────────────────────
 
     def _sources_health(self) -> Dict[str, Any]:
-        """数据源健康药丸：PostgreSQL / OpenSearch / Loki / 采集器纳管数。
+        """数据源健康药丸：PostgreSQL / OpenSearch / Loki / 采集器纳管数 / P2-T3 来源。
 
         OS / Loki 走轻量探活（httpx GET/HEAD，超时 3s），失败标 online:false
         + error 摘要，不抛异常（显信任原则）。
+        P2-T3：补充 soc_source_health 来源（>2× 周期未更新标红中断）。
         """
         health: Dict[str, Any] = {
             "postgres": {"online": True},
@@ -134,6 +135,41 @@ class DashboardService:
             .scalar() or 0
         )
         health["collector"] = {"managed": managed, "total": total}
+
+        # P2-T3：从 soc_source_health 表获取采集任务健康状态
+        from app.models.source_health import SourceHealth
+        from app.services.source_health import is_healthy as sh_is_healthy
+        from datetime import datetime, timezone
+        rows = self.db.query(SourceHealth).all()
+        sources: Dict[str, Any] = {}
+        for r in rows:
+            interval = r.expected_interval_seconds or 300
+            healthy = sh_is_healthy(r.last_success_at, expected_interval_seconds=interval)
+            sources[r.source_key] = {
+                "source_type": r.source_type,
+                "display_name": r.display_name or r.source_key,
+                "healthy": healthy,
+                "last_success_at": r.last_success_at.isoformat() if r.last_success_at else None,
+                "last_failure_at": r.last_failure_at.isoformat() if r.last_failure_at else None,
+                "last_failure_message": r.last_failure_message,
+                "success_count": r.success_count,
+                "failure_count": r.failure_count,
+                "interval_seconds": interval,
+            }
+        if sources:
+            health["tracked_sources"] = sources
+            # 任何不健康的源都计入"data_freshness"语义
+            unhealthy = [k for k, v in sources.items() if not v["healthy"]]
+            if unhealthy:
+                health["freshness_alert"] = {
+                    "level": "stale" if any(
+                        # 如果 last_success_at 超 5x 周期且从未恢复，认为采集中断
+                        (datetime.now(timezone.utc) - datetime.fromisoformat(s["last_success_at"])).total_seconds()
+                        > (s["interval_seconds"] * 5)
+                        for s in (sources[k] for k in unhealthy) if s["last_success_at"]
+                    ) else "warning",
+                    "unhealthy_sources": unhealthy,
+                }
         return health
 
     def _probe_opensearch(self) -> Dict[str, Any]:

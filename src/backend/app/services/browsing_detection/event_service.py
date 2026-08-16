@@ -2,15 +2,22 @@
 事件服务
 
 将规则引擎的检测结果落地：
-  1. 写入 soc_browsing_events
+  1. 写入 soc_browsing_events（P1-T4：幂等，ON CONFLICT DO NOTHING）
   2. 高风险时升级为 soc_incidents
   3. 通过 NotificationService 推送站内通知 + WebSocket
   4. 抑制期内同 (ip,domain) 不重复生成
+
+P1-T4 幂等语义：
+- DB 侧：soc_browsing_events 有唯一约束 (ip, domain, window_start, window_end)
+- 写侧：INSERT ... ON CONFLICT DO NOTHING（重复窗口不新增，score 不更新）
+- suppress_minutes 仅作二级抑制（抑制期以外的同窗口仍允许首次插入）
 """
 
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models.browsing_event import BrowsingEvent
@@ -38,6 +45,9 @@ class EventService:
     ) -> int:
         """
         批量落地检测结果。返回实际新建的事件数。
+
+        P1-T4：改 ON CONFLICT DO NOTHING 保证同窗口不重复。重复跑/重放应返回 0 新增。
+        suppress_minutes 仍作二级抑制（抑制期外的同窗口可首次插入；同窗口重复不走抑制仍被唯一约束拦截）。
         """
         created = 0
         admin_ids = self._resolve_notify_targets(config)
@@ -45,12 +55,12 @@ class EventService:
         for finding in findings:
             severity = config.severity_for(finding.score)
 
-            # 抑制检查
+            # 二级抑制：抑制期内同 (ip, domain) 直接跳过（DB 侧唯一约束已拦截重复窗口，本检查降为预防）
             if self._is_suppressed(finding.ip, finding.domain, config.suppress_minutes):
                 continue
 
-            # 写检测事件
-            event = BrowsingEvent(
+            # P1-T4 幂等写：INSERT ... ON CONFLICT DO NOTHING
+            stmt = pg_insert(BrowsingEvent).values(
                 ip=finding.ip,
                 domain=finding.domain,
                 apptype=finding.apptype or None,
@@ -61,9 +71,29 @@ class EventService:
                 window_start=finding.window_start,
                 window_end=finding.window_end,
                 status="new",
+            ).on_conflict_do_nothing(
+                index_elements=["ip", "domain", "window_start", "window_end"]
             )
-            self.db.add(event)
-            self.db.flush()  # 拿到 event.id
+            result = self.db.execute(stmt)
+            # result.rowcount: PostgreSQL 下 ON CONFLICT DO NOTHING 返回 0（重复）或 1（新增）
+            if not result.rowcount:
+                continue
+
+            # 查询拿回 event.id（PG INSERT ... RETURNING 未在 ON CONFLICT 中返回）
+            event = (
+                self.db.query(BrowsingEvent)
+                .filter(
+                    BrowsingEvent.ip == finding.ip,
+                    BrowsingEvent.domain == finding.domain,
+                    BrowsingEvent.window_start == finding.window_start,
+                    BrowsingEvent.window_end == finding.window_end,
+                )
+                .order_by(BrowsingEvent.created_at.desc())
+                .first()
+            )
+            if event is None:
+                # 极端情况：插入后立刻被外部删除，防御性跳过
+                continue
 
             # 高风险升级为安全事件
             should_notify = severity in ("high", "critical")

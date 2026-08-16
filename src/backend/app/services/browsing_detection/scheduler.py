@@ -14,8 +14,7 @@ from datetime import datetime, timedelta, timezone
 from prometheus_client import Counter
 
 from app.core.config import settings
-from app.core.database import SessionLocal, engine
-from app.models.base import Base
+from app.core.database import SessionLocal
 import app.models  # noqa: F401  确保模型注册
 from app.services.browsing_detection.config import get_detection_config
 from app.services.browsing_detection.loki_client import LokiClient
@@ -37,13 +36,9 @@ _LAST_RUN_SECONDS = 0.0
 
 _detector_task: asyncio.Task | None = None
 
-_BROWSING_TABLES = {"soc_browsing_events", "soc_browsing_blacklist", "soc_browsing_baseline"}
-
-
-def _ensure_tables() -> None:
-    """确保 3 张检测表已建（checkfirst，幂等）"""
-    tables = [t for n, t in Base.metadata.tables.items() if n in _BROWSING_TABLES]
-    Base.metadata.create_all(bind=engine, tables=tables)
+# P1-T2：原 _ensure_tables / Base.metadata.create_all 已迁移化（迁移 e2f3a4b5c6d7 / f3a4b5c6d7e8），
+# 生产启动路径不再有运行时 DDL。
+_BROWSING_TABLES_DEPRECATED = {"soc_browsing_events", "soc_browsing_blacklist", "soc_browsing_baseline"}
 
 
 async def run_detection_once() -> dict:
@@ -107,14 +102,46 @@ async def run_detection_once() -> dict:
 
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
         _LAST_RUN_SECONDS = elapsed
+        # P2-T3：上报成功到 soc_source_health
+        try:
+            from app.services.source_health import SourceHealthRecorder
+            SourceHealthRecorder(db).record_success(
+                source_key="loki:browsing_detection",
+                source_type="loki",
+                display_name="上网行为检测（Loki）",
+                records_count=stats["fetched"],
+                expected_interval_seconds=config.interval_seconds,
+            )
+            db.commit()
+        except Exception:
+            logger.exception("写 soc_source_health 失败")
+            db.rollback()
         logger.info(
             "browsing detection: fetched=%d parsed=%d findings=%d events=%d (%.1fs)",
             stats["fetched"], stats["parsed"], stats["findings"], stats["events"], elapsed,
         )
-    except Exception:
+    except Exception as e:
         _DETECT_ERRORS.inc()
         stats["error"] = "exception"
         logger.exception("browsing detection failed")
+        # P2-T3：上报失败到 soc_source_health
+        try:
+            from app.services.source_health import SourceHealthRecorder
+            recorder = SourceHealthRecorder(db)
+            # 重设区间为默认 300
+            recorder.record_failure(
+                source_key="loki:browsing_detection",
+                source_type="loki",
+                error=f"{type(e).__name__}: {e}",
+                display_name="上网行为检测（Loki）",
+            )
+            db.commit()
+        except Exception:
+            logger.exception("写 soc_source_health 失败")
+            try:
+                db.rollback()
+            except Exception:
+                pass
     finally:
         db.close()
     return stats
@@ -123,7 +150,7 @@ async def run_detection_once() -> dict:
 async def _detector_loop() -> None:
     """主循环：每 interval_seconds 执行一轮"""
     logger.info("browsing detector loop started")
-    _ensure_tables()
+    # P1-T2：原 _ensure_tables() 已移除，表由迁移 f3a4b5c6d7e8 保障
     while True:
         # 动态读取间隔（配置变更生效）
         interval = 300
@@ -155,7 +182,7 @@ def start_browsing_detector() -> None:
     if not settings.BROWSING_DETECT_ENABLED:
         logger.info("browsing detector disabled by BROWSING_DETECT_ENABLED")
         return
-    _ensure_tables()
+    # P1-T2：原 _ensure_tables() 已移除，表由迁移 f3a4b5c6d7e8 保障
     _detector_task = asyncio.create_task(_detector_loop())
     logger.info("browsing detector task started")
 

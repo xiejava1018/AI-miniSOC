@@ -3,7 +3,9 @@
 
 组合 AlertQueryService 的聚合能力，产出一份可查询、可推送的"告警治理摘要"。
 Phase0：summary_text 由模板生成（不调 AI，先让"看得见"）；Phase1 起接入 AI 簇级研判。
-建表复用 browsing 范式：Base.metadata.create_all(checkfirst，幂等)，不依赖 Alembic。
+
+P1-T2：表 soc_alert_digests / soc_alert_group_analyses 已迁移化（迁移 e2f3a4b5c6d7），
+原 _ensure_tables / Base.metadata.create_all 移除。
 """
 import logging
 from datetime import datetime, timedelta
@@ -11,8 +13,6 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.database import engine
-from app.models.base import Base
 import app.models  # noqa: F401  确保模型注册
 from app.models import AlertDigest, AlertGroupAnalysis
 from app.services.alert_query import AlertQueryService
@@ -32,12 +32,6 @@ class AlertDigestService:
     def __init__(self, db: Session):
         self.db = db
 
-    @staticmethod
-    def _ensure_tables() -> None:
-        Base.metadata.create_all(
-            bind=engine, tables=[AlertDigest.__table__, AlertGroupAnalysis.__table__], checkfirst=True
-        )
-
     # ── 生成 ─────────────────────────────────────────
 
     async def generate(self, hours: int = 24) -> AlertDigest:
@@ -47,7 +41,7 @@ class AlertDigestService:
         top_groups 的 ai_* 字段，summary_text 改为"今日必处理"综述，ai_model 写实模型名。
         AI 不可用时降级为纯聚合 + 启发式 verdict（source='heuristic'）。
         """
-        self._ensure_tables()
+        # P1-T2：_ensure_tables 已移除，表由迁移 e2f3a4b5c6d7 保障
         svc = AlertQueryService(self.db)
         end = datetime.utcnow()
         start = end - timedelta(hours=hours)

@@ -36,9 +36,14 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.http_retry import RetryConfig, RetryStats, http_retry
 from app.models.vulnerability import Vulnerability, AssetVulnerability
 from app.models.asset import Asset
 from app.schemas.vulnerability import SeverityEnum, ScannerEnum, VulnerabilityStatusEnum
+from app.services.opensearch.os_field_map import (
+    OSFieldProbe,
+    extract_vuln_fields,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +68,13 @@ class OpenSearchSCAPSyncService:
             verify=False,  # Wazuh/OpenSearch 自签名证书
             timeout=30.0,
         )
+        # P3-T1：重试统计与装饰器
+        self._retry_stats = RetryStats()
+
+    @http_retry(config=RetryConfig.default(), stats=RetryStats())
+    def _send_search(self, url, json):
+        """P3-T1：单次 _search POST，5xx/超时重试。"""
+        return self._os.post(url, json=json)
 
     def close(self):
         self._os.close()
@@ -72,8 +84,8 @@ class OpenSearchSCAPSyncService:
     # ------------------------------------------------------------------
 
     def _search(self, body: dict) -> List[dict]:
-        """执行 _search 并返回 hits 列表（异常向上抛，由调用方统计 errors）"""
-        resp = self._os.post(f"/{VULN_INDEX}/_search", json=body)
+        """执行 _search 并返回 hits 列表（异常向上抛，由调用方统计 errors，P3-T1 重试）"""
+        resp = self._send_search(f"/{VULN_INDEX}/_search", body)
         resp.raise_for_status()
         return resp.json().get("hits", {}).get("hits", [])
 
@@ -186,46 +198,47 @@ class OpenSearchSCAPSyncService:
         return None
 
     def _vuln_from_doc(self, src: dict) -> Optional[Vulnerability]:
-        """OpenSearch 文档 → Vulnerability ORM 对象（不含 has_exploit，由 KEV 服务富化）"""
-        v = src.get("vulnerability") or {}
-        pkg = src.get("package") or {}
-        # CVE 编号统一大写（OpenSearch 偶有小写 id；避免 unique 约束区分大小写重复，
-        # 也保证 CISA KEV 命中匹配）
-        cve = (v.get("id") or "").strip().upper()
-        severity = self.SEVERITY_MAPPING.get(v.get("severity"))
-        if not cve or not severity:
+        """OpenSearch 文档 → Vulnerability ORM 对象（不含 has_exploit，由 KEV 服务富化）
+
+        P2-T1：改走统一映射层（os_field_map）。禁止 data.vulnerability.* / 顶层混写。
+        """
+        # P2-T1：走统一字段映射层
+        fields = extract_vuln_fields(src, source="states")
+        # 关键字段缺失探针
+        missing = self._field_probe.check(fields)
+        if missing:
+            logger.warning("OS 漏洞文档缺关键字段 %s，丢弃: %s", missing, (fields.cve_id or "<no cve>"))
             return None
 
-        description = (v.get("description") or "").strip()
-        cvss = self._parse_cvss(v.get("score"))
-        published = self._parse_datetime(v.get("published_at"))
+        # severity 合法值校验
+        severity = self.SEVERITY_MAPPING.get(fields.severity) if fields.severity else None
+        if severity is None:
+            return None
 
-        affected = None
-        if pkg.get("name"):
-            affected = {
-                "name": pkg.get("name"),
-                "version": pkg.get("version"),
-                "architecture": pkg.get("architecture"),
-                "condition": pkg.get("condition"),
-            }
+        cve = fields.cve_id
+        description = fields.description or ""
+        title = description[:200] if description else cve
+        published = self._parse_datetime(fields.published_at)
 
-        title = description[:200] if description else cve  # states 索引无 title，描述截断兜底
+        affected = fields.package
 
         return Vulnerability(
             type="scap",
             cve_id=cve,
             title=title,
             description=description or None,
-            cvss_score=cvss,
-            cvss_vector=None,  # states 索引无独立向量字段（score.version 已随 score 记录）
+            cvss_score=fields.cvss_score,
+            cvss_vector=None,  # states 索引无独立向量字段
             severity=severity,
             affected_packages=affected,
-            fix_suggestion=None,  # states 索引无 fix 版本（P5：可从 alerts 索引富化）
-            references=self._parse_reference(v.get("reference")),
+            fix_suggestion=None,  # states 索引无 fix 版本
+            references=fields.references,
             published_date=published.date() if published else None,
             has_exploit=False,  # 由 CISA KEV 富化（T6）
-            discovered_at=self._parse_datetime(v.get("detected_at")) or datetime.utcnow(),
+            discovered_at=self._parse_datetime(fields.detected_at) or datetime.utcnow(),
         )
+
+    _field_probe = OSFieldProbe()  # 复用探针实例
 
     # ------------------------------------------------------------------
     # 同步主流程

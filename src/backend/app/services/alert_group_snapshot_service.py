@@ -24,50 +24,20 @@ logger = logging.getLogger(__name__)
 RETENTION_DAYS = 90
 SNAPSHOT_WINDOW_HOURS = 24
 
-# 模块级一次性标记：确保 soc_alert_groups 的 AI 列已存在
-# （create_all 不会给已存在的表加列，需显式 ALTER）
-_schema_ensured = False
+# P1-T2：原 _schema_ensured + 运行时 ALTER 已迁移化为 alembic 迁移
+# d1e2f3a4b5c6 / e2f3a4b5c6d7。生产启动路径不再有 create_all / 运行时 ALTER。
 
 
 class AlertGroupSnapshotService:
     def __init__(self, db):
         self.db = db
 
-    def _ensure_schema(self) -> None:
-        """确保 soc_alert_groups 的 AI 列存在（create_all 不会给已存在表加列）。"""
-        global _schema_ensured
-        if _schema_ensured:
-            return
-        from app.core.database import engine
-        from app.models.base import Base
-        from sqlalchemy import text
-
-        Base.metadata.create_all(
-            bind=engine,
-            tables=[AlertGroupSnapshot.__table__, AlertGroupAnalysis.__table__],
-            checkfirst=True,
-        )
-        for col, typ in (
-            ("ai_priority", "VARCHAR(4)"),
-            ("ai_is_noise", "BOOLEAN"),
-            ("ai_suggest_incident", "BOOLEAN"),
-            ("ai_verdict_at", "TIMESTAMPTZ"),
-        ):
-            try:
-                self.db.execute(
-                    text(f"ALTER TABLE soc_alert_groups ADD COLUMN IF NOT EXISTS {col} {typ}")
-                )
-            except Exception as e:  # 列已存在等
-                logger.warning("确保 AI 列失败(%s): %s", col, e)
-        self.db.commit()
-        _schema_ensured = True
-
     def snapshot(self, hours: int = SNAPSHOT_WINDOW_HOURS) -> dict:
         """对当前窗口的告警簇做全量快照，写入 soc_alert_groups。
 
         Phase 1：落库时为每簇按 fingerprint 回填"最近一次 AI verdict"（不重新调 AI）。
         """
-        self._ensure_schema()
+        # P1-T2：移除 _ensure_schema() 调用，列由迁移 d1e2f3a4b5c6 保障
         svc = AlertQueryService(self.db)
         result = svc.get_alert_groups(hours=hours, min_count=1, level=None, limit=500)
         groups = result.get("groups", []) if isinstance(result, dict) else result

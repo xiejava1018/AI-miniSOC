@@ -26,13 +26,12 @@ def upgrade() -> None:
     op.alter_column('soc_audit_logs', 'user_id',
                     existing_type=sa.BigInteger(),
                     nullable=True)
-    # 重新创建带 ON DELETE SET NULL 的外键约束
-    op.create_foreign_key(
-        'soc_audit_logs_user_id_fkey',
-        'soc_audit_logs', 'soc_users',
-        ['user_id'], ['id'],
-        ondelete='SET NULL'
-    )
+    # 重新创建带 ON DELETE SET NULL 的外键约束（P4：改用原生 SQL）
+    op.execute("""
+        ALTER TABLE soc_audit_logs
+        ADD CONSTRAINT soc_audit_logs_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES soc_users(id) ON DELETE SET NULL
+    """)
 
 
 def downgrade() -> None:
@@ -43,9 +42,9 @@ def downgrade() -> None:
     op.alter_column('soc_audit_logs', 'user_id',
                     existing_type=sa.BigInteger(),
                     nullable=False)
-    # 重新创建不带 ON DELETE 的外键约束
-    op.create_foreign_key(
-        'soc_audit_logs_user_id_fkey',
-        'soc_audit_logs', 'soc_users',
-        ['user_id'], ['id']
-    )
+    # 重新创建不带 ON DELETE 的外键约束（P4：改用原生 SQL）
+    op.execute("""
+        ALTER TABLE soc_audit_logs
+        ADD CONSTRAINT soc_audit_logs_user_id_fkey
+        FOREIGN KEY (user_id) REFERENCES soc_users(id)
+    """)

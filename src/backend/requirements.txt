@@ -20,6 +20,12 @@ python-multipart==0.0.12
 httpx==0.27.2
 requests==2.32.3
 
+# 数据库迁移 (alembic 与 sqlalchemy==2.0.36 兼容，>=1.10 支持 recursive_version_locations)
+alembic>=1.13,<2.0
+
+# 重试与容错
+tenacity>=8.2,<10.0
+
 # MCP (Model Context Protocol) — 让 Agent 通过 MCP 调用 FastAPI
 # 注意：mcp>=1.0 在旧版(如1.12)有 issubclass(param.annotation, Context) 启动崩溃，需 >=1.29
 mcp==1.29.0

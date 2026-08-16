@@ -14,8 +14,6 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.database import engine
-from app.models.base import Base
 from app.models import AlertGroupAnalysis
 from app.services.alert_query import AlertQueryService
 from app.services.ai_analysis import AIAnalysisService
@@ -37,9 +35,7 @@ class AlertGroupTriageService:
     def __init__(self, db: Session):
         self.db = db
 
-    @staticmethod
-    def _ensure_tables() -> None:
-        Base.metadata.create_all(bind=engine, tables=[AlertGroupAnalysis.__table__], checkfirst=True)
+    # P1-T2：原 _ensure_tables() 已移除，表由迁移 e2f3a4b5c6d7 保障
 
     # ── 公开方法 ──────────────────────────────────────
 
@@ -47,7 +43,7 @@ class AlertGroupTriageService:
         self, hours: int = 24, top_n: Optional[int] = None, force_refresh: bool = False
     ) -> List[dict]:
         """对 TopN 告警簇做 AI 研判，返回带 verdict 的簇清单（按优先级排序）。"""
-        self._ensure_tables()
+        # P1-T2：_ensure_tables() 已移除，表由迁移 e2f3a4b5c6d7 保障
         if top_n is None:
             top_n = get_triage_top_n(self.db)
 

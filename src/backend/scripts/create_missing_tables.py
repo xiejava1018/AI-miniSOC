@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
 创建缺失的数据库表
+
+P1-T2（数据可靠性）：历史一次性脚本，仅作为紧急恢复备用。
+禁止生产环境调用，表结构变更一律走 alembic migration：
+  cd src/backend && alembic upgrade head
+
+保持此脚本仅为冷启动/灾备场景使用。
 """
 import sys
 import os
@@ -22,7 +28,7 @@ from app.models import (
 
 
 def create_tables():
-    """创建所有表"""
+    """创建所有表（P1-T2：仅冷启动/灾备场景使用）"""
     print("开始创建数据库表...")
 
     # 创建所有表

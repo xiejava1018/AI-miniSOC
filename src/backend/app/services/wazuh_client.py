@@ -13,6 +13,7 @@ T0（2026-08-15 脆弱性管理点亮计划）：
 import httpx
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
+from app.core.http_retry import RetryConfig, http_retry, RetryStats
 
 
 class WazuhClient:
@@ -23,7 +24,8 @@ class WazuhClient:
         base_url: str = None,
         username: str = None,
         password: str = None,
-        use_mock_data: bool = False
+        use_mock_data: bool = False,
+        retry_config: Optional[RetryConfig] = None,
     ):
         self.base_url = base_url or settings.WAZUH_API_URL
         self.username = username or settings.WAZUH_API_USERNAME
@@ -32,6 +34,9 @@ class WazuhClient:
         self.use_mock_data = use_mock_data
         self._token: Optional[str] = None
         self._client = httpx.Client(verify=False)  # Wazuh 使用自签名证书
+        # P3-T1：HTTP 重试配置
+        self._retry_stats = RetryStats()
+        self._retry_config = retry_config or RetryConfig.default()
 
     def _get_token(self) -> str:
         """获取或刷新 JWT token"""
@@ -47,6 +52,13 @@ class WazuhClient:
             self._token = data["data"]["token"]
         return self._token
 
+    @http_retry()
+    def _send_request(self, method: str, url: str, headers: dict, params: dict, data: dict):
+        """单次发送请求（被 _request 调用，受重试装饰器保护，P3-T1）"""
+        return self._client.request(
+            method=method, url=url, headers=headers, params=params, json=data,
+        )
+
     def _request(
         self,
         method: str,
@@ -54,7 +66,7 @@ class WazuhClient:
         params: Dict[str, Any] = None,
         data: Dict[str, Any] = None
     ) -> Dict[str, Any]:
-        """发送请求到 Wazuh API"""
+        """发送请求到 Wazuh API（P3-T1：5xx/超时走 tenacity 重试）"""
         token = self._get_token()
         url = f"{self.base_url}{endpoint}"
 
@@ -63,12 +75,8 @@ class WazuhClient:
             "Content-Type": "application/json"
         }
 
-        response = self._client.request(
-            method=method,
-            url=url,
-            headers=headers,
-            params=params,
-            json=data
+        response = self._send_request(
+            method=method, url=url, headers=headers, params=params, data=data,
         )
 
         # Token 过期时(401)自动清除并重试一次
@@ -76,16 +84,17 @@ class WazuhClient:
             self._token = None
             token = self._get_token()
             headers["Authorization"] = f"Bearer {token}"
-            response = self._client.request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=data
+            response = self._send_request(
+                method=method, url=url, headers=headers, params=params, data=data,
             )
 
         response.raise_for_status()
         return response.json()
+
+    @property
+    def retry_stats(self) -> RetryStats:
+        """P3-T1：返回本 client 累计重试统计（可观测）。"""
+        return self._retry_stats
 
     def get_agents(self) -> List[Dict[str, Any]]:
         """获取所有 agents（mock 模式返回模拟 agent 列表）"""

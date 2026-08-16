@@ -96,11 +96,26 @@ function createHttpError(message: string, code: number) {
   return new HttpError(message, code)
 }
 
-/** 处理401错误（带防抖） */
+/** 处理401错误（带防抖）
+
+重要：仅在【已登录】状态时才会触发自动登出。
+未登录时（如登录页加载时的 notif.unread-count）返回 401 只是"正常预期"，不应踢人。
+
+P4 修复：登录页加载时 art-notification 组件无条件 onMounted 拉 unread-count，
+后端返回 code:401（未认证），原代码无条件触发 logOut()，导致：
+1. userStore.isLogin 被重置为 false
+2. router.push('/auth/login') 但 currentRoute.path 已是 '/auth/login'，
+   造成 URL 累加 ?redirect=/auth/login?redirect=/... 死循环。
+*/
 function handleUnauthorizedError(message?: string): never {
   const error = createHttpError(message || '登录状态已失效，请重新登录', ApiStatus.unauthorized)
 
-  if (!isUnauthorizedErrorShown) {
+  // 只在已登录时才触发自动登出。未登录状态下的 401 是预期行为（如 captcha
+  // / 登录页预加载 / 主动调 logout 后等），不能误踢。
+  const userStore = useUserStore()
+  const wasLoggedIn = userStore.isLogin || !!userStore.accessToken
+
+  if (wasLoggedIn && !isUnauthorizedErrorShown) {
     isUnauthorizedErrorShown = true
     logOut()
 
