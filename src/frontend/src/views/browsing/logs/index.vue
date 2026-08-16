@@ -15,7 +15,6 @@
         v-loading="loading"
         border
         style="width: 100%"
-        max-height="560"
         size="small"
       >
         <ElTableColumn prop="ts" label="时间" width="170" align="center" />
