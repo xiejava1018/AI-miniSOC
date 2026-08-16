@@ -14,7 +14,7 @@
         title="行为日志"
         @refresh="handleSearch"
       >
-        <template #right>
+        <template #left>
           <span class="logs-meta" v-if="logs.length">
             命中 {{ logs.length }} 条<template v-if="logs.length >= currentLimit">（已达上限，建议缩小范围）</template>
           </span>
@@ -187,7 +187,7 @@
     .logs-meta {
       font-size: 12px;
       color: var(--el-text-color-secondary, #909399);
-      margin-right: 8px;
+      margin-left: 12px;
     }
   }
 </style>
