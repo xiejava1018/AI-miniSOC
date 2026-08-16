@@ -1024,12 +1024,19 @@
     }
   }
 
-  // 双源合并：本地(手动/nmap, 可删) + Wazuh(实时, 带进程)。同端口同协议时本地优先展示、合并进程信息
+  // 双源合并：本地(手动/nmap, 可删) + Wazuh(实时, 带进程)。同 port+protocol 去重
+  // （本地优先；Wazuh 内部同键也去重——如 53/tcp IPv4/IPv6 双监听只计一次，与摘要统计口径一致）
   const mergedPortsData = computed(() => {
     const local = portsData.value.map((p: any) => ({ ...p, source: 'local' }))
     const localKeys = new Set(local.map((p: any) => `${p.port}/${p.protocol}`))
+    const wazuhSeen = new Set<string>()
     const wazuh = wazuhPortsData.value
-      .filter((p: any) => !localKeys.has(`${p.port}/${p.protocol}`))
+      .filter((p: any) => {
+        const key = `${p.port}/${p.protocol}`
+        if (localKeys.has(key) || wazuhSeen.has(key)) return false
+        wazuhSeen.add(key)
+        return true
+      })
       .map((p: any) => ({
         id: `wazuh-${p.port}-${p.protocol}`,
         port: p.port,

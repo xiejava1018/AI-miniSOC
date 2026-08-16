@@ -104,8 +104,8 @@ class AssetSummaryService:
         # 3. 事件数据(本地 DB,JOIN asset_incidents)
         open_incidents = self._get_open_incidents_count(asset.id)
 
-        # 4. 端口数据(本地 DB)
-        open_ports, high_risk_ports, last_port_scan = self._get_port_stats(asset.id)
+        # 4. 端口数据（M4 双源：本地 AssetPort + Wazuh states 实时端口合并去重）
+        open_ports, high_risk_ports, last_port_scan = self._get_port_stats(asset.id, asset.wazuh_agent_id)
 
         # 5. 标签数据
         tags = self._get_tags(asset.id)
@@ -246,12 +246,13 @@ class AssetSummaryService:
             logger.warning(f"获取未关闭事件数失败(asset_id={asset_id}): {e}")
             return 0
 
-    def _get_port_stats(self, asset_id) -> tuple[int, int, Optional[datetime]]:
+    def _get_port_stats(self, asset_id, wazuh_agent_id: Optional[str] = None) -> tuple[int, int, Optional[datetime]]:
         """
-        端口统计:
-        - open_ports: 开放端口总数(state='open')
+        端口统计（M4 双源合并去重，以 port+protocol 为键）:
+        - open_ports: 开放端口总数（本地 state=open + Wazuh listening）
         - high_risk_ports: 命中高危端口库的端口数
-        - last_port_scan: 最近一次扫描时间
+        - last_port_scan: 最近一次扫描时间（本地表；Wazuh 实时无 scan_time 概念）
+        - Wazuh 不可达时降级仅本地（与告警/应用清单同降级语义）
         """
         try:
             ports = (
@@ -259,9 +260,24 @@ class AssetSummaryService:
                 .filter(AssetPort.asset_id == asset_id, AssetPort.state == "open")
                 .all()
             )
+            port_keys = {f"{p.port}/{p.protocol}" for p in ports}
             open_count = len(ports)
-            high_risk_count = sum(1 for p in ports if p.port in HIGH_RISK_PORTS)
+
             last_scan = max((p.scan_time for p in ports if p.scan_time), default=None)
+
+            # M4：Wazuh states 实时监听端口合并（同 port+protocol 去重，避免双计）
+            if wazuh_agent_id:
+                try:
+                    wazuh_ports = _get_inventory_service().get_ports(wazuh_agent_id)
+                    for wp in wazuh_ports:
+                        key = f"{wp.get('port')}/{wp.get('protocol')}"
+                        if key not in port_keys:
+                            port_keys.add(key)
+                            open_count += 1
+                except Exception as e:
+                    logger.warning("Wazuh 实时端口获取失败，降级仅本地统计: %s", e)
+
+            high_risk_count = sum(1 for key in port_keys if key.split("/")[0].isdigit() and int(key.split("/")[0]) in HIGH_RISK_PORTS)
             return open_count, high_risk_count, last_scan
         except Exception as e:
             logger.warning(f"获取端口统计失败(asset_id={asset_id}): {e}")
