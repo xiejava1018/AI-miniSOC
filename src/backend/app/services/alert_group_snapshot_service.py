@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import select, func as sa_func, delete
+from sqlalchemy import select, func as sa_func, delete, String
 
 from app.core.database import SessionLocal
 from app.models.alert_group_snapshot import AlertGroupSnapshot
@@ -160,17 +160,40 @@ class AlertGroupSnapshotService:
         return self.db.execute(stmt).scalars().all()
 
     def get_trend(self, days: int = 14) -> dict:
-        """按 snapshot 日期聚合：每日簇数 / 告警总量 / 关联资产数。"""
+        """按 snapshot 日期聚合：每日簇数 / 告警总量 / 关联资产数。
+
+        口径（2026-08-16 修复）：一天内调度器可能跑多次快照，同一指纹会有多行，
+        直接 count(*) 会把快照次数当簇数（如 8/15 快照跑 23 次，行数 696 被当成
+        "簇数"，而当日真实簇数仅 35）。
+        - clusters:      每日 distinct fingerprint 数
+        - alerts:        每指纹取当日快照中 count 的最大值（最近窗口告警量）再求和，
+                         避免跨快照重复累加
+        - linked_assets: 每日 distinct linked_asset_id 数
+        """
         since = datetime.now(timezone.utc) - timedelta(days=days)
-        stmt = (
+        # 每指纹当日聚合（linked_asset_id 为 UUID 无 max()，cast text 后 max 仅为保留值供外层去重）
+        per_fp = (
             select(
                 sa_func.date(AlertGroupSnapshot.snapshot_at).label("day"),
-                sa_func.count().label("clusters"),
-                sa_func.sum(AlertGroupSnapshot.count).label("alerts"),
-                sa_func.count(AlertGroupSnapshot.linked_asset_id).label("linked"),
+                AlertGroupSnapshot.fingerprint.label("fingerprint"),
+                sa_func.max(AlertGroupSnapshot.count).label("max_count"),
+                sa_func.max(
+                    sa_func.cast(AlertGroupSnapshot.linked_asset_id, String)
+                ).label("asset_id"),
             )
             .where(AlertGroupSnapshot.snapshot_at >= since)
-            .group_by(sa_func.date(AlertGroupSnapshot.snapshot_at))
+            .group_by("day", "fingerprint")
+            .subquery()
+        )
+        stmt = (
+            select(
+                per_fp.c.day.label("day"),
+                sa_func.count().label("clusters"),
+                sa_func.coalesce(sa_func.sum(per_fp.c.max_count), 0).label("alerts"),
+                # count(distinct) 忽略 NULL
+                sa_func.count(sa_func.distinct(per_fp.c.asset_id)).label("linked"),
+            )
+            .group_by(per_fp.c.day)
             .order_by("day")
         )
         rows = self.db.execute(stmt).all()
