@@ -1,11 +1,11 @@
 <template>
   <div class="browsing-baseline-page art-full-height" id="table-full-screen">
-    <!-- 搜索栏（ip 精确 / domain 模糊） -->
+    <!-- 搜索栏（ip 精确 / domain 模糊，空值忽略过滤） -->
     <ArtSearchBar
       v-model="searchParams"
       :items="searchItems"
-      @reset="handleReset"
-      @search="handleSearch"
+      @reset="resetSearchParams"
+      @search="getDataByPage"
     />
 
     <ElCard shadow="never" class="art-table-card">
@@ -27,27 +27,17 @@
 </template>
 
 <script setup lang="ts">
-  import { reactive } from 'vue'
   import { useTable } from '@/composables/useTable'
   import { getBrowsingBaseline } from '@/api/browsing'
   import type { SearchFormItem } from '@/types'
 
-  // 筛选条件（空值传 undefined 忽略过滤，对齐后端 ip 精确 / domain ILIKE 语义）
-  const searchParams = reactive({
-    ip: '',
-    domain: ''
-  })
-
-  const searchItems: SearchFormItem[] = [
-    { label: '内网 IP', key: 'ip', type: 'input', span: 6, clearable: true, placeholder: '如 192.168.0.8' },
-    { label: '域名', key: 'domain', type: 'input', span: 6, clearable: true, placeholder: '域名关键字' }
-  ]
-
-  // 表格（服务端分页，仿 blacklist 范式；基线为系统维护只读数据，无增删操作）
+  // 表格（服务端分页，仿 event 页范式：searchParams 由 useTable 提供，
+  // ArtSearchBar v-model 双向同步，查询走 getDataByPage 以当前筛选请求）
+  // 基线为系统维护只读数据，无增删操作
   const tableApi = useTable<any>({
     core: {
       apiFn: getBrowsingBaseline,
-      apiParams: { ip: undefined, domain: undefined },
+      apiParams: { ip: '', domain: '' },
       columnsFactory: () => [
         { prop: 'ip', label: '内网 IP', align: 'left', showOverflowTooltip: true },
         { prop: 'domain', label: '域名', align: 'left', showOverflowTooltip: true },
@@ -62,20 +52,14 @@
 
   const {
     data, loading, columns, columnChecks, pagination,
+    searchParams, getDataByPage, resetSearchParams,
     handleSizeChange, handleCurrentChange, refresh
   } = tableApi as any
 
-  // 查询：以当前筛选条件刷新（空值 → undefined 忽略）
-  const handleSearch = () => {
-    refresh({ ip: searchParams.ip || undefined, domain: searchParams.domain || undefined })
-  }
-
-  // 重置：清空筛选并刷新全量
-  const handleReset = () => {
-    searchParams.ip = ''
-    searchParams.domain = ''
-    refresh({ ip: undefined, domain: undefined })
-  }
+  const searchItems: SearchFormItem[] = [
+    { label: '内网 IP', key: 'ip', type: 'input', span: 6, clearable: true, placeholder: '如 192.168.0.8' },
+    { label: '域名', key: 'domain', type: 'input', span: 6, clearable: true, placeholder: '域名关键字' }
+  ]
 </script>
 
 <style lang="scss" scoped>
