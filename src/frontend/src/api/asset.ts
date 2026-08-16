@@ -135,8 +135,9 @@ export const getAssetApplications = (
 }> => {
   return httpClient.get({
     url: `${API_PREFIX}/${assetId}/applications`,
-    params
-  })
+    params,
+    keepFullResponse: true
+  }) as Promise<any>
 }
 
 // M4：Wazuh 实时监听端口（带进程信息，与本地端口双源合并）
@@ -150,7 +151,7 @@ export interface WazuhPort {
 }
 
 export const getAssetWazuhPorts = (assetId: string): Promise<{ items: WazuhPort[]; not_applicable?: boolean; reason?: string }> => {
-  return httpClient.get({ url: `${API_PREFIX}/${assetId}/wazuh-ports` })
+  return httpClient.get({ url: `${API_PREFIX}/${assetId}/wazuh-ports`, keepFullResponse: true }) as Promise<any>
 }
 
 export const addAssetPort = (assetId: string, data: any): Promise<any> => {

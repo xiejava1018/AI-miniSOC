@@ -895,15 +895,15 @@
     if (!assetId.value || !hasWazuhAgent.value) return
     vulnsLoading.value = true
     try {
-      const r: any = await getAssetVulnerabilities({
+      // 注意：request.get 无 keepFullResponse → 返回已解包的业务本体 {items,total}
+      const d: any = await getAssetVulnerabilities({
         asset_id: assetId.value,
         vuln_type: 'scap',
         status: 'open',
         skip: 0,
         limit: 100
       })
-      const d = r?.data
-      vulnsData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
+      vulnsData.value = Array.isArray(d?.items) ? d.items : []
     } catch {
       vulnsData.value = []
     } finally {
@@ -915,15 +915,14 @@
     if (!assetId.value || !hasWazuhAgent.value) return
     baselineLoading.value = true
     try {
-      const r: any = await getAssetVulnerabilities({
+      const d: any = await getAssetVulnerabilities({
         asset_id: assetId.value,
         vuln_type: 'sca',
         status: 'open',
         skip: 0,
         limit: 100
       })
-      const d = r?.data
-      baselineData.value = Array.isArray(d?.items) ? d.items : Array.isArray(d) ? d : []
+      baselineData.value = Array.isArray(d?.items) ? d.items : []
     } catch {
       baselineData.value = []
     } finally {
@@ -956,8 +955,8 @@
     }
     incidentCreatingId.value = row.id
     try {
-      const r: any = await createIncidentFromVulnerability(row.id)
-      const d = r?.data
+      // request.post 无 keepFullResponse → 返回业务本体 {message, incident}
+      const d: any = await createIncidentFromVulnerability(row.id)
       ElMessage.success(`事件已创建：${d?.incident?.title || row.cve_id}（可在事件管理页处理）`)
     } catch (err) {
       ElMessage.error('生成事件失败')
