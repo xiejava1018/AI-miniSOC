@@ -52,11 +52,18 @@ class DashboardService:
 
     def __init__(self, db: Session):
         self.db = db
+        self._window_hours = 24  # 态势条时间窗，get_summary(hours=...) 覆盖
 
     # ── 主入口 ───────────────────────────────────────
 
-    def get_summary(self) -> Dict[str, Any]:
-        """聚合全部仪表板数据；各模块查询失败互不影响。"""
+    def get_summary(self, hours: int = 24) -> Dict[str, Any]:
+        """聚合全部仪表板数据；各模块查询失败互不影响。
+
+        hours 为态势条时间窗（24 / 168），仅影响窗口型 KPI
+        （活跃告警簇 / 行为异常 / 今日新增事件）；
+        存量型指标（事件积压 / 漏洞 / 纳管率 / 夜间摘要）与窗口无关。
+        """
+        self._window_hours = max(1, int(hours))
         kpi_builders = [
             ("active_alert_groups", self._kpi_active_alert_groups),
             ("open_incidents", self._kpi_open_incidents),
@@ -71,6 +78,7 @@ class DashboardService:
 
         return {
             "generated_at": datetime.now(UTC).isoformat(),
+            "window_hours": self._window_hours,
             "freshness": self._safe("freshness", self._freshness),
             "sources_health": self._safe("sources_health", self._sources_health),
             "kpi": kpi,
@@ -174,7 +182,9 @@ class DashboardService:
 
             svc = AlertQueryService(self.db)
             try:
-                result = svc.get_alert_groups(hours=24, min_count=1, limit=1)
+                result = svc.get_alert_groups(
+                    hours=self._window_hours, min_count=1, limit=1
+                )
                 return int(result.get("total_groups") or 0)
             finally:
                 svc.close()
@@ -183,11 +193,20 @@ class DashboardService:
             return None
 
     def _kpi_active_alert_groups(self) -> Dict[str, Any]:
-        """活跃告警簇：OS 实时聚合优先，回退当日（北京时间）快照 distinct 指纹。"""
+        """窗口内活跃告警簇：OS 实时聚合优先，回退快照 distinct 指纹。
+
+        窗口随态势条时间窗（_window_hours）：24h=北京"今日"，168h=近 7 天。
+        Δ 环比始终按"今日 vs 昨日"日界口径（与窗口无关的稳定基线）。
+        """
         # 北京时间"今日 / 昨日"窗口（Python 侧算好，不依赖 DB session 时区）
         now_bj = datetime.now(BJ_TZ)
         today_start = now_bj.replace(hour=0, minute=0, second=0, microsecond=0)
         yesterday_start = today_start - timedelta(days=1)
+
+        if self._window_hours <= 24:
+            fallback_start = today_start
+        else:
+            fallback_start = now_bj - timedelta(hours=self._window_hours)
 
         def _distinct_since(start: datetime, end: datetime = None) -> int:
             q = self.db.query(
@@ -199,7 +218,7 @@ class DashboardService:
 
         value = self._active_alert_groups_from_os()
         if value is None:
-            value = _distinct_since(today_start)
+            value = _distinct_since(fallback_start)
 
         # Δ 环比：快照口径 今日 distinct - 昨日 distinct（无昨日基线则 None）
         today_n = _distinct_since(today_start)
@@ -284,21 +303,22 @@ class DashboardService:
     # ── KPI：行为异常（24h，按 window_end）──────────
 
     def _kpi_browsing_anomalies(self) -> Dict[str, Any]:
-        """近 24h 行为异常数 / 累计 / 前 24h（时间列是 window_end，不是 created_at）。"""
-        now = datetime.now(UTC)
-        last24 = now - timedelta(hours=24)
-        prev48 = now - timedelta(hours=48)
+        """窗口内行为异常数 / 累计 / 前一窗口（时间列是 window_end，不是 created_at）。
 
+        窗口宽度随态势条时间窗（_window_hours，默认 24h；近 7 天=168h）。
+        """
+        now = datetime.now(UTC)
+        w = timedelta(hours=self._window_hours)
         cur = (
             self.db.query(sa_func.count(BrowsingEvent.id))
-            .filter(BrowsingEvent.window_end > last24)
+            .filter(BrowsingEvent.window_end > now - w)
             .scalar() or 0
         )
         prev = (
             self.db.query(sa_func.count(BrowsingEvent.id))
             .filter(
-                BrowsingEvent.window_end > prev48,
-                BrowsingEvent.window_end <= last24,
+                BrowsingEvent.window_end > now - 2 * w,
+                BrowsingEvent.window_end <= now - w,
             )
             .scalar() or 0
         )
@@ -331,14 +351,21 @@ class DashboardService:
     # ── KPI：今日新增事件 ────────────────────────────
 
     def _kpi_incidents_today(self) -> Dict[str, Any]:
-        """今日（北京时间）新增事件 + 近 7 天事件数。"""
+        """窗口内新增事件（24h=今日北京时间起 / 168h=近 7 天）+ 近 7 天事件数。
+
+        24h 窗口保持"今日 0 点起"的日界语义（SOC 惯例）；
+        7d 窗口直接按滚动 168h 统计。
+        """
         now = datetime.now(UTC)
-        today_start_bj = datetime.now(BJ_TZ).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        today = (
+        if self._window_hours <= 24:
+            since = datetime.now(BJ_TZ).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        else:
+            since = now - timedelta(hours=self._window_hours)
+        in_window = (
             self.db.query(sa_func.count(Incident.id))
-            .filter(Incident.created_at >= today_start_bj)
+            .filter(Incident.created_at >= since)
             .scalar() or 0
         )
         last7 = (
@@ -346,7 +373,7 @@ class DashboardService:
             .filter(Incident.created_at >= now - timedelta(days=7))
             .scalar() or 0
         )
-        return {"value": today, "last_7d": last7}
+        return {"value": in_window, "last_7d": last7}
 
     # ── 夜间摘要（昨日 18:00 → 今日 09:00 北京时间）──
 

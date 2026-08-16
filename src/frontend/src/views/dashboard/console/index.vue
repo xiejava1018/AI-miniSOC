@@ -252,7 +252,8 @@
     type DashboardSummary,
     type DashboardTrendResponse,
     type DashboardTodoPriority,
-    type DashboardAiInsight
+    type DashboardAiInsight,
+    type DashboardWindowHours
   } from '@/api/dashboard'
 
   defineOptions({ name: 'Console' })
@@ -280,7 +281,12 @@
   const trend = ref<DashboardTrendResponse | null>(null)
   const trendLoading = ref(false)
   const trendError = ref('')
-  const timeWindow = ref<'24h' | '7d'>('24h') // 纯 UI 状态，本期不联动数据
+  // 态势条时间窗：切换时重拉 summary（窗口型 KPI 随窗口变化，
+  // 存量型指标——积压/漏洞/纳管率/夜间摘要——与窗口无关）
+  const timeWindow = ref<'24h' | '7d'>('24h')
+  const windowHours = computed<DashboardWindowHours>(() =>
+    timeWindow.value === '7d' ? 168 : 24
+  )
   let lastLoadedAt = 0
 
   // ── a. 态势条 ───────────────────────────────────────
@@ -399,15 +405,16 @@
       })
     }
 
-    // 4. 行为异常（24h）
+    // 4. 行为异常（窗口随态势条：24h / 7d）
     if (kpi.browsing_anomalies_24h && !isModuleError(kpi.browsing_anomalies_24h)) {
       const k = kpi.browsing_anomalies_24h
+      const winLabel = timeWindow.value === '7d' ? '7 天' : '24h'
       cards.push({
         key: 'browsing_anomalies_24h',
-        title: '行为异常（24h）',
+        title: `行为异常（${winLabel}）`,
         value: String(k.value),
         sub: `累计 ${k.total} · 全部待研判（status=new）`,
-        delta: deltaOf(k.value - k.prev_24h, `vs 前 24h ${k.prev_24h}`),
+        delta: deltaOf(k.value - k.prev_24h, `vs 前${winLabel} ${k.prev_24h}`),
         route: ROUTE.browsingEvent,
         tooltip: '行为事件页'
       })
@@ -429,15 +436,16 @@
       })
     }
 
-    // 6. 今日新增事件
+    // 6. 窗口内新增事件（24h=今日 / 7d=近 7 天，随态势条时间窗）
     if (kpi.incidents_today && !isModuleError(kpi.incidents_today)) {
       const k = kpi.incidents_today
+      const is7d = timeWindow.value === '7d'
       cards.push({
         key: 'incidents_today',
-        title: '今日新增事件',
+        title: is7d ? '7 天新增事件' : '今日新增事件',
         value: String(k.value),
         sub: `近 7 天 ${k.last_7d} 起`,
-        delta: k.value === 0 ? { text: '今日无新事发', cls: 'down' } : undefined,
+        delta: !is7d && k.value === 0 ? { text: '今日无新事发', cls: 'down' } : undefined,
         route: ROUTE.incidents,
         tooltip: '事件管理页'
       })
@@ -642,7 +650,7 @@
     summaryLoading.value = true
     summaryError.value = ''
     try {
-      const res = await getDashboardSummary()
+      const res = await getDashboardSummary(windowHours.value)
       summary.value = res.data
       lastLoadedAt = Date.now()
     } catch (e: any) {
@@ -680,6 +688,12 @@
   // 深浅色切换时重绘图表（轴/提示框配色跟随主题）
   watch(isDark, () => {
     if (trendDays.value.length) renderTrendChart()
+  })
+
+  // 态势条时间窗切换：重拉 summary（窗口型 KPI 变化；
+  // 切换期间保留旧数据渲染，避免闪骨架屏）
+  watch(timeWindow, () => {
+    loadSummary()
   })
 
   onMounted(() => {

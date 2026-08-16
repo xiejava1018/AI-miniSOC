@@ -150,11 +150,16 @@ def _apply_rbac(summary: dict, paths: Optional[Set[str]]) -> dict:
 
 @router.get("/summary")
 async def get_dashboard_summary(
+    hours: int = Query(24, ge=1, le=168, description="态势条时间窗（小时）：24=近24h，168=近7天"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """概览仪表板聚合数据（设计 §5.2：一个接口驱动五区块，按菜单权限裁剪）。"""
-    summary = DashboardService(db).get_summary()
+    """概览仪表板聚合数据（设计 §5.2：一个接口驱动五区块，按菜单权限裁剪）。
+
+    hours 仅影响窗口型 KPI（活跃簇/行为异常/窗口内新增事件）；
+    存量型指标（积压/漏洞/纳管率/夜间摘要）与窗口无关。
+    """
+    summary = DashboardService(db).get_summary(hours=hours)
     paths = _user_menu_paths(db, current_user)
     return _apply_rbac(summary, paths)
 

@@ -135,6 +135,8 @@ export interface DashboardAiInsight {
 
 export interface DashboardSummary {
   generated_at: string
+  /** 态势条时间窗（24/168 小时），后端回显 */
+  window_hours?: number
   freshness: DashboardFreshness | DashboardModuleError
   sources_health: DashboardSourcesHealth | DashboardModuleError
   kpi: DashboardKpi | DashboardModuleError
@@ -165,12 +167,16 @@ export const isModuleError = (
 
 // ── API 函数 ─────────────────────────────────────────
 
+/** 态势条时间窗：24=近24h，168=近7天（仅影响窗口型 KPI） */
+export type DashboardWindowHours = 24 | 168
+
 /** 概览仪表板聚合数据（KPI + 健康 + 待办 + AI 洞察一次返回） */
-export const getDashboardSummary = (): Promise<
-  Http.BaseResponse<DashboardSummary>
-> => {
+export const getDashboardSummary = (
+  hours: DashboardWindowHours = 24
+): Promise<Http.BaseResponse<DashboardSummary>> => {
   return httpClient.get({
     url: `${API_PREFIX}/summary`,
+    params: { hours },
     keepFullResponse: true,
     showErrorMessage: false
   })
