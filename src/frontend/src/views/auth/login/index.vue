@@ -217,7 +217,10 @@
   const showLoginSuccessNotice = () => {
     // 优先用显示名 (full_name), 回退到登录账号 (username)
     const displayName =
-      userStore.userInfo?.full_name || userStore.userInfo?.username || formData.username || ''
+      userStore.getUserInfo?.full_name ||
+      userStore.getUserInfo?.username ||
+      formData.username ||
+      ''
     setTimeout(() => {
       ElNotification({
         title: '登录成功',
