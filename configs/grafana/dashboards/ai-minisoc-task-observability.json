@@ -1,0 +1,260 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "datasource", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "AI-miniSOC 后台任务可观测性看板（v0.4.2 Phase 2.2）",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "📊 任务总览",
+      "type": "row",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "collapsed": false
+    },
+    {
+      "title": "看门狗存活",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "ALIVE", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "green", "value": 1}]}
+        }
+      },
+      "targets": [
+        {"expr": "task_watchdog_alive", "refId": "A"}
+      ]
+    },
+    {
+      "title": "看门狗最后 tick",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name",
+        "unit": "s"
+      },
+      "targets": [
+        {"expr": "time() - task_watchdog_last_tick", "refId": "A", "legendFormat": "{{instance}}"}
+      ]
+    },
+    {
+      "title": "僵尸任务数",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 1}]}
+        }
+      },
+      "targets": [{"expr": "task_zombie_total", "refId": "A"}]
+    },
+    {
+      "title": "通知队列积压",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 50}, {"color": "red", "value": 100}]}
+        }
+      },
+      "targets": [{"expr": "task_notification_queue_size", "refId": "A"}]
+    },
+    {
+      "title": "通知累计丢弃",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "targets": [{"expr": "notification_dropped_total", "refId": "A"}]
+    },
+    {
+      "title": "NTP 时钟偏移",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name",
+        "unit": "s"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 1}, {"color": "red", "value": 60}]}
+        }
+      },
+      "targets": [{"expr": "abs(task_watchdog_clock_skew_seconds)", "refId": "A"}]
+    },
+
+    {
+      "title": "⏱ 任务执行耗时（最近一次）",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear"}}},
+      "targets": [
+        {"expr": "task_last_duration_seconds{task_key!~\"__watchdog__|mcp_token_refresher\"}", "refId": "A", "legendFormat": "{{task_key}}"}
+      ]
+    },
+    {
+      "title": "🔄 任务停滞秒数（超过 2×expected_interval 即异常）",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineInterpolation": "linear"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "yellow", "value": 1800}, {"color": "red", "value": 3600}]}}},
+      "targets": [
+        {"expr": "task_staleness_seconds", "refId": "A", "legendFormat": "{{task_key}}"}
+      ]
+    },
+
+    {
+      "title": "❌ 连续失败次数",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "fieldConfig": {"defaults": {"custom": {"drawStyle": "line", "lineInterpolation": "linear"}, "thresholds": {"mode": "absolute", "steps": [{"color": "green"}, {"color": "red", "value": 3}]}}},
+      "targets": [
+        {"expr": "task_consecutive_failures", "refId": "A", "legendFormat": "{{task_key}}"}
+      ]
+    },
+    {
+      "title": "📈 任务执行次数（按状态）",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {"expr": "sum by (status) (increase(task_runs_total[1h]))", "refId": "A", "legendFormat": "{{status}}"}
+      ]
+    },
+
+    {
+      "title": "🎯 24h 成功率按任务（< 90% 异常）",
+      "type": "bargauge",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 21},
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "displayMode": "gradient",
+        "orientation": "horizontal"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red"}, {"color": "yellow", "value": 0.9}, {"color": "green", "value": 0.99}]}
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (task_key) (increase(task_runs_total{status=\"success\"}[24h])) / clamp_min(sum by (task_key) (increase(task_runs_total{status=~\"success|failed|timeout\"}[24h])), 1)",
+          "refId": "A",
+          "legendFormat": "{{task_key}}"
+        }
+      ]
+    },
+
+    {
+      "title": "📋 任务定义（来自 soc_task_registry）",
+      "type": "table",
+      "datasource": {"type": "postgres", "uid": "${DS_POSTGRES}"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 29},
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT task_key, task_name, task_type, enabled, last_status, consecutive_failures, total_runs, last_duration_ms, last_run_at, last_error FROM soc_task_registry ORDER BY task_key;",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {"id": "organize", "options": {"excludeByName": {"id": true}}}
+      ]
+    },
+    {
+      "title": "🐛 最近 24h 失败/超时 run",
+      "type": "table",
+      "datasource": {"type": "postgres", "uid": "${DS_POSTGRES}"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 39},
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT task_key, trigger, status, duration_ms, started_at, finished_at, LEFT(error_text, 200) AS error FROM soc_task_runs WHERE status IN ('failed', 'timeout', 'zombie') AND started_at > now() - interval '24 hours' ORDER BY started_at DESC LIMIT 100;",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["ai-minisoc", "task-observability"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus", "selected": false},
+        "hide": 0,
+        "label": "Prometheus"
+      },
+      {
+        "name": "DS_POSTGRES",
+        "type": "datasource",
+        "query": "postgres",
+        "current": {"text": "PostgreSQL", "value": "PostgreSQL", "selected": false},
+        "hide": 0,
+        "label": "PostgreSQL"
+      }
+    ]
+  },
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "AI-miniSOC · 后台任务可观测性",
+  "uid": "ai-minisoc-tasks",
+  "version": 1,
+  "weekStart": ""
+}

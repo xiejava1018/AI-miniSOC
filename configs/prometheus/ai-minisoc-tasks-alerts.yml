@@ -1,0 +1,129 @@
+# Prometheus 告警规则 — 后台任务可观测性 (v0.4.2)
+#
+# 部署位置：/etc/prometheus/rules/ai-minisoc-tasks.yml
+# 加载方式：在 prometheus.yml 的 rule_files 段引用本文件
+#
+# 严重级别：
+#   critical: 需立即介入（看门狗挂了 / 有僵尸任务 / 任务连续失败）
+#   warning:  需关注但非紧急（任务停滞 / 失败率高）
+#   info:     长尾异常（任务超时但已完成）
+
+groups:
+  - name: ai-minisoc-task-observability
+    interval: 30s
+    rules:
+      # ============================================================
+      # P0 — 看门狗挂了（整个系统可能瞎了）
+      # ============================================================
+      - alert: TaskWatchdogDown
+        expr: task_watchdog_alive == 0 OR (time() - task_watchdog_last_tick) > 180
+        for: 1m
+        labels:
+          severity: critical
+          component: task-observability
+        annotations:
+          summary: "任务看门狗已停止 tick（instance {{ $labels.instance }}）"
+          description: |
+            看门狗最后一次 tick 在 {{ $value | printf "%.0f" }} 秒前。
+            超过 180s 意味着 zombie 检测 / 停滞检测 / 指标更新都停止工作，
+            所有后台任务可能正在静默失败。
+            排查：kubectl logs / docker logs 看 "watchdog tick failed"。
+
+      # ============================================================
+      # P0 — 存在僵尸任务（同步线程卡死，锁不释放，后续 tick 被 skip）
+      # ============================================================
+      - alert: TaskZombieRunDetected
+        expr: task_zombie_total > 0
+        for: 30s
+        labels:
+          severity: critical
+          component: task-observability
+        annotations:
+          summary: "检测到 {{ $value }} 个僵尸任务"
+          description: |
+            soc_task_runs 中存在 started_at > 5 分钟前且 status=running 的记录。
+            对应 asyncio.Lock 仍持有，后续调度 tick 会被 skip。
+            排查：SELECT * FROM soc_task_runs WHERE status='running' AND started_at < now() - interval '5 minutes';
+            处理：找到卡住的线程堆栈（py-spy dump --pid <pid>），kill 或重启进程。
+
+      # ============================================================
+      # P0 — 任务连续失败 ≥3 次
+      # ============================================================
+      - alert: TaskConsecutiveFailures
+        expr: task_consecutive_failures >= 3
+        for: 10s
+        labels:
+          severity: critical
+          component: task-observability
+        annotations:
+          summary: "任务 {{ $labels.task_key }} 连续失败 {{ $value }} 次"
+          description: |
+            连续失败意味着任务无法自愈（凭证失效、外部依赖宕机、DB 死锁等）。
+            排查：SELECT task_key, last_status, last_error, consecutive_failures, last_run_at
+                  FROM soc_task_registry WHERE task_key='{{ $labels.task_key }}';
+            通知已通过站内信/邮件（3 次失败触发 dedup 窗口）发送给 oncall_user_ids。
+
+      # ============================================================
+      # P1 — 任务停滞（超过 2×expected_interval 没运行）
+      # ============================================================
+      - alert: TaskStalenessHigh
+        expr: task_staleness_seconds > 1800
+        for: 2m
+        labels:
+          severity: warning
+          component: task-observability
+        annotations:
+          summary: "任务 {{ $labels.task_key }} 已停滞 {{ $value | printf \"%.0f\" }} 秒"
+          description: |
+            超过 30 分钟没有成功 run。可能是被禁用、调度循环崩溃、上游依赖不可用。
+            检查 /api/v1/tasks/{{ $labels.task_key }} 返回的 enabled 与 last_run_at。
+
+      # ============================================================
+      # P1 — 任务超时（有 timeout 状态 run）
+      # ============================================================
+      - alert: TaskTimeoutOccurred
+        expr: increase(task_runs_total{status="timeout"}[15m]) > 0
+        for: 10s
+        labels:
+          severity: warning
+          component: task-observability
+        annotations:
+          summary: "任务 {{ $labels.task_key }} 在过去 15 分钟发生超时"
+          description: |
+            任务执行超过 timeout_s 配置。装饰器会等同步线程完成后写 status=timeout，
+            期间锁仍持有，后续 tick 被 skip。
+            处理：检查 Loki/DB 慢查询，或调大 timeout_s。
+
+      # ============================================================
+      # P1 — 24h 成功率 < 90%
+      # ============================================================
+      - alert: TaskSuccessRateLow
+        expr: |
+          (
+            sum by (task_key) (increase(task_runs_total{status="success"}[24h]))
+            /
+            (sum by (task_key) (increase(task_runs_total{status=~"success|failed|timeout"}[24h])) > 0)
+          ) < 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: task-observability
+        annotations:
+          summary: "任务 {{ $labels.task_key }} 24h 成功率 {{ $value | printf \"%.1f\" }}%"
+          description: |
+            24 小时成功率跌破 90%。即使没有连续 3 次失败，也可能存在间歇性故障。
+
+      # ============================================================
+      # P2 — 通知队列堆积（drain task 异常 / 下游故障）
+      # ============================================================
+      - alert: NotificationQueueBacklog
+        expr: task_notification_queue_size > 100
+        for: 2m
+        labels:
+          severity: warning
+          component: task-observability
+        annotations:
+          summary: "任务通知队列堆积 {{ $value }} 条"
+          description: |
+            drain task 可能没在跑，或通知下游（站内信/邮件）持续失败。
+            检查日志 "notification drain"。
