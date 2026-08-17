@@ -16,6 +16,7 @@ from app.services.alert_group_snapshot_service import (
     AlertGroupSnapshotService,
     RETENTION_DAYS,
 )
+from app.services.task_observability import track_task
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +29,29 @@ _task = None
 # soc_alert_groups / soc_alert_group_analyses）。生产启动路径不再有 create_all。
 
 
+@track_task(
+    task_key="alert_group_snapshot",
+    task_name="告警簇快照",
+    task_type="scheduled",
+    schedule_expr="@every 6h",
+    expected_interval_s=6 * 3600,
+    timeout_s=1800,
+)
 async def run_snapshot_once(hours: int = 24) -> dict:
     """执行单轮快照（含保留期清理），返回统计。"""
+    from app.services.task_observability import update_progress_stage
     db = SessionLocal()
     try:
+        update_progress_stage("snapshot", processed=0, total=2)
         svc = AlertGroupSnapshotService(db)
         stats = svc.snapshot(hours=hours)
+        update_progress_stage(
+            "cleanup", processed=1, total=2,
+            extra={"groups": stats.get("groups", 0)},
+        )
         removed = svc.cleanup_retention()
         stats["retention_removed"] = removed
+        update_progress_stage("done", processed=2, total=2, extra=stats)
         logger.info("alert group snapshot done: %s", stats)
         return stats
     except Exception:

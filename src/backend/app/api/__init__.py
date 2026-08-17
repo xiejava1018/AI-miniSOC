@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends
 from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
-    ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard)
+    ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
+    task_observability)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -56,3 +57,8 @@ api_router.include_router(
 )
 # 概览仪表板（聚合接口，端点内部已用 get_current_user 鉴权 + RBAC 裁剪）
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["概览仪表板"])
+# 后台任务可观测性（v0.4.2 Phase 1.3）
+api_router.include_router(
+    task_observability.router,
+    dependencies=[Depends(get_current_user)],
+)

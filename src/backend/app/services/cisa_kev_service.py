@@ -26,6 +26,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.cisa_kev import CisaKev
 from app.models.vulnerability import Vulnerability
+from app.services.task_observability import track_task
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,14 @@ class CisaKevService:
 
         upserted = 0
         CHUNK = 300
-        for i in range(0, len(items), CHUNK):
+        total_items = len(items)
+        # Phase 2.4：分块上报进度（节流在 update_progress 内部）
+        try:
+            from app.services.task_observability import update_progress
+            update_progress(processed=0, total=total_items, stats={"stage": "upsert", "source": source})
+        except Exception:
+            update_progress = None  # type: ignore
+        for i in range(0, total_items, CHUNK):
             chunk = items[i:i + CHUNK]
             stmt = pg_insert(CisaKev).values(chunk)
             stmt = stmt.on_conflict_do_update(
@@ -117,6 +125,12 @@ class CisaKevService:
             )
             db.execute(stmt)
             upserted += len(chunk)
+            if update_progress:
+                update_progress(
+                    processed=upserted,
+                    total=total_items,
+                    stats={"stage": "upsert", "source": source},
+                )
 
         db.commit()
         _invalidate_cache()
@@ -201,17 +215,26 @@ _task = None
 _FIRST_RUN_DELAY = 120  # 启动后稍等，避开与其他后台任务的启动高峰
 
 
+@track_task(
+    task_key="cisa_kev_sync",
+    task_name="CISA KEV 漏洞情报同步",
+    task_type="scheduled",
+    schedule_expr="@every 24h",
+    expected_interval_s=86400,
+    timeout_s=1800,
+)
 async def run_kev_sync_once() -> dict:
-    """手动/调度触发一轮 KEV 同步 + 存量富化"""
+    """手动/调度触发一轮 KEV 同步 + 存量富化。失败 raise 让装饰器记录。"""
+    from app.services.task_observability import update_progress_stage
     db = SessionLocal()
     try:
+        update_progress_stage("sync_kev", processed=0, total=2)
         result = CisaKevService.sync_kev(db)
+        update_progress_stage("enrich", processed=1, total=2, extra={"upserted": result.get("upserted", 0)})
         enriched = CisaKevService.enrich_has_exploit(db)
         result["enriched"] = enriched
+        update_progress_stage("done", processed=2, total=2, extra={"enriched": enriched})
         return result
-    except Exception:
-        logger.exception("CISA KEV sync failed")
-        return {"error": "exception"}
     finally:
         db.close()
 

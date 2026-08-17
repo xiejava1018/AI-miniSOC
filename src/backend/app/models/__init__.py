@@ -33,6 +33,7 @@ from .alert_digest import AlertDigest
 from .alert_group_snapshot import AlertGroupSnapshot
 from .alert_group_analysis import AlertGroupAnalysis
 from .cisa_kev import CisaKev
+from .task_observability import SocTaskRegistry, SocTaskRun, TaskRunStatus
 
 __all__ = [
     "Base",
@@ -68,4 +69,7 @@ __all__ = [
     "AlertDigest",
     "AlertGroupSnapshot",
     "AlertGroupAnalysis",
+    "SocTaskRegistry",
+    "SocTaskRun",
+    "TaskRunStatus",
 ]

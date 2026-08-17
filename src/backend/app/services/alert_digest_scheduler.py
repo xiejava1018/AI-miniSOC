@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.services.alert_digest_service import AlertDigestService
+from app.services.task_observability import track_task
 
 logger = logging.getLogger(__name__)
 
@@ -33,25 +34,38 @@ def _seconds_until_next(hour: int) -> float:
     return (target - now).total_seconds()
 
 
+@track_task(
+    task_key="alert_digest_scheduler",
+    task_name="告警日报生成",
+    task_type="scheduled",
+    schedule_expr="@daily 08:00",
+    expected_interval_s=86400,
+    timeout_s=1800,
+)
 async def run_digest_once(hours: int = 24) -> dict:
-    """手动触发一轮摘要生成（返回统计；失败返回 {"error": ...}）。"""
+    """手动触发一轮摘要生成（返回统计；失败 raise 让装饰器记录）。"""
+    from app.services.task_observability import update_progress_stage
     db = SessionLocal()
     try:
+        update_progress_stage("generate", processed=0, total=2)
         svc = AlertDigestService(db)
         digest = await svc.generate(hours=hours)
+        update_progress_stage(
+            "finalize", processed=1, total=2,
+            extra={"digest_id": str(digest.id), "total_alerts": digest.total_alerts},
+        )
         logger.info(
             "alert digest generated: id=%s total=%s ai_model=%s",
             digest.id, digest.total_alerts, digest.ai_model,
         )
-        return {
+        result = {
             "digest_id": str(digest.id),
             "total_alerts": digest.total_alerts,
             "groups": len(digest.top_groups or []),
             "ai_model": digest.ai_model,
         }
-    except Exception:
-        logger.exception("alert digest generation failed")
-        return {"error": "exception"}
+        update_progress_stage("done", processed=2, total=2, extra=result)
+        return result
     finally:
         db.close()
 

@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 # 加载环境变量
 load_dotenv()
@@ -36,14 +37,28 @@ from app.services.cisa_kev_service import (
     start_cisa_kev_scheduler,
     stop_cisa_kev_scheduler,
 )
+from app.services.task_observability import (
+    bootstrap_task_observability,
+    shutdown_task_observability,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期：启动/停止后台任务"""
-    # P3-T4：检测单 worker 部署约束（多 worker 会导致调度重复与状态漂移）
+    """应用生命周期：启动/停止后台任务。
+
+    启动顺序（v0.4.2）：
+    1. 单 worker 部署约束检查
+    2. 任务可观测性启动（启动对账 + watchdog + notification drain）
+       ★ 必须在业务 scheduler 启动之前，先把残留 running run 标 unknown
+    3. 业务 schedulers
+    """
     from app.services.single_worker_guard import check_single_worker_or_warn
     check_single_worker_or_warn()
+
+    # 任务可观测性：启动对账 + watchdog + notification drain
+    obs_stats = await bootstrap_task_observability()
+    logging.getLogger(__name__).info("task observability bootstrapped: %s", obs_stats)
 
     start_browsing_detector()
     start_alert_group_snapshot()
@@ -56,6 +71,8 @@ async def lifespan(app: FastAPI):
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
+        # 任务可观测性最后关，保证业务 scheduler 完结后的 run 能被对账
+        await shutdown_task_observability()
 
 
 # 创建 FastAPI 应用实例
@@ -132,8 +149,91 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
-    return {
+    """健康检查（v0.4.2）。
+
+    - healthy:  200，全部正常
+    - degraded: 200，部分任务 stale / 单个 zombie（容器保留，运维介入）
+    - down:     503，多个 zombie / 看门狗自身挂 / DB 不可达（容器可重启、LB 摘流量）
+    """
+    from fastapi.responses import JSONResponse
+    from app.core.database import SessionLocal
+    from app.models.task_observability import SocTaskRegistry, SocTaskRun, TaskRunStatus
+    from app.services.task_observability.metrics import task_watchdog_alive
+    from sqlalchemy import select, func as sa_func
+    import time
+
+    body: dict = {
         "status": "healthy",
-        "service": "ai-minisoc-backend"
+        "service": "ai-minisoc-backend",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "watchdog": {"alive": True, "last_tick_seconds_ago": None, "clock_skew_seconds": 0},
+        "stale_tasks": [],
+        "zombies": [],
+        "disabled_tasks": [],
     }
+    http_code = 200
+
+    try:
+        db = SessionLocal()
+        try:
+            from app.services.task_observability.watchdog import WATCHDOG_TASK_KEY
+            now = datetime.now(timezone.utc)
+
+            # zombie runs
+            zombies = db.execute(
+                select(SocTaskRun).where(SocTaskRun.status == TaskRunStatus.ZOMBIE)
+            ).scalars().all()
+            body["zombies"] = [
+                {"task_key": z.task_key, "run_id": str(z.id), "started_at": z.started_at.isoformat() if z.started_at else None}
+                for z in zombies
+            ]
+
+            # stale registry
+            stale = []
+            for reg in db.execute(select(SocTaskRegistry).where(SocTaskRegistry.enabled.is_(True))).scalars():
+                if reg.task_key == WATCHDOG_TASK_KEY or not reg.expected_interval_s:
+                    continue
+                ref = reg.last_run_at or reg.created_at
+                if ref and (now - ref).total_seconds() > 2 * reg.expected_interval_s:
+                    stale.append({
+                        "task_key": reg.task_key,
+                        "last_run_at": ref.isoformat() if ref else None,
+                        "expected_interval_s": reg.expected_interval_s,
+                    })
+            body["stale_tasks"] = stale
+
+            # disabled
+            disabled = db.execute(
+                select(SocTaskRegistry.task_key).where(SocTaskRegistry.enabled.is_(False))
+            ).scalars().all()
+            body["disabled_tasks"] = list(disabled)
+
+            # watchdog last tick —— 从指标当前值拿不到，用 registry 推断
+            wd = db.get(SocTaskRegistry, WATCHDOG_TASK_KEY)
+            if wd and wd.last_run_at:
+                body["watchdog"]["last_tick_seconds_ago"] = int((now - wd.last_run_at).total_seconds())
+                if (now - wd.last_run_at).total_seconds() > 180:
+                    body["watchdog"]["alive"] = False
+        finally:
+            db.close()
+    except Exception as e:
+        body["status"] = "down"
+        body["error"] = f"db unreachable: {type(e).__name__}: {e}"
+        return JSONResponse(status_code=503, content=body)
+
+    # 状态判定
+    n_zombie = len(body["zombies"])
+    n_stale = len(body["stale_tasks"])
+    wd_alive = body["watchdog"]["alive"]
+
+    if not wd_alive or n_zombie >= 3:
+        body["status"] = "down"
+        http_code = 503
+    elif n_zombie > 0 or n_stale > 0:
+        body["status"] = "degraded"
+        http_code = 200
+    else:
+        body["status"] = "healthy"
+        http_code = 200
+
+    return JSONResponse(status_code=http_code, content=body)

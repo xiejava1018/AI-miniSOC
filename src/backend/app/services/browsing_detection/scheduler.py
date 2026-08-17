@@ -22,6 +22,7 @@ from app.services.browsing_detection.log_parser import parse_loki_result
 from app.services.browsing_detection.baseline_service import BaselineService
 from app.services.browsing_detection.rule_engine import RuleEngine
 from app.services.browsing_detection.event_service import EventService
+from app.services.task_observability import track_task
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,19 @@ _detector_task: asyncio.Task | None = None
 _BROWSING_TABLES_DEPRECATED = {"soc_browsing_events", "soc_browsing_blacklist", "soc_browsing_baseline"}
 
 
+@track_task(
+    task_key="browsing_detector",
+    task_name="上网行为检测",
+    task_type="scheduled",
+    schedule_expr="@every 5m",
+    expected_interval_s=300,
+    timeout_s=600,
+    source_key="loki:browsing",
+)
 async def run_detection_once() -> dict:
     """执行单轮检测，返回统计信息"""
     global _LAST_RUN_SECONDS
+    from app.services.task_observability import update_progress_stage
     db = SessionLocal()
     started = datetime.now(timezone.utc)
     stats = {"fetched": 0, "parsed": 0, "findings": 0, "events": 0, "error": None}
@@ -61,6 +72,7 @@ async def run_detection_once() -> dict:
         end_ns = int(end.timestamp() * 1_000_000_000)
 
         # 1. 拉取（同步 httpx 放到线程池，避免阻塞事件循环）
+        update_progress_stage("fetch", processed=0, total=5)
         client = LokiClient()
         try:
             streams = await asyncio.to_thread(
@@ -76,29 +88,50 @@ async def run_detection_once() -> dict:
         logger.info("browsing detection step1 fetched=%d", stats["fetched"])
 
         # 2. 解析
+        update_progress_stage(
+            "parse", processed=1, total=5,
+            extra={"fetched": stats["fetched"]},
+        )
         records = parse_loki_result(streams)
         stats["parsed"] = len(records)
         if not records:
+            update_progress_stage("done", processed=5, total=5, extra=stats)
             logger.debug("窗口内无日志，跳过")
             return stats
 
         # 3. 基线预加载
+        update_progress_stage(
+            "baseline", processed=2, total=5,
+            extra={"parsed": stats["parsed"]},
+        )
         baseline = BaselineService(db)
         internal_ips = {r.ip for r in records if r.is_internal}
         known_map = baseline.get_known_domains_bulk(internal_ips)
 
         # 4. 规则评估
+        update_progress_stage(
+            "evaluate", processed=3, total=5,
+            extra={"internal_ips": len(internal_ips)},
+        )
         engine = RuleEngine(db, config)
         findings = engine.evaluate(records, known_map, start, end)
         stats["findings"] = len(findings)
 
         # 5. 更新基线（仅 url 记录，仅内网）
+        update_progress_stage(
+            "persist", processed=4, total=5,
+            extra={"findings": stats["findings"]},
+        )
         baseline.upsert_many([r for r in records if r.action == "url"])
 
         # 6. 落地 + 通知
         event_svc = EventService(db)
         created = await event_svc.create_findings(findings, config)
         stats["events"] = created
+
+        update_progress_stage(
+            "done", processed=5, total=5, extra=stats,
+        )
 
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
         _LAST_RUN_SECONDS = elapsed

@@ -26,6 +26,18 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# 任务可观测性心跳（v0.4.2 Phase 2.1）
+# 线程型任务：每 tick 上报 heartbeat，真正 refresh 时写 run
+from app.services.task_observability.heartbeat import ThreadHeartbeat
+
+_TASK_HEARTBEAT = ThreadHeartbeat(
+    task_key="mcp_token_refresher",
+    task_name="MCP Token 刷新",
+    owner_module="app.mcp.token_manager",
+    interval_s=60,
+    timeout_s=300,
+)
+
 
 class TokenExpiredError(RuntimeError):
     """账号凭证彻底失效，需要人工重新登录（MCP 配置更新）"""
@@ -209,6 +221,11 @@ class TokenManager:
         if self._refresh_thread and self._refresh_thread.is_alive():
             return
         self._stop_event.clear()
+        # 注册到任务可观测性（task_type=thread）
+        try:
+            _TASK_HEARTBEAT.register()
+        except Exception:
+            logger.debug("heartbeat register failed", exc_info=True)
         t = threading.Thread(
             target=self._refresh_loop,
             name="mcp-token-refresher",
@@ -218,15 +235,43 @@ class TokenManager:
         t.start()
 
     def _refresh_loop(self) -> None:
-        """每秒检查一次，临近过期则刷新"""
+        """每 60s 检查一次，临近过期则刷新"""
         while not self._stop_event.is_set():
             try:
+                # 每 tick 上报心跳（不写 run 表，避免一天 1440 条空记录）
+                _TASK_HEARTBEAT.tick(
+                    stats={
+                        "configured": self._bundle is not None,
+                        "access_valid": bool(self._bundle and self._bundle.access_valid),
+                        "refresh_valid": bool(self._bundle and self._bundle.refresh_valid),
+                    }
+                )
                 with self._lock:
                     if self._bundle and self._bundle.access_valid:
                         remaining = self._bundle.expires_at - time.time()
                         if remaining <= self._refresh_margin_seconds and self._bundle.refresh_valid:
                             logger.info("即将过期（剩余 %.0fs），触发后台 refresh", remaining)
-                            self._refresh_now()
+                            _TASK_HEARTBEAT.run_started(trigger="scheduled")
+                            try:
+                                self._refresh_now()
+                                _TASK_HEARTBEAT.run_succeeded(
+                                    stats={"remaining_s": int(remaining)},
+                                    trigger="scheduled",
+                                )
+                            except TokenExpiredError as e:
+                                _TASK_HEARTBEAT.run_failed(
+                                    e,
+                                    stats={"remaining_s": int(remaining), "fatal": True},
+                                    trigger="scheduled",
+                                )
+                                raise
+                            except Exception as e:
+                                _TASK_HEARTBEAT.run_failed(
+                                    e,
+                                    stats={"remaining_s": int(remaining)},
+                                    trigger="scheduled",
+                                )
+                                raise
             except TokenExpiredError:
                 logger.error("后台 refresh 线程终止：凭证失效")
                 return
@@ -237,6 +282,10 @@ class TokenManager:
     def shutdown(self) -> None:
         """停止后台线程（应用关闭时调用）"""
         self._stop_event.set()
+        try:
+            _TASK_HEARTBEAT.unregister()
+        except Exception:
+            logger.debug("heartbeat unregister failed", exc_info=True)
 
 
 # 全局便捷访问
