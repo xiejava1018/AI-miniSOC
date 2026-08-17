@@ -34,6 +34,10 @@ interface BackendMenuItem {
   is_visible?: boolean
   parent_id?: number | null
   children?: BackendMenuItem[]
+  // 后端 /menus/tree 额外提供（_build_menu_with_auth）
+  permissions?: Array<{ title: string; authMark: string; hasPermission?: boolean }>
+  authList?: Array<{ title: string; authMark: string; hasPermission?: boolean }>
+  meta?: { authList?: Array<{ title: string; authMark: string; hasPermission?: boolean }>; [k: string]: any }
 }
 
 /**
@@ -50,6 +54,10 @@ function backendMenuToRoute(menu: BackendMenuItem): AppRouteRecord {
   // 直接使用后端返回的 component（已转换为实际路径）
   const component = menu.component || (hasChildren ? RoutesAlias.Layout : '')
 
+  // 按钮权限列表（后端返回的 authList / meta.authList 必须透传到路由 meta）
+  // 否则 v-auth 指令 / useAuth().hasAuth() 都拿不到按钮权限，全部返回 false
+  const authList = menu.authList || menu.meta?.authList || menu.permissions || []
+
   return {
     name: menu.name,
     path: menu.path,
@@ -59,7 +67,9 @@ function backendMenuToRoute(menu: BackendMenuItem): AppRouteRecord {
       icon: menu.icon,
       keepAlive: !hasChildren,
       isHide: menu.is_visible === false,
-      isHideTab: menu.is_visible === false
+      isHideTab: menu.is_visible === false,
+      // 关键：把后端的 authList 透传进去（v-auth / useAuth 都靠它判断）
+      authList
     },
     children: hasChildren ? menu.children!.map((child) => backendMenuToRoute(child)) : undefined
   }

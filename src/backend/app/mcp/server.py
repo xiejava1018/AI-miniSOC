@@ -61,6 +61,14 @@ def mount_mcp(_app: FastAPI, mount_path: str = "/mcp") -> dict[str, Any]:
         logger.warning("枚举手写 tools 失败: %s", e)
 
     # FastMCP 独立 SSE server，端口 8100
+    # 测试/开发环境可通过 MCP_SSE_ENABLED=false 关闭，避免端口冲突
+    import os as _os
+    if _os.getenv("MCP_SSE_ENABLED", "true").lower() in ("false", "0", "no"):
+        logger.info("MCP SSE server disabled by MCP_SSE_ENABLED=false")
+        info["endpoints"]["mcp_sse_url"] = ""
+        info["mount_path_unused"] = mount_path
+        return info
+
     custom_mcp.settings.host = "0.0.0.0"
     custom_mcp.settings.port = 8100
     # sse_app("/") 让 endpoint URL 与实际路由都是 /messages/，避免 307 重定向
