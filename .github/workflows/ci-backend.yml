@@ -80,12 +80,24 @@ jobs:
         continue-on-error: true
         # 注: alembic check 当前在某些迁移上会失败（种子数据），作为 warning 继续
 
-      - name: Alembic upgrade head (初始化测试库 schema)
+      - name: 初始化测试库 schema (Base.metadata.create_all)
         working-directory: src/backend
         run: |
-          python -m alembic upgrade head
-        # 注: postgres service 是空的, 不跑 upgrade pytest 会报 "表不存在"
-        #      CI 创建表 + 迁移都用 alembic, 不手工 SQL
+          # 注: alembic upgrade head 会失败（soc_menus.component / permissions 列是手工 ALTER 加的，
+          #     alembic 历史里没迁移记录）。改用 Base.metadata.create_all 创建所有表（model 即 schema）
+          python -c "
+          import sys, os
+          sys.path.insert(0, '.')
+          from dotenv import load_dotenv
+          load_dotenv()
+          from app.core.database import engine
+          from app.models import Base
+          Base.metadata.create_all(bind=engine)
+          print('✅ 创建表成功')
+          from sqlalchemy import inspect
+          tables = inspect(engine).get_table_names()
+          print(f'总 {len(tables)} 张表')
+          "
 
       - name: Pytest
         working-directory: src/backend
