@@ -1,13 +1,14 @@
-# AI-miniSOC CI/CD 方案 v2.5
+# AI-miniSOC CI/CD 方案 v2.6
 
-> **状态**: ✅ Step 0 提交 + push 完成；CI (Backend/Frontend/UnitTests) 全绿；CD 待 self-hosted runner 装后跳转 Step 5
+> **状态**: ✅ Step 0–3 已完成（CI 全绿 + 服务器归档 + systemd 接管 + deploy.sh 双路径实测）；待 Step 4（无，CI 已提交）/ Step 5（self-hosted runner）
 > **日期**: 2026-08-18
 > **关键变更**:
 > - v2.0 → v2.1：修正 CD 架构（self-hosted runner 替代 SSH）
-> - v2.1 → v2.2：修复 v2.1 评审 8 条意见中 7 条（R1–R5、R7、R8）—— 但 R6 修复引入新错误（链方向写反）
-> - v2.2 → v2.3：R6 重修——仓库 head = `a0b1c2d3e4f5`（本地与生产同步），e8f9a0b1c2d3/f9a0b1c2d3e4 是其祖先
-> - v2.3 → v2.4：实施发现 — pyjwt ResolutionImpossible 修复 + lint 历史错误多改为 advisory（§12.8）
-> - **v2.4 → v2.5**：Step 0 后续修复 — soc_menus.component/permissions 手工列 + conftest import 全部 models + pytest advisory 探测（§12.9）
+> - v2.1 → v2.2：修复评审 7 条 + R6 误修
+> - v2.2 → v2.3：R6 重修
+> - v2.3 → v2.4：pyjwt 冲突 + lint advisory（§12.8）
+> - v2.4 → v2.5：soc_menus 手工列 + conftest 全 model（§12.9）
+> - **v2.5 → v2.6**：Step 2/3 实测——DB 探活改 venv python + fetch 加 depth/timeout + 故障注入验证 R5 回滚（§12.10）
 
 ---
 
@@ -737,7 +738,8 @@ gh run cancel <run-id>
 | v2.2 | 2026-08-18 | 修复 v2.1 评审 R1–R8 中的 7 条（R1–R5、R7、R8）。**R6 修复引入新错误（链方向写反）** |
 | v2.3 | 2026-08-18 | R6 重修（仓库 head = 服务器 current = `a0b1c2d3e4f5`，详见 §12.7） |
 | v2.4 | 2026-08-18 | Step 0 实施发现：pyjwt 冲突修复 + lint 历史错误多改为 advisory（详见 §12.8） |
-| **v2.5** | **2026-08-18** | **Step 0 后续修复**：soc_menus 手工列 + conftest import 全部 + pytest advisory（详见 §12.9） |
+| v2.5 | 2026-08-18 | Step 0 后续修复：soc_menus 手工列 + conftest import 全部 + pytest advisory（详见 §12.9） |
+| **v2.6** | **2026-08-18** | **Step 2/3 实测**：DB 探活 venv python + fetch depth/timeout + 故障注入验证 R5 回滚（详见 §12.10） |
 
 ### 12.2 v2.1 评审意见（主 Agent, 2026-08-18）及 v2.2 修复
 
@@ -1018,6 +1020,70 @@ CI 最终状态（commit `d0433c6`）：
 所有 **CI workflow ✅ success**。CD workflow cancelled 是因为 self-hosted runner 未装——这是**预期**状态，不是 bug。
 
 **v2.5 修复后跳转 Step 1**：服务器未提交修改归档。
+
+---
+
+### 12.10 Step 2/3 实施记录（2026-08-18 深夜）
+
+#### 12.10.1 Step 2 systemd 接管 ✅
+
+服务器手动输入一次 sudo 密码（askpass 脚本方式，密码不入 shell history）后：
+- `/etc/systemd/system/aisoc-backend.service` 已部署
+- `/etc/sudoers.d/aisoc-deployer` 已部署（10 条 NOPASSWD 规则生效）
+- `/var/log/aisoc/` 已建（xiejava:xiejava）
+- 旧 nohup PID 2920824 已杀；systemd 服务 active，新 PID 2937674
+- 验证：`sudo -n systemctl restart` 无密码成功；HTTP 200 + captcha API 正常
+- 注意：`sudo -n systemctl status` 仍要密码（systemctl status 强制 use_pty，NOPASSWD 也压不住）——不影响 deploy.sh（只用 restart）
+
+#### 12.10.2 Step 3 deploy.sh 实测发现三个问题（逐一修复）
+
+**问题 1：DB 探活依赖 psql，服务器没装**
+- 首次跑 deploy.sh：健康检查 5 次全失败（psql: command not found）
+- 修复：新增 `deploy/db_healthcheck.py`（venv python + SQLAlchemy），deploy.sh 和 deploy-prod.yml 都改用该脚本
+- commit `6082cc4`
+
+**问题 2：git fetch 全量历史超时（服务器到 github ~456 B/s）**
+- 首次 fetch 5 分钟不返回 → 300s timeout 触发
+- **意外验证了 R5 全局回滚**：fetch 失败 → trap 触发 → git reset + rebuild (1m) + restart 全链路自动完成 ✓
+- 修复：fetch 加 `timeout 120` + `--depth=50`；失败时降级用本地已有 commit
+
+**问题 3：deploy/ 下未 commit 的新文件会触发"reset 后仍有未提交文件"退出**
+- scp 上去的 db_healthcheck.py 未跟踪 → deploy.sh 检查失败
+- 修复：把 db_healthcheck.py commit 进 git（6082cc4），服务器 pull 同步
+
+#### 12.10.3 Step 3 成功路径 ✅（commit 6082cc4）
+
+```
+✅ git fetch (depth=50, 2s)
+✅ git reset --hard 6082cc4
+✅ 未提交检查（干净）
+✅ pip install
+✅ alembic check（advisory WARN 不阻塞）
+✅ npm ci + vite build（1m1s）
+✅ dist/index.html 存在
+✅ systemctl restart
+✅ 健康检查：[1/5] HTTP失败（启动中）→ [2/5] ✓ HTTP 200 + DB SELECT 1 OK
+✅ alembic 比对：生产 == 代码 (a0b1c2d3e4f5)
+✅ 部署成功 6082cc4
+```
+
+#### 12.10.4 Step 3c 故障注入 ✅（验证 R5 回滚）
+
+在服务器本地造一个坏 commit 46c412d（vite.config.ts 加语法错误，不 push）：
+- vite build 失败 → `dist/index.html 不存在` → exit 4 → trap 触发 ✓
+- 回滚三步自动执行：git reset + rebuild + restart ✓
+- 服务全程在线（旧 dist 未破坏，backend 正常）✓
+- 事后手动 `git reset --hard 6082cc4` + rebuild 恢复
+
+**回滚语义边界（重要发现）**：
+- PREVIOUS_SHA = 部署前 HEAD。正常 CI/CD 流程 HEAD 始终是好代码，回滚语义正确。
+- 但如果部署前 HEAD 本身就是坏的（如测试时手动 checkout 坏 commit），回滚会回到坏 commit。
+- 回滚里 rebuild 失败用 `|| true` 容错（保证 restart 一定尝试），极端情况留下"git HEAD 坏 + dist 旧"中间态，服务仍活。可接受，文档已注明。
+
+#### 12.10.5 Step 2/3 遗留
+
+- 前端 `npm run dev`（PID 2909773）仍 nohup 跑着——生产用 nginx 8080 服务 dist，dev server 可随时停
+- `soc_source_health` 等 8 张 P4 表在 model 但不在 alembic 历史（alembic check 一直 WARN 的根因），后续补迁移
 
 ---
 
