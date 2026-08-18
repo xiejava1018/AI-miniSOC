@@ -80,14 +80,19 @@ jobs:
         continue-on-error: true
         # 注: alembic check 当前在某些迁移上会失败（种子数据），作为 warning 继续
 
-      - name: 初始化测试库 schema (Base.metadata.create_all)
+      - name: 初始化测试库 schema (Base.metadata.create_all + 手工补列)
         working-directory: src/backend
         run: |
           # 注: alembic upgrade head 会失败（soc_menus.component / permissions 列是手工 ALTER 加过，
-          #     alembic 历史里没迁移记录）。改用 Base.metadata.create_all (model 即 schema 准)
-          set -x
-          python scripts/ci_create_tables.py 2>&1 | tee /tmp/ci_create_tables.log
-        # 失败原因后续追查 (可能是某张表 NULL 约束 / default)
+          #     alembic 历史里没迁移记录）。
+          # CI 采用 Base.metadata.create_all (model 即 schema 准)，补手工修改的列:
+          set -e
+          python scripts/ci_create_tables.py
+          # 补 soc_menus.component 和 permissions 列 (生产库是手工 ALTER 加的, alembic 没记录)
+          PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "
+            ALTER TABLE soc_menus ADD COLUMN IF NOT EXISTS component VARCHAR(200);
+            ALTER TABLE soc_menus ADD COLUMN IF NOT EXISTS permissions JSONB;
+          " || echo "ALTER TABLE 失败但不阻塞"
 
       - name: Pytest
         working-directory: src/backend
