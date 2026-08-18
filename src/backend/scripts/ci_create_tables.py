@@ -6,6 +6,7 @@
 """
 import sys
 import os
+import traceback
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + '/..')
@@ -19,15 +20,33 @@ from app.models import Base
 
 def main() -> None:
     print("开始创建数据库表 (Base.metadata.create_all)...")
-    Base.metadata.create_all(bind=engine)
-    print("✅ 创建表成功")
+    print(f"  Engine: {engine.url.host}:{engine.url.port}/{engine.url.database}")
+    print(f"  Base.metadata.tables 数: {len(Base.metadata.tables)}")
+
+    # 列出所有要创建的表
+    for tname in sorted(Base.metadata.tables.keys()):
+        print(f"  - 表: {tname}")
+
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ 创建表成功")
+    except Exception as e:
+        print(f"❌ create_all 失败: {type(e).__name__}: {e}")
+        traceback.print_exc()
+        sys.exit(1)
 
     from sqlalchemy import inspect
     inspector = inspect(engine)
     tables = inspector.get_table_names()
-    print(f"总 {len(tables)} 张表")
+    print(f"实际库内 {len(tables)} 张表")
     for t in sorted(tables):
         print(f"  - {t}")
+
+    missing = set(Base.metadata.tables.keys()) - set(tables)
+    if missing:
+        print(f"❌ 缺失表: {missing}")
+        sys.exit(1)
+    print("✅ 所有 model 表都已创建")
 
 
 if __name__ == "__main__":

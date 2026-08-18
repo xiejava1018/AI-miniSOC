@@ -87,7 +87,12 @@ jobs:
           #     alembic 历史里没迁移记录）。
           # CI 采用 Base.metadata.create_all (model 即 schema 准)，补手工修改的列:
           set -e
-          python scripts/ci_create_tables.py
+          python scripts/ci_create_tables.py 2>&1 | tee /tmp/ci_create_tables.log || {
+            echo "::: create_all 失败，以下是 log :::"
+            cat /tmp/ci_create_tables.log
+            echo "::: 失败 log 已保存到 artifact :::"
+            exit 1
+          }
           # 补 soc_menus.component 和 permissions 列 (生产库是手工 ALTER 加的, alembic 没记录)
           PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -c "
             ALTER TABLE soc_menus ADD COLUMN IF NOT EXISTS component VARCHAR(200);
