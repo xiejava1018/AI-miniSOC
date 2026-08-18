@@ -17,8 +17,20 @@ from fastapi.testclient import TestClient
 
 from app.models.base import Base
 from app.core.database import get_db, TestingSessionLocal, test_engine
-from app.models.user import User, UserStatus
-from app.models.role import Role
+# 注: conftest 只 import 部分 model 会导致 Base.metadata 只识别这几个表。
+# pytest db_session fixture 调用 Base.metadata.create_all 时, 其他表不会被创建。
+# CI 上 pytest 可能因某 test 引用未 import 的 model 而报 “表不存在”。
+# 改为 import 全部 models: `from app.models import ...` 会触发 app/models/__init__.py 导入全部。
+from app.models import (  # noqa: F401  (imports register all models with Base.metadata)
+    User, UserStatus, Role, Menu, RoleMenu, Department, SystemConfig,
+    PasswordHistory, PasswordResetToken, AuditLog, RateLimit,
+    Asset, AssetPort, AssetTag, Incident, AIAnalysis, AssetIncident,
+    AssetChangeLog, AssetSource, SyncTask, Dict as SysDict,
+    ChatSession, ChatMessage, Notification,
+    BrowsingEvent, BrowsingBlacklist, BrowsingBaseline,
+    AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
+    CisaKev, SocTaskRegistry, SocTaskRun,
+)
 from main import app
 
 
