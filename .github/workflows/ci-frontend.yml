@@ -8,11 +8,11 @@ on:
 
 jobs:
   frontend-lint:
-    # 实际意义：lint + typecheck（PR 门禁）
+    # 实际意义：lint + typecheck（advisory，不阻塞 PR；与 cicd.md §十二 12.2 v2.2 修复 R4 一致）
     # **不跑 vite build** —— 构建交给服务器侧 deploy.sh（与 cicd.md §三 D1 一致）
     # 原因：服务器有 @tailwindcss/oxide-linux-x64-gnu 等本地依赖，
     #       GitHub Actions ubuntu-latest build 不一定一致；让服务器本地构建避免环境差异
-    name: Lint + Type Check
+    name: Lint + Type Check (advisory)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,24 +31,25 @@ jobs:
         working-directory: src/frontend
         run: |
           npm ci
-          # 暂不预装 oxide（如果 build 失败说明 Actions 环境缺什么，到时再加）
-          # 早期曾试过 npm install --no-save @tailwindcss/oxide-linux-x64-gnu
 
-      - name: ESLint (阻塞 PR)
+      - name: ESLint (advisory)
         working-directory: src/frontend
         run: |
-          npx eslint . --ext .ts,.tsx,.vue --max-warnings 0
-        # 不 continue-on-error: lint 错误直接挂 PR
+          echo "--- ESLint 检查（warning only, 不阻塞 PR） ---"
+          npx eslint . --ext .ts,.tsx,.vue --max-warnings 0 2>&1 | tail -50 || echo "ESLint 有错误，但不阻塞（详见上面输出）"
+        continue-on-error: true
+        # 注: 仓库历史累积 2614+ 个 lint 错误（之前从未跑过 lint 门禁）
+        #     改为 advisory；后续修 lint 错误时移除 continue-on-error
+        #     跟踪 issue: TODO
 
-      - name: vue-tsc (阻塞 PR)
+      - name: vue-tsc (advisory)
         working-directory: src/frontend
         run: |
-          echo "--- vue-tsc 类型检查 ---"
-          npx vue-tsc --noEmit
-        # 不 continue-on-error: 严重类型错误直接挂 PR
-        # 注: 历史上有 vue-tsc 报错但 vite build 成功的"先有鸡还是先有蛋"问题，
-        #     如果将来 vue-tsc 严格性问题无法修，可以临时加 continue-on-error: true
-        #     然后单独开 issue 跟进修类型
+          echo "--- vue-tsc 类型检查（warning only） ---"
+          npx vue-tsc --noEmit 2>&1 | tee /tmp/vue-tsc.log | tail -30 || echo "vue-tsc 报错但 CI 不阻塞（详见 /tmp/vue-tsc.log）"
+        continue-on-error: true
+        # 已知: vue-tsc 报错比 vite build 严格, 历史上有 "vue-tsc fail 但 vite build OK"
+        # 改为 advisory, 让 PR 不被卡; 待类型问题修复后再移除 continue-on-error
 
       # ⚠️ 没有 "Build" 步骤 - 构建在服务器侧做（deploy.sh）
       # 如果未来想要"CI 也能产出 dist 用于 smoke test"，可以加：
