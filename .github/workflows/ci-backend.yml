@@ -85,7 +85,9 @@ jobs:
         run: |
           # 注: alembic upgrade head 会失败（soc_menus.component / permissions 列是手工 ALTER 加过，
           #     alembic 历史里没迁移记录）。改用 Base.metadata.create_all (model 即 schema 准)
-          python scripts/ci_create_tables.py
+          set -x
+          python scripts/ci_create_tables.py 2>&1 | tee /tmp/ci_create_tables.log
+        # 失败原因后续追查 (可能是某张表 NULL 约束 / default)
 
       - name: Pytest
         working-directory: src/backend
@@ -104,5 +106,14 @@ jobs:
         with:
           name: backend-coverage
           path: src/backend/coverage.xml
+          retention-days: 7
+        continue-on-error: true
+
+      - name: Upload CI debug logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-debug-logs
+          path: /tmp/ci_*.log
           retention-days: 7
         continue-on-error: true
