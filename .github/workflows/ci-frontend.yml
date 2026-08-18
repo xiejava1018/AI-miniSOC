@@ -1,0 +1,58 @@
+name: CI - Frontend
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  frontend-lint:
+    # 实际意义：lint + typecheck（PR 门禁）
+    # **不跑 vite build** —— 构建交给服务器侧 deploy.sh（与 cicd.md §三 D1 一致）
+    # 原因：服务器有 @tailwindcss/oxide-linux-x64-gnu 等本地依赖，
+    #       GitHub Actions ubuntu-latest build 不一定一致；让服务器本地构建避免环境差异
+    name: Lint + Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/frontend
+        run: |
+          npm ci
+          # 暂不预装 oxide（如果 build 失败说明 Actions 环境缺什么，到时再加）
+          # 早期曾试过 npm install --no-save @tailwindcss/oxide-linux-x64-gnu
+
+      - name: ESLint (阻塞 PR)
+        working-directory: src/frontend
+        run: |
+          npx eslint . --ext .ts,.tsx,.vue --max-warnings 0
+        # 不 continue-on-error: lint 错误直接挂 PR
+
+      - name: vue-tsc (阻塞 PR)
+        working-directory: src/frontend
+        run: |
+          echo "--- vue-tsc 类型检查 ---"
+          npx vue-tsc --noEmit
+        # 不 continue-on-error: 严重类型错误直接挂 PR
+        # 注: 历史上有 vue-tsc 报错但 vite build 成功的"先有鸡还是先有蛋"问题，
+        #     如果将来 vue-tsc 严格性问题无法修，可以临时加 continue-on-error: true
+        #     然后单独开 issue 跟进修类型
+
+      # ⚠️ 没有 "Build" 步骤 - 构建在服务器侧做（deploy.sh）
+      # 如果未来想要"CI 也能产出 dist 用于 smoke test"，可以加：
+      #   - name: Build (服务器环境才有 oxide 等本地依赖)
+      #     working-directory: src/frontend
+      #     run: npx vite build
+      #     continue-on-error: true   # warning only，不阻塞 PR

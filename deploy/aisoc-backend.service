@@ -1,0 +1,27 @@
+[Unit]
+Description=AI-miniSOC FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+User=xiejava
+Group=xiejava
+WorkingDirectory=/home/xiejava/AIproject/AI-miniSOC/src/backend
+Environment="PATH=/home/xiejava/AIproject/AI-miniSOC/src/backend/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/home/xiejava/AIproject/AI-miniSOC/src/backend/.env
+# P3-T4（数据可靠性）：后台调度器为进程内单例，必须单 worker
+# 多 worker 会导致 browsing/alert/KEV 调度重复执行与缓存漂移
+ExecStart=/home/xiejava/AIproject/AI-miniSOC/src/backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+# 日志输出到 /var/log/aisoc/backend.log（需先 sudo mkdir -p /var/log/aisoc）
+StandardOutput=append:/var/log/aisoc/backend.log
+StandardError=append:/var/log/aisoc/backend.log
+
+# 资源限制
+LimitNOFILE=65536
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=GitHub Actions Self-hosted Runner (AI-miniSOC)
+After=network.target
+
+[Service]
+Type=simple
+User=xiejava
+Group=xiejava
+WorkingDirectory=/home/xiejava/actions-runner
+# ./run.sh 是注册后自动生成的脚本，监听 GitHub API 拉 job
+ExecStart=/home/xiejava/actions-runner/run.sh
+Restart=always
+RestartSec=10
+# 同一时间只跑 1 个 job (避免并发部署)
+Environment=RUNNER_CONCURRENT_JOBS=1
+
+# 资源限制
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

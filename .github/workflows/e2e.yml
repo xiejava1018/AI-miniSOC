@@ -1,11 +1,13 @@
 name: E2E Tests
 
+# ⚠️ 暂未启用 - 指向已下线的 runner (192.168.0.42/128)
+# 启用前需要: 1) 恢复 self-hosted runner  2) 更新 IP 配置
 on:
+  workflow_dispatch:  # 仅手动触发，需要先修 IP/凭证
   push:
-    branches: [ master, develop ]
+    branches: []  # 禁用 push 触发
   pull_request:
-    branches: [ master, develop ]
-  workflow_dispatch:
+    branches: []  # 禁用 PR 触发
 
 jobs:
   e2e:

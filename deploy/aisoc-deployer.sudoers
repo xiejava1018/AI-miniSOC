@@ -1,0 +1,24 @@
+# AI-miniSOC deploy user (xiejava) 的最小 sudo 权限
+# 安装: sudo cp deploy/aisoc-deployer.sudoers /etc/sudoers.d/aisoc-deployer && sudo chmod 440 /etc/sudoers.d/aisoc-deployer
+# 验证: sudo -l -U xiejava 应列出下面所有命令 NOPASSWD
+
+# --- backend 服务管理 ---
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart aisoc-backend
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl start aisoc-backend
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop aisoc-backend
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl status aisoc-backend
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl enable aisoc-backend
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/systemctl disable aisoc-backend
+
+# --- backend 日志查看 ---
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/journalctl -u aisoc-backend *
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/tail /var/log/aisoc/*
+
+# --- log 目录维护 ---
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /var/log/aisoc
+xiejava ALL=(ALL) NOPASSWD: /usr/bin/chown -R xiejava\:xiejava /var/log/aisoc
+
+# --- 允许 deploy.sh 的 sudo 调用无需 TTY (systemd ExecStart 也没 TTY) ---
+Defaults!/usr/bin/systemctl !requiretty
+Defaults!/usr/bin/journalctl !requiretty
+Defaults!/usr/bin/tail !requiretty
