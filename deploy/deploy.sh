@@ -104,8 +104,11 @@ TS_TAG=$(date +%Y%m%d_%H%M%S)
 log ".env 已备份到 $BACKUP_DIR"
 
 # ===== 2. 拉取 + reset =====
-log "git fetch origin master"
-git fetch origin master
+log "git fetch origin master (depth=50, timeout=120s)"
+# 注: 服务器到 github 带宽很慢 (实测 ~456 B/s), fetch 全历史会超时
+# 用 --depth=50 只拉最近 50 个 commit; timeout 120s 硬限
+# 如果 fetch 失败且目标 commit 已在本地 (常见: 服务器已拉过), 继续走
+timeout 120 git fetch --depth=50 origin master || log "WARN: git fetch 超时/失败, 尝试用本地已有 commit 继续"
 
 # 验证目标 commit 存在
 if ! git cat-file -t "$TARGET_SHA" >/dev/null 2>&1; then
@@ -161,7 +164,7 @@ for i in 1 2 3 4 5; do
     fi
 
     # 8.2 DB 探活 (R7 修复：解决 /system-info 不查 DB 的假阳性)
-    # 从 .env 读连接信息，直接 psql SELECT 1
+    # 用 venv python + SQLAlchemy 探活 (不依赖 psql, 服务器可能没装 postgresql-client)
     DB_HOST=$(grep '^DB_HOST=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
     DB_PORT=$(grep '^DB_PORT=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "5432")
     DB_NAME=$(grep '^DB_NAME=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
@@ -174,7 +177,9 @@ for i in 1 2 3 4 5; do
         break
     fi
 
-    DB_RESP=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" -tA 2>/dev/null || echo "")
+    DB_RESP=$(cd "$PROJECT_DIR" && \
+        DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASS="$DB_PASS" \
+        src/backend/venv/bin/python deploy/db_healthcheck.py 2>/dev/null || echo "")
     if [[ "$DB_RESP" == "1" ]]; then
         log "  [$i/5] ✓ HTTP 200 + DB SELECT 1 OK"
         HEALTH_OK=1

@@ -122,7 +122,9 @@ jobs:
           DB_USER=$(grep '^DB_USER=' src/backend/.env | cut -d= -f2 | tr -d '"' || echo "")
           DB_PASS=$(grep '^DB_PASSWORD=' src/backend/.env | cut -d= -f2 | tr -d '"' || echo "")
           if [[ -n "$DB_HOST" && -n "$DB_NAME" ]]; then
-            DB_RESP=$(PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" -tA 2>/dev/null || echo "")
+            # 用 venv python + SQLAlchemy 探活（不依赖 psql，服务器可能没装 postgresql-client）
+            DB_RESP=$(DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASS="$DB_PASS" \
+              src/backend/venv/bin/python deploy/db_healthcheck.py 2>/dev/null || echo "")
             echo "DB: $DB_RESP"
             [[ "$DB_RESP" == "1" ]] || { echo "ERROR: DB 探活失败"; exit 1; }
           else
