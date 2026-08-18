@@ -80,6 +80,13 @@ jobs:
         continue-on-error: true
         # 注: alembic check 当前在某些迁移上会失败（种子数据），作为 warning 继续
 
+      - name: Alembic upgrade head (初始化测试库 schema)
+        working-directory: src/backend
+        run: |
+          python -m alembic upgrade head
+        # 注: postgres service 是空的, 不跑 upgrade pytest 会报 "表不存在"
+        #      CI 创建表 + 迁移都用 alembic, 不手工 SQL
+
       - name: Pytest
         working-directory: src/backend
         run: |
