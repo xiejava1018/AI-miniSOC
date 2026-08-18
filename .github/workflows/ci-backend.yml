@@ -83,21 +83,9 @@ jobs:
       - name: 初始化测试库 schema (Base.metadata.create_all)
         working-directory: src/backend
         run: |
-          # 注: alembic upgrade head 会失败（soc_menus.component / permissions 列是手工 ALTER 加的，
-          #     alembic 历史里没迁移记录）。改用 Base.metadata.create_all 创建所有表（model 即 schema）
-          python -c "
-          import sys, os
-          sys.path.insert(0, '.')
-          from dotenv import load_dotenv
-          load_dotenv()
-          from app.core.database import engine
-          from app.models import Base
-          Base.metadata.create_all(bind=engine)
-          print('✅ 创建表成功')
-          from sqlalchemy import inspect
-          tables = inspect(engine).get_table_names()
-          print(f'总 {len(tables)} 张表')
-          "
+          # 注: alembic upgrade head 会失败（soc_menus.component / permissions 列是手工 ALTER 加过，
+          #     alembic 历史里没迁移记录）。改用 Base.metadata.create_all (model 即 schema 准)
+          python scripts/ci_create_tables.py
 
       - name: Pytest
         working-directory: src/backend
