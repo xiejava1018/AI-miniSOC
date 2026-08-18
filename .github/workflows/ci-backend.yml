@@ -57,7 +57,11 @@ jobs:
         working-directory: src/backend
         run: |
           python -m pip install --upgrade pip
+          # 注: zhipuai 要 pyjwt<2.9.0 但 mcp 要 pyjwt>=2.10.1, pip 解析冲突
+          # 服务器现网 venv 装 zhipuai 是手动 --no-deps (zhipuai 只声明依赖但实际不调 pyjwt API)
+          # CI 采用同样方式: --no-deps 装 zhipuai
           python -m pip install -r requirements.txt
+          python -m pip install --no-deps "zhipuai>=2.1.5"
           python -m pip install ruff
 
       - name: Lint (ruff)

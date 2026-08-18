@@ -27,8 +27,9 @@ alembic>=1.13,<2.0
 tenacity>=8.2,<10.0
 
 # MCP (Model Context Protocol) — 让 Agent 通过 MCP 调用 FastAPI
-# 注意：mcp>=1.0 在旧版(如1.12)有 issubclass(param.annotation, Context) 启动崩溃，需 >=1.29
-mcp==1.29.0
+# 注意：mcp<1.13 有 issubclass(param.annotation, Context) 启动崩溃；mcp>=1.20 引入 pyjwt>=2.10.1
+# 与 zhipuai 的 pyjwt<2.9.0 冲突。限定为 1.13 ≤ mcp < 1.20，避免冲突
+mcp>=1.13,<1.20
 sse-starlette==3.4.8
 
 # AI SDK (智谱AI)
