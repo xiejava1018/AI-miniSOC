@@ -6,6 +6,9 @@
 # 项目本地记忆（不入库）
 .workbuddy/
 
+# npm/pnpm 个人镜像配置（不入库，每个开发者自配）
+.npmrc
+
 # Python
 __pycache__/
 *.pyc

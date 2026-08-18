@@ -24,8 +24,8 @@ services:
 
   wazuh-collector:
     build:
-      context: ./wazuh
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: wazuh/Dockerfile
     container_name: minisoc-wazuh-collector
     restart: unless-stopped
     environment:
