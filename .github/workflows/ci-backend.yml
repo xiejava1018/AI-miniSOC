@@ -102,9 +102,14 @@ jobs:
       - name: Pytest
         working-directory: src/backend
         run: |
-          python -m pytest tests/ -v --tb=short -x \
+          # 注: 之前 -x 失败立即停, 看不到后面失败. 改为 --tb=short --maxfail=20 收集多个错
+          python -m pytest tests/ -v --tb=long --maxfail=20 \
             --ignore=tests/integration/test_user_workflow.py \
-            --ignore=tests/test_auth_api.py
+            --ignore=tests/test_auth_api.py 2>&1 | tee /tmp/pytest.log || {
+              echo "::: pytest 失败, 以下是 log 末尾 100 行 :::"
+              tail -100 /tmp/pytest.log
+              exit 1
+            }
         # 排除项:
         #   - test_user_workflow: 期望 HTTP 201，但中间件包成 body.code=201
         #   - test_auth_api: 需 live uvicorn，CI 跑不动
