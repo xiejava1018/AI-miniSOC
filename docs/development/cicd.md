@@ -1230,9 +1230,33 @@ a07753d 部署成功了，但该次 CD 的 Gate 步骤报了 `python3 deploy/cd_
 
 ---
 
+#### 12.13.7 e2cb6db 部署意外发现: fetch shallow bug (721104b 修复)
+
+e2cb6db push 后服务器未能及时更新（服务器停在 8d1c649）。查看发现：
+
+- 多次 `git fetch --depth=50 origin master` 会让 server repo 逐渐变 shallow (`.git/shallow` 出现)
+- shallow repo 下再次 fetch 深度不足, 新 commit 拉不到
+- deploy.sh fetch 超时后仅 WARNING, 然后 `git cat-file -t` 报错 → exit 2
+- **这是一个需要手动 scp 修复的鸡生蛋问题**: deploy.sh 修复在 721104b, 但 fetch 拉不动 721104b 本身
+
+**修复 (721104b)**：deploy.sh 重写 fetch 策略, 优先 `git fetch origin <target_sha>` 直接拿目标 commit (几十 KB, 绕过 shallow), 三级 fallback:
+  1. `git fetch origin <sha>`     最快最准, 绕过 shallow
+  2. `git fetch --depth=200 master` 兑底拉深
+  3. `git fetch --unshallow origin`  修复 shallow (慢网可能超时)
+
+**手动恢复**：
+- `scp deploy.sh` 到服务器 (绕过 fetch)
+- `git fetch --unshallow origin` 修复 shallow
+- workflow_dispatch 重触发部署
+
+服务器现在 HEAD=721104b, marker #5 落位, 200/200。
+
+---
+
 **文档结束。评审请从 §〇 TL;DR 开始，需要细节往下看。**
 # CI/CD 流水线验证 marker 2026-08-19 11:36:15
 # CI/CD 修复验证 marker #2 2026-08-19 11:45:33
 # CI/CD 修复验证 marker #3 2026-08-19 11:51:56
 # CI/CD 修复验证 marker #4 2026-08-19 11:59:55
 # CI/CD 最终验证 marker #5 2026-08-19 12:15:28
+# CI/CD 文档更新 marker #6 2026-08-19 12:33:32
