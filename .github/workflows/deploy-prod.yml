@@ -68,7 +68,8 @@ jobs:
         id: target
         run: |
           cd /home/xiejava/AIproject/AI-miniSOC
-          git fetch origin master
+          # 服务器到 github 慢（实测 ~456 B/s）：限定 depth + timeout；失败降级用本地引用
+          timeout 120 git fetch --depth=50 origin master || echo "WARN: fetch 超时/失败，用本地 origin/master 继续"
           if [ -n "${{ inputs.commit_sha }}" ]; then
             TARGET="${{ inputs.commit_sha }}"
           else
