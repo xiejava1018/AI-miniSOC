@@ -125,16 +125,13 @@ jobs:
           for n in REQUIRED:
               if runs[n]["conclusion"] != "success":
                   print("::error::" + n + " conclusion=" + str(runs[n]["conclusion"]) + "，阻断部署"); raise SystemExit(1)
-          # 双 CD 去重：同 sha 已有其他 CD 成功部署过 → 跳过（无论时序，每个 commit 恰好部署一次）
-          # 仅当那次 completed+success 才跳过；若它失败/被取消，本次照常部署（重试语义）
-          self_id = int(os.environ.get("GITHUB_RUN_ID", "0"))
-          dup = [w for w in all_runs
-                 if w["name"] == "CD - Deploy to Production" and w["id"] != self_id
-                 and w["status"] == "completed" and w["conclusion"] == "success"]
-          if dup:
-              print("DEPLOY=no（同 commit 已有成功的 CD run#" + str(dup[0]["run_number"]) + " 部署过，跳过重复部署）")
-              out.write("deploy=no\n"); raise SystemExit(0)
-          print("DEPLOY=yes（两个 CI 均 success，且尚无成功部署）")
+          # 注意：此处**不加** "同 sha 已有其他成功 CD → 跳过" 的去重规则。
+          # 原因（实测，参见 cicd.md §12.13）：在两 CI 几乎同时完成的快速路径下，
+          # 第一个 CD 的 gate 查询时 #2 已被 API 列为 completed/success（API 状态略超前），
+          # 会误判"已有部署"→ 跳过首次部署 → 服务器不更新（实测 a271f30）。
+          # 去重完全交给 workflow 的 concurrency group (deploy-prod, cancel-in-progress: false)：
+          # 两个 CD 全局串行部署同一 commit，幂等无害。
+          print("DEPLOY=yes（两个 CI 均 success）")
           out.write("deploy=yes\n")
           PYEOF
 
