@@ -67,20 +67,40 @@ jobs:
       - name: Determine target SHA
         id: target
         run: |
-          cd /home/xiejava/AIproject/AI-miniSOC
-          # 服务器到 github 慢（实测 ~456 B/s）：限定 depth + timeout；失败降级用本地引用
-          timeout 120 git fetch --depth=50 origin master || echo "WARN: fetch 超时/失败，用本地 origin/master 继续"
-          if [ -n "${{ inputs.commit_sha }}" ]; then
-            TARGET="${{ inputs.commit_sha }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # 手动触发：可用 inputs.commit_sha 回滚/重部署；缺省 fetch 最新 master
+            cd /home/xiejava/AIproject/AI-miniSOC
+            if [ -n "${{ inputs.commit_sha }}" ]; then
+              TARGET="${{ inputs.commit_sha }}"
+            else
+              timeout 120 git fetch --depth=50 origin master || echo "WARN: fetch 超时/失败，用本地 origin/master 继续"
+              TARGET=$(git rev-parse origin/master)
+            fi
           else
-            TARGET=$(git rev-parse origin/master)
+            # workflow_run：CI 跑在哪个 commit 就部署哪个 —— 直接取事件自带的 head_sha。
+            # 不再 fetch origin/master：慢网 fetch 失败时会回退到过期的本地引用，
+            # 曾导致把旧 commit 部署一遍（详见 cicd.md §12.13）
+            TARGET="${{ github.event.workflow_run.head_sha }}"
           fi
           echo "value=$TARGET" >> $GITHUB_OUTPUT
           echo "目标 commit: $TARGET"
-          git log -1 --oneline "$TARGET"
+          cd /home/xiejava/AIproject/AI-miniSOC
+          git log -1 --oneline "$TARGET" 2>/dev/null || echo "(本地暂无该 commit，deploy.sh 内部会 fetch)"
+
+      # 1.5 门禁：两个 CI 都成功才部署（顺带去重双触发，详见 cicd.md §12.13）
+      #    - 双 CI 任一未完成 → deploy=no，跳过（由后完成的那个触发部署）
+      #    - 任一失败 → 本步 exit 1，job 失败阻断
+      - name: Gate - both CI green (dedupe)
+        id: gate
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+        run: python3 deploy/cd_gate.py
 
       # 2. 执行部署 (核心步骤)
       - name: Execute deploy.sh
+        if: steps.gate.outputs.deploy != 'no'
         run: |
           cd /home/xiejava/AIproject/AI-miniSOC
           bash deploy/deploy.sh "${{ steps.target.outputs.value }}" "GitHub Actions 自动部署 #${{ github.run_number }}"
@@ -108,7 +128,7 @@ jobs:
 
       # 4. 部署后健康检查（v2.2 加 DB 探活）
       - name: Post-deploy health check (HTTP + DB)
-        if: success()
+        if: success() && steps.gate.outputs.deploy != 'no'
         run: |
           sleep 2
           # HTTP 探活
