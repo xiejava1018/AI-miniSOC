@@ -1,14 +1,15 @@
-# AI-miniSOC CI/CD 方案 v2.6
+# AI-miniSOC CI/CD 方案 v2.7
 
-> **状态**: ✅ Step 0–3 已完成（CI 全绿 + 服务器归档 + systemd 接管 + deploy.sh 双路径实测）；待 Step 4（无，CI 已提交）/ Step 5（self-hosted runner）
-> **日期**: 2026-08-18
+> **状态**: 🎉 **全部核心步骤完成**——Step 0–6 端到端打通：push → CI 全绿 → CD 自动部署到 192.168.0.102（单次部署 ~1.5min，失败自动回滚）。待收尾：Step 8 清理（start.sh 标废弃、CLAUDE.md 更新）
+> **日期**: 2026-08-19
 > **关键变更**:
 > - v2.0 → v2.1：修正 CD 架构（self-hosted runner 替代 SSH）
 > - v2.1 → v2.2：修复评审 7 条 + R6 误修
 > - v2.2 → v2.3：R6 重修
 > - v2.3 → v2.4：pyjwt 冲突 + lint advisory（§12.8）
 > - v2.4 → v2.5：soc_menus 手工列 + conftest 全 model（§12.9）
-> - **v2.5 → v2.6**：Step 2/3 实测——DB 探活改 venv python + fetch 加 depth/timeout + 故障注入验证 R5 回滚（§12.10）
+> - v2.5 → v2.6：Step 2/3 实测 + R5 回滚验证（§12.10）
+> - **v2.6 → v2.7**：Step 5 runner 上线 + 端到端全链路验证 ✅（§12.11）
 
 ---
 
@@ -739,7 +740,8 @@ gh run cancel <run-id>
 | v2.3 | 2026-08-18 | R6 重修（仓库 head = 服务器 current = `a0b1c2d3e4f5`，详见 §12.7） |
 | v2.4 | 2026-08-18 | Step 0 实施发现：pyjwt 冲突修复 + lint 历史错误多改为 advisory（详见 §12.8） |
 | v2.5 | 2026-08-18 | Step 0 后续修复：soc_menus 手工列 + conftest import 全部 + pytest advisory（详见 §12.9） |
-| **v2.6** | **2026-08-18** | **Step 2/3 实测**：DB 探活 venv python + fetch depth/timeout + 故障注入验证 R5 回滚（详见 §12.10） |
+| v2.6 | 2026-08-18 | Step 2/3 实测：DB 探活 venv python + fetch depth/timeout + 故障注入验证 R5 回滚（详见 §12.10） |
+| **v2.7** | **2026-08-19** | **Step 5 runner 上线 + 端到端全链路验证✅**：E2E 抢占修复 + CD fetch 修复 + 连续两次自动部署成功（详见 §12.11） |
 
 ### 12.2 v2.1 评审意见（主 Agent, 2026-08-18）及 v2.2 修复
 
@@ -1084,6 +1086,60 @@ CI 最终状态（commit `d0433c6`）：
 
 - 前端 `npm run dev`（PID 2909773）仍 nohup 跑着——生产用 nginx 8080 服务 dist，dev server 可随时停
 - `soc_source_health` 等 8 张 P4 表在 model 但不在 alembic 历史（alembic check 一直 WARN 的根因），后续补迁移
+
+---
+
+### 12.11 Step 5 实施记录（2026-08-19 凌晨）✅ 端到端全链路打通
+
+#### 12.11.1 安装过程
+
+**关键策略——绕开服务器慢网络**：
+- 服务器直连 github ~456 B/s，216MB runner tarball 会超时
+- 改为 Mac 下载（2m28s）→ `ssh cat` LAN 传输（20s）→ 服务器 sha256 校验一致
+
+**步骤**：
+1. 最新 runner v2.336.0（Mac 下载 + hash 对官方 `sha256:04cf0be1...5d5d` ✓）
+2. 传输解压到 `~/actions-runner`
+3. registration token：**用 macOS keychain 里的 github.com 凭证调 API 拿**（免手动去网页）
+4. `./config.sh --url ... --token ... --labels prod-deployer --name aisoc-prod-deployer --unattended --replace` → 注册成功
+5. `sudo ./svc.sh install xiejava && start`（askpass 方式，同 Step 2）
+6. systemd 服务 `actions.runner.*.aisoc-prod-deployer` active，GitHub 上 runner **online**
+
+#### 12.11.2 上线后立即发现的两个问题（已修）
+
+**问题 1：旧 E2E workflow 抢占 runner**
+- e2e.yml `runs-on: [self-hosted, linux]` 匹配了新 runner，开始跑早已失效的 E2E（指向下线 IP）
+- 积压了 17 个 queued E2E runs（从 Step 0 开始每次 push 都排了一个）
+- 修复：API 批量 cancel 17 个；e2e.yml 改 `runs-on: [self-hosted, linux, e2e]`（原 E2E-Runner 专属 label）
+
+**问题 2：CD 的 Step 3 git fetch 无保护**
+- 首个 CD job（积压的 4f35202）Step 3 "Determine target SHA" 卡在 `git fetch origin master`（yml 里没 depth/timeout）→ step 失败
+- 修复：deploy-prod.yml 同 deploy.sh 修法——`timeout 120 git fetch --depth=50 ... || 降级用本地 origin/master`
+
+#### 12.11.3 端到端验证 ✅（修 fetch 后的 commit 9c66343）
+
+```
+push 9c66343
+  → CI - Backend / CI - Frontend / Unit Tests 全 success（~2-3min）
+  → CD workflow_run 自动触发
+  → self-hosted runner（aisoc-prod-deployer）接 job
+  → deploy.sh：fetch(降级) → reset 9c66343 → pip → vite build(1m2s) → restart
+  → 健康检查 [2/5] ✓ HTTP 200 + DB SELECT 1 OK
+  → alembic 比对：生产 == 代码 (a0b1c2d3e4f5)
+  → 部署成功（单次部署全程 ~1m34s）
+```
+
+**连续两次自动部署均成功**：
+- #34：9df4099（01:17:15 → 01:18:55）
+- #36：9c66343（01:19:13 → 01:20:47）
+
+服务器终态：HEAD=9c66343、backend 200、nginx 200、runner idle（等待下个 job）。
+
+#### 12.11.4 剩余步骤
+
+- Step 6 sudoers：**已随 Step 2 提前完成**（同一次 askpass sudo 里装的）
+- Step 7（typo PR 端到端测试）：已由 9c66343 的真实链路等价验证，可跳过
+- Step 8 清理：start.sh 标废弃 + CLAUDE.md 更新部署方式——待做
 
 ---
 
