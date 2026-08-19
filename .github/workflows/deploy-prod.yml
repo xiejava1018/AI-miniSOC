@@ -108,7 +108,8 @@ jobs:
           if token:
               headers["Authorization"] = "Bearer " + token
           with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as resp:
-              runs = {w["name"]: w for w in json.load(resp).get("workflow_runs", [])}
+              all_runs = json.load(resp).get("workflow_runs", [])
+          runs = {w["name"]: w for w in all_runs}
           REQUIRED = ["CI - Backend", "CI - Frontend"]
           for n in REQUIRED:
               w = runs.get(n)
@@ -124,7 +125,16 @@ jobs:
           for n in REQUIRED:
               if runs[n]["conclusion"] != "success":
                   print("::error::" + n + " conclusion=" + str(runs[n]["conclusion"]) + "，阻断部署"); raise SystemExit(1)
-          print("DEPLOY=yes（两个 CI 均 success）")
+          # 双 CD 去重：同 sha 已有其他 CD 成功部署过 → 跳过（无论时序，每个 commit 恰好部署一次）
+          # 仅当那次 completed+success 才跳过；若它失败/被取消，本次照常部署（重试语义）
+          self_id = int(os.environ.get("GITHUB_RUN_ID", "0"))
+          dup = [w for w in all_runs
+                 if w["name"] == "CD - Deploy to Production" and w["id"] != self_id
+                 and w["status"] == "completed" and w["conclusion"] == "success"]
+          if dup:
+              print("DEPLOY=no（同 commit 已有成功的 CD run#" + str(dup[0]["run_number"]) + " 部署过，跳过重复部署）")
+              out.write("deploy=no\n"); raise SystemExit(0)
+          print("DEPLOY=yes（两个 CI 均 success，且尚无成功部署）")
           out.write("deploy=yes\n")
           PYEOF
 
