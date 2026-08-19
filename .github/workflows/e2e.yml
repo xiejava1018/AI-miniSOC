@@ -11,7 +11,9 @@ on:
 
 jobs:
   e2e:
-    runs-on: [self-hosted, linux]
+    # 注: 用专属 label 'e2e'（原 AI-miniSOC-E2E-Runner 所有），避免抢占新装的
+    #     prod-deployer runner（那台只跑部署，不跑测试）
+    runs-on: [self-hosted, linux, e2e]
 
     steps:
       - name: Checkout code
