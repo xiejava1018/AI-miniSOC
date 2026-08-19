@@ -88,15 +88,45 @@ jobs:
           git log -1 --oneline "$TARGET" 2>/dev/null || echo "(本地暂无该 commit，deploy.sh 内部会 fetch)"
 
       # 1.5 门禁：两个 CI 都成功才部署（顺带去重双触发，详见 cicd.md §12.13）
-      #    - 双 CI 任一未完成 → deploy=no，跳过（由后完成的那个触发部署）
-      #    - 任一失败 → 本步 exit 1，job 失败阻断
+      #    - 双 CI 任一未完成 → deploy=no 跳过（由后完成的那个触发部署）
+      #    - 任一失败 → exit 1 阻断
+      #    逻辑内联（不引用仓库文件）：CD 无 checkout 步骤，且服务器 HEAD 可能还没包含
+      #    新增的 deploy/cd_gate.py（首次上线本逻辑时就是鸡生蛋问题，实测踩过）
       - name: Gate - both CI green (dedupe)
         id: gate
         if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.target.outputs.value }}
-        run: python3 deploy/cd_gate.py
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, urllib.request
+          sha = os.environ["TARGET_SHA"]
+          token = os.environ.get("GH_TOKEN", "")
+          url = "https://api.github.com/repos/xiejava1018/AI-miniSOC/actions/runs?head_sha=" + sha + "&per_page=100"
+          headers = {"Accept": "application/vnd.github+json"}
+          if token:
+              headers["Authorization"] = "Bearer " + token
+          with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as resp:
+              runs = {w["name"]: w for w in json.load(resp).get("workflow_runs", [])}
+          REQUIRED = ["CI - Backend", "CI - Frontend"]
+          for n in REQUIRED:
+              w = runs.get(n)
+              print(n, "=", (w["status"] + "/" + str(w["conclusion"])) if w else "missing")
+          out = open(os.environ.get("GITHUB_OUTPUT", "/dev/null"), "a")
+          for n in REQUIRED:
+              if runs.get(n) is None:
+                  print("::error::" + n + " 的 run 不存在"); raise SystemExit(1)
+          for n in REQUIRED:
+              if runs[n]["status"] != "completed":
+                  print("DEPLOY=no（" + n + " 未完成，跳过本次，由后完成的 CI 触发部署）")
+                  out.write("deploy=no\n"); raise SystemExit(0)
+          for n in REQUIRED:
+              if runs[n]["conclusion"] != "success":
+                  print("::error::" + n + " conclusion=" + str(runs[n]["conclusion"]) + "，阻断部署"); raise SystemExit(1)
+          print("DEPLOY=yes（两个 CI 均 success）")
+          out.write("deploy=yes\n")
+          PYEOF
 
       # 2. 执行部署 (核心步骤)
       - name: Execute deploy.sh
