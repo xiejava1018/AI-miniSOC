@@ -1,6 +1,6 @@
-# AI-miniSOC CI/CD 方案 v2.7
+# AI-miniSOC CI/CD 方案 v2.7（完结）
 
-> **状态**: 🎉 **全部核心步骤完成**——Step 0–6 端到端打通：push → CI 全绿 → CD 自动部署到 192.168.0.102（单次部署 ~1.5min，失败自动回滚）。待收尾：Step 8 清理（start.sh 标废弃、CLAUDE.md 更新）
+> **状态**: 🎉 **全部步骤（Step 0–8）完成，方案落地并稳定运行**——push → CI 全绿 → CD 自动部署 192.168.0.102（~1.5min，失败自动回滚）。遗留优化项见 §12.12 末尾
 > **日期**: 2026-08-19
 > **关键变更**:
 > - v2.0 → v2.1：修正 CD 架构（self-hosted runner 替代 SSH）
@@ -1139,7 +1139,31 @@ push 9c66343
 
 - Step 6 sudoers：**已随 Step 2 提前完成**（同一次 askpass sudo 里装的）
 - Step 7（typo PR 端到端测试）：已由 9c66343 的真实链路等价验证，可跳过
-- Step 8 清理：start.sh 标废弃 + CLAUDE.md 更新部署方式——待做
+- Step 8 清理：见 §12.12
+
+#### 12.11.5 流水线稳定性补充（上线 1 小时内观察）
+
+- 每次 push 触发 2 个 CD run（CI-Backend 与 CI-Frontend 各自 workflow_run 事件）→
+  concurrency 串行重复部署同目标，幂等无害；如嫌冗余，后续可在 deploy-prod.yml
+  加 run-id 去重或只监听一个 CI
+- E2E workflow 已通过 API disable + yml 只留 workflow_dispatch，queued 污染已清零
+- runner 稳定 online；aisoc-backend / actions.runner 两个 systemd 服务均 enabled（开机自启）
+
+---
+
+### 12.12 Step 8 收尾（2026-08-19）✅ 方案完结
+
+| 项 | 动作 |
+|----|------|
+| `src/backend/start.sh` | 头部加大幅废弃说明（指向 systemd/deploy.sh，保留应急用法）|
+| `CLAUDE.md` | ① 常用命令新增「生产部署（CI/CD 自动化）」节（systemd 速查/手动部署/runner 管理）② 已知问题更新 Alembic 条目（真实根因：手工列+P4 表缺迁移）+ 新增 lint/pytest advisory 条目 ③ Phase 1 勾选 CI/CD 上线 ④ 注意事项新增「不要在 102 手动 nohup」「慢网注意」⑤ 新增「2026-08-19 CI/CD 上线」节（生产拓扑/速查/遗留）⑥ 文档版本 v2.2→v2.3 |
+| 验证 | 本节 push 后流水线第五次自动部署作为完结验证 |
+
+**遗留清单（不阻塞，按需修）**：见 CLAUDE.md「2026-08-19」节末尾 4 项：
+1. alembic 迁移历史补齐（soc_menus 手工列 + 8 张 P4 表）→ 修后 alembic check 可改阻塞
+2. lint/pytest 清零后移除 advisory
+3. wazuh collector config.yaml 明文密码改 env/secret 注入
+4. 102 上前端 dev server（nohup）可停
 
 ---
 

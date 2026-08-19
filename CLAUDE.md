@@ -356,7 +356,7 @@ GET /alerts?offset=0&limit=10
 
 ## 常用命令
 
-### 启动开发服务器
+### 启动开发服务器（本地 Mac，dev）
 ```bash
 # 后端 (从 src/backend/ 目录启动以正确加载 .env)
 cd src/backend
@@ -365,8 +365,48 @@ cd src/backend
 # 前端
 cd src/frontend
 npm run dev        # 开发服务器: http://localhost:3006
-npm run build      # 生产构建
+npm run build      # 生产构建（注意: vue-tsc 必挂，用 npx vite build）
 ```
+
+### 生产部署（192.168.0.102）— CI/CD 自动化
+
+**已全自动（2026-08-19 起，详见 `docs/development/cicd.md`）**：
+```
+push master → CI（Backend/Frontend/UnitTests 全绿）
+            → CD（self-hosted runner aisoc-prod-deployer）
+            → deploy/deploy.sh：fetch → reset → pip → vite build → restart → 健康检查
+失败 → 全局 trap 自动回滚（git reset + rebuild + restart）
+```
+
+**服务器后端进程管理（systemd，替代旧 nohup）**：
+```bash
+# 在 192.168.0.102 上（sudoers 已配 NOPASSWD，可无人值守）
+sudo systemctl status aisoc-backend      # 状态（免密）/ start|stop|restart
+sudo -n systemctl restart aisoc-backend # 重启（deploy.sh 用这个，免密）
+tail -f /var/log/aisoc/backend.log       # 应用日志
+sudo -n journalctl -u aisoc-backend -n 50  # systemd 日志（免密）
+```
+
+**手动部署指定 commit（不经 GitHub Actions）**：
+```bash
+ssh xiejava@192.168.0.102
+cd ~/AIproject/AI-miniSOC
+bash deploy/deploy.sh <commit_sha> "说明"
+# 任何步骤失败 → 自动回滚到部署前 commit
+```
+
+**Self-hosted Runner 管理**：
+```bash
+sudo systemctl status actions.runner.*   # runner 服务（装在 102）
+sudo systemctl restart actions.runner.xiejava1018-AI-miniSOC.aisoc-prod-deployer.service
+tail -f ~/actions-runner/_diag/Runner_*.log   # runner 诊断日志
+```
+
+⚠️ **注意**：
+- `src/backend/start.sh` **已废弃**（保留仅应急），生产用 systemd
+- 前端生产由 nginx:8080 服务 `dist/`（deploy.sh 自动重建）
+- alembic 迁移**永不在 CI/CD 自动跑**，由 DBA 审阅后手动执行
+- 服务器到 github 慢（~456 B/s）：fetch 已限 `--depth=50 + timeout 120`，新仓库 clone 建议从 Mac 中转
 
 ### 数据库操作
 ```bash
@@ -412,10 +452,19 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - 需要分页查询大量数据
 - 时戳使用纳秒级
 
-### Alembic迁移
-- `alembic_version` 表引用了一个不存在的修订版本
-- 当前使用直接SQL/SQLAlchemy创建表作为替代方案（见 `src/backend/scripts/create_missing_tables.py`）
-- 实际已能 create_all（通过 Base.metadata）正常启动
+### Alembic 迁移历史不完整（2026-08-19 更新）
+- 生产库 `soc_menus.component` / `permissions` 列是手工 ALTER 加的，alembic 历史漏写迁移
+- 后果：`alembic upgrade head` 在空库必败；`alembic check` 一直 WARN（CI 里是 advisory）
+- 另外 `soc_source_health` 等 8 张 P4 表在 model 但不在迁移链
+- **当前对策**：CI 用 `scripts/ci_create_tables.py`（Base.metadata.create_all + 补列）建测试库；生产 schema 与 model 一致（head=a0b1c2d3e4f5）
+- **待修**：补一个迁移把这些表/列写进历史，之后 `alembic check` 才能改阻塞
+
+### Lint 历史欠账（2026-08-19）
+- 前端 ESLint 2614 个错误（2590 可 --fix）、后端 ruff 数百条、vue-tsc 类型错
+- CI 里 lint 均为 advisory（不阻塞），待逐步清零后恢复阻塞
+
+### CI pytest 仍 advisory（2026-08-19）
+- CI logs/artifacts 需 admin token 才能读，个别失败用例待拿到日志后修复，修复后移除 continue-on-error
 
 ### ENCRYPTION_KEY 不是合法 Fernet 密钥（pre-existing, 2026-06-02 发现）
 - 启动 warning: `Fernet key must be 32 url-safe base64-encoded bytes.. Using temporary key.`
@@ -451,6 +500,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] Python 虚拟环境升级到 3.13
 - [x] 表名统一 soc_ 前缀（24 张表全部合规）
 - [ ] 补全项目文档
+- [x] **CI/CD 全链路上线**（2026-08-19）：push → CI 全绿 → self-hosted runner 自动部署 192.168.0.102，失败自动回滚，单次部署 ~1.5min，详见 `docs/development/cicd.md`
 - [ ] 集成现有监控工具
 - [ ] 事件管理 / 告警管理 / 脆弱性管理前端页面（仍占位）
 
@@ -490,6 +540,8 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 12. **测试库**: `pytest` 走独立库 `AI-miniSOC-db_test`，跑测试前需 `CREATE DATABASE "AI-miniSOC-db_test";`
 13. **JWT 测试**: 部分 E2E 用例 (`tests/test_auth_api.py`) 走 live uvicorn (http://localhost:8000)，需要先启动后端进程
 14. **PINIA 持久化**: 登录态、用户信息、菜单树等都持久化到 localStorage，登出时显式 `userStore.logOut()` 清
+15. **生产部署**: 不要在 192.168.0.102 手动 nohup/uvicorn，用 systemd（`systemctl restart aisoc-backend`）；常规发版直接 push master，CI/CD 自动部署
+16. **慢网注意**: 102 服务器到 github ~456 B/s，git fetch 已限 depth+timeout；大文件（如 runner 包）从 Mac 中转
 
 ---
 
@@ -514,9 +566,38 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 ### 本次未做但建议尽快处理
 1. `ENCRYPTION_KEY` 修成合法 Fernet 密钥（pre-existing 启动 warning，重启丢加密数据）
 2. 修 `tests/integration/test_user_workflow.py` 的 envelope 断言
-3. 数据库仍连 `AI-miniSOC-testdb`，生产环境应切到正式库
+3. ~~数据库仍连 `AI-miniSOC-testdb`，生产环境应切到正式库~~（**已于 2026-08-18 完成**：服务器 `.env` 已切 `AI-miniSOC-db`，三层库分离见 cicd.md §1.2）
 
 ---
 
-**文档版本**: v2.2
-**最后更新**: 2026-06-07
+## 今日补充（2026-08-19 CI/CD 上线）
+
+### 生产拓扑（本节为准）
+- **生产服务器**: 192.168.0.102（xiejava-8g-host），后端 systemd `aisoc-backend`（port 8000），前端 nginx:8080 服务 dist
+- **数据库**: 远端 PostgreSQL 111.228.57.2:25432；**生产库 `AI-miniSOC-db`**（服务器 .env 指向）；本地 Mac dev 用 `AI-miniSOC-testdb`；pytest 专用 `AI-miniSOC-db_test`——三个库严格分离，**本地 .env 绝不指向生产**
+- **CI/CD**: GitHub Actions；CI 跑 GitHub 托管 runner，CD 跑装在 102 的 self-hosted runner `aisoc-prod-deployer`（label `prod-deployer`）
+- **部署脚本**: `deploy/deploy.sh`（fetch depth+timeout / pip / vite build / systemd restart / HTTP+DB 双探活 / 失败全局 trap 回滚）
+- **sudoers**: `/etc/sudoers.d/aisoc-deployer`（10 条 NOPASSWD 最小权限，deploy 无人值守）
+- **E2E workflow 已禁用**（旧 runner 下线）；重启方法见 e2e.yml 头注释
+- **完整方案**: `docs/development/cicd.md`（v2.7，含 v2.0→v2.7 全部演进与实测记录）
+
+### 关键操作速查
+```bash
+# 发版：直接 push master（CI 全绿后自动部署，~1.5min）
+# 手动部署指定 commit:
+ssh xiejava@192.168.0.102 'cd ~/AIproject/AI-miniSOC && bash deploy/deploy.sh <sha> "说明"'
+# 查部署日志: ssh ... 'tail -30 /tmp/aisoc-deploy.log'
+# 后端重启/日志: sudo -n systemctl restart aisoc-backend / tail -f /var/log/aisoc/backend.log
+# Runner: sudo systemctl status actions.runner.*
+```
+
+### 遗留（不阻塞，按需修）
+1. alembic 迁移历史缺 soc_menus 手工列 + 8 张 P4 表（check 一直 WARN，CI 用 create_all 绕过）
+2. lint/pytest 仍 advisory（历史欠账：ESLint 2614 错、ruff 数百）
+3. wazuh collector 的 config.yaml 明文密码在服务器端手工维护（未入库，待改 env/secret 注入）
+4. 服务器上前端 `npm run dev`（nohup）仍在跑，可随时停（生产走 nginx:8080）
+
+---
+
+**文档版本**: v2.3
+**最后更新**: 2026-08-19
