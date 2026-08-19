@@ -104,11 +104,21 @@ TS_TAG=$(date +%Y%m%d_%H%M%S)
 log ".env 已备份到 $BACKUP_DIR"
 
 # ===== 2. 拉取 + reset =====
-log "git fetch origin master (depth=50, timeout=120s)"
-# 注: 服务器到 github 带宽很慢 (实测 ~456 B/s), fetch 全历史会超时
-# 用 --depth=50 只拉最近 50 个 commit; timeout 120s 硬限
-# 如果 fetch 失败且目标 commit 已在本地 (常见: 服务器已拉过), 继续走
-timeout 120 git fetch --depth=50 origin master || log "WARN: git fetch 超时/失败, 尝试用本地已有 commit 继续"
+log "获取目标 commit: $TARGET_SHA"
+# 三个 fetch 策略 (按优先顺序):
+#   1) git fetch origin <sha>      直接拿这一个 commit (最快, 绕过 shallow 问题)
+#   2) git fetch --depth=N origin  带深度 (易将 repo 变 shallow, 后续 fetch 会丢 commit)
+#   3) git fetch --unshallow origin 兑底取消 shallow (全历史下载, 慢网可能超时但能修复)
+# 注: 服务器到 github 带宽很慢 (~456 B/s), 全历史 fetch 几乎必超时
+cd "$PROJECT_DIR"
+if timeout 90 git fetch origin "$TARGET_SHA" 2>/dev/null; then
+    log "  策略1成功: 直接拉取目标 commit"
+elif timeout 120 git fetch --depth=200 origin master 2>/dev/null; then
+    log "  策略2成功: --depth=200 pull"
+else
+    log "WARN: 前两策略都失败, 尝试 --unshallow (会下载全历史, 慢网可能超时)"
+    timeout 300 git fetch --unshallow origin 2>/dev/null || log "WARN: unshallow 也失败, 仅靠本地 commit"
+fi
 
 # 验证目标 commit 存在
 if ! git cat-file -t "$TARGET_SHA" >/dev/null 2>&1; then
