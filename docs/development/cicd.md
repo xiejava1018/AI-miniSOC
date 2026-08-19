@@ -1151,6 +1151,69 @@ push 9c66343
 
 ---
 
+### 12.13 完整链路验证 + 部署目标修正（2026-08-19）
+
+#### 12.13.1 用户发起的端到端测试 → 发现两个 bug
+
+用户要求“试一下看”，推了测试 commit 01f8f4a/marker #1。结果：
+
+| 现象 | 根因 |
+|------|------|
+| 服务器 HEAD 停在 df3c11a，marker #1 未落位 | CD 的 “Determine target SHA” 走 `git fetch origin master`，慢网失败时**降级到过期的本地 origin/master** → 把旧的 df3c11a 重新部署了一遍 |
+| 每次 push 产生两个 CD run | `deploy-prod.yml` 的 `workflow_run` 监听 CI - Backend 与 CI - Frontend，各发一个事件 → 各触发一次 CD。concurrency 串行，两次部署同 commit |
+
+**两个真 bug：部署旧 commit + 单 CI 过也能部署（因为只检查事件源 CI）**。
+
+#### 12.13.2 修 a07753d：双 CI 门禁 + head_sha 源头去错
+
+- **目标 commit 改用 `github.event.workflow_run.head_sha`**（事件自带，零依赖）
+  - workflow_dispatch 保持原 inputs/fetch 逻辑
+- **新增 deploy/cd_gate.py 门禁**：
+  - 两 CI 均 completed+success → deploy=yes
+  - 任一未完成 → deploy=no（由后完成的 CI 触发部署，天然去重）
+  - 任一失败 → exit 1 阻断（顺带堵住“单 CI 过也部署”）
+- **修后**：01f8f4a 本不再被错误部署，a07753d 成功部署到了 32f6adf。
+
+#### 12.13.3 修 32f6adf：内联 gate（解决鸡生蛋）
+
+a07753d 部署成功了，但该次 CD 的 Gate 步骤报了 `python3 deploy/cd_gate.py: can't open file`。原因：
+- CD workflow 无 actions/checkout（所有操作直击服务器实体仓库）
+- 服务器 HEAD 还是 32f6adf 之前的 df3c11a（marker bug 遗留）
+- 新加的 cd_gate.py 在服务器不存在
+- **鸡生蛋：新增脚本本身需要该脚本被部署才能生效**
+
+**修复：把 gate 逻辑 heredoc 内联到 yml 的 run: 块**，自包含，零依赖。删除仓库里的 deploy/cd_gate.py（避免双源）。
+
+#### 12.13.4 修 a271f30：dup rule 回归 → 彻底删
+
+加 dup rule（“同 sha 已有其他成功 CD → 跳过”）试图完美去重，结果**造成回归**：
+- 两 CI 几乎同时完成时，首个 CD 的 gate 查询 API 返回另一 CD “completed/success”（API 状态略超前于实际）
+- 首个 CD 误判“已有部署”→ 跳过
+- **服务器不更新**（a271f30 未部署，HEAD 停在 32f6adf）
+
+**修复：删除 dup rule**，去重完全交给 workflow `concurrency: deploy-prod, cancel-in-progress: false`（全局串行）。保留“两 CI 均 success” 检查堵“单 CI 过也部署”。两个 CD 仍会都部署同一 commit，但幂等无害（已验证 5+ 次重复部署）。
+
+**权衡**：保留“重复部署但必定部署” vs “完美去重但有误判风险”——选择前者。
+
+#### 12.13.5 最终验证（marker #2/#3/#4）
+
+- push a271f30：服务器未更新（dup rule bug）❌
+- push 8d1c649（去 dup rule）：
+  - CI 全绿
+  - CD run#51 / #52 均 success（重复部署同一 commit，但服务器更新成功）
+  - 服务器 HEAD = 8d1c649，markers #2/#3/#4 全落位，backend/nginx 200
+
+#### 12.13.6 最终稳定架构
+
+- 触发：push master → CI（Backend/Frontend）→ workflow_run → CD（self-hosted runner）
+- 门禁：仅检查“两 CI 都 success”（单 CI 失败也阻断）
+- 去重：依赖 concurrency group 串行（两次部署幂等）
+- 目标：workflow_run 直接用 head_sha；workflow_dispatch 可手动指定 commit_sha
+- 服务端：systemd aisoc-backend + nginx:8080 + self-hosted runner + 14:1~回滚 trap
+- 文档：	v2.3（完结）
+
+---
+
 ### 12.12 Step 8 收尾（2026-08-19）✅ 方案完结
 
 | 项 | 动作 |
@@ -1172,3 +1235,4 @@ push 9c66343
 # CI/CD 修复验证 marker #2 2026-08-19 11:45:33
 # CI/CD 修复验证 marker #3 2026-08-19 11:51:56
 # CI/CD 修复验证 marker #4 2026-08-19 11:59:55
+# CI/CD 最终验证 marker #5 2026-08-19 12:15:28
