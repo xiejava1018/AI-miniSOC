@@ -2,7 +2,7 @@
 资产模型
 """
 
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, MACADDR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -56,6 +56,13 @@ class Asset(Base):
     # 否则 ai-suggestions / score-breakdown 访问 Asset.exposure_level 即 AttributeError → 500。
     # 取值：public（公网暴露）/ internal（内网）/ isolated（隔离网络）
     exposure_level = Column(String(20), default="internal", server_default="internal")
+
+    # P3/F1.1（2026-08-21，PRD v1.2.1）：AI 资产风险评分（规则引擎计算，不调 GLM）
+    # risk_score: 0-100；NULL 表示未评分或数据全缺失（N/A，不误导为"0 分很安全"）
+    risk_score = Column(Integer)
+    risk_summary = Column(Text)      # GLM 一句话摘要（仅 score>=60 或快速上升资产，24h 缓存）
+    risk_scored_at = Column(DateTime(timezone=True))
+    score_breakdown = Column(JSONB)  # 各维度得分/权重/命中规则（可解释性，PRD §八-C）
 
     # 关系
     ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")

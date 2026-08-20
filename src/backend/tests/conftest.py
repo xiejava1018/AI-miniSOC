@@ -30,7 +30,10 @@ from app.models import (  # noqa: F401  (imports register all models with Base.m
     BrowsingEvent, BrowsingBlacklist, BrowsingBaseline,
     AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
     CisaKev, SocTaskRegistry, SocTaskRun,
+    AssetRiskHistory, AiFeedback,
 )
+# P3：风险评分「系统健康度」维度依赖漏洞表（不在 __init__ 导出，需显式注册供 create_all）
+from app.models.vulnerability import Vulnerability, AssetVulnerability, ScanTask  # noqa: F401
 from main import app
 
 

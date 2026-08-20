@@ -201,3 +201,82 @@ export const getAssetIncidents = (assetId: string, params?: Record<string, any>)
     keepFullResponse: true
   })
 }
+
+// ========== P3/F1.1 资产风险评分 ==========
+
+export interface AssetRiskDetail {
+  asset_id: string
+  asset_name?: string
+  asset_ip?: string
+  risk_score: number | null
+  risk_summary?: string | null
+  risk_scored_at?: string | null
+  score_breakdown?: {
+    total: number
+    delta_7d?: number
+    dimensions: Record<string, {
+      score: number
+      weight: number
+      effective_weight: number
+      data_gap: boolean
+      reasons: string[]
+      inputs?: Record<string, any>
+    }>
+  } | null
+  summary_source?: 'glm' | 'rule' | null
+}
+
+export interface RiskOverview {
+  distribution: { low: number; medium: number; high: number; critical: number; na: number }
+  total_assets: number
+  top10: Array<{ asset_id: string; name?: string; ip: string; risk_score: number; risk_summary?: string }>
+  rising: Array<{ asset_id: string; name?: string; ip: string; risk_score: number; delta_7d: number }>
+  budget: Record<string, any>
+}
+
+export const getAssetRisk = (id: string): Promise<Http.BaseResponse<AssetRiskDetail>> => {
+  return httpClient.get({ url: `${API_PREFIX}/${id}/risk` })
+}
+
+export const getAssetRiskHistory = (id: string, days = 90): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/${id}/risk/history`, params: { days } })
+}
+
+export const batchScoreRisk = (): Promise<any> => {
+  return httpClient.post({ url: `${API_PREFIX}/risk/batch-score`, keepFullResponse: true })
+}
+
+export const getRiskOverview = (): Promise<Http.BaseResponse<RiskOverview>> => {
+  return httpClient.get({ url: `${API_PREFIX}/risk/overview` })
+}
+
+export const getRiskRules = (): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/risk/rules` })
+}
+
+export const updateRiskRules = (override: Record<string, any>): Promise<any> => {
+  return httpClient.put({ url: `${API_PREFIX}/risk/rules`, data: { override }, keepFullResponse: true })
+}
+
+// ========== P3/F2.1 L1 自然语言查询 ==========
+
+export interface AskResult {
+  level: 'L1'
+  intent: string
+  params?: Record<string, any>
+  total?: number
+  assets?: Array<Record<string, any>>
+  stats?: Record<string, number>
+  stats_dimension?: string
+  summary?: string
+  message?: string
+  session_id?: string
+}
+
+export const askAssetQuery = (question: string, sessionId?: string): Promise<Http.BaseResponse<AskResult>> => {
+  return httpClient.post({ url: `${API_PREFIX}/ask`, data: { question, session_id: sessionId || null } })
+}
+
+export const getAskHistory = (limit = 20): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/ask/history`, params: { limit } })
+}

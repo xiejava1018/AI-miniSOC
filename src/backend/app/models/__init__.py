@@ -34,6 +34,8 @@ from .alert_group_snapshot import AlertGroupSnapshot
 from .alert_group_analysis import AlertGroupAnalysis
 from .cisa_kev import CisaKev
 from .task_observability import SocTaskRegistry, SocTaskRun, TaskRunStatus
+from .asset_risk import AssetRiskHistory
+from .ai_feedback import AiFeedback
 
 __all__ = [
     "Base",
@@ -72,4 +74,6 @@ __all__ = [
     "SocTaskRegistry",
     "SocTaskRun",
     "TaskRunStatus",
+    "AssetRiskHistory",
+    "AiFeedback",
 ]

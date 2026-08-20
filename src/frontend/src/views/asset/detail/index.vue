@@ -127,6 +127,63 @@
       </div>
     </ElCard>
 
+    <!-- P3/F1.1：资产风险卡（评分 + AI 摘要 + 维度明细 + 趋势，PRD §八-C 可解释性） -->
+    <ElCard shadow="never" class="risk-card" v-loading="riskLoading">
+      <template #header>
+        <div class="card-header">
+          <span class="title">资产风险</span>
+          <div class="card-header-right">
+            <span v-if="riskData?.risk_scored_at" class="risk-scored-at">评分于 {{ formatTime(riskData.risk_scored_at) }}</span>
+            <ElButton size="small" text :icon="Refresh" @click="loadRisk" :loading="riskLoading">刷新</ElButton>
+          </div>
+        </div>
+      </template>
+
+      <template v-if="riskData">
+        <div v-if="riskData.risk_score === null || riskData.risk_score === undefined" class="risk-na">
+          <ElTag type="info" effect="plain">N/A</ElTag>
+          <span class="risk-na-text">数据不足（无端口/漏洞/告警证据），暂不评分——避免误导</span>
+        </div>
+        <template v-else>
+          <div class="risk-main">
+            <div class="risk-score" :class="riskScoreClass">
+              <div class="risk-score-number">{{ riskData.risk_score }}</div>
+              <div class="risk-score-label">/ 100</div>
+            </div>
+            <div class="risk-summary-area">
+              <div class="risk-summary-text">{{ riskData.risk_summary || '（暂无 AI 摘要，可点击刷新触发）' }}</div>
+              <AiFeedback target-type="risk_summary" :target-id="assetId" :visible="!!riskData.risk_summary" />
+            </div>
+          </div>
+
+          <!-- 维度明细（可解释性：为什么是这个分） -->
+          <div v-if="riskDimensions.length" class="risk-dimensions">
+            <div v-for="d in riskDimensions" :key="d.key" class="risk-dim">
+              <div class="risk-dim-head">
+                <span class="risk-dim-name">{{ d.label }}</span>
+                <span class="risk-dim-score" :class="`is-${d.level}`">{{ d.score }}</span>
+                <ElTag v-if="d.dataGap" size="small" type="warning" effect="plain">数据缺失·半权</ElTag>
+              </div>
+              <ElProgress :percentage="d.score" :stroke-width="8" :color="d.color" :show-text="false" />
+              <div class="risk-dim-reasons">{{ d.reasons }}</div>
+            </div>
+          </div>
+
+          <!-- 趋势 sparkline（90 天） -->
+          <div v-if="riskTrendPoints.length >= 2" class="risk-trend">
+            <span class="risk-trend-label">近 90 天评分趋势</span>
+            <svg class="risk-trend-svg" :viewBox="`0 0 ${trendW} ${trendH}`" preserveAspectRatio="none">
+              <polyline :points="trendPolyline" fill="none" stroke="currentColor" stroke-width="2" />
+            </svg>
+            <span v-if="riskDelta7d !== null" class="risk-trend-delta" :class="riskDelta7d >= 0 ? 'is-up' : 'is-down'">
+              7天 {{ riskDelta7d >= 0 ? '+' : '' }}{{ riskDelta7d }}
+            </span>
+          </div>
+        </template>
+      </template>
+      <ElEmpty v-else-if="!riskLoading" description="尚未评分，可到资产列表页点击“风险评分”" :image-size="60" />
+    </ElCard>
+
     <!-- Tab 区域 -->
     <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
@@ -599,6 +656,8 @@
   import { useRelativeTime } from '@/composables/useRelativeTime'
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
   import MetricCard from './components/MetricCard.vue'
+  import AiFeedback from '@/components/business/ai-feedback/index.vue'
+  import { getAssetRisk, getAssetRiskHistory, type AssetRiskDetail } from '@/api/asset'
 
   const route = useRoute()
   const router = useRouter()
@@ -1224,9 +1283,87 @@
   )
 
   // 加载数据
+  // ============ P3/F1.1：资产风险卡 ============
+
+  const riskLoading = ref(false)
+  const riskData = ref<AssetRiskDetail | null>(null)
+  const riskHistory = ref<Array<{ risk_score: number; scored_at: string }>>([])
+
+  const DIM_LABELS: Record<string, string> = {
+    exposure: '暴露面',
+    health: '系统健康度',
+    alerts: '告警密度',
+    importance: '资产重要性'
+  }
+
+  const loadRisk = async () => {
+    if (!assetId.value) return
+    riskLoading.value = true
+    try {
+      const [riskRes, histRes] = await Promise.all([
+        getAssetRisk(assetId.value),
+        getAssetRiskHistory(assetId.value, 90)
+      ])
+      if (riskRes.code === 200) riskData.value = riskRes.data
+      if (histRes.code === 200) riskHistory.value = histRes.data?.history || []
+    } catch {
+      /* 静默，卡片显示空态 */
+    } finally {
+      riskLoading.value = false
+    }
+  }
+
+  const riskScoreClass = computed(() => {
+    const s = riskData.value?.risk_score ?? 0
+    if (s >= 80) return 'is-critical'
+    if (s >= 60) return 'is-high'
+    if (s >= 40) return 'is-medium'
+    return 'is-low'
+  })
+
+  const riskDimensions = computed(() => {
+    const dims = riskData.value?.score_breakdown?.dimensions || {}
+    return Object.entries(dims).map(([key, d]) => {
+      const level = d.score >= 80 ? 'critical' : d.score >= 60 ? 'high' : d.score >= 40 ? 'medium' : 'low'
+      const color =
+        d.score >= 80 ? '#f56c6c' : d.score >= 60 ? '#e6a23c' : d.score >= 40 ? '#f7ba2a' : '#67c23a'
+      return {
+        key,
+        label: DIM_LABELS[key] || key,
+        score: d.score,
+        dataGap: d.data_gap,
+        reasons: (d.reasons || []).join('；'),
+        level,
+        color
+      }
+    })
+  })
+
+  // 趋势 sparkline
+  const trendW = 320
+  const trendH = 48
+  const riskTrendPoints = computed(() => riskHistory.value.map((h) => h.risk_score))
+  const trendPolyline = computed(() => {
+    const pts = riskTrendPoints.value
+    if (pts.length < 2) return ''
+    const min = Math.min(...pts)
+    const max = Math.max(...pts)
+    const range = max - min || 1
+    const step = trendW / (pts.length - 1)
+    return pts
+      .map((v, i) => `${(i * step).toFixed(1)},${(trendH - 4 - ((v - min) / range) * (trendH - 8)).toFixed(1)}`)
+      .join(' ')
+  })
+
+  const riskDelta7d = computed(() => {
+    const d = (riskData.value?.score_breakdown as any)?.delta_7d
+    return typeof d === 'number' ? d : null
+  })
+
   onMounted(() => {
     loadDetail()
     loadSummary()
+    loadRisk()
     loadPorts()
     loadTags()
     loadDataSources()
@@ -1235,6 +1372,136 @@
 
 <style lang="scss" scoped>
   .asset-detail-page {
+    // ============ P3/F1.1 资产风险卡 ============
+    .risk-card {
+      .card-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .risk-scored-at {
+          font-size: 12px;
+          color: var(--el-text-color-secondary);
+        }
+      }
+
+      .risk-na {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 0;
+
+        .risk-na-text {
+          font-size: 13px;
+          color: var(--el-text-color-secondary);
+        }
+      }
+
+      .risk-main {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+
+        .risk-score {
+          display: flex;
+          align-items: baseline;
+          gap: 4px;
+          flex-shrink: 0;
+
+          .risk-score-number {
+            font-size: 44px;
+            font-weight: 700;
+            line-height: 1;
+          }
+
+          .risk-score-label {
+            font-size: 13px;
+            color: var(--el-text-color-secondary);
+          }
+
+          &.is-critical .risk-score-number { color: #f56c6c; }
+          &.is-high .risk-score-number { color: #e6a23c; }
+          &.is-medium .risk-score-number { color: #f7ba2a; }
+          &.is-low .risk-score-number { color: #67c23a; }
+        }
+
+        .risk-summary-area {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+
+          .risk-summary-text {
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--el-text-color-primary);
+          }
+        }
+      }
+
+      .risk-dimensions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 14px 24px;
+        margin-top: 16px;
+
+        .risk-dim {
+          .risk-dim-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 4px;
+
+            .risk-dim-name { font-size: 13px; }
+            .risk-dim-score {
+              font-weight: 700;
+              font-size: 13px;
+
+              &.is-critical { color: #f56c6c; }
+              &.is-high { color: #e6a23c; }
+              &.is-medium { color: #f7ba2a; }
+              &.is-low { color: #67c23a; }
+            }
+          }
+
+          .risk-dim-reasons {
+            font-size: 12px;
+            color: var(--el-text-color-secondary);
+            margin-top: 4px;
+            line-height: 1.5;
+          }
+        }
+      }
+
+      .risk-trend {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 16px;
+        color: var(--el-color-primary);
+
+        .risk-trend-label {
+          font-size: 12px;
+          color: var(--el-text-color-secondary);
+          flex-shrink: 0;
+        }
+
+        .risk-trend-svg {
+          flex: 1;
+          height: 48px;
+        }
+
+        .risk-trend-delta {
+          font-size: 13px;
+          font-weight: 600;
+          flex-shrink: 0;
+
+          &.is-up { color: #f56c6c; }
+          &.is-down { color: #67c23a; }
+        }
+      }
+    }
+
     padding: 0;
     // 兜底滚动: 在小屏/小笔记本上 (顶部信息卡+摘要卡+Tab 累加高度 > 视口高度)
     // .art-full-height 的 height: var(--art-full-height) 会让内容溢出但不可滚。

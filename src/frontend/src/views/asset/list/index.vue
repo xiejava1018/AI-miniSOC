@@ -1,5 +1,61 @@
 <template>
   <div class="asset-list-page art-full-height">
+    <!-- P3/F2.1 L1：AI 查询栏（意图识别 → 参数 chips 回显 → 可一键应用回筛选器） -->
+    <ElCard shadow="never" class="ai-query-card">
+      <div class="ai-query-row">
+        <ElIcon class="ai-query-icon"><MagicStick /></ElIcon>
+        <ElInput
+          v-model="aiQuestion"
+          placeholder="用中文问资产：例如“有哪些 Windows 服务器？”“负责人张三的资产”“按操作系统统计”"
+          clearable
+          @keyup.enter="handleAsk"
+        />
+        <ElButton type="primary" :loading="askLoading" @click="handleAsk" v-ripple>AI 查询</ElButton>
+        <ElDropdown trigger="click" @command="replayAsk">
+          <ElButton v-ripple>历史<ElIcon><ArrowDown /></ElIcon></ElButton>
+          <template #dropdown>
+            <ElDropdownMenu>
+              <ElDropdownItem v-for="h in askHistoryList" :key="h.session_id" :command="h.title">
+                {{ h.title }}
+              </ElDropdownItem>
+              <ElDropdownItem v-if="!askHistoryList.length" disabled>暂无查询历史</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
+      </div>
+      <!-- 结果区：AI 摘要 + 参数 chips（可修正语义：点叉移除后重新应用） -->
+      <div v-if="askResult" class="ai-query-result">
+        <template v-if="askResult.intent === 'filter' || askResult.intent === 'detail'">
+          <div class="ai-query-summary">
+            <span class="ai-query-summary-text">{{ askResult.summary }}</span>
+            <AiFeedback target-type="query" :target-id="askResult.session_id || aiQuestion" />
+          </div>
+          <div class="ai-query-chips">
+            <ElTag
+              v-for="(v, k) in askResult.params"
+              :key="k"
+              closable
+              size="small"
+              type="primary"
+              effect="plain"
+              @close="removeAskParam(k as string)"
+            >
+              {{ askParamLabel(k as string, v) }}
+            </ElTag>
+            <ElButton size="small" type="primary" plain @click="applyAskToSearch">在列表中筛选</ElButton>
+          </div>
+        </template>
+        <template v-else-if="askResult.intent === 'stats'">
+          <div class="ai-query-summary">
+            <span class="ai-query-summary-text">{{ askResult.summary }}</span>
+            <AiFeedback target-type="query" :target-id="askResult.session_id || aiQuestion" />
+          </div>
+        </template>
+        <div v-else-if="askResult.intent === 'unsupported'" class="ai-query-notice">{{ askResult.summary || askResult.message }}</div>
+        <div v-else-if="askResult.intent === 'unavailable'" class="ai-query-notice is-warn">{{ askResult.message }}</div>
+      </div>
+    </ElCard>
+
     <!-- 搜索栏 -->
     <ArtSearchBar
       v-model="searchState"
@@ -18,6 +74,7 @@
         <template #left>
           <ElButton @click="showDialog('add')" v-ripple>添加资产</ElButton>
           <ElButton type="warning" @click="handleSyncWazuh" v-ripple>Wazuh同步</ElButton>
+          <ElButton type="danger" plain :loading="riskScoring" @click="handleBatchScore" v-ripple>风险评分</ElButton>
         </template>
       </ArtTableHeader>
 
@@ -191,6 +248,14 @@
   import { useTable } from '@/composables/useTable'
   import { SearchFormItem } from '@/types'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
+  import AiFeedback from '@/components/business/ai-feedback/index.vue'
+  import { MagicStick, ArrowDown } from '@element-plus/icons-vue'
+  import {
+    askAssetQuery,
+    getAskHistory,
+    batchScoreRisk,
+    type AskResult
+  } from '@/api/asset'
 
   const router = useRouter()
   const dictStore = useDictStore()
@@ -281,6 +346,25 @@
                   { default: () => label }
                 )
               : '--'
+          }
+        },
+        {
+          prop: 'risk_score',
+          label: '风险分',
+          align: 'center',
+          width: 90,
+          formatter: (row: any) => {
+            if (row.risk_score === null || row.risk_score === undefined) {
+              return h(resolveComponent('ElTag'), { type: 'info', effect: 'plain' }, { default: () => 'N/A' })
+            }
+            const s = row.risk_score as number
+            const type = s >= 80 ? 'danger' : s >= 60 ? 'warning' : s >= 40 ? 'warning' : 'success'
+            const effect = s >= 80 ? 'dark' : 'light'
+            return h(
+              resolveComponent('ElTag'),
+              { type, effect },
+              { default: () => `${s}` }
+            )
           }
         },
         {
@@ -559,6 +643,102 @@
       .catch(() => {})
   }
 
+  // ============ P3：L1 AI 查询（F2.1）+ 批量风险评分（F1.1） ============
+
+  const aiQuestion = ref('')
+  const askLoading = ref(false)
+  const askResult = ref<AskResult | null>(null)
+  const askHistoryList = ref<Array<{ session_id: string; title: string }>>([])
+  const riskScoring = ref(false)
+
+  const handleAsk = async () => {
+    const q = aiQuestion.value.trim()
+    if (!q) return
+    askLoading.value = true
+    const prevSessionId = askResult.value?.session_id || undefined
+    askResult.value = null
+    try {
+      const res = await askAssetQuery(q, prevSessionId)
+      if (res.code === 200 && res.data) {
+        askResult.value = res.data
+        loadAskHistory()
+      } else {
+        ElMessage.error(res.msg || 'AI 查询失败')
+      }
+    } catch {
+      ElMessage.error('AI 查询请求失败，请稍后重试')
+    } finally {
+      askLoading.value = false
+    }
+  }
+
+  const replayAsk = (question: string) => {
+    aiQuestion.value = question
+    handleAsk()
+  }
+
+  const loadAskHistory = async () => {
+    try {
+      const res = await getAskHistory(10)
+      askHistoryList.value = res.data?.history || []
+    } catch {
+      /* 静默 */
+    }
+  }
+
+  const ASK_PARAM_LABELS: Record<string, string> = {
+    asset_type: '类型',
+    os_name: 'OS',
+    criticality: '重要性',
+    asset_status: '状态',
+    network_segment: '网段',
+    owner: '负责人',
+    keywords: '关键词'
+  }
+  const askParamLabel = (k: string, v: any) => `${ASK_PARAM_LABELS[k] || k}: ${String(v)}`
+
+  const removeAskParam = (k: string) => {
+    if (askResult.value?.params) {
+      delete askResult.value.params[k]
+    }
+  }
+
+  /** 把 AI 提取的参数一键应用到常规筛选器（L1 与筛选器互通） */
+  const applyAskToSearch = () => {
+    const p = askResult.value?.params || {}
+    if (p.asset_type) searchState.asset_type = p.asset_type
+    if (p.criticality) searchState.criticality = p.criticality
+    if (p.keywords) searchState.name = p.keywords
+    if (p.asset_status) {
+      searchState.asset_status =
+        String(p.asset_status).toLowerCase() === 'offline' || p.asset_status === '离线' ? 'offline' : 'online'
+    }
+    searchData()
+    ElMessage.success('已应用到筛选器并刷新列表')
+  }
+
+  const handleBatchScore = async () => {
+    riskScoring.value = true
+    try {
+      const res = await batchScoreRisk()
+      if (res.code === 200) {
+        const s = res.data?.stats
+        ElMessage.success(`评分完成：${s?.scored ?? 0} 台已评分，${s?.na ?? 0} 台数据不足(N/A)`)
+        refreshAll()
+      } else {
+        ElMessage.error(res.msg || '批量评分失败')
+      }
+    } catch {
+      ElMessage.error('批量评分请求失败')
+    } finally {
+      riskScoring.value = false
+    }
+  }
+
+  onMounted(() => {
+    loadAskHistory()
+  })
+
   // Wazuh同步
   const handleSyncWazuh = () => {
     ElMessageBox.confirm('确定要从 Wazuh 同步资产信息吗？', 'Wazuh同步', {
@@ -645,6 +825,60 @@
 
 <style lang="scss" scoped>
   .asset-list-page {
+    .ai-query-card {
+      margin-bottom: 12px;
+
+      .ai-query-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .ai-query-icon {
+          color: var(--el-color-primary);
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+      }
+
+      .ai-query-result {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--el-border-color-lighter);
+
+        .ai-query-summary {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+
+          .ai-query-summary-text {
+            font-size: 13px;
+            color: var(--el-text-color-primary);
+            line-height: 1.6;
+          }
+        }
+
+        .ai-query-chips {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 6px;
+          margin-top: 8px;
+        }
+
+        .ai-query-notice {
+          font-size: 13px;
+          color: var(--el-text-color-secondary);
+          line-height: 1.6;
+          white-space: pre-line;
+
+          &.is-warn {
+            color: var(--el-color-warning);
+          }
+        }
+      }
+    }
+
     .operation-column-container {
       display: flex;
       align-items: center;
