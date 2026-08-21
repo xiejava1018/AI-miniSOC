@@ -165,11 +165,76 @@ class AssetRiskService:
             _rules_cache["at"] = 0.0
         return merged
 
+    # ---------- 批量预取（N+1 → 5 查询；远程 PG 上 73 资产从 ~30s 降到秒级） ----------
+
+    def _prefetch(self, asset_ids, now: datetime, rules: dict) -> dict:
+        """一次性预取四类 per-asset 数据，按 asset_id 分组。ctx 各键缺省为空（等价单查路径）。"""
+        from collections import defaultdict
+        from app.models.asset_port import AssetPort
+        from app.models.vulnerability import AssetVulnerability, Vulnerability
+
+        ctx = {"ports": defaultdict(list), "vulns": defaultdict(list),
+               "alerts": defaultdict(list), "prev": {}}
+        ids = [a for a in asset_ids if a is not None]
+        if not ids:
+            return ctx
+
+        # 显式初始化空桶：保证 get() 永远返回 list（而非 None 落回单查 lazy-load 路径，
+        # 无数据资产众多时 N+1 复活）——空列表语义 = 预取了但无记录
+        for aid in ids:
+            ctx["ports"][aid] = []
+            ctx["vulns"][aid] = []
+            ctx["alerts"][aid] = []
+
+        for p in self.db.query(AssetPort).filter(AssetPort.asset_id.in_(ids)).all():
+            ctx["ports"][p.asset_id].append(p)
+
+        # 投影裁剪：漏洞表 description/references 等 JSONB 大字段是传输大头
+        # （3517 行全列 ≈ 17MB 公网传输 → 16s+；只取 5 个评分必需小列 → 秒级），
+        # 评分逻辑仅消费 asset_id/status/severity/cvss_score/has_exploit
+        vrows = (
+            self.db.query(
+                AssetVulnerability.asset_id,
+                AssetVulnerability.status,
+                Vulnerability.severity,
+                Vulnerability.cvss_score,
+                Vulnerability.has_exploit,
+            )
+            .join(Vulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id)
+            .filter(AssetVulnerability.asset_id.in_(ids))
+            .all()
+        )
+        for r in vrows:
+            ctx["vulns"][r.asset_id].append(r)
+
+        since = now - timedelta(days=int(rules["alerts"]["window_days"]))
+        for aga in self.db.query(AlertGroupAnalysis).filter(
+            AlertGroupAnalysis.linked_asset_id.in_(ids),
+            AlertGroupAnalysis.created_at >= since,
+        ).all():
+            ctx["alerts"][aga.linked_asset_id].append(aga)
+
+        rise_since = now - timedelta(days=int(rules["summary"]["rise_window_days"]))
+        # 同样投影裁剪：score_breakdown JSONB 是大字段，上升检测只需 risk_score
+        hrows = (
+            self.db.query(AssetRiskHistory.asset_id, AssetRiskHistory.risk_score)
+            .filter(AssetRiskHistory.asset_id.in_(ids),
+                    AssetRiskHistory.scored_at >= rise_since)
+            .order_by(AssetRiskHistory.scored_at.desc())
+            .all()
+        )
+        for h in hrows:  # desc 扫描，首条即该资产 7 天内最新
+            ctx["prev"].setdefault(h.asset_id, h)
+        return ctx
+
     # ---------- 维度评分 ----------
 
-    def _score_exposure(self, asset: Asset, rules: dict) -> dict:
+    def _score_exposure(self, asset: Asset, rules: dict, ports=None) -> dict:
         cfg = rules["exposure"]
-        ports = list(getattr(asset, "ports", []) or [])
+        if ports is None:
+            ports = list(getattr(asset, "ports", []) or [])  # 单资产路径（relationship lazy）
+        else:
+            ports = list(ports)  # 预取路径（该资产全部端口记录）
         open_ports = [p for p in ports if (p.state or "open") == "open"]
         hit = sorted({p.port for p in open_ports if p.port in set(cfg["high_risk_ports"])})
         reasons, score = [], 0
@@ -188,33 +253,45 @@ class AssetRiskService:
         return {"score": score, "data_gap": data_gap, "reasons": reasons,
                 "inputs": {"open_high_risk_ports": hit, "port_records": len(ports)}}
 
-    def _score_health(self, asset: Asset, rules: dict) -> dict:
-        """主路径：活跃漏洞（VulnerabilityAIService 口径）；无扫描数据回退 OS EOL 判断。"""
+    def _score_health(self, asset: Asset, rules: dict, vuln_rows=None) -> dict:
+        """主路径：活跃漏洞（VulnerabilityAIService 口径）；无扫描数据回退 OS EOL 判断。
+
+        vuln_rows：投影行（asset_id/status/severity/cvss_score/has_exploit，
+        预取或单查均裁剪大 JSONB 字段）；None = 单查路径。"""
         from app.models.vulnerability import AssetVulnerability, Vulnerability
         from app.services.vulnerability_ai import VulnerabilityAIService
 
         cfg = rules["health"]["from_vulnerabilities"]
-        rows = (
-            self.db.query(AssetVulnerability, Vulnerability)
-            .join(Vulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id)
-            .filter(AssetVulnerability.asset_id == asset.id)
-            .all()
-        )
-        open_rows = [(av, v) for av, v in rows if av.status != "fixed"]
+        if vuln_rows is None:
+            rows = (
+                self.db.query(
+                    AssetVulnerability.asset_id,
+                    AssetVulnerability.status,
+                    Vulnerability.severity,
+                    Vulnerability.cvss_score,
+                    Vulnerability.has_exploit,
+                )
+                .join(Vulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id)
+                .filter(AssetVulnerability.asset_id == asset.id)
+                .all()
+            )
+        else:
+            rows = vuln_rows
+        open_rows = [r for r in rows if r.status != "fixed"]
 
         if rows:  # 有扫描覆盖（无论是否已修复）
             counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
             max_vuln = 0.0
-            for _, v in open_rows:
-                sev = (v.severity or "low").lower()
+            for r in open_rows:
+                sev = (r.severity or "low").lower()
                 if sev in counts:
                     counts[sev] += 1
                 try:
                     s = VulnerabilityAIService.calculate_risk_score(
-                        cvss_score=float(v.cvss_score or 0.0),
+                        cvss_score=float(r.cvss_score or 0.0),
                         asset_criticality=asset.criticality or "medium",
                         exposure_level=asset.exposure_level or "internal",
-                        has_exploit=bool(v.has_exploit),
+                        has_exploit=bool(r.has_exploit),
                     )
                     max_vuln = max(max_vuln, s)
                 except Exception:
@@ -249,21 +326,24 @@ class AssetRiskService:
         return {"score": 0, "data_gap": True,
                 "reasons": ["无 OS 信息且无漏洞扫描数据（维度按 50% 权重计入）"], "inputs": {}}
 
-    def _score_alerts(self, asset: Asset, rules: dict, now: datetime) -> dict:
+    def _score_alerts(self, asset: Asset, rules: dict, now: datetime, alert_rows=None) -> dict:
         cfg = rules["alerts"]
         # 离线资产不参与告警密度计分（§4.5：无告警 ≠ 安全）→ 半权
         if (asset.asset_status or "").lower() == "offline":
             return {"score": 0, "data_gap": True,
                     "reasons": ["资产离线，告警密度不参与计分（无告警 ≠ 安全，按 50% 权重计入）"], "inputs": {}}
-        since = now - timedelta(days=int(cfg["window_days"]))
-        rows = (
-            self.db.query(AlertGroupAnalysis)
-            .filter(
-                AlertGroupAnalysis.linked_asset_id == asset.id,
-                AlertGroupAnalysis.created_at >= since,
+        if alert_rows is None:
+            since = now - timedelta(days=int(cfg["window_days"]))
+            rows = (
+                self.db.query(AlertGroupAnalysis)
+                .filter(
+                    AlertGroupAnalysis.linked_asset_id == asset.id,
+                    AlertGroupAnalysis.created_at >= since,
+                )
+                .all()
             )
-            .all()
-        )
+        else:
+            rows = alert_rows
         score, counts = 0, {"P0": 0, "P1": 0, "P2": 0, "P3": 0}
         for r in rows:
             p = (r.priority or "P3").upper()
@@ -292,13 +372,16 @@ class AssetRiskService:
 
     # ---------- 聚合 ----------
 
-    def score_asset(self, asset: Asset, rules: dict, now: Optional[datetime] = None) -> Optional[dict]:
-        """纯计算，不落库。四维全缺 → None（N/A）。"""
+    def score_asset(self, asset: Asset, rules: dict, now: Optional[datetime] = None, ctx: dict = None) -> Optional[dict]:
+        """纯计算，不落库。证据维度全缺 → None（N/A）。ctx 为批量预取数据（score_all 用）。"""
         now = now or _utcnow()
         dims = {
-            "exposure": self._score_exposure(asset, rules),
-            "health": self._score_health(asset, rules),
-            "alerts": self._score_alerts(asset, rules, now),
+            "exposure": self._score_exposure(
+                asset, rules, ports=(ctx["ports"].get(asset.id) if ctx else None)),
+            "health": self._score_health(
+                asset, rules, vuln_rows=(ctx["vulns"].get(asset.id) if ctx else None)),
+            "alerts": self._score_alerts(
+                asset, rules, now, alert_rows=(ctx["alerts"].get(asset.id) if ctx else None)),
             "importance": self._score_importance(asset, rules),
         }
         # N/A 判定（§4.5）：三个证据维度（暴露面/健康/告警）全缺时，仅剩 importance
@@ -408,13 +491,14 @@ class AssetRiskService:
         rules = self.load_rules()
         now = _utcnow()
         assets = self.db.query(Asset).all()
+        ctx = self._prefetch([a.id for a in assets], now, rules)
         stats = {"total_assets": len(assets), "scored": 0, "na": 0, "summaries": {"glm": 0, "rule": 0, "cached": 0, "skipped": 0}, "errors": 0}
         summaries_generated = 0
         summary_cap = int(rules["summary"]["per_run_cap"])
 
         for asset in assets:
             try:
-                breakdown = self.score_asset(asset, rules, now)
+                breakdown = self.score_asset(asset, rules, now, ctx=ctx)
                 if breakdown is None:
                     asset.risk_score = None
                     asset.risk_summary = None
@@ -422,16 +506,8 @@ class AssetRiskService:
                     stats["na"] += 1
                     continue
 
-                # 7 天内上一条历史（本条插入前），用于上升检测
-                prev = (
-                    self.db.query(AssetRiskHistory)
-                    .filter(
-                        AssetRiskHistory.asset_id == asset.id,
-                        AssetRiskHistory.scored_at >= now - timedelta(days=rules["summary"]["rise_window_days"]),
-                    )
-                    .order_by(AssetRiskHistory.scored_at.desc())
-                    .first()
-                )
+                # 7 天内上一条历史（本条插入前，预取已取），用于上升检测
+                prev = ctx["prev"].get(asset.id)
                 prev_score = prev.risk_score if prev else None
                 if prev_score is not None:
                     breakdown["delta_7d"] = total_delta = breakdown["total"] - prev_score  # noqa: F841
@@ -525,23 +601,30 @@ class AssetRiskService:
             for a in top10
         ]
 
-        # 评分上升最快（7 天窗口：最新分 - 窗口内最早分）
+        # 评分上升最快（7 天窗口：最新分 - 窗口内最早分；批量一次查询防 N+1）
         rising = []
-        for a in scored:
-            rows = (
-                self.db.query(AssetRiskHistory)
+        if scored:
+            since = now - timedelta(days=7)
+            hrows = (
+                self.db.query(AssetRiskHistory.asset_id, AssetRiskHistory.risk_score)
                 .filter(
-                    AssetRiskHistory.asset_id == a.id,
-                    AssetRiskHistory.scored_at >= now - timedelta(days=7),
+                    AssetRiskHistory.asset_id.in_([a.id for a in scored]),
+                    AssetRiskHistory.scored_at >= since,
                 )
                 .order_by(AssetRiskHistory.scored_at.asc())
                 .all()
             )
-            if len(rows) >= 2:
-                delta = a.risk_score - rows[0].risk_score
-                if delta >= 10:
-                    rising.append({"asset_id": str(a.id), "name": a.name, "ip": a.asset_ip,
-                                   "risk_score": a.risk_score, "delta_7d": delta})
+            first_by_asset: dict = {}
+            count_by_asset: dict = {}
+            for h in hrows:  # asc 扫描，首条即窗口内最早
+                first_by_asset.setdefault(h.asset_id, h.risk_score)
+                count_by_asset[h.asset_id] = count_by_asset.get(h.asset_id, 0) + 1
+            for a in scored:
+                if count_by_asset.get(a.id, 0) >= 2:
+                    delta = a.risk_score - first_by_asset[a.id]
+                    if delta >= 10:
+                        rising.append({"asset_id": str(a.id), "name": a.name, "ip": a.asset_ip,
+                                       "risk_score": a.risk_score, "delta_7d": delta})
         rising.sort(key=lambda x: x["delta_7d"], reverse=True)
 
         return {

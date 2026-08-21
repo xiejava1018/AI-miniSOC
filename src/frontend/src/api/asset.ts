@@ -243,7 +243,9 @@ export const getAssetRiskHistory = (id: string, days = 90): Promise<any> => {
 }
 
 export const batchScoreRisk = (): Promise<any> => {
-  return httpClient.post({ url: `${API_PREFIX}/risk/batch-score`, keepFullResponse: true })
+  // 批量评分含 GLM 摘要时可达数十秒（per_run_cap=20 × 摘要耗时），
+  // 单独放宽到 120s（全局默认 15s 会超时报"网络错误"）
+  return httpClient.post({ url: `${API_PREFIX}/risk/batch-score`, keepFullResponse: true, timeout: 120000 })
 }
 
 export const getRiskOverview = (): Promise<Http.BaseResponse<RiskOverview>> => {

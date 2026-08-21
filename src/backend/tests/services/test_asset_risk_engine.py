@@ -273,3 +273,35 @@ class TestSummaryDegradation:
         assert svc._should_summarize(a, 85, None, rules) is True    # 高分触发
         assert svc._should_summarize(a, 30, 15, rules) is False     # 低分平稳（30-15=15 < 20）不触发
         assert svc._should_summarize(a, 55, 20, rules) is True      # 上升 35 ≥ 20 触发
+
+
+class TestPrefetchConsistency:
+    def test_prefetch_same_as_single_query(self, db_session):
+        """批量预取路径与单资产查询路径评分结果一致（N+1 优化的正确性回归）"""
+        from app.services.asset_risk import AssetRiskService as S
+
+        a1 = _make_asset(asset_ip="192.168.0.101")
+        a2 = _make_asset(asset_ip="192.168.0.102", os_name="CentOS", os_version="7", criticality="critical")
+        db_session.add_all([a1, a2])
+        db_session.flush()
+        for a, port in ((a1, 445), (a2, 3389)):
+            db_session.add(AssetPort(asset_id=a.id, asset_ip=a.asset_ip, port=port, protocol="tcp", state="open"))
+        v = Vulnerability(cve_id="CVE-2026-7777", title="t", severity="high", cvss_score=8.5)
+        db_session.add(v)
+        db_session.flush()
+        db_session.add(AssetVulnerability(asset_id=a2.id, vulnerability_id=v.id, scanner="wazuh", status="open"))
+        db_session.add(AlertGroupAnalysis(fingerprint="pf-a1", priority="P1", linked_asset_id=a1.id))
+        db_session.commit()
+
+        svc = S(db_session)
+        rules = svc.load_rules(force=True)
+        now = _now()
+        ctx = svc._prefetch([a1.id, a2.id], now, rules)
+        for a in (a1, a2):
+            via_ctx = svc.score_asset(a, rules, now, ctx=ctx)
+            single = svc.score_asset(a, rules, now)
+            assert via_ctx is not None and single is not None
+            assert via_ctx["total"] == single["total"], f"asset {a.asset_ip} 分数不一致"
+            for k in ("exposure", "health", "alerts"):
+                assert via_ctx["dimensions"][k]["score"] == single["dimensions"][k]["score"]
+                assert via_ctx["dimensions"][k]["data_gap"] == single["dimensions"][k]["data_gap"]
