@@ -495,9 +495,9 @@ class SecurityReportService:
                 "要求严格遵守以下规则：\n"
                 "1) 不得推测未提供的信息；如数据不在事实里，写「数据不足」\n"
                 "2) data_degraded=True 时，summary 必须开头先声明「数据可信度降级，结果可能不全」\n"
-                "3) summary ≤ 200 字；risk_highlights 用短横线列表；recommendations 用短横线列表\n"
+                "3) summary ≤ 200 字（纯文本，一段话）；risk_highlights / recommendations 用短横线列表（每行以 - 开头，**不要** 用 JSON 数组、Markdown 代码块或编号列表）\n"
                 "4) 推荐事项要可执行（例如「联系 xxx 工单」「检查 xxx 配置」），不写空话\n"
-                "5) 输出 JSON：{\"summary\": \"...\", \"risk_highlights\": \"...\", \"recommendations\": \"...\"}"
+                "5) 输出严格 JSON：{\"summary\": \"字符串\", \"risk_highlights\": \"多行字符串\", \"recommendations\": \"多行字符串\"}"
             )
             user_prompt = (
                 f"【事实】\n{facts_str}\n\n"
