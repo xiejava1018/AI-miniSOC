@@ -777,3 +777,22 @@ export const checkIncidentTrigger = (): Promise<any> => {
     timeout: 60000
   })
 }
+
+// ─────────────────────────────────────────────
+// P3 / F3.1 变更影响分析
+// ─────────────────────────────────────────────
+
+export interface ImpactAnalysisPayload {
+  change_description: string
+  change_window_hours?: number
+}
+
+/** 智能变更影响分析（GLM 调用可能 20-60s，timeout 放宽到 180s） */
+export const analyzeChangeImpact = (payload: ImpactAnalysisPayload): Promise<any> => {
+  return httpClient.post({
+    url: '/api/v1/assets/impact-analysis',
+    data: payload,
+    keepFullResponse: true,
+    timeout: 180000
+  })
+}
