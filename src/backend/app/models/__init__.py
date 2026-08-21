@@ -36,6 +36,7 @@ from .cisa_kev import CisaKev
 from .task_observability import SocTaskRegistry, SocTaskRun, TaskRunStatus
 from .asset_risk import AssetRiskHistory
 from .ai_feedback import AiFeedback
+from .knowledge import Knowledge
 
 __all__ = [
     "Base",
@@ -76,4 +77,5 @@ __all__ = [
     "TaskRunStatus",
     "AssetRiskHistory",
     "AiFeedback",
+    "Knowledge",
 ]

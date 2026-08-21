@@ -7,7 +7,7 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
-    task_observability, asset_risk, asset_query, ai_feedback)
+    task_observability, asset_risk, asset_query, ai_feedback, knowledge)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -38,6 +38,13 @@ api_router.include_router(ai_chat.router, prefix="/ai", tags=["Art Bot"])
 api_router.include_router(ai_agent.router, prefix="/ai", tags=["Pi Agent"])
 # P3/F4.1：AI 反馈闭环（👍/👎，所有 AI 产物通用）
 api_router.include_router(ai_feedback.router, prefix="/ai", tags=["AI反馈"])
+# P3/F2.3：运维知识库（搜索/列表/CRUD/验证/自动提取）
+api_router.include_router(
+    knowledge.router,
+    prefix="/knowledge",
+    tags=["运维知识库"],
+    dependencies=[Depends(get_current_user)],
+)
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(departments.router, prefix="/departments", tags=["部门管理"])
