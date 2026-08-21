@@ -288,7 +288,7 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
   }
 
-  const goRecon = () => router.push('/asset/reconciliation')
+  const goRecon = () => router.push('/assets/reconciliation')
 
   const load = async () => {
     loading.value = true

@@ -351,7 +351,7 @@
   const objIp = (row: ReconciliationItem) =>
     row.details?.ledger?.asset_ip || row.details?.agent?.ip || ''
 
-  const goDataHealth = () => router.push('/asset/data-health')
+  const goDataHealth = () => router.push('/assets/data-health')
 
   const filterByType = (t: ReconciliationType) => {
     filterType.value = filterType.value === t ? '' : t
