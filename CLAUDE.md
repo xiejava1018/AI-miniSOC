@@ -47,7 +47,7 @@ AI-miniSOC/
 │   │   ├── app/
 │   │   │   ├── api/          # API路由 (auth, users, roles, menus, departments, assets, data_sync, ...)
 │   │   │   ├── core/         # 核心配置、认证、验证码、响应包装中间件
-│   │   │   ├── models/       # SQLAlchemy 模型 (24张表)
+│   │   │   ├── models/       # SQLAlchemy 模型 (47张表)
 │   │   │   ├── schemas/      # Pydantic Schema
 │   │   │   ├── services/     # 业务逻辑层 (含 sync_handlers/)
 │   │   │   └── database.py   # 数据库连接
@@ -114,6 +114,8 @@ AI-miniSOC/
 | AI分析 | `app/api/ai.py` | AI日志分析 |
 | 采集数据同步 | `app/api/data_sync.py` | 接收外部采集器推送的数据 |
 | 同步任务 | `app/api/sync.py` | 同步任务状态查询 |
+| 资产对账 | `app/api/asset_reconciliation.py` | P3/F1.3：触发对账、差异列表/摘要、AI 报告、差异处理（Wazuh 不可达返 503，不退化为无差异） |
+| 数据健康 | `app/api/data_health.py` | P3/F1.3：源健康 + 同步死信 + 对账差异三层聚合（`soc_source_health`/`soc_sync_dead_letter` 的首个对外出口） |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -126,7 +128,7 @@ AI-miniSOC/
 | soc_role_menus | 角色菜单关联表（含permissions JSONB按钮权限） |
 | soc_menus | 菜单表（含permissions JSONB可用权限定义） |
 | soc_departments | 部门表 |
-| soc_assets | 资产表（含 source/source_id/mac 等采集器字段） |
+| soc_assets | 资产表（含 `data_source`/`source_id`/`mac`/`wazuh_agent_id`、风险评分与 EOL 等字段） |
 | soc_asset_ports | 资产端口表 |
 | soc_asset_tags | 资产标签表 |
 | soc_asset_sources | 资产数据源配置表 |
@@ -147,7 +149,11 @@ AI-miniSOC/
 | soc_chat_sessions | AI对话会话表 |
 | soc_chat_messages | AI对话消息表 |
 
-> 实际共 **24 张表**（`from app.models.base import Base; len(Base.metadata.tables)`）。
+> 实际共 **47 张表**（`import app.models; from app.models.base import Base; len(Base.metadata.tables)`）。
+> 生产库 48 个（多出的是 `alembic_version`）。上表仅列核心表，P0–P3 陆续新增的
+> 告警聚合、脆弱性、SCA、任务可观测性、源健康、同步死信、风险/EOL/合规/知识库/对账等表未全部展开。
+> **注意**：统计前必须 `import app.models`，否则漏 import 的模块不会注册到 `Base.metadata`
+> ——曾因此让 `alembic check` 误报要 DROP 8 张表（已于 `7600a1a` 修复）。
 > 所有业务表统一使用 `soc_` 前缀（`alembic_version` 除外）。
 
 ## 前端核心特性
@@ -498,7 +504,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - [x] 采集器架构集成 (collector-framework + tplink-collector)
 - [x] 资产数据同步 (data_sync API + sync_handlers)
 - [x] Python 虚拟环境升级到 3.13
-- [x] 表名统一 soc_ 前缀（24 张表全部合规）
+- [x] 表名统一 soc_ 前缀（全部业务表合规）
 - [ ] 补全项目文档
 - [x] **CI/CD 全链路上线**（2026-08-19）：push → CI 全绿 → self-hosted runner 自动部署 192.168.0.102，失败自动回滚，单次部署 ~1.5min，详见 `docs/development/cicd.md`
 - [ ] 集成现有监控工具
@@ -599,5 +605,33 @@ ssh xiejava@192.168.0.102 'cd ~/AIproject/AI-miniSOC && bash deploy/deploy.sh <s
 
 ---
 
-**文档版本**: v2.3
-**最后更新**: 2026-08-19
+## 今日补充（2026-08-21 P3/F1.3 上线）
+
+### 本次交付
+- **F1.3 资产自动对账**：三类差异（shadow 影子资产 / offline 疑似下线 / mismatch 信息不一致）纯规则判定，AI 只做解读
+- **`GET /api/v1/data-health`**：源健康（基础设施层）/ 同步死信（数据层）/ 对账差异（业务层）三层聚合
+- 新增表 `soc_asset_reconciliations`；新增菜单「资产对账」`/assets/reconciliation`、「数据健康」`/assets/data-health`
+- 迁移 `e4f5a6b7c8d9`（已在生产手动执行，当前 head）
+
+### 实测要点（非推演）
+- 生产真实对账：20 agent（manager `000` 已排除，Wazuh 共 21）/ 73 资产 / 9 项 offline，shadow 与 mismatch 均 0，无误报
+- 状态机：首次 resolve 200、重复 409、非法状态 400，均生产实测
+- AI 报告走通 GLM（`source=glm`），数据降级时首行强制声明可信度
+
+### 踩过的坑（往后避开）
+1. **菜单 `component` 与路由 `path` 不是一回事**：DB 的 `component` 存相对名（如 `reconciliation`），API 层转成 `/asset/reconciliation/index` 供 `ComponentLoader` 解析；而前端跳转要用路由 URL `/assets/reconciliation`（**复数**，父菜单 `/assets` + 子 path 拼接）。两者单复数不同，混用必 404
+2. **排查菜单别按 `path` 查**：生产库 `soc_menus.path` 存的是中文名、`title` 大量为 NULL。按 `path='/asset/xxx'` 查会以为菜单没种进去（本次就误判一次），应按 `parent_id` 或 `component` 查
+3. **`INSERT ... SELECT` 幂等写法会静默插 0 行**：父菜单解析不到时不报错，必须事后查表确认
+4. **统计表数量前必须 `import app.models`**（见上方表结构注）
+
+### 本地 push 应急
+ Mac 到 GitHub 的 SSH 会间歇被切（现象：TCP 能连、发出本地版本串后即断，连 GitHub banner 都没收到，报 `Connection closed by ... port 22`）。
+这**不是** key 问题（key 问题会报 `Permission denied`）。应急走 HTTPS（已存凭证 `credential.helper=store`）：
+```bash
+git push https://github.com/xiejava1018/AI-miniSOC.git master
+```
+
+---
+
+**文档版本**: v2.4
+**最后更新**: 2026-08-21
