@@ -1,0 +1,272 @@
+# ============================================================================
+# AI-miniSOC 合规基线规则库（PRD F3.3）
+#
+# 【核心原则】判定交给规则，解读交给 AI。
+#   本文件是合规判定的唯一事实来源。判定过程 100% 确定性，不经过 LLM；
+#   LLM 只对「不达标」项生成整改建议，且必须引用规则 ID。
+#
+# 【审计自证】
+#   - ruleset_version 随任何规则语义变更递增，判定结果落库时记录该版本号
+#   - 每条规则有稳定 id + 独立 version；改判定口径必须升 version（不可原地改语义）
+#   - 本文件受 git 版本管理，`git log configs/compliance_rules.yaml` 即规则变更史
+#
+# 【三态判定】
+#   pass    = 明确达标
+#   fail    = 明确不达标
+#   unknown = 数据缺失无法判定（requires 声明的数据依赖不满足）
+#   ⚠️ unknown 绝不计入达标，也绝不计入不达标。合规率必须与数据覆盖率一起呈现，
+#      否则「56 台无端口数据的资产」会让「高危端口达标率」虚高到 100%——这是审计造假。
+#
+# 【check.type 白名单】
+#   判定器只认下列固定类型（app/services/compliance.py 的 _CHECKERS 注册表）。
+#   不支持自由表达式/eval——规则文件不可执行任意代码，避免配置即漏洞。
+# ============================================================================
+
+ruleset_version: '1.0.0'
+ruleset_name: 等保2.0 二级 + CIS 高价值子集
+updated_at: '2026-08-21'
+
+# 判定口径说明（写入报告「判定依据」章节）
+notes:
+  scope: 仅对「在网」资产判定（asset_status in [online, active]）；offline/退役资产跳过
+  coverage: 达标率 = pass / (pass + fail)，unknown 单列并计入数据覆盖率指标
+  evidence: 每条 finding 落库 evidence JSONB，记录判定时读到的实际字段值
+
+rules:
+  # ------------------------------------------------------------------------
+  # 一、网络暴露面（等保 8.1.2.1 边界防护 / CIS 9 端口服务限制）
+  # ------------------------------------------------------------------------
+  - id: SOC-NET-001
+    version: 1
+    title: 高危管理端口未对公网暴露
+    category: network
+    severity: critical
+    baseline: 等保2.0-8.1.2.1 / CIS-9.2
+    rationale: 管理端口直接暴露公网等于把大门敞开，是勒索软件最主要入口
+    scope:
+      exposure_level: [public]
+    requires: [ports]
+    check:
+      type: ports_absent
+      ports: [22, 23, 135, 139, 445, 3389, 5900, 5901]
+    remediation_hint: 改为 VPN/跳板机访问，或用安全组限制源 IP
+
+  - id: SOC-NET-002
+    version: 1
+    title: 数据库端口未对公网暴露
+    category: network
+    severity: critical
+    baseline: 等保2.0-8.1.4.2 / CIS-9.2
+    rationale: 数据库直连公网无异于把数据放在门口，且常伴弱口令
+    scope:
+      exposure_level: [public]
+    requires: [ports]
+    check:
+      type: ports_absent
+      ports: [1433, 3306, 5432, 6379, 9200, 11211, 27017]
+    remediation_hint: 数据库仅监听内网地址，公网访问经应用层代理
+
+  - id: SOC-NET-003
+    version: 1
+    title: 明文传输协议未启用
+    category: network
+    severity: high
+    baseline: 等保2.0-8.1.4.1 通信保密性
+    rationale: Telnet/FTP/rsh 等明文协议凭据可被嗅探，等保明确要求加密传输
+    requires: [ports]
+    check:
+      type: ports_absent
+      ports: [21, 23, 69, 512, 513, 514]
+    remediation_hint: Telnet→SSH、FTP→SFTP/FTPS、rsh→SSH
+
+  - id: SOC-NET-004
+    version: 1
+    title: 高危端口开放数量受控
+    category: network
+    severity: medium
+    baseline: CIS-9.1 最小化服务
+    rationale: 攻击面随开放服务数量线性增长，单机高危端口不宜超过 3 个
+    requires: [ports]
+    check:
+      type: high_risk_port_count_max
+      ports: [22, 23, 135, 139, 445, 1433, 3306, 3389, 5432, 5900, 5901, 6379, 9200, 11211, 27017, 2375]
+      max: 3
+    remediation_hint: 梳理必要服务清单，关闭非必需端口
+
+  - id: SOC-NET-005
+    version: 1
+    title: 容器管理接口未暴露
+    category: network
+    severity: critical
+    baseline: CIS-Docker-2.8
+    rationale: Docker 2375 未授权 API 可直接创建特权容器逃逸到宿主机
+    requires: [ports]
+    check:
+      type: ports_absent
+      ports: [2375, 2376, 10250]
+    remediation_hint: 启用 TLS 双向认证并限制来源，或禁用 TCP 监听只用 unix socket
+
+  # ------------------------------------------------------------------------
+  # 二、系统生命周期（等保 8.1.4.4 恶意代码防范前提：系统可获得补丁）
+  # ------------------------------------------------------------------------
+  - id: SOC-SYS-001
+    version: 1
+    title: 操作系统未超出生命周期
+    category: system
+    severity: critical
+    baseline: 等保2.0-8.1.4.5 漏洞修补
+    rationale: EOL 系统厂商停止安全补丁，任何新漏洞都将永久敞开
+    requires: [expected_eol]
+    check:
+      type: date_not_passed
+      field: expected_eol
+    remediation_hint: 制定升级计划迁移到受支持版本；无法升级的隔离网络并补偿控制
+
+  - id: SOC-SYS-002
+    version: 1
+    title: 操作系统距 EOL 不足 90 天需有升级计划
+    category: system
+    severity: medium
+    baseline: 等保2.0-8.1.4.5 / 变更管理
+    rationale: EOL 前 90 天是升级窗口，临期才动往往被迫带病运行
+    requires: [expected_eol]
+    check:
+      type: date_days_remaining_min
+      field: expected_eol
+      min_days: 90
+    remediation_hint: 纳入季度升级排期
+
+  - id: SOC-SYS-003
+    version: 1
+    title: 资产操作系统信息完整
+    category: system
+    severity: medium
+    baseline: 等保2.0-8.1.10.2 资产清单准确性
+    rationale: 无 OS 信息则漏洞管理、EOL 判定、补丁基线全部失效——台账等于空壳
+    check:
+      type: fields_not_empty
+      fields: [os_name]
+    remediation_hint: 部署 Agent 自动采集，或人工补录后纳入同步
+
+  # ------------------------------------------------------------------------
+  # 三、安全监测覆盖（等保 8.1.5 安全审计 / 8.1.3.2 入侵防范）
+  # ------------------------------------------------------------------------
+  - id: SOC-MON-001
+    version: 1
+    title: 服务器已纳入安全监测
+    category: monitoring
+    severity: high
+    baseline: 等保2.0-8.1.5.1 安全审计覆盖
+    rationale: 无 Agent 即无日志无审计，等保要求审计覆盖每个用户与重要行为
+    scope:
+      asset_type: [server]
+    check:
+      type: fields_not_empty
+      fields: [wazuh_agent_id]
+    remediation_hint: 部署 Wazuh Agent 并确认心跳正常
+
+  - id: SOC-MON-002
+    version: 1
+    title: 关键资产已纳入安全监测
+    category: monitoring
+    severity: critical
+    baseline: 等保2.0-8.1.5.1
+    rationale: 关键/高重要度资产失去监测，等于在最该看的地方闭眼
+    scope:
+      criticality: [critical, high]
+    check:
+      type: fields_not_empty
+      fields: [wazuh_agent_id]
+    remediation_hint: 优先为关键资产部署 Agent
+
+  - id: SOC-MON-003
+    version: 1
+    title: 资产状态数据新鲜
+    category: monitoring
+    severity: medium
+    baseline: 等保2.0-8.1.10.2 资产清单时效性
+    rationale: 7 天未同步的资产状态不可信，据此做的判定同样不可信
+    requires: [last_synced_at]
+    check:
+      type: timestamp_within_days
+      field: last_synced_at
+      max_days: 7
+    remediation_hint: 检查采集器/同步任务是否中断（见数据健康页）
+
+  # ------------------------------------------------------------------------
+  # 四、数据安全（等保 8.1.4 数据保密性）
+  # ------------------------------------------------------------------------
+  - id: SOC-DAT-001
+    version: 1
+    title: 敏感数据资产未对公网暴露
+    category: data
+    severity: critical
+    baseline: 等保2.0-8.1.4.1 数据保密性
+    rationale: 机密/秘密级数据资产直连公网违反数据分级保护要求
+    scope:
+      data_classification: [confidential, secret]
+    check:
+      type: field_not_in
+      field: exposure_level
+      forbidden: [public, dmz]
+    remediation_hint: 迁入内网区，对外服务经代理并做访问控制
+
+  # ------------------------------------------------------------------------
+  # 五、资产管理责任（等保 8.1.10 资产管理）
+  # ------------------------------------------------------------------------
+  - id: SOC-MGT-001
+    version: 1
+    title: 资产责任人已明确
+    category: management
+    severity: medium
+    baseline: 等保2.0-8.1.10.1 资产责任人
+    rationale: 无责任人则事件响应无人认领，等保要求资产有明确责任部门/人
+    check:
+      type: fields_not_empty
+      fields: [owner]
+    remediation_hint: 在资产编辑中补充责任人
+
+  - id: SOC-MGT-002
+    version: 1
+    title: 关键资产责任人联系方式完整
+    category: management
+    severity: medium
+    baseline: 等保2.0-8.1.10.1 / 应急响应可达性
+    rationale: 深夜故障找不到人，SLA 就是纸面数字
+    scope:
+      criticality: [critical, high]
+    check:
+      type: fields_not_empty
+      fields: [owner, owner_contact]
+    remediation_hint: 补充责任人联系电话
+
+  - id: SOC-MGT-003
+    version: 1
+    title: 资产风险分处于可接受水平
+    category: management
+    severity: high
+    baseline: 内控基线（风险接受阈值）
+    rationale: 风险分 ≥80 表示多维度问题叠加，应进入整改流程而非长期带病运行
+    requires: [risk_score]
+    check:
+      type: number_max
+      field: risk_score
+      max: 79
+    remediation_hint: 查看风险 breakdown 逐维度整改（资产详情页）
+
+  - id: SOC-MGT-004
+    version: 1
+    title: 资产重要度取值符合字典定义
+    category: management
+    severity: medium
+    baseline: 等保2.0-8.1.10.2 资产清单准确性 / 数据治理
+    rationale: >-
+      字典外取值会让所有按重要度分流的规则与评分静默失效——
+      不报错、不命中，看起来一切正常。DEV 实测 39 台资产被采集器写入字典
+      未定义的 'normal'（tplink 采集器 client.py 硬编码），导致「关键资产已纳入
+      监测」类规则全量 skipped，风险评分的重要性维度隐式回落为 medium
+    check:
+      type: field_in
+      field: criticality
+      allowed: [critical, high, medium, low]
+    remediation_hint: 修采集器默认值为 medium 并回刷存量数据；或在字典中正式增加 normal 项

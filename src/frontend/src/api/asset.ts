@@ -381,3 +381,131 @@ export const overrideAssetEol = (id: string, eolDate: string): Promise<any> => {
 export const clearAssetEol = (id: string): Promise<any> => {
   return httpClient.del({ url: `${API_PREFIX}/${id}/eol`, keepFullResponse: true })
 }
+
+// ============================================================================
+// P3/F3.3 合规基线（判定层零 LLM，解读层仅对 fail 生成）
+// ============================================================================
+
+export interface ComplianceRule {
+  id: string
+  version: number
+  title: string
+  category: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  baseline?: string
+  rationale?: string
+  remediation_hint?: string
+  scope?: Record<string, string[]>
+  requires?: string[]
+  check?: Record<string, any>
+}
+
+export interface ComplianceRunStats {
+  per_rule: Record<
+    string,
+    {
+      title: string
+      severity: string
+      category: string
+      version: number
+      pass: number
+      fail: number
+      unknown: number
+      skipped: number
+    }
+  >
+  fail_by_severity: Record<string, number>
+  skipped_total: number
+  notes?: Record<string, string>
+}
+
+export interface ComplianceRun {
+  id: string
+  ruleset_version: string
+  ruleset_name: string
+  rules_total: number
+  assets_total: number
+  assets_in_scope: number
+  pass_count: number
+  fail_count: number
+  unknown_count: number
+  /** 达标率 = pass/(pass+fail)；无可判定项时 null */
+  compliance_rate: number | null
+  /** 覆盖率 = (pass+fail)/(pass+fail+unknown)，必须与达标率同时展示 */
+  coverage_rate: number | null
+  stats: ComplianceRunStats
+  triggered_by: string
+  created_at: string
+}
+
+export interface ComplianceFinding {
+  id: string
+  asset_id: string
+  asset_name?: string | null
+  asset_ip?: string | null
+  rule_id: string
+  rule_version: number
+  rule_title: string
+  category: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+  status: 'fail' | 'unknown'
+  reason: string
+  evidence: Record<string, any>
+  ai_remediation?: string | null
+  ai_model?: string | null
+  ai_prompt_version?: string | null
+  ai_generated_at?: string | null
+}
+
+/** 规则库（含版本，审计对照） */
+export const getComplianceRules = (): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/compliance/rules`, keepFullResponse: true })
+}
+
+/** 最近一次巡检 */
+export const getLatestComplianceRun = (): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/compliance/latest`, keepFullResponse: true })
+}
+
+/** 执行巡检（纯规则判定，不调 AI） */
+export const runComplianceCheck = (): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/compliance/run-check`,
+    keepFullResponse: true,
+    timeout: 120000
+  })
+}
+
+/** 问题项列表 */
+export const getComplianceFindings = (params: {
+  run_id?: string
+  status?: 'fail' | 'unknown'
+  severity?: string
+  rule_id?: string
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/compliance/findings`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** AI 生成整改建议（仅 fail 项） */
+export const interpretCompliance = (limit = 10, force = false): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/compliance/interpret`,
+    params: { limit, force },
+    keepFullResponse: true,
+    timeout: 180000
+  })
+}
+
+/** 单资产逐规则判定（即时重算） */
+export const getAssetCompliance = (assetId: string): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/compliance/assets/${assetId}`,
+    keepFullResponse: true
+  })
+}

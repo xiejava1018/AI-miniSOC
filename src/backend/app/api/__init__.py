@@ -7,7 +7,8 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
-    task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle)
+    task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
+    compliance)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -21,6 +22,8 @@ api_router.include_router(asset_query.router, prefix="/assets", tags=["AI资产�
 # P3/F1.1：风险评分（路径均为 /risk/* 或 /{asset_id}/risk，与 assets 无冲突；
 # 先注册保持一致习惯）
 api_router.include_router(asset_risk.router, prefix="/assets", tags=["资产风险评分"])
+# P3/F3.3：合规基线（/compliance/** 两段以上静态路径；与 lifecycle 同习惯先于 assets 注册）
+api_router.include_router(compliance.router, prefix="/assets", tags=["合规基线"])
 api_router.include_router(assets.router, prefix="/assets", tags=["资产管理"])
 api_router.include_router(asset_ports.router, prefix="/assets", tags=["资产端口管理"])
 api_router.include_router(asset_tags.router, prefix="/assets", tags=["资产标签管理"])

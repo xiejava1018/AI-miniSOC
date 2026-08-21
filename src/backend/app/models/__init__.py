@@ -38,6 +38,7 @@ from .asset_risk import AssetRiskHistory
 from .ai_feedback import AiFeedback
 from .knowledge import Knowledge
 from .eol_reference import EolReference
+from .compliance import ComplianceRun, ComplianceFinding
 
 __all__ = [
     "Base",
@@ -80,4 +81,6 @@ __all__ = [
     "AiFeedback",
     "Knowledge",
     "EolReference",
+    "ComplianceRun",
+    "ComplianceFinding",
 ]

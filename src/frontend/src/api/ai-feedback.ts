@@ -5,7 +5,13 @@ const httpClient = request as HttpClient
 
 const API_PREFIX = '/api/v1/ai'
 
-export type FeedbackTargetType = 'risk_summary' | 'security_summary' | 'query' | 'report' | 'knowledge'
+export type FeedbackTargetType =
+  | 'risk_summary'
+  | 'security_summary'
+  | 'query'
+  | 'report'
+  | 'knowledge'
+  | 'compliance'
 
 /**
  * 提交 AI 产物反馈（👍/👎 + 可选修正文本）

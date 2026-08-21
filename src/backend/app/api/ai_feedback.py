@@ -21,7 +21,8 @@ from app.models.ai_feedback import AiFeedback
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-VALID_TARGET_TYPES = {"risk_summary", "security_summary", "query", "report", "knowledge"}
+VALID_TARGET_TYPES = {"risk_summary", "security_summary", "query", "report", "knowledge",
+                      "compliance"}
 
 
 class FeedbackCreate(BaseModel):
