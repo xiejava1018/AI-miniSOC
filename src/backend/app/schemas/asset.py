@@ -57,6 +57,9 @@ class AssetResponse(AssetBase):
     updated_at: datetime
     status_updated_at: Optional[datetime] = None
     parent_id: Optional[str] = None
+    # P3/F1.1：风险评分（列表页“风险分”列；None = N/A 未评分/数据不足）
+    risk_score: Optional[int] = None
+    risk_scored_at: Optional[datetime] = None
 
     model_config = {
         "from_attributes": True

@@ -105,6 +105,8 @@ async def list_assets(
             parent_id=asset.parent_id,
             data_classification=asset.data_classification,
             owner_contact=asset.owner_contact,
+            risk_score=asset.risk_score,
+            risk_scored_at=asset.risk_scored_at,
         ))
 
     return AssetListResponse(
