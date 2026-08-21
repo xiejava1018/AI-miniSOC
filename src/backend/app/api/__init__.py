@@ -8,7 +8,7 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance)
+    compliance, asset_reconciliation, data_health)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -24,6 +24,9 @@ api_router.include_router(asset_query.router, prefix="/assets", tags=["AI资产�
 api_router.include_router(asset_risk.router, prefix="/assets", tags=["资产风险评分"])
 # P3/F3.3：合规基线（/compliance/** 两段以上静态路径；与 lifecycle 同习惯先于 assets 注册）
 api_router.include_router(compliance.router, prefix="/assets", tags=["合规基线"])
+# P3/F1.3：资产对账（/reconcile** 与 /reconciliations** 两段静态路径，
+# 同样必须先于 assets.router，否则 GET /assets/reconciliations 会被 /{asset_id} 抢匹配）
+api_router.include_router(asset_reconciliation.router, prefix="/assets", tags=["资产对账"])
 api_router.include_router(assets.router, prefix="/assets", tags=["资产管理"])
 api_router.include_router(asset_ports.router, prefix="/assets", tags=["资产端口管理"])
 api_router.include_router(asset_tags.router, prefix="/assets", tags=["资产标签管理"])
@@ -50,6 +53,9 @@ api_router.include_router(
 )
 # P3/F3.2：生命周期（/lifecycle/* 两段静态路径，须先于 assets.router 注册防 /{asset_id} 抢匹配）
 api_router.include_router(asset_lifecycle.router, prefix="/assets", tags=["资产生命周期"])
+# P3/F1.3：数据健康聚合（顶级 /data-health）。
+# source_health / sync_dead_letter 之前只有后台任务在写表、从未有 API，这里是它们的首个出口。
+api_router.include_router(data_health.router, tags=["数据健康"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(departments.router, prefix="/departments", tags=["部门管理"])
