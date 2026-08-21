@@ -4,13 +4,14 @@
 定位：让已建成的能力"主动找人"——复用 soc_notifications + WebSocket（零新增基础设施），
 周期巡检两个已就绪的数据源，把异常推给全部活跃用户：
 
-场景（PRD F4.2 表，已落地 3 个；报告完成场景依赖 F2.2，影子资产依赖 F1.3，
-建成后按同模式扩展）：
+场景（PRD F4.2 表，F1.3/F2.2 就绪后已全部落地）：
 1. 数据链路异常（critical）：soc_source_health 中断 ≥ down_hours（默认 3h；
    有 expected_interval 时取 max(down_hours, 2×周期)）
 2. 风险评分突变（warn）：7 天窗口内评分上升 ≥ threshold（默认 20，复用 F1.1 历史）
 3. EOL 临近（info/warn，F3.2 联动）：距 expected_eol ≤ info_days(30) 提醒一次、
    ≤ warn_days(7) 升级 warn；已超期也 warn；manual 覆盖同样纳入提醒
+4. 影子资产发现（warn，F1.3 联动）：近 10 分钟内新增的 pending shadow 差异
+5. 报告生成完成（info，F2.2 联动）：近 10 分钟内生成的 weekly/monthly/incident_driven
 
 频控（PRD）：同类通知去重——dedup key 存 Notification.link（push:<场景>:<对象>），
 info/warn 24h、critical 6h（critical 支持重复提醒）。
@@ -29,7 +30,9 @@ from sqlalchemy.orm import Session
 
 from app.models import Asset
 from app.models.asset_risk import AssetRiskHistory
+from app.models.asset_reconciliation import AssetReconciliation, TYPE_SHADOW
 from app.models.notification import Notification
+from app.models.security_report import SecurityReport
 from app.models.source_health import SourceHealth
 from app.models.user import User, UserStatus
 from app.services.notification_service import NotificationService
@@ -47,6 +50,10 @@ DEFAULT_PUSH_RULES: dict = {
     "source_health": {"enabled": True, "down_hours": 3},
     "risk_jump": {"enabled": True, "threshold": 20, "window_days": 7},
     "eol": {"enabled": True, "warn_days": 7, "info_days": 30},
+    # F4.2 补齐：场景3 影子资产发现（依赖 F1.3 对账页）、场景4 报告生成完成（依赖 F2.2）
+    "shadow_assets": {"enabled": True, "lookback_minutes": 10},
+    "report_completion": {"enabled": True, "lookback_minutes": 10,
+                           "types": ["weekly", "monthly", "incident_driven"]},
 }
 
 _rules_cache = {"value": None, "at": 0.0}
@@ -310,6 +317,111 @@ class PushNotificationService:
             sent_total += sent
         return sent_total
 
+    # ---------- 场景 4：影子资产发现（warn，依赖 F1.3 对账页） ----------
+
+    def _find_new_shadows(self, rules: dict) -> list:
+        """近 N 分钟内创建且 status='pending' 的 shadow 差异。
+
+        为什么不查全部 pending：多轮轮询下不重推，dedup title 锁定到「<主键>」，
+        dedup_hours 24h 也能防住偶发双推。
+        """
+        cfg = rules["shadow_assets"]
+        since = _utcnow() - timedelta(minutes=int(cfg["lookback_minutes"]))
+        rows = (
+            self.db.query(AssetReconciliation)
+            .filter(
+                AssetReconciliation.reconciliation_type == TYPE_SHADOW,
+                AssetReconciliation.status == "pending",
+                AssetReconciliation.created_at >= since,
+            )
+            .order_by(AssetReconciliation.created_at.desc())
+            .all()
+        )
+        out = []
+        for r in rows:
+            d = r.details or {}
+            ag = d.get("agent") or {}
+            out.append({
+                "recon": r,
+                "agent_id": ag.get("id", "?"),
+                "agent_name": ag.get("name") or "（未命名）",
+                "agent_ip": ag.get("ip") or "",
+                "os_name": ag.get("os_name") or "",
+            })
+        return out
+
+    async def check_shadow_assets(self) -> int:
+        rules = self.load_rules()
+        if not (rules.get("enabled") and rules["shadow_assets"].get("enabled")):
+            return 0
+        sent_total = 0
+        for item in self._find_new_shadows(rules):
+            rec = item["recon"]
+            # 去重键锁定到差异主键，不限今天会跨轮重推的概率
+            dedup_title = f"【影子资产】Agent {item['agent_id']}"
+            ip = item["agent_ip"]
+            ip_part = f"（IP {ip}）" if ip else ""
+            os_part = item["os_name"] or "系统未知"
+            sent = await self._push(
+                dedup_title=dedup_title,
+                severity="warn",
+                title=f"{dedup_title} 新增",
+                content=(
+                    f"Wazuh 中存在 Agent {item['agent_id']} {item['agent_name']} "
+                    f"{ip_part}，但台账中无对应资产记录（系统 {os_part}）。"
+                    f"建议确认是否需补录入台账，或在 Wazuh 侧确认 Agent 合法。"
+                ),
+                link_path="/assets/reconciliation",
+            )
+            sent_total += sent
+        return sent_total
+
+    # ---------- 场景 5：报告生成完成（info，依赖 F2.2 报告页） ----------
+
+    def _find_new_reports(self, rules: dict) -> list:
+        """近 N 分钟内生成的报告。
+
+        只推 weekly/monthly/incident_driven；on_demand 是用户自己点的、跳过。
+        skip_scheduled=True 时跳过 system:scheduler 生成的（属于后台调度）。
+        """
+        cfg = rules["report_completion"]
+        since = _utcnow() - timedelta(minutes=int(cfg["lookback_minutes"]))
+        allowed = set(cfg.get("types") or [])
+        if not allowed:
+            return []
+        rows = (
+            self.db.query(SecurityReport)
+            .filter(
+                SecurityReport.created_at >= since,
+                SecurityReport.report_type.in_(list(allowed)),
+            )
+            .order_by(SecurityReport.created_at.desc())
+            .all()
+        )
+        return rows
+
+    async def check_report_completion(self) -> int:
+        rules = self.load_rules()
+        if not (rules.get("enabled") and rules["report_completion"].get("enabled")):
+            return 0
+        sent_total = 0
+        for r in self._find_new_reports(rules):
+            dedup_title = f"【报告就绪】{r.title}"
+            degraded = (r.data_coverage or {}).get("data_degraded", False)
+            cov_note = "（数据降级，见报告数据说明）" if degraded else ""
+            sent = await self._push(
+                dedup_title=dedup_title,
+                severity="info",
+                title=f"{dedup_title}{cov_note}",
+                content=(
+                    f"{r.title} 已生成（触发人 {r.triggered_by or '系统'}）"
+                    f"，可前往报告列表查看详情。"
+                ),
+                link_path=f"/reports/list",
+            )
+            sent_total += sent
+        return sent_total
+
     # ---------- 巡检入口 ----------
 
     async def run_all(self) -> dict:
@@ -318,4 +430,6 @@ class PushNotificationService:
             "source_health": await self.check_source_health(),
             "risk_jump": await self.check_risk_jump(),
             "eol": await self.check_eol(),
+            "shadow_assets": await self.check_shadow_assets(),
+            "report_completion": await self.check_report_completion(),
         }
