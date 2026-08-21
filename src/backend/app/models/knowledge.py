@@ -39,8 +39,8 @@ class Knowledge(Base):
     confidence_score = Column(SmallInteger, default=70)   # 人工验证后提升至 90
     review_status = Column(String(20), default="active")  # active / pending_review
     created_by = Column(String(100))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     @property
     def tag_list(self) -> list:

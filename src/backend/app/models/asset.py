@@ -2,7 +2,7 @@
 资产模型
 """
 
-from sqlalchemy import Column, String, Text, DateTime, Date, Integer, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, String, Text, DateTime, Date, Integer, ForeignKey, UniqueConstraint, Index, text
 from sqlalchemy.dialects.postgresql import UUID, MACADDR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -17,6 +17,13 @@ class Asset(Base):
         # T0a：wazuh_agent_id 唯一部分索引（NULL 不受约束），防 agent 双挂串数据
         Index('uq_soc_assets_agent_id', 'wazuh_agent_id', unique=True,
               postgresql_where='wazuh_agent_id IS NOT NULL'),
+        # 下面两个索引由迁移用原生 SQL 建（a7f8e9d0c1b2 / c2d3e4f5a6b7）。
+        # 必须在 model 侧同步声明，否则 alembic autogenerate 认为库里多了索引而生成 DROP。
+        # 列表页按风险倒序排序用（NULLS LAST：未评分资产排最后）
+        Index('idx_soc_assets_risk_score', text('risk_score DESC NULLS LAST')),
+        # EOL 到期预警扫描用，只索引已知 EOL 的资产
+        Index('idx_soc_assets_expected_eol', 'expected_eol',
+              postgresql_where='expected_eol IS NOT NULL'),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())

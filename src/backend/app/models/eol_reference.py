@@ -28,8 +28,8 @@ class EolReference(Base):
     source = Column(String(20), default="preset")        # preset / manual（条目维护来源）
     notes = Column(Text)                                 # 口径说明（如 Windows 按具体版本估算）
     enabled = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
         return f"<EolReference(pattern={self.pattern!r}, eol={self.eol_date})>"

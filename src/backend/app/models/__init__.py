@@ -40,6 +40,16 @@ from .knowledge import Knowledge
 from .eol_reference import EolReference
 from .compliance import ComplianceRun, ComplianceFinding
 
+# P4 数据可靠性 / 脆弱性 / SCA 模块。
+# 这 4 个模块此前漏在这里导入，导致 alembic env.py 的 Base.metadata 缺失下面 8 张表，
+# `alembic check` 每次都把它们误报成 remove_table——一旦有人照着 autogenerate 出迁移，
+# 生成的就是 DROP 这 8 张表的脚本。表本身在迁移链里是齐全的（见 a1b2c3d4e5f7 /
+# c3d4e5f6g7h8 / c6d7e8f9a0b1 / d7e8f9a0b1c2），缺的只是 metadata 注册。
+from .vulnerability import Vulnerability, AssetVulnerability, ScanTask
+from .sca import ScaCheck, AssetScaCheck
+from .source_health import SourceHealth
+from .sync_dead_letter import SyncDeadLetter
+
 __all__ = [
     "Base",
     "Asset",
@@ -83,4 +93,12 @@ __all__ = [
     "EolReference",
     "ComplianceRun",
     "ComplianceFinding",
+    # P4 / 脆弱性 / SCA
+    "Vulnerability",
+    "AssetVulnerability",
+    "ScanTask",
+    "ScaCheck",
+    "AssetScaCheck",
+    "SourceHealth",
+    "SyncDeadLetter",
 ]
