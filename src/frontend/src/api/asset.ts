@@ -249,6 +249,46 @@ export const refreshAssetRiskSummary = (
   return httpClient.post({ url: `${API_PREFIX}/${id}/risk/refresh-summary`, keepFullResponse: true, timeout: 30000 })
 }
 
+// ========== P3/F1.2 资产安全态势摘要（告警簇+事件+风险聚合 → GLM 摘要） ==========
+
+export interface SecuritySummaryStats {
+  asset: { name?: string; ip: string; os?: string; criticality?: string }
+  window: { days: number; start: string; end: string }
+  alert_groups: {
+    total: number
+    by_priority: Record<string, number>
+    top_rules: Array<{ description: string; count: number }>
+  }
+  incidents: {
+    total: number
+    open: number
+    recent: Array<{ title: string; status?: string; severity?: string }>
+  }
+  risk: { risk_score: number | null; risk_summary?: string | null }
+  latest_group_at?: string | null
+}
+
+export interface SecuritySummaryResult {
+  asset_id: string
+  summary: string
+  summary_source: 'glm' | 'rule'
+  stats: SecuritySummaryStats
+  generated_at: string
+}
+
+export const getAssetSecuritySummary = (
+  id: string,
+  days = 30,
+  force = false
+): Promise<Http.BaseResponse<SecuritySummaryResult>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${id}/security-summary`,
+    params: { days, force },
+    keepFullResponse: true,
+    timeout: 30000
+  })
+}
+
 export const batchScoreRisk = (): Promise<any> => {
   // 批量评分含 GLM 摘要时可达数十秒（per_run_cap=20 × 摘要耗时），
   // 单独放宽到 120s（全局默认 15s 会超时报"网络错误"）

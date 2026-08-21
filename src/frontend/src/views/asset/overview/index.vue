@@ -82,7 +82,60 @@
       </ElCol>
     </ElRow>
 
-    <!-- 3. Top 10 并列 -->
+    <!-- 3. P3/F1.1：风险评分分布 + 上升最快（接 risk overview API） -->
+    <ElRow :gutter="16" class="chart-row">
+      <ElCol :sm="24" :md="8">
+        <ElCard shadow="never" class="chart-card">
+          <template #header>
+            <span class="chart-title">资产风险分布</span>
+            <span class="chart-subtitle">(F1.1 评分口径)</span>
+          </template>
+          <ArtRingChart
+            height="280px"
+            :data="riskRingData"
+            :show-legend="true"
+            legend-position="right"
+            center-text="风险"
+          />
+        </ElCard>
+      </ElCol>
+      <ElCol :sm="24" :md="16">
+        <ElCard shadow="never" class="top-card">
+          <template #header>
+            <span class="chart-title">7 天评分上升最快</span>
+            <span class="chart-subtitle">(Δ ≥ 10，需关注异动)</span>
+          </template>
+          <div class="top-table-wrap">
+            <ElTable
+              :data="risingRows"
+              size="small"
+              class="top-table"
+              empty-text="近 7 天无评分异动资产"
+              @row-click="goDetailById"
+            >
+              <ElTableColumn prop="name" label="名称" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.name || row.ip }}</template>
+              </ElTableColumn>
+              <ElTableColumn prop="ip" label="IP" min-width="120" />
+              <ElTableColumn label="当前分" width="90" align="right">
+                <template #default="{ row }">
+                  <ElTag :type="riskTagType(row.risk_score)" size="small" effect="dark">
+                    {{ row.risk_score }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="7天变化" width="100" align="right">
+                <template #default="{ row }">
+                  <span class="text-danger fw-600">+{{ row.delta_7d }}</span>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
+
+    <!-- 4. Top 10 并列 -->
     <ElRow :gutter="16" class="top-row">
       <ElCol :sm="24" :md="12" class="top-col">
         <ElCard shadow="never" class="top-card">
@@ -179,7 +232,7 @@
   import { ref, onMounted, computed } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { getAssetOverview } from '@/api/asset'
+  import { getAssetOverview, getRiskOverview, type RiskOverview } from '@/api/asset'
   import { useDictStore } from '@/store/modules/dict'
 
   defineOptions({ name: 'AssetOverview' })
@@ -189,6 +242,39 @@
 
   const overview = ref<Api.Asset.AssetOverview | null>(null)
   const loadError = ref<string>('')
+
+  // ---------- P3/F1.1：风险分布 + 上升最快（独立加载，失败静默不影响主区） ----------
+
+  const riskOverview = ref<RiskOverview | null>(null)
+  const loadRiskOverview = async () => {
+    try {
+      const res = await getRiskOverview()
+      if (res.code === 200) riskOverview.value = res.data
+    } catch {
+      /* 静默 */
+    }
+  }
+
+  const RISK_LABELS: Record<string, string> = {
+    critical: '危险(80+)', high: '高危(60+)', medium: '中危(40+)', low: '低危(<40)', na: '未评分'
+  }
+
+  const riskRingData = computed(() => {
+    const d = riskOverview.value?.distribution
+    if (!d) return []
+    return ['critical', 'high', 'medium', 'low', 'na']
+      .filter((k) => d[k] > 0)
+      .map((k) => ({ name: RISK_LABELS[k], value: d[k] }))
+  })
+
+  const risingRows = computed(() => riskOverview.value?.rising ?? [])
+
+  const riskTagType = (s: number) =>
+    s >= 80 ? 'danger' : s >= 60 ? 'warning' : s >= 40 ? 'warning' : 'success'
+
+  const goDetailById = (row: { asset_id?: string; id?: string }) => {
+    goDetail({ id: row.asset_id || row.id })
+  }
 
   // ---------- KPI 卡 ----------
 
@@ -326,6 +412,7 @@
 
   onMounted(() => {
     fetchOverview()
+    loadRiskOverview()
   })
 </script>
 

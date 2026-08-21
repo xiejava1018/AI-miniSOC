@@ -462,6 +462,30 @@
 
         <!-- 5. 告警(M5: 时间范围/等级筛选/分页增强) -->
         <ElTabPane label="告警" name="alerts">
+          <!-- F1.2：AI 安全态势摘要横幅（告警簇+事件+风险聚合；带溯源与反馈） -->
+          <div v-if="secSummary" class="sec-summary" v-loading="secSummaryLoading">
+            <div class="sec-summary-head">
+              <span class="sec-summary-title">
+                AI 态势摘要
+                <ElTag size="small" :type="secSummary.summary_source === 'glm' ? 'primary' : 'info'" effect="plain">
+                  {{ secSummary.summary_source === 'glm' ? 'GLM' : '统计' }}
+                </ElTag>
+              </span>
+              <span class="sec-summary-actions">
+                <ElTooltip :content="secSummaryWindowLabel" placement="top">
+                  <ElIcon class="sec-summary-meta-icon"><InfoFilled /></ElIcon>
+                </ElTooltip>
+                <ElIcon class="sec-summary-refresh" @click="loadSecSummary(true)"><Refresh /></ElIcon>
+                <AiFeedback target-type="security_summary" :target-id="assetId" />
+              </span>
+            </div>
+            <div class="sec-summary-text">{{ secSummary.summary }}</div>
+            <div v-if="secSummaryTopRules.length" class="sec-summary-rules">
+              <ElTag v-for="r in secSummaryTopRules" :key="r.description" size="small" effect="light" type="info">
+                {{ r.description }} ×{{ r.count }}
+              </ElTag>
+            </div>
+          </div>
           <div class="tab-header">
             <div class="tab-header-actions">
               <ElSelect v-model="alertsHours" style="width: 110px" @change="handleAlertsQuery">
@@ -638,7 +662,7 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
-  import { ArrowLeft, Refresh, Plus, Box, Warning, Document } from '@element-plus/icons-vue'
+  import { ArrowLeft, Refresh, Plus, Box, Warning, Document, InfoFilled } from '@element-plus/icons-vue'
   import { FormInstance, ElMessageBox, ElMessage } from 'element-plus'
   import { getAssetVulnerabilities, createIncidentFromVulnerability } from '@/api/vulnerabilities'
   import {
@@ -660,7 +684,7 @@
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
   import MetricCard from './components/MetricCard.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
-  import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, type AssetRiskDetail } from '@/api/asset'
+  import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, getAssetSecuritySummary, type AssetRiskDetail, type SecuritySummaryResult } from '@/api/asset'
 
   const route = useRoute()
   const router = useRouter()
@@ -1339,6 +1363,35 @@
     }
   }
 
+  // ============ P3/F1.2：AI 安全态势摘要（告警 Tab 顶部横幅） ============
+
+  const secSummary = ref<SecuritySummaryResult | null>(null)
+  const secSummaryLoading = ref(false)
+
+  const loadSecSummary = async (force = false) => {
+    if (!assetId.value) return
+    secSummaryLoading.value = true
+    try {
+      const res = await getAssetSecuritySummary(assetId.value, 30, force)
+      if (res.code === 200 && res.data) {
+        secSummary.value = res.data
+      }
+    } catch {
+      /* 静默：横幅不显示即可，不影响告警列表 */
+    } finally {
+      secSummaryLoading.value = false
+    }
+  }
+
+  const secSummaryWindowLabel = computed(() => {
+    const s = secSummary.value?.stats
+    if (!s) return ''
+    const g = s.alert_groups
+    return `数据窗口：近 ${s.window.days} 天｜告警簇 ${g.total}（降噪后）｜事件 ${s.incidents.total}（未关闭 ${s.incidents.open}）`
+  })
+
+  const secSummaryTopRules = computed(() => secSummary.value?.stats?.alert_groups?.top_rules?.slice(0, 3) || [])
+
   const riskScoreClass = computed(() => {
     const s = riskData.value?.risk_score ?? 0
     if (s >= 80) return 'is-critical'
@@ -1390,6 +1443,7 @@
     loadDetail()
     loadSummary()
     loadRisk()
+    loadSecSummary()
     loadPorts()
     loadTags()
     loadDataSources()
@@ -1563,6 +1617,63 @@
     // 取消 tab-card 的 flex:1 + overflow:hidden,
     // 让卡片高度随内容伸展, 避免被父级 scroll 夹住压成 0 高度
     .tab-card {
+      // F1.2：安全态势摘要横幅
+      .sec-summary {
+        margin-bottom: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--el-color-primary-light-8);
+        border-radius: 6px;
+        background: var(--el-color-primary-light-9, #f0f7ff);
+
+        .sec-summary-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+
+          .sec-summary-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--el-text-color-primary);
+          }
+
+          .sec-summary-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+
+            .sec-summary-meta-icon {
+              color: var(--el-text-color-secondary);
+              cursor: help;
+            }
+
+            .sec-summary-refresh {
+              color: var(--el-text-color-secondary);
+              cursor: pointer;
+
+              &:hover {
+                color: var(--el-color-primary);
+              }
+            }
+          }
+        }
+
+        .sec-summary-text {
+          font-size: 13px;
+          line-height: 1.7;
+          color: var(--el-text-color-primary);
+        }
+
+        .sec-summary-rules {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 8px;
+        }
+      }
       flex-shrink: 0;
       margin-bottom: 16px;
 

@@ -136,3 +136,25 @@ def refresh_asset_risk_summary(
     if not data:
         raise HTTPException(status_code=404, detail="资产不存在")
     return data
+
+
+@router.get("/{asset_id}/security-summary")
+def get_asset_security_summary(
+    asset_id: str,
+    days: int = 30,
+    force: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """F1.2 资产安全态势摘要：聚合 P0 告警簇 + P1 事件 + F1.1 风险分 → GLM 摘要。
+
+    12h 进程内缓存；GLM 不可用/限流 → 统计模板降级；返回体含数据窗口与
+    各源计数（X2 溯源，缺口显式）。force=true 绕过缓存（用户显式刷新）。
+    """
+    from app.services.asset_security import AssetSecurityService
+    data = AssetSecurityService(db).security_summary(
+        _parse_asset_id(asset_id), days=min(max(days, 1), 90), force=force
+    )
+    if not data:
+        raise HTTPException(status_code=404, detail="资产不存在")
+    return data
