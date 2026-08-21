@@ -33,6 +33,9 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+# macOS AppleDouble 资源分支：从 Mac 经 tar/scp 中转文件到服务器时会成对生成 ._xxx，
+# 未忽略会污染 git status --porcelain，卡死 deploy.sh 的 uncommitted 门禁（部署 #61 事故）
+._*
 
 # Logs
 *.log
