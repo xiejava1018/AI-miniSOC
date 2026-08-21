@@ -5,6 +5,7 @@ from typing import Callable
 
 from app.core.auth import get_current_user
 from app.models.user import User
+from app.models.role import RoleCode
 
 
 def require_admin() -> Callable:
@@ -57,3 +58,71 @@ def require_menu_permission(menu_path: str) -> Callable:
         return current_user
 
     return _check_permission
+
+
+def require_role(*role_codes: str) -> Callable:
+    """
+    要求指定角色依赖（PRD X1 权限矩阵）。
+
+    admin 始终放行，其余枚举 role_codes 限定接受范围。
+    与 require_menu_permission 的区别：后者限制菜单可见性，
+    本依赖限制业务操作权限。
+
+    用法：
+        @router.post("/reports/generate")
+        async def generate(
+            current_user: User = Depends(require_role("admin", "operator"))
+        ):
+            ...
+    """
+    allowed = set(role_codes)
+
+    async def _check_role(current_user: User = Depends(get_current_user)):
+        if current_user.is_admin:
+            return current_user
+        if not current_user.role or current_user.role.code not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"需要角色：{sorted(allowed)}",
+            )
+        return current_user
+
+    return _check_role
+
+
+def require_button_permission(menu_path: str, button: str) -> Callable:
+    """
+    要求菜单按钮权限依赖（PRD X1）。
+
+    底层读 RoleMenu.permissions JSONB 数组。
+    admin bypass。检查 'authMark' 是否在当前菜单的权限列表中。
+
+    用法：
+        @router.post("/assets/reconcile")
+        async def trigger_reconcile(
+            current_user: User = Depends(require_button_permission(
+                "/asset/reconciliation", "reconcile"
+            ))
+        ):
+            ...
+    """
+    import logging
+    _log = logging.getLogger("permissions")
+
+    async def _check_button(current_user: User = Depends(get_current_user)):
+        is_admin = current_user.is_admin
+        has_btn = current_user.has_button_access(menu_path, button)
+        if is_admin:
+            return current_user
+        if not has_btn:
+            _log.info(
+                "X1 按钮权限拒绝: user=%s menu=%s/%s (中间件会把 403 包成 200+code)",
+                current_user.username, menu_path, button,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"按钮权限不足：{menu_path}/{button}",
+            )
+        return current_user
+
+    return _check_button

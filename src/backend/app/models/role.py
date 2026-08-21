@@ -10,8 +10,19 @@ from app.models.base import Base
 
 
 class RoleCode(str, Enum):
-    """角色代码枚举"""
+    """角色代码枚举（PRD P3 / X1 权限矩阵）
+
+    ADMIN     : 全部权限
+    OPERATOR  : 运维：资产读写、对账、AI 查询/报告生成/知识编辑/EOL 覆盖（不可改系统配置）
+    VIEWER    : 只读用户：可看资产/告警/报告/知识，不可写任何东西
+    AUDITOR   : 审计：与 viewer 类似但额外开放「审计日志」菜单
+    USER      : 历史遗留，默认等同于 VIEWER（保留兼容）
+    READONLY  : 历史遗留，默认等同于 VIEWER（保留兼容）
+    """
     ADMIN = "admin"
+    OPERATOR = "operator"
+    VIEWER = "viewer"
+    AUDITOR = "auditor"
     USER = "user"
     READONLY = "readonly"
 

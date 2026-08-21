@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
+from app.core.permissions import require_role
 from app.models import User
 from app.models.eol_reference import EolReference
 from app.services.asset_lifecycle import AssetLifecycleService
@@ -42,9 +43,14 @@ def _parse_date(v: str) -> date_type:
         raise HTTPException(status_code=400, detail="日期格式错误（需 YYYY-MM-DD）")
 
 
-def _require_admin(current_user: User) -> None:
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
+def _require_admin_or_operator(current_user: User) -> None:
+    """PRD X1：EOL 手动覆盖限定 admin / operator。
+    原本 _require_admin 不够——operator 也能手动覆盖（PRD §F3.2 + X1）。"""
+    if current_user.is_admin:
+        return
+    if current_user.role and current_user.role.code == "operator":
+        return
+    raise HTTPException(status_code=403, detail="需要管理员或运维权限")
 
 
 @router.get("/lifecycle/overview")
@@ -85,7 +91,7 @@ def override_eol(
     asset_id: str,
     body: EolOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("admin", "operator")),
 ):
     """手动覆盖 EOL（优先于参考表；落审计）。PRD 防幻觉设计：人工确认优先。"""
     eol = _parse_date(body.eol_date)
@@ -103,7 +109,7 @@ def override_eol(
 def clear_eol(
     asset_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("admin", "operator")),
 ):
     """恢复自动匹配（立即按参考表重算；落审计）"""
     asset = AssetLifecycleService(db).clear_eol_override(_parse_asset_id(asset_id), current_user)

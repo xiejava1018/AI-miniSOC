@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.permissions import require_button_permission
 from app.models import User
 from app.models.security_report import REPORT_TYPES
 from app.services.report_generator import (
@@ -52,7 +53,7 @@ class GenerateReportRequest(BaseModel):
 async def generate_report(
     body: GenerateReportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_button_permission("list", "generate")),
 ):
     if body.report_type not in REPORT_TYPES:
         return {
@@ -147,7 +148,7 @@ async def get_report(
 @router.post("/reports/check-incident-trigger", summary="事件驱动触发检查")
 async def check_incident_trigger(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_button_permission("list", "trigger")),
 ):
     """过去 24h 累计 critical+high 告警 ≥ 阈值时生成 incident_driven 报告。
 

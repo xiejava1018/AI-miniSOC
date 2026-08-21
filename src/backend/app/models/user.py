@@ -61,5 +61,40 @@ class User(Base):
             return False
         return any(menu.path == menu_path for menu in self.role.menus)
 
+    def has_button_access(self, menu_path: str, button: str) -> bool:
+        """检查用户对指定菜单的某个按钮（authMark）是否有权限。
+
+        依赖 RoleMenu.permissions JSONB 数组（迁移里种），
+        例：role_menu.permissions = '["view", "reconcile", "resolve"]'
+        调用例：user.has_button_access('/asset/reconciliation', 'resolve') => True/False
+
+        注意：path 可能多菜单匹配（如 'list' 在 /assets 和 /reports 都有），
+        所以检查路径'path 在多个菜单里、任一一个菜单含 button 就返 True。
+        """
+        if self.is_admin:
+            return True
+        if not self.role:
+            return False
+        from app.models import RoleMenu, Menu
+        session = self.role._sa_instance_state.session
+        rows = (
+            session.query(RoleMenu.permissions)
+            .join(Menu, Menu.id == RoleMenu.menu_id)
+            .filter(Menu.path == menu_path, RoleMenu.role_id == self.role_id)
+            .all()
+        ) if self.role_id else []
+        if not rows:
+            return False
+        import json
+        for perms in [r[0] for r in rows]:
+            if isinstance(perms, str):
+                try:
+                    perms = json.loads(perms)
+                except (ValueError, TypeError):
+                    continue
+            if button in (perms or []):
+                return True
+        return False
+
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, status={self.status})>"

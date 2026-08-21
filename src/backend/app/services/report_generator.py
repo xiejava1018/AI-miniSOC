@@ -54,6 +54,7 @@ from app.models.security_report import (
 from app.services.ai_budget import ai_budget
 from app.services.alert_query import AlertQueryService
 from app.services.asset_risk import AssetRiskService
+from app.services.audit_log_service import AuditLogService
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +259,21 @@ class SecurityReportService:
         self.db.add(report)
         self.db.commit()
         self.db.refresh(report)
+        # 写操作落审计（PRD X1：报告生成落 soc_audit_logs）
+        # resource_id 为 BigInteger 存不了 UUID，用 resource_name 作复合 key
+        AuditLogService(self.db).create_audit_log(
+            user_id=None,  # service 层拿不到 current_user，由调用方传；此处先记 username 快照
+            username=triggered_by,
+            action="CREATE",
+            resource_type="security_report",
+            resource_id=None,
+            resource_name=f"report:{report.id}",
+            new_values={
+                "report_type": report_type,
+                "title": report.title,
+                "data_degraded": (report.data_coverage or {}).get("data_degraded", False),
+            },
+        )
         return report
 
     # ---------- 事件驱动触发检查 ----------
