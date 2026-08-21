@@ -49,7 +49,7 @@
 | AI 安全报告 | F2.2 | ✅ 已完成 | 周报/月报/按需/事件驱动四种触发；data_coverage JSONB 硬门槛；不引入消息队列，事件驱动走 cron 或前端按钮调 `POST /reports/check-incident-trigger` |
 | 变更影响分析 | F3.1 | ❌ 未开始 | P3 优先级 |
 | 推送场景 3/5 | F4.2 | ✅ 已完成 | 5 个场景全部落地：数据链路异常/评分突变/EOL/影子资产/报告生成完成；事件驱动走 `POST /api/v1/notifications/push-check` 同步端点（admin only，cron 可调） |
-| 权限矩阵（§6.5） | X1 | ⚠️ 未对齐 | 菜单已种 `view/reconcile/resolve/report` 按钮权限，但后端 `require_menu_permission` 使用数仍为 0 |
+| 权限矩阵（§6.5） | X1 | ✅ 部分 | P3 4 个写操作端点接 require_button_permission；operator/viewer/auditor 三角色 + 12 条菜单授权。**未完**：全菜单权限（仅 4 个菜单种了）、部门隔离（需独立工单建资产↔部门关联） |
 
 > **F1.3 实现偏差（已实测，2026-08-21 生产验证）**：
 > - 表结构相对 §1.3 增加 `run_id`（批次）与 `resolve_note`。无批次标识无法查询「最近一次对账结果」；未采用 compliance 的 runs/findings 双表，避免为一张结果表再引一张表。

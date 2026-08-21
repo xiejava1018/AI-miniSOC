@@ -118,6 +118,7 @@ AI-miniSOC/
 | 数据健康 | `app/api/data_health.py` | P3/F1.3：源健康 + 同步死信 + 对账差异三层聚合（`soc_source_health`/`soc_sync_dead_letter` 的首个对外出口） |
 | 安全报告 | `app/api/reports.py` | P3/F2.2：weekly/monthly/on_demand/incident_driven 四种触发；`data_coverage` JSONB NOT NULL 是硬门槛 |
 | 主动推送 | `app/services/push_notification_service.py` | P3/F4.2：5 个场景全落地（源健康/评分突变/EOL/影子资产/报告生成完成）；`/api/v1/notifications/push-check` 手动触发，`/api/v1/notifications/push-rules` admin 配置 |
+| 权限矩阵 | `app/core/permissions.py` | P3/X1：`require_role()` + `require_button_permission()`，P3 4 个写操作端点 + EOL 覆盖接权限；admin bypass、operator/viewer 实体测试通过 |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -695,5 +696,63 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 
 ---
 
-**文档版本**: v2.6
+## 今日补充（2026-08-22 P3/X1 权限矩阵）
+
+### 本次交付
+- **X1 权限矩阵**端点级落地。PRD X1 表里 admin/operator/viewer/auditor 的能力差异
+  之前完全靠前端 v-auth 隐藏按钮——后端端点没区分，viewer 调 trigger 也能 200。
+- 后端新增两个依赖：`require_role(*role_codes)`、`require_button_permission(menu_path, button)`；
+  配 User.has_button_access() ORM 方法（admin bypass）。
+- 4 个 P3 写操作端点接权限（端到端 HTTP 实测）：
+  - `POST /assets/reconcile`                            → reconciliation, reconcile
+  - `PUT  /assets/reconciliations/{id}/resolve`          → reconciliation, resolve
+  - `POST /reports/generate`                            → list, generate
+  - `POST /reports/check-incident-trigger`              → list, trigger
+- EOL 覆盖（PUT/DELETE /assets/{id}/eol）改用 `require_role("admin","operator")`；
+  原 _require_admin 太死（PRD §F3.2 + X1 都写明 operator 也能手动覆盖）。
+- 报告生成落审计（AuditLogService.create_audit_log）；EOL/对账此前已落。
+- 迁移 `g1h2i3j4k5l6`：种 operator/viewer/auditor + 4 菜单 × 3 角色 × perms JSONB 共 12 条授权。
+  全 SQL 子查询写法，dry-run 干净 0 DROP。
+- RoleCode 扩展：admin/operator/viewer/auditor（旧的 user/readonly 保留兼容）。
+
+### 实测（生产 HTTP 路由级）
+- admin:     /reconcile 200 / trigger 200
+- operator:  /reconcile 200 / trigger 200
+- viewer:    /reconcile 403 / trigger 403
+
+### 踩过的坑（8 条，本轮反复重演）
+1. **菜单 path 是相对名**（如 'reconciliation'），不是 '/asset/reconciliation'。一开始查全失败
+2. **path 多匹配**：'list' 在 /assets 和 /reports 都有，has_button_access 必须 OR 全匹配，不是只查第一个
+3. **响应包装中间件**：HTTPException(403) 被包成 status=200 + body.code=403，测试要读 body.code
+4. **alembic 迁移别用 Python 状态变量 + INSERT 后回读**（--sql dry-run 炸）
+5. **soc_role_menus 没 created_at 列**，INSERT 不要带
+6. **soc_roles.name 也 unique**，种子不能与既有 '只读用户' 重名
+7. **用户 fixture 测完要清理**，否则污染本地库 dedup/role 状态
+8. **必须 HTTP 路由级实测**，service 层测过了路由未必通（F2.2 教训）
+
+### X1 后续欠账（不在本轮范围）
+- 全菜单权限补齐：本轮只种 4 个菜单；其余菜单仍是 admin 全通/其他人无权限
+- 部门隔离：PRD 表写"operator 限本部门资产"，但 soc_assets 没有 department_id 关联，
+  User.department_id 已有但需建 Asset↔Department 关联——独立工单
+- 审计日志前端：当前只后端落，前端审计菜单能查但没专门页面
+
+### P3 缺口最终状态
+- F1.1 风险评分 ✅
+- F1.2 安全态势摘要 ✅
+- F1.3 资产对账 + 数据健康 ✅
+- F2.1 L1 自然语言查询 ✅ / L2 复合查询 ❌
+- F2.2 AI 安全报告 ✅
+- F2.3 知识库 ✅
+- F3.1 变更影响分析 ❌
+- F3.2 生命周期/EOL ✅
+- F3.3 合规基线 ✅
+- F4.1 AI 反馈闭环 ✅
+- F4.2 推送 5 场景 ✅
+- X1 权限矩阵 部分 ✅（端点 + 角色 + 4 菜单授权）
+- W0 准备阶段 ❌（前置）
+- §十一 Go/No-Go ❌（上线门槛）
+
+---
+
+**文档版本**: v2.7
 **最后更新**: 2026-08-22
