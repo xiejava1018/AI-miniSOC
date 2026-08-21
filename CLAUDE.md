@@ -117,6 +117,7 @@ AI-miniSOC/
 | 资产对账 | `app/api/asset_reconciliation.py` | P3/F1.3：触发对账、差异列表/摘要、AI 报告、差异处理（Wazuh 不可达返 503，不退化为无差异） |
 | 数据健康 | `app/api/data_health.py` | P3/F1.3：源健康 + 同步死信 + 对账差异三层聚合（`soc_source_health`/`soc_sync_dead_letter` 的首个对外出口） |
 | 安全报告 | `app/api/reports.py` | P3/F2.2：weekly/monthly/on_demand/incident_driven 四种触发；`data_coverage` JSONB NOT NULL 是硬门槛 |
+| 主动推送 | `app/services/push_notification_service.py` | P3/F4.2：5 个场景全落地（源健康/评分突变/EOL/影子资产/报告生成完成）；`/api/v1/notifications/push-check` 手动触发，`/api/v1/notifications/push-rules` admin 配置 |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -666,5 +667,33 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 
 ---
 
-**文档版本**: v2.5
-**最后更新**: 2026-08-21
+## 今日补充（2026-08-21 P3/F4.2 收尾）
+
+### 本次交付
+- **F4.2 五个推送场景全部落地**。原状：场景1 数据链路异常/2 评分突变/3 EOL 已实现；
+  场景4 影子资产发现（依赖 F1.3）、场景5 报告生成完成（依赖 F2.2）本次补齐。
+- 新增 `check_shadow_assets()` / `check_report_completion()`；
+  `DEFAULT_PUSH_RULES` 加 `shadow_assets` / `report_completion` 默认配置（60s 缓存透明接管）。
+- `run_all()` 返回新增两个键；`POST /api/v1/notifications/push-check` 端点已存在（admin only），不需新增。
+
+### 实测（生产，2026-08-22）
+- 插入 fixture 报告（PROD-CHECK-Weekly）→ push-check → admin 通知列表出现 `【报告就绪】PROD-CHECK-Weekly 7days`（type=push、link=/reports/list）。
+- 第二次 push-check 同份报告被 24h dedup 拦下，stats.report_completion=0——dedup 工作正常。
+- 场景5 类型白名单 default = weekly/monthly/incident_driven；on_demand 跳过（用户自己点的就不必再推）。
+
+### 踩过的坑
+1. **fixture 测完必须清理**，否则污染本地测试库 dedup 状态（本地 dedup 与生产是两套 DB，所以问题只发生在本地库）
+2. **测 dedup 不能清 push 表**——把 dedup 依据也清了会假阳性
+3. **`run_id` 是 NOT NULL**：fixture 影子资产必须给 run_id（PRD 加的字段，不是 NULL）
+4. **多层 ssh escape 太脆**——内嵌 `\"` 在 ssh + bash heredoc 里会撞；改用 `cat > /tmp/xxx.py + scp + ssh` 三段，Python 内避免 emoji/中文括号（`·` 撞 Python3 ASCII）
+
+### P3 剩余缺口
+- F2.1 L2 复合查询（P2/P3）
+- F3.1 变更影响分析（P3）
+- X1 权限矩阵补齐（横切）
+- W0 准备阶段（前置）、§十一 Go/No-Go（上线门槛）
+
+---
+
+**文档版本**: v2.6
+**最后更新**: 2026-08-22

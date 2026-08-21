@@ -48,7 +48,7 @@
 | **数据健康聚合页** | **F1.3** | **✅ 已完成** | `GET /api/v1/data-health`，源健康/死信/对账三层统一入口 |
 | AI 安全报告 | F2.2 | ✅ 已完成 | 周报/月报/按需/事件驱动四种触发；data_coverage JSONB 硬门槛；不引入消息队列，事件驱动走 cron 或前端按钮调 `POST /reports/check-incident-trigger` |
 | 变更影响分析 | F3.1 | ❌ 未开始 | P3 优先级 |
-| 推送场景 3/5 | F4.2 | ⚠️ 部分 | 影子资产发现（F1.3 已就绪可接）、报告生成完成（依赖 F2.2） |
+| 推送场景 3/5 | F4.2 | ✅ 已完成 | 5 个场景全部落地：数据链路异常/评分突变/EOL/影子资产/报告生成完成；事件驱动走 `POST /api/v1/notifications/push-check` 同步端点（admin only，cron 可调） |
 | 权限矩阵（§6.5） | X1 | ⚠️ 未对齐 | 菜单已种 `view/reconcile/resolve/report` 按钮权限，但后端 `require_menu_permission` 使用数仍为 0 |
 
 > **F1.3 实现偏差（已实测，2026-08-21 生产验证）**：
