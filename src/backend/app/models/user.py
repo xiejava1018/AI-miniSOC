@@ -70,6 +70,8 @@ class User(Base):
 
         注意：path 可能多菜单匹配（如 'list' 在 /assets 和 /reports 都有），
         所以检查路径'path 在多个菜单里、任一一个菜单含 button 就返 True。
+
+        admin bypass：管理員菜单 permissions 常为空数组（[''），依赖本 bypass。
         """
         if self.is_admin:
             return True

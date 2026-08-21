@@ -8,7 +8,7 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance, asset_reconciliation, data_health, reports)
+    compliance, asset_reconciliation, data_health, reports, impact_analysis)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -55,6 +55,7 @@ api_router.include_router(
 api_router.include_router(asset_lifecycle.router, prefix="/assets", tags=["资产生命周期"])
 # P3/F1.3：数据健康聚合（顶级 /data-health）。
 # source_health / sync_dead_letter 之前只有后台任务在写表、从未有 API，这里是它们的首个出口。
+api_router.include_router(impact_analysis.router, prefix="/assets", tags=["变更影响分析"])
 api_router.include_router(data_health.router, tags=["数据健康"])
 api_router.include_router(reports.router, tags=["AI安全报告"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
