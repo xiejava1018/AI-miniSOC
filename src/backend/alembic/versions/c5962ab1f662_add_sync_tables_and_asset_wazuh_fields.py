@@ -69,6 +69,12 @@ def upgrade() -> None:
     sa.Column('title', sa.String(length=50), nullable=True),
     sa.Column('path', sa.String(length=200), nullable=False),
     sa.Column('icon', sa.String(length=50), nullable=True),
+    # component / permissions 这两列历史上是手工 ALTER 加到生产库的，漏写迁移，
+    # 导致空库 `alembic upgrade head` 跑到 a0b1c2d3e4f5 的菜单种子时必挂
+    # （UndefinedColumn: component）。此处补回建表定义，使空库可从零重建。
+    # 对已过此 revision 的库（生产/dev/test）无影响：不会重跑。
+    sa.Column('component', sa.String(length=200), nullable=True),
+    sa.Column('permissions', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('sort_order', sa.Integer(), nullable=True),
     sa.Column('is_visible', sa.Boolean(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),

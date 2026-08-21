@@ -4,8 +4,10 @@ Revision ID: a0b1c2d3e4f5
 Revises: f9a0b1c2d3e4
 Create Date: 2026-08-17 00:30:00.000000
 
-插入"任务中心"菜单到系统管理（parent_id=5）下，授权给 admin 角色。
+插入"任务中心"菜单到系统管理（path='/system'）下，授权给 admin 角色。
 幂等：重复执行不会重复插入。
+父菜单按 path 动态解析（不再硬编码 id=5），缺失时整段自动跳过，
+使空库也能 `alembic upgrade head` 跑到头。
 """
 from typing import Sequence, Union
 
@@ -29,21 +31,33 @@ MENU_PERMISSIONS = sa.text("""'[
 
 
 def upgrade() -> None:
-    # 幂等插入菜单（DO NOTHING 若 path+parent_id 已存在）
+    # 兜底：旧库可能停在 component/permissions 还没补进建表迁移的中间状态。
+    # 下方种子 INSERT 要写这两列，列不存在就会 UndefinedColumn 直接挂。
+    # 幂等，已有列的库（包括生产）执行后无变化。
+    op.execute("ALTER TABLE soc_menus ADD COLUMN IF NOT EXISTS component VARCHAR(200)")
+    op.execute("ALTER TABLE soc_menus ADD COLUMN IF NOT EXISTS permissions JSONB")
+
+    # 幂等插入菜单。父菜单按 path='/system' 子查询取，不再硬编码 id=5：
+    # 基础菜单（系统管理等）从来不由迁移插入，空库里它不存在，id=5 会直接撞
+    # 外键 soc_menus_parent_id_fkey，使灰库无法从零重建。现在父菜单不在时
+    # SELECT 无行 → 整段自然跳过（schema 迁移不应载于业务种子缺失）。
+    # 生产行为不变：/system 存在，解析结果仍是 id=5。
     op.execute(
         sa.text(
             """
             INSERT INTO soc_menus (parent_id, name, title, path, icon, component,
                                    sort_order, is_visible, permissions, created_at, updated_at)
-            SELECT 5, 'TaskCenter', '任务中心', 'task-center', 'ri:list-check-2',
+            SELECT p.id, 'TaskCenter', '任务中心', 'task-center', 'ri:list-check-2',
                    '/system/task-center/index', 90, TRUE,
                    """
             + str(MENU_PERMISSIONS)
             + """,
                    now(), now()
-            WHERE NOT EXISTS (
-                SELECT 1 FROM soc_menus
-                WHERE parent_id = 5 AND path = 'task-center'
+            FROM soc_menus p
+            WHERE p.path = '/system' AND p.parent_id IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM soc_menus m
+                WHERE m.parent_id = p.id AND m.path = 'task-center'
             )
             """
         )
@@ -56,7 +70,8 @@ def upgrade() -> None:
             SELECT r.id, m.id,
                    '["view","trigger","cancel","toggle","view_runs"]'::jsonb
             FROM soc_roles r
-            JOIN soc_menus m ON m.parent_id = 5 AND m.path = 'task-center'
+            JOIN soc_menus m ON m.path = 'task-center'
+            JOIN soc_menus p ON p.id = m.parent_id AND p.path = '/system'
             WHERE r.code = 'admin'
               AND NOT EXISTS (
                   SELECT 1 FROM soc_role_menus rm
@@ -88,13 +103,19 @@ def downgrade() -> None:
             """
             DELETE FROM soc_role_menus
             WHERE menu_id IN (
-                SELECT id FROM soc_menus WHERE parent_id = 5 AND path = 'task-center'
+                SELECT m.id FROM soc_menus m
+                JOIN soc_menus p ON p.id = m.parent_id AND p.path = '/system'
+                WHERE m.path = 'task-center'
             )
             """
         )
     )
     op.execute(
         sa.text(
-            "DELETE FROM soc_menus WHERE parent_id = 5 AND path = 'task-center'"
+            """
+            DELETE FROM soc_menus
+            WHERE path = 'task-center'
+              AND parent_id IN (SELECT id FROM soc_menus WHERE path = '/system' AND parent_id IS NULL)
+            """
         )
     )
