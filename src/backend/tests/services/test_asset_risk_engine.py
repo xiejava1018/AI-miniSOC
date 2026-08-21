@@ -305,3 +305,51 @@ class TestPrefetchConsistency:
             for k in ("exposure", "health", "alerts"):
                 assert via_ctx["dimensions"][k]["score"] == single["dimensions"][k]["score"]
                 assert via_ctx["dimensions"][k]["data_gap"] == single["dimensions"][k]["data_gap"]
+
+
+class TestRefreshSummaryOnDemand:
+    def test_subthreshold_asset_gets_summary_on_demand(self, db_session, monkeypatch):
+        """低于批量门槛（60）的资产，详情页按需刷新也能拿到摘要（UI 承诺）；
+        预算拒绝 → 规则文案降级，仍落库。"""
+        a = _make_asset(criticality="low")  # 低重要性，确保总分 < 60
+        db_session.add(a)
+        db_session.commit()
+        svc = AssetRiskService(db_session)
+        stats = svc.score_all()
+        db_session.refresh(a)
+        assert a.risk_score is not None and a.risk_score < 60
+        assert a.risk_summary is None  # 批量路径按门槛跳过
+
+        monkeypatch.setattr("app.services.asset_risk.ai_budget.allow", lambda: False)
+        out = svc.refresh_summary(a.id)
+        assert out["risk_summary"]  # 按需生成（规则降级文案）
+        assert out["summary_source"] == "rule"
+        db_session.refresh(a)
+        assert a.risk_summary is not None
+
+    def test_batch_keeps_ondemand_summary(self, db_session, monkeypatch):
+        """批量评分不再清空低分资产的按需摘要（保留用户显式生成的内容）"""
+        a = _make_asset(criticality="low")
+        db_session.add(a)
+        db_session.commit()
+        svc = AssetRiskService(db_session)
+        monkeypatch.setattr("app.services.asset_risk.ai_budget.allow", lambda: False)
+        svc.refresh_summary(a.id)
+        db_session.refresh(a)
+        assert a.risk_summary is not None
+        svc.score_all()  # 再次批量（低分 → skipped）
+        db_session.refresh(a)
+        assert a.risk_summary is not None  # 不被清空
+
+    def test_na_asset_returns_message(self, db_session):
+        a = _make_asset(asset_status="offline", os_name=None, os_version=None)
+        db_session.add(a)
+        db_session.commit()
+        svc = AssetRiskService(db_session)
+        out = svc.refresh_summary(a.id)
+        assert out["risk_score"] is None
+        assert "数据不足" in out["message"]
+
+    def test_refresh_nonexistent_asset(self, db_session):
+        import uuid
+        assert AssetRiskService(db_session).refresh_summary(uuid.uuid4()) is None

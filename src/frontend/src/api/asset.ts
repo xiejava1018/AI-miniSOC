@@ -242,6 +242,13 @@ export const getAssetRiskHistory = (id: string, days = 90): Promise<any> => {
   return httpClient.get({ url: `${API_PREFIX}/${id}/risk/history`, params: { days }, keepFullResponse: true })
 }
 
+/** 单资产按需生成风险摘要（详情页「刷新」；N/A 资产返回 message） */
+export const refreshAssetRiskSummary = (
+  id: string
+): Promise<Http.BaseResponse<AssetRiskDetail & { message?: string }>> => {
+  return httpClient.post({ url: `${API_PREFIX}/${id}/risk/refresh-summary`, keepFullResponse: true, timeout: 30000 })
+}
+
 export const batchScoreRisk = (): Promise<any> => {
   // 批量评分含 GLM 摘要时可达数十秒（per_run_cap=20 × 摘要耗时），
   // 单独放宽到 120s（全局默认 15s 会超时报"网络错误"）

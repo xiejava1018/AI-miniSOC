@@ -183,3 +183,23 @@ class TestAskAPI:
     def test_history_requires_auth(self, client):
         r = client.get("/api/v1/assets/ask/history")
         assert r.json()["code"] == 401
+
+
+class TestRefreshSummaryAPI:
+    def test_refresh_summary_endpoint(self, client, db_session, monkeypatch):
+        """POST /{id}/risk/refresh-summary：按需生成（预算拒绝走规则文案，确定性）"""
+        _, headers = _setup_admin(db_session, username="rs_admin")
+        asset = _make_asset(db_session, criticality="low")
+        client.post("/api/v1/assets/risk/batch-score", headers=headers)
+        monkeypatch.setattr("app.services.asset_risk.ai_budget.allow", lambda: False)
+        r = client.post(f"/api/v1/assets/{asset.id}/risk/refresh-summary", headers=headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["risk_summary"]
+        assert data["summary_source"] == "rule"
+
+    def test_refresh_summary_404(self, client, db_session):
+        _, headers = _setup_admin(db_session, username="rs_admin2")
+        r = client.post("/api/v1/assets/00000000-0000-0000-0000-000000000000/risk/refresh-summary",
+                        headers=headers)
+        assert r.json()["code"] == 404

@@ -134,7 +134,7 @@
           <span class="title">资产风险</span>
           <div class="card-header-right">
             <span v-if="riskData?.risk_scored_at" class="risk-scored-at">评分于 {{ formatTime(riskData.risk_scored_at) }}</span>
-            <ElButton size="small" text :icon="Refresh" @click="loadRisk" :loading="riskLoading">刷新</ElButton>
+            <ElButton size="small" text :icon="Refresh" @click="handleRefreshRisk" :loading="riskLoading">刷新</ElButton>
           </div>
         </div>
       </template>
@@ -151,8 +151,11 @@
               <div class="risk-score-label">/ 100</div>
             </div>
             <div class="risk-summary-area">
-              <div class="risk-summary-text">{{ riskData.risk_summary || '（暂无 AI 摘要，可点击刷新触发）' }}</div>
-              <AiFeedback target-type="risk_summary" :target-id="assetId" :visible="!!riskData.risk_summary" />
+              <div class="risk-summary-text">{{ riskData.risk_summary || '（暂无 AI 摘要，点击右上「刷新」生成）' }}</div>
+              <div class="risk-summary-meta">
+                <span v-if="riskData.risk_summary" class="risk-summary-src">{{ riskData.summary_source === 'glm' ? 'GLM 生成' : '规则生成' }}</span>
+                <AiFeedback target-type="risk_summary" :target-id="assetId" :visible="!!riskData.risk_summary" />
+              </div>
             </div>
           </div>
 
@@ -657,7 +660,7 @@
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
   import MetricCard from './components/MetricCard.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
-  import { getAssetRisk, getAssetRiskHistory, type AssetRiskDetail } from '@/api/asset'
+  import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, type AssetRiskDetail } from '@/api/asset'
 
   const route = useRoute()
   const router = useRouter()
@@ -1313,6 +1316,29 @@
     }
   }
 
+  /** 刷新 = 按需生成摘要（POST refresh-summary），而非重新 GET 已存数据 */
+  const handleRefreshRisk = async () => {
+    if (!assetId.value) return
+    riskLoading.value = true
+    try {
+      const res = await refreshAssetRiskSummary(assetId.value)
+      if (res.code === 200 && res.data) {
+        riskData.value = res.data
+        if (res.data.message) {
+          ElMessage.info(res.data.message)
+        } else if (res.data.risk_summary) {
+          ElMessage.success('风险摘要已更新')
+        }
+      } else {
+        ElMessage.warning(res.msg || '摘要生成失败')
+      }
+    } catch {
+      ElMessage.error('刷新请求失败，请稍后重试')
+    } finally {
+      riskLoading.value = false
+    }
+  }
+
   const riskScoreClass = computed(() => {
     const s = riskData.value?.risk_score ?? 0
     if (s >= 80) return 'is-critical'
@@ -1435,6 +1461,17 @@
             font-size: 13px;
             line-height: 1.7;
             color: var(--el-text-color-primary);
+          }
+
+          .risk-summary-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+
+            .risk-summary-src {
+              font-size: 12px;
+              color: var(--el-text-color-secondary);
+            }
           }
         }
       }

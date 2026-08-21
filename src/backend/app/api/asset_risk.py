@@ -119,3 +119,20 @@ def get_asset_risk_history(
     asset_uuid = _parse_asset_id(asset_id)
     history = AssetRiskService(db).get_history(asset_uuid, days=min(max(days, 1), 365))
     return {"asset_id": asset_id, "history": history}
+
+
+@router.post("/{asset_id}/risk/refresh-summary")
+def refresh_asset_risk_summary(
+    asset_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """单资产按需生成风险摘要（详情页「刷新」按钮）。
+
+    绕过批量 min_score 门槛（用户显式请求），成本由 ai_budget 限流兑底；
+    GLM 不可用降级规则化文案；N/A 资产返回 message 提示。
+    """
+    data = AssetRiskService(db).refresh_summary(_parse_asset_id(asset_id))
+    if not data:
+        raise HTTPException(status_code=404, detail="资产不存在")
+    return data

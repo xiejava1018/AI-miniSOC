@@ -429,7 +429,6 @@ class AssetRiskService:
 
     def generate_summary(self, asset: Asset, breakdown: dict, force: bool = False) -> tuple:
         """生成 GLM 摘要；返回 (text, source)。source: glm / rule / cached。"""
-        cfg = rules = None  # noqa
         s_cfg = self.load_rules()["summary"]
         cache_seconds = int(s_cfg["cache_hours"]) * 3600
         if (
@@ -475,6 +474,31 @@ class AssetRiskService:
             ai_budget.record_failure()
             logger.warning("风险摘要 GLM 调用失败，走规则化降级: %s", e)
             return self._fallback_summary(asset, breakdown), "rule"
+
+    def refresh_summary(self, asset_id) -> Optional[dict]:
+        """单资产按需生成摘要（详情页「刷新」按钮触发）。
+
+        绕过批量的 min_score 门槛——用户显式请求即意图，成本由 ai_budget 限流兑底
+        （1 次 GLM 调用）；GLM 不可用降级规则文案（§八-C）。返回 get_risk 载荷，
+        资产不存在返回 None，数据全缺（N/A）附带 message 提示。
+        """
+        asset = self.db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            return None
+        if asset.risk_score is None or not asset.score_breakdown:
+            rules = self.load_rules()
+            breakdown = self.score_asset(asset, rules)
+            if breakdown is None:
+                return {**self.get_risk(asset.id),
+                        "message": "该资产数据不足（N/A），无法生成摘要；请先在列表页执行批量评分补齐端口/漏洞/告警数据"}
+            asset.risk_score = breakdown["total"]
+            asset.score_breakdown = breakdown
+            asset.risk_scored_at = _utcnow()
+        text, _source = self.generate_summary(asset, asset.score_breakdown, force=True)
+        asset.risk_summary = text
+        self.db.commit()
+        logger.info("按需摘要生成完成 asset=%s source=%s", asset.id, _source)
+        return self.get_risk(asset.id)
 
     # ---------- 批量评分（落库 + 历史 + 摘要） ----------
 
@@ -532,9 +556,8 @@ class AssetRiskService:
                     else:
                         stats["summaries"]["skipped"] += 1
                 else:
-                    # 低分资产摘要清空，避免陈旧摘要误导（前端展示 breakdown 模板即可）
-                    if asset.risk_score < rules["summary"]["min_score"]:
-                        asset.risk_summary = None
+                    # 低于门槛：批跑不生成（省成本）；也不清空——保留用户在详情页
+                    # 按需刷新（refresh_summary）生成的摘要，陈旧度由 24h 缓存语义约束
                     stats["summaries"]["skipped"] += 1
             except Exception as e:
                 stats["errors"] += 1
