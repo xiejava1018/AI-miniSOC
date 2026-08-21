@@ -225,6 +225,67 @@
         </ElCard>
       </ElCol>
     </ElRow>
+
+    <!-- 5. P3/F3.2：生命周期预警（退役/升级建议列表） -->
+    <ElRow :gutter="16" class="top-row">
+      <ElCol :span="24" class="top-col">
+        <ElCard shadow="never" class="top-card" v-loading="lifecycleLoading">
+          <template #header>
+            <span class="chart-title">生命周期预警</span>
+            <span class="chart-subtitle">(EOL 已超期 / 30 天内 / 90 天内 + 保修临期)</span>
+            <span class="lc-actions">
+              <span v-if="lifecycle && lifecycle.unmatched_count > 0" class="lc-unmatched">
+                {{ lifecycle.unmatched_count }} 台未匹配 EOL
+              </span>
+              <ElButton size="small" text :icon="Refresh" :loading="lifecycleLoading" @click="handleRefreshEol">
+                重新匹配
+              </ElButton>
+            </span>
+          </template>
+          <div class="top-table-wrap">
+            <ElTable
+              :data="lifecycleRows"
+              size="small"
+              class="top-table"
+              empty-text="暂无生命周期预警（EOL 90 天内与保修临期资产会出现在此）"
+              :row-class-name="lifecycleRowClass"
+              @row-click="goDetail"
+            >
+              <ElTableColumn label="预警" min-width="110">
+                <template #default="{ row }">
+                  <ElTag :type="row.tagType" size="small" effect="light">{{ row.tagLabel }}</ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn prop="ip" label="IP" min-width="120" />
+              <ElTableColumn prop="name" label="名称" min-width="150" show-overflow-tooltip />
+              <ElTableColumn prop="os" label="操作系统" min-width="170" show-overflow-tooltip />
+              <ElTableColumn label="日期" min-width="120">
+                <template #default="{ row }">{{ row.dateText || '--' }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="剩余" min-width="110">
+                <template #default="{ row }">
+                  <span :class="{ 'text-danger fw-600': row.days < 0 }">{{ row.daysText }}</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="口径" min-width="190" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <template v-if="row.kind === 'eol'">
+                    <span v-if="row.source === 'manual'">人工指定</span>
+                    <span v-else>
+                      {{ row.eol_ref || '参考表' }}
+                      <ElTooltip v-if="row.eol_unverified" :content="row.eol_note || '该条目为预估口径，待人工核实'">
+                        <ElTag type="warning" size="small" effect="plain">预估</ElTag>
+                      </ElTooltip>
+                    </span>
+                  </template>
+                  <span v-else>保修期</span>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
   </div>
 </template>
 
@@ -232,7 +293,15 @@
   import { ref, onMounted, computed } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { getAssetOverview, getRiskOverview, type RiskOverview } from '@/api/asset'
+  import { Refresh } from '@element-plus/icons-vue'
+  import {
+    getAssetOverview,
+    getRiskOverview,
+    getLifecycleOverview,
+    refreshLifecycleEol,
+    type RiskOverview,
+    type LifecycleOverview
+  } from '@/api/asset'
   import { useDictStore } from '@/store/modules/dict'
 
   defineOptions({ name: 'AssetOverview' })
@@ -275,6 +344,91 @@
   const goDetailById = (row: { asset_id?: string; id?: string }) => {
     goDetail({ id: row.asset_id || row.id })
   }
+
+  // ---------- P3/F3.2：生命周期预警（独立加载，失败静默） ----------
+
+  const lifecycle = ref<LifecycleOverview | null>(null)
+  const lifecycleLoading = ref(false)
+
+  const loadLifecycle = async () => {
+    lifecycleLoading.value = true
+    try {
+      const res = await getLifecycleOverview()
+      if (res.code === 200) lifecycle.value = res.data
+    } catch {
+      /* 静默 */
+    } finally {
+      lifecycleLoading.value = false
+    }
+  }
+
+  /** 手动重新匹配（参考表→资产 EOL 回填；人工覆盖不会被覆盖） */
+  const handleRefreshEol = async () => {
+    lifecycleLoading.value = true
+    try {
+      const res = await refreshLifecycleEol()
+      if (res.code === 200) {
+        const s = res.data?.stats || {}
+        ElMessage.success(
+          `EOL 匹配完成：命中 ${s.matched ?? 0}，无 OS 信息 ${s.no_os ?? 0}，未匹配 ${s.unmatched ?? 0}` +
+            (s.kept_manual ? `，保留人工指定 ${s.kept_manual}` : '')
+        )
+        await loadLifecycle()
+      } else {
+        ElMessage.warning(res.msg || 'EOL 匹配失败')
+      }
+    } catch {
+      ElMessage.error('EOL 匹配失败')
+    } finally {
+      lifecycleLoading.value = false
+    }
+  }
+
+  /** 三档 EOL + 保修临期合并为一张表，按紧急度排序 */
+  const lifecycleRows = computed(() => {
+    const v = lifecycle.value
+    if (!v) return []
+    const rows: any[] = []
+    const pushEol = (items: any[], tagLabel: string, tagType: string) => {
+      items.forEach((i) =>
+        rows.push({
+          ...i,
+          id: i.asset_id,
+          kind: 'eol',
+          tagLabel,
+          tagType,
+          dateText: i.eol_date,
+          days: i.days_left,
+          daysText: i.days_left < 0 ? `已过 ${Math.abs(i.days_left)} 天` : `${i.days_left} 天`
+        })
+      )
+    }
+    pushEol(v.eol_expired, 'EOL 已超期', 'danger')
+    pushEol(v.eol_within_30d, 'EOL 30 天内', 'danger')
+    pushEol(v.eol_within_90d, 'EOL 90 天内', 'warning')
+    const pushWarranty = (items: any[], tagLabel: string, tagType: string) => {
+      items.forEach((i) =>
+        rows.push({
+          ...i,
+          id: i.asset_id,
+          kind: 'warranty',
+          tagLabel,
+          tagType,
+          dateText: i.warranty_end,
+          days: i.warranty_days_left,
+          daysText:
+            i.warranty_days_left < 0
+              ? `已过 ${Math.abs(i.warranty_days_left)} 天`
+              : `${i.warranty_days_left} 天`
+        })
+      )
+    }
+    pushWarranty(v.warranty_expired, '保修已到期', 'danger')
+    pushWarranty(v.warranty_within_30d, '保修 30 天内', 'warning')
+    return rows
+  })
+
+  const lifecycleRowClass = ({ row }: { row: any }) => (row.days < 0 ? 'lc-row-expired' : '')
 
   // ---------- KPI 卡 ----------
 
@@ -413,6 +567,7 @@
   onMounted(() => {
     fetchOverview()
     loadRiskOverview()
+    loadLifecycle()
   })
 </script>
 
@@ -494,6 +649,23 @@
     margin-left: 8px;
     font-size: 12px;
     color: var(--el-text-color-secondary, #909399);
+  }
+
+  /* P3/F3.2 生命周期预警 */
+  .lc-actions {
+    float: right;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .lc-unmatched {
+    font-size: 12px;
+    color: var(--el-text-color-secondary, #909399);
+  }
+
+  :deep(.lc-row-expired) {
+    background-color: var(--el-color-danger-light-9, #fef0f0);
   }
 
   .top-table {

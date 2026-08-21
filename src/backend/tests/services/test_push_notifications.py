@@ -4,6 +4,7 @@ F4.2 主动推送服务测试
 覆盖（PRD F4.2 表 + 频控）：
 - 源健康异常：中断超阈值 / expected_interval 双周期 / 从未成功
 - 风险突变：7 天 Δ≥20 触发 / 单点跳过 / 低于阈值不触发
+- EOL 临近（F3.2 联动）：30 天 info / 7 天 warn / 已超期 warn / 窗口外不推
 - 频控去重：窗口内第二轮 0 发送；规则关闭 0 发送
 - 规则存取：深合并保存/读取
 - 接收人：仅 active 用户
@@ -141,6 +142,80 @@ class TestRiskJump:
         _make_users(db_session)
         self._setup_asset(db_session, [30, 35, 45])  # Δ=15 < 20
         assert _run(PushNotificationService(db_session).check_risk_jump()) == 0
+
+
+class TestEolApproaching:
+    """场景 3：EOL 临近（PRD F4.2 表：30 天 info / 7 天 warn）"""
+
+    def _asset(self, db, days_offset, source="preset"):
+        from datetime import date
+        a = Asset(network_segment="3F", asset_ip="192.168.0.96", asset_status="online",
+                  name="eol-target", os_name="Windows", os_version="11 Pro",
+                  expected_eol=date.today() + timedelta(days=days_offset),
+                  expected_eol_source=source)
+        db.add(a)
+        db.commit()
+        return a
+
+    def _spy_severity(self, db, monkeypatch):
+        """severity 不落库（仅决定去重窗口/日志/未来通道路由）→ 用 spy 断言映射"""
+        captured = {}
+        svc = PushNotificationService(db)
+        real = svc._push
+
+        async def wrapper(**kw):
+            captured.update(kw)
+            return await real(**kw)
+
+        monkeypatch.setattr(svc, "_push", wrapper)
+        return svc, captured
+
+    def test_info_at_30d(self, db_session, monkeypatch):
+        _make_users(db_session)
+        a = self._asset(db_session, 25)
+        svc, cap = self._spy_severity(db_session, monkeypatch)
+        assert _run(svc.check_eol()) == 1
+        assert cap["severity"] == "info"
+        n = db_session.query(Notification).filter_by(type="push").one()
+        assert n.title.startswith("【EOL 提醒】") and "剩 25 天" in n.title
+        assert "纳入升级规划" in n.content
+        assert f"/assets/detail/{a.id}" == n.link
+
+    def test_warn_at_7d(self, db_session, monkeypatch):
+        _make_users(db_session)
+        self._asset(db_session, 5)
+        svc, cap = self._spy_severity(db_session, monkeypatch)
+        assert _run(svc.check_eol()) == 1
+        assert cap["severity"] == "warn"
+        assert "尽快安排升级" in db_session.query(Notification).filter_by(type="push").one().content
+
+    def test_warn_when_expired(self, db_session, monkeypatch):
+        _make_users(db_session)
+        self._asset(db_session, -100)
+        svc, cap = self._spy_severity(db_session, monkeypatch)
+        assert _run(svc.check_eol()) == 1
+        assert cap["severity"] == "warn"
+        n = db_session.query(Notification).filter_by(type="push").one()
+        assert "已超期 100 天" in n.title and "无安全补丁" in n.content
+
+    def test_outside_window_not_pushed(self, db_session):
+        _make_users(db_session)
+        self._asset(db_session, 200)   # 距 EOL 200 天 → 不打扰
+        assert _run(PushNotificationService(db_session).check_eol()) == 0
+
+    def test_manual_source_annotated(self, db_session):
+        """人工指定的 EOL 同样提醒，但内容标注口径"""
+        _make_users(db_session)
+        self._asset(db_session, 3, source="manual")
+        assert _run(PushNotificationService(db_session).check_eol()) == 1
+        assert "人工指定" in db_session.query(Notification).filter_by(type="push").one().content
+
+    def test_dedup_second_round(self, db_session):
+        """回归：dedup_title 必须是 title 的稳定前缀，否则每轮巡检都重复推送"""
+        _make_users(db_session)
+        self._asset(db_session, 5)
+        assert _run(PushNotificationService(db_session).check_eol()) == 1
+        assert _run(PushNotificationService(db_session).check_eol()) == 0  # 24h 窗口去重
 
 
 class TestDedupAndRules:

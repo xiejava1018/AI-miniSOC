@@ -37,6 +37,7 @@ from .task_observability import SocTaskRegistry, SocTaskRun, TaskRunStatus
 from .asset_risk import AssetRiskHistory
 from .ai_feedback import AiFeedback
 from .knowledge import Knowledge
+from .eol_reference import EolReference
 
 __all__ = [
     "Base",
@@ -78,4 +79,5 @@ __all__ = [
     "AssetRiskHistory",
     "AiFeedback",
     "Knowledge",
+    "EolReference",
 ]

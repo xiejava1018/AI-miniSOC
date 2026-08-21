@@ -7,7 +7,7 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
-    task_observability, asset_risk, asset_query, ai_feedback, knowledge)
+    task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -45,6 +45,8 @@ api_router.include_router(
     tags=["运维知识库"],
     dependencies=[Depends(get_current_user)],
 )
+# P3/F3.2：生命周期（/lifecycle/* 两段静态路径，须先于 assets.router 注册防 /{asset_id} 抢匹配）
+api_router.include_router(asset_lifecycle.router, prefix="/assets", tags=["资产生命周期"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(departments.router, prefix="/departments", tags=["部门管理"])

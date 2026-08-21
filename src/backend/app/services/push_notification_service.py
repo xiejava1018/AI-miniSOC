@@ -4,11 +4,13 @@
 定位：让已建成的能力"主动找人"——复用 soc_notifications + WebSocket（零新增基础设施），
 周期巡检两个已就绪的数据源，把异常推给全部活跃用户：
 
-场景（PRD F4.2 表，MVP 落地 2 个；其余 3 个场景依赖 F1.3/F2.2/F3.2，建成后在
-_check_xxx 处按同模式扩展）：
+场景（PRD F4.2 表，已落地 3 个；报告完成场景依赖 F2.2，影子资产依赖 F1.3，
+建成后按同模式扩展）：
 1. 数据链路异常（critical）：soc_source_health 中断 ≥ down_hours（默认 3h；
    有 expected_interval 时取 max(down_hours, 2×周期)）
 2. 风险评分突变（warn）：7 天窗口内评分上升 ≥ threshold（默认 20，复用 F1.1 历史）
+3. EOL 临近（info/warn，F3.2 联动）：距 expected_eol ≤ info_days(30) 提醒一次、
+   ≤ warn_days(7) 升级 warn；已超期也 warn；manual 覆盖同样纳入提醒
 
 频控（PRD）：同类通知去重——dedup key 存 Notification.link（push:<场景>:<对象>），
 info/warn 24h、critical 6h（critical 支持重复提醒）。
@@ -44,6 +46,7 @@ DEFAULT_PUSH_RULES: dict = {
     "critical_dedup_hours": 6,    # critical 允许更频繁重复提醒（PRD：critical 支持重复）
     "source_health": {"enabled": True, "down_hours": 3},
     "risk_jump": {"enabled": True, "threshold": 20, "window_days": 7},
+    "eol": {"enabled": True, "warn_days": 7, "info_days": 30},
 }
 
 _rules_cache = {"value": None, "at": 0.0}
@@ -265,6 +268,48 @@ class PushNotificationService:
             sent_total += sent
         return sent_total
 
+    # ---------- 场景 3：EOL 临近（F3.2 联动；PRD：30 天 info / 7 天 warn） ----------
+
+    async def check_eol(self) -> int:
+        rules = self.load_rules()
+        if not (rules.get("enabled") and rules["eol"].get("enabled")):
+            return 0
+        from datetime import date, datetime, timezone
+        today = datetime.now(timezone.utc).date()
+        warn_days = int(rules["eol"]["warn_days"])
+        info_days = int(rules["eol"]["info_days"])
+        sent_total = 0
+        for a in self.db.query(Asset).filter(Asset.expected_eol.isnot(None)).all():
+            days = (a.expected_eol - today).days
+            if days < 0:
+                severity, state = "warn", f"已超期 {abs(days)} 天"
+                desc = f"已过 EOL {abs(days)} 天（{a.expected_eol.isoformat()}），系统无安全补丁，建议优先升级/下线"
+            elif days <= warn_days:
+                severity, state = "warn", f"仅剩 {days} 天"
+                desc = f"距 EOL 仅 {days} 天（{a.expected_eol.isoformat()}），请尽快安排升级/替换"
+            elif days <= info_days:
+                severity, state = "info", f"剩 {days} 天"
+                desc = f"距 EOL {days} 天（{a.expected_eol.isoformat()}），建议纳入升级规划"
+            else:
+                continue
+            os_label = f"{a.os_name or ''} {a.os_version or ''}".strip()
+            name = a.name or a.asset_ip
+            # 去重键必须是 title 的稳定前缀（_already_notified 用 startswith），
+            # 变动部分（剩余天数）放尾部，否则每轮巡检都会重复推送
+            dedup_title = f"【EOL 提醒】{name}"
+            sent = await self._push(
+                dedup_title=dedup_title,
+                severity=severity,
+                title=f"{dedup_title} · {state}",
+                content=(
+                    f"资产 {name}（{a.asset_ip}）{('，系统 ' + os_label) if os_label else ''}。{desc}。"
+                    + ("（EOL 日期为人工指定）" if a.expected_eol_source == "manual" else "")
+                ),
+                link_path=f"/assets/detail/{a.id}",
+            )
+            sent_total += sent
+        return sent_total
+
     # ---------- 巡检入口 ----------
 
     async def run_all(self) -> dict:
@@ -272,4 +317,5 @@ class PushNotificationService:
         return {
             "source_health": await self.check_source_health(),
             "risk_jump": await self.check_risk_jump(),
+            "eol": await self.check_eol(),
         }

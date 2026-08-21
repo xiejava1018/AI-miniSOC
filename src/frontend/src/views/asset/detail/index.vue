@@ -44,6 +44,31 @@
           {{ assetDetail.os_name ? `${assetDetail.os_name} ${assetDetail.os_version || ''}`.trim() : '--' }}
         </ElDescriptionsItem>
         <ElDescriptionsItem label="Wazuh Agent">{{ assetDetail.wazuh_agent_id || '--' }}</ElDescriptionsItem>
+        <!-- P3/F3.2：生命周期 -->
+        <ElDescriptionsItem label="采购日期">{{ assetDetail.purchase_date || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="保修到期">
+          <span v-if="assetDetail.warranty_end" :class="{ 'text-danger': warrantyDays !== null && warrantyDays < 0 }">
+            {{ assetDetail.warranty_end }}
+            <span class="lc-days">({{ warrantyDaysText }})</span>
+          </span>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="预期 EOL">
+          <template v-if="assetDetail.expected_eol">
+            <ElTag :type="eolTagType" size="small" effect="light">{{ assetDetail.expected_eol }}</ElTag>
+            <span class="lc-days">{{ eolDaysText }}</span>
+            <ElTag
+              size="small"
+              effect="plain"
+              :type="assetDetail.expected_eol_source === 'manual' ? 'info' : ''"
+              class="lc-source-tag"
+            >
+              {{ assetDetail.expected_eol_source === 'manual' ? '人工指定' : '参考表匹配' }}
+            </ElTag>
+          </template>
+          <span v-else class="lc-none">未匹配（无对应预置条目）</span>
+          <ElButton size="small" text type="primary" class="lc-edit-btn" @click="openEolDialog">设置</ElButton>
+        </ElDescriptionsItem>
         <ElDescriptionsItem label="创建时间">{{ formatTime(assetDetail.created_at) }}</ElDescriptionsItem>
         <ElDescriptionsItem label="更新时间">{{ formatTime(assetDetail.updated_at) }}</ElDescriptionsItem>
         <ElDescriptionsItem label="状态更新">{{ formatTime(assetDetail.status_updated_at) }}</ElDescriptionsItem>
@@ -656,6 +681,44 @@
         <ElButton type="primary" @click="handleTagSubmit">确定</ElButton>
       </template>
     </ElDialog>
+
+    <!-- P3/F3.2：EOL 设置（人工指定优先于参考表，操作落审计） -->
+    <ElDialog v-model="eolDialogVisible" title="设置预期 EOL" width="460px" align-center>
+      <p class="eol-hint">
+        系统默认根据预置生命周期参考表自动匹配 EOL。手动指定后将<strong>优先于参考表</strong>，
+        批量刷新不再覆盖；操作会记入审计日志。
+      </p>
+      <ElForm label-width="90px">
+        <ElFormItem label="EOL 日期">
+          <ElDatePicker
+            v-model="eolFormDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择日期"
+            style="width: 100%"
+          />
+        </ElFormItem>
+        <ElFormItem label="当前口径">
+          <span class="eol-current">
+            {{ assetDetail.expected_eol || '未设置' }}
+            <ElTag size="small" effect="plain">
+              {{ assetDetail.expected_eol_source === 'manual' ? '人工指定' : '参考表匹配' }}
+            </ElTag>
+          </span>
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton
+          v-if="assetDetail.expected_eol_source === 'manual'"
+          @click="handleClearEol"
+          :loading="eolSubmitting"
+        >
+          恢复自动匹配
+        </ElButton>
+        <ElButton @click="eolDialogVisible = false">取消</ElButton>
+        <ElButton type="primary" @click="handleSaveEol" :loading="eolSubmitting">确定</ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -685,6 +748,7 @@
   import MetricCard from './components/MetricCard.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
   import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, getAssetSecuritySummary, type AssetRiskDetail, type SecuritySummaryResult } from '@/api/asset'
+  import { overrideAssetEol, clearAssetEol } from '@/api/asset'
 
   const route = useRoute()
   const router = useRouter()
@@ -720,6 +784,91 @@
       ElMessage.error('获取资产详情失败')
     } finally {
       detailLoading.value = false
+    }
+  }
+
+  // ---------- P3/F3.2：生命周期（EOL / 保修） ----------
+
+  const daysUntil = (d?: string): number | null => {
+    if (!d) return null
+    const target = new Date(`${d}T00:00:00Z`).getTime()
+    const today = new Date()
+    const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    return Math.round((target - todayUtc) / 86400000)
+  }
+
+  const eolDays = computed(() => daysUntil(assetDetail.value.expected_eol))
+  const warrantyDays = computed(() => daysUntil(assetDetail.value.warranty_end))
+
+  const daysText = (n: number | null) => {
+    if (n === null) return ''
+    if (n < 0) return `已过期 ${Math.abs(n)} 天`
+    if (n === 0) return '今日到期'
+    return `剩 ${n} 天`
+  }
+
+  const eolDaysText = computed(() => daysText(eolDays.value))
+  const warrantyDaysText = computed(() => daysText(warrantyDays.value))
+
+  const eolTagType = computed(() => {
+    const n = eolDays.value
+    if (n === null) return 'info'
+    if (n < 0) return 'danger'
+    if (n <= 30) return 'danger'
+    if (n <= 90) return 'warning'
+    return 'success'
+  })
+
+  const eolDialogVisible = ref(false)
+  const eolFormDate = ref<string>('')
+  const eolSubmitting = ref(false)
+
+  const openEolDialog = () => {
+    eolFormDate.value = assetDetail.value.expected_eol || ''
+    eolDialogVisible.value = true
+  }
+
+  const handleSaveEol = async () => {
+    if (!eolFormDate.value) {
+      ElMessage.warning('请选择 EOL 日期')
+      return
+    }
+    eolSubmitting.value = true
+    try {
+      const res: any = await overrideAssetEol(assetId.value, eolFormDate.value)
+      if (res.code === 200) {
+        ElMessage.success('已设为人工指定 EOL')
+        eolDialogVisible.value = false
+        await loadDetail()
+      } else {
+        ElMessage.warning(res.msg || '设置失败')
+      }
+    } catch {
+      ElMessage.error('设置 EOL 失败')
+    } finally {
+      eolSubmitting.value = false
+    }
+  }
+
+  const handleClearEol = async () => {
+    eolSubmitting.value = true
+    try {
+      const res: any = await clearAssetEol(assetId.value)
+      if (res.code === 200) {
+        ElMessage.success(
+          res.data?.expected_eol
+            ? `已恢复自动匹配：${res.data.expected_eol}`
+            : '已恢复自动匹配（当前无对应预置条目）'
+        )
+        eolDialogVisible.value = false
+        await loadDetail()
+      } else {
+        ElMessage.warning(res.msg || '恢复失败')
+      }
+    } catch {
+      ElMessage.error('恢复自动匹配失败')
+    } finally {
+      eolSubmitting.value = false
     }
   }
 
@@ -1451,6 +1600,41 @@
 </script>
 
 <style lang="scss" scoped>
+  /* P3/F3.2 生命周期 */
+  .text-danger {
+    color: var(--el-color-danger, #f56c6c);
+  }
+
+  .lc-days {
+    margin-left: 6px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary, #909399);
+  }
+
+  .lc-source-tag {
+    margin-left: 6px;
+  }
+
+  .lc-none {
+    font-size: 13px;
+    color: var(--el-text-color-secondary, #909399);
+  }
+
+  .lc-edit-btn {
+    margin-left: 8px;
+  }
+
+  .eol-hint {
+    margin: 0 0 14px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--el-text-color-secondary, #909399);
+  }
+
+  .eol-current {
+    font-size: 13px;
+  }
+
   .asset-detail-page {
     // ============ P3/F1.1 资产风险卡 ============
     .risk-card {

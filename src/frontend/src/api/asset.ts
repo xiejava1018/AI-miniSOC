@@ -329,3 +329,55 @@ export const askAssetQuery = (question: string, sessionId?: string): Promise<Htt
 export const getAskHistory = (limit = 20): Promise<any> => {
   return httpClient.get({ url: `${API_PREFIX}/ask/history`, params: { limit }, keepFullResponse: true })
 }
+
+// ========== P3/F3.2 资产生命周期（EOL / 保修） ==========
+
+export interface LifecycleItem {
+  asset_id: string
+  name: string
+  ip: string
+  os: string
+  eol_date?: string
+  days_left?: number
+  source?: string          // preset=参考表匹配 / manual=人工指定
+  eol_ref?: string         // 命中的参考条目名（如 "Ubuntu 24.04 LTS"）
+  eol_unverified?: boolean // true=该参考条目为预估口径，待人工核实
+  eol_note?: string
+  warranty_end?: string
+  warranty_days_left?: number
+}
+
+export interface LifecycleOverview {
+  eol_expired: LifecycleItem[]
+  eol_within_30d: LifecycleItem[]
+  eol_within_90d: LifecycleItem[]
+  warranty_expired: LifecycleItem[]
+  warranty_within_30d: LifecycleItem[]
+  unmatched_count: number
+}
+
+export const getLifecycleOverview = (): Promise<Http.BaseResponse<LifecycleOverview>> => {
+  return httpClient.get({ url: `${API_PREFIX}/lifecycle/overview`, keepFullResponse: true })
+}
+
+export const refreshLifecycleEol = (): Promise<any> => {
+  return httpClient.post({ url: `${API_PREFIX}/lifecycle/refresh-eol`, keepFullResponse: true })
+}
+
+export const getEolReference = (): Promise<any> => {
+  return httpClient.get({ url: `${API_PREFIX}/lifecycle/eol-reference`, keepFullResponse: true })
+}
+
+/** 手动覆盖 EOL（优先于参考表，落审计） */
+export const overrideAssetEol = (id: string, eolDate: string): Promise<any> => {
+  return httpClient.put({
+    url: `${API_PREFIX}/${id}/eol`,
+    data: { eol_date: eolDate },
+    keepFullResponse: true
+  })
+}
+
+/** 恢复自动匹配（清除人工覆盖，立即按参考表重算） */
+export const clearAssetEol = (id: string): Promise<any> => {
+  return httpClient.del({ url: `${API_PREFIX}/${id}/eol`, keepFullResponse: true })
+}

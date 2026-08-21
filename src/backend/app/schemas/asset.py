@@ -4,7 +4,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 
@@ -31,7 +31,9 @@ class AssetBase(BaseModel):
 
 class AssetCreate(AssetBase):
     """创建资产"""
-    pass
+    # P3/F3.2：生命周期（新建时可选录入；EOL 由参考表自动匹配，不在此录入）
+    purchase_date: Optional[date] = None
+    warranty_end: Optional[date] = None
 
 
 class AssetUpdate(BaseModel):
@@ -48,6 +50,9 @@ class AssetUpdate(BaseModel):
     wazuh_agent_id: Optional[str] = None
     data_classification: Optional[str] = None
     owner_contact: Optional[str] = None
+    # P3/F3.2：生命周期（EOL 走专用覆盖接口 PUT /assets/{id}/eol，不走通用编辑）
+    purchase_date: Optional[date] = None
+    warranty_end: Optional[date] = None
 
 
 class AssetResponse(AssetBase):
@@ -60,6 +65,11 @@ class AssetResponse(AssetBase):
     # P3/F1.1：风险评分（列表页“风险分”列；None = N/A 未评分/数据不足）
     risk_score: Optional[int] = None
     risk_scored_at: Optional[datetime] = None
+    # P3/F3.2：生命周期（详情页展示；expected_eol_source: preset=参考表匹配 / manual=人工指定）
+    purchase_date: Optional[date] = None
+    warranty_end: Optional[date] = None
+    expected_eol: Optional[date] = None
+    expected_eol_source: Optional[str] = None
 
     model_config = {
         "from_attributes": True

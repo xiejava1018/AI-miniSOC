@@ -532,6 +532,34 @@ ALTER TABLE soc_assets ADD COLUMN expected_EOL DATE;
 ALTER TABLE soc_assets ADD COLUMN expected_eol_source VARCHAR(20) DEFAULT 'preset';  -- v1.2 新增：preset / manual
 ```
 
+**实现记录（2026-08-21 已落地，migration `c2d3e4f5a6b7`）**：
+
+1. **参考表 schema 与 §5.3 DDL 有意偏差**：实际用 `pattern`（规范化小写子串）+ `display_name`
+   替代 `product_name + cycle_name`。原因：Wazuh 上报的 OS 字段变体极多
+   （`Ubuntu` / `Ubuntu Linux`、`24.04 LTS` / `24.04.2 LTS`、`Debian GNU/Linux 12`、
+   `Microsoft Windows 11 Home China` + version `10.0.26200`），按 product+cycle 精确解析需要
+   为每种发行版写版本号解析器；改为「规范化标签（去 `gnu/linux`、` linux` 噪声词）
+   → 子串匹配 → 最长模式优先」后，DEV 22 台有 OS 信息的资产 100% 正确命中，
+   且 `windows 11` 不会误命中 `windows 10`。
+2. **诚实留空优于猜测**：滚动发行版（如 Kali 2025.3）无参考条目即 `expected_eol=NULL`，
+   不按规律推算日期。DEV 实测 2 台 Kali 保持未匹配。
+3. **`source='preset_unverified'` 口径分级（超出原 PRD 设计）**：种子数据编写过程中发现
+   「凭记忆填 EOL」本身就是幻觉风险源——初版把 Alibaba Cloud Linux 3 填成 2026-03-31
+   （实为 Linux **2** 的 EOL），官方文档核对后修正为 **2034-03-31**，误差 8 年，
+   会把一台健康资产误报成「已超期」。因此：
+   - 官方明确日期 → `source='preset'`
+   - 按厂商支持政策推算 / 社区口径未定（openEuler 22.03、Windows 11 滚动版、
+     Debian 13、Ubuntu 26.04）→ `source='preset_unverified'` + `notes` 写明依据，
+     总览接口透出 `eol_unverified=true`，前端打「预估」标签
+   - 人工核实后再改 `preset`（对应 PRD「WebSearch 结果必须人工确认后才写入」）
+4. **落地范围**：33 条种子；API `GET /assets/lifecycle/overview`、`POST /lifecycle/refresh-eol`、
+   `GET /lifecycle/eol-reference`、`PUT|DELETE /assets/{id}/eol`（覆盖/恢复均落审计）；
+   前端概览页「生命周期预警」表 + 详情页 EOL 行与设置弹窗 + 编辑弹窗采购/保修日期；
+   F4.2 推送场景 3（30 天 info / 7 天 warn / 已超期 warn，24h 去重）。
+5. **与风险评分的关系**：`asset_risk` 的 health 维度仍用自带 `eol_systems` 兜底配置
+   （无漏洞扫描数据时使用），未改为消费本表——遵循「本 PRD 不改动既有评分口径」，
+   两套口径并存已在代码注释标注，后续可统一。
+
 #### F3.3 合规基线检查
 
 **优先级**: P2（v1.2 修订实现方案：判定不得交给 LLM）

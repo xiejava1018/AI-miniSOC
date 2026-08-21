@@ -107,6 +107,10 @@ async def list_assets(
             owner_contact=asset.owner_contact,
             risk_score=asset.risk_score,
             risk_scored_at=asset.risk_scored_at,
+            purchase_date=asset.purchase_date,
+            warranty_end=asset.warranty_end,
+            expected_eol=asset.expected_eol,
+            expected_eol_source=asset.expected_eol_source,
         ))
 
     return AssetListResponse(

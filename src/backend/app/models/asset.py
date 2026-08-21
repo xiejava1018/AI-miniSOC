@@ -2,7 +2,7 @@
 资产模型
 """
 
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, UniqueConstraint, Index
+from sqlalchemy import Column, String, Text, DateTime, Date, Integer, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID, MACADDR, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -63,6 +63,12 @@ class Asset(Base):
     risk_summary = Column(Text)      # GLM 一句话摘要（仅 score>=60 或快速上升资产，24h 缓存）
     risk_scored_at = Column(DateTime(timezone=True))
     score_breakdown = Column(JSONB)  # 各维度得分/权重/命中规则（可解释性，PRD §八-C）
+
+    # P3/F3.2（2026-08-21，PRD v1.2.1）：资产生命周期
+    purchase_date = Column(Date)                       # 采购日期
+    warranty_end = Column(Date)                        # 保修到期
+    expected_eol = Column(Date)                        # 预期 EOL（preset 自动匹配 / manual 手动覆盖）
+    expected_eol_source = Column(String(20), default="preset", server_default="preset")
 
     # 关系
     ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")

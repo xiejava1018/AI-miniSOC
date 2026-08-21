@@ -207,6 +207,32 @@
           </ElCol>
         </ElRow>
 
+        <!-- P3/F3.2：生命周期（EOL 由预置参考表自动匹配，如需人工指定请到详情页） -->
+        <ElRow :gutter="20">
+          <ElCol :span="12">
+            <ElFormItem label="采购日期" prop="purchase_date">
+              <ElDatePicker
+                v-model="formData.purchase_date"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择采购日期"
+                style="width: 100%"
+              />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="保修到期" prop="warranty_end">
+              <ElDatePicker
+                v-model="formData.warranty_end"
+                type="date"
+                value-format="YYYY-MM-DD"
+                placeholder="选择保修到期日"
+                style="width: 100%"
+              />
+            </ElFormItem>
+          </ElCol>
+        </ElRow>
+
         <!-- 备注 -->
         <ElRow>
           <ElCol :span="24">
@@ -482,7 +508,9 @@
     owner: '',
     business_unit: '',
     asset_description: '',
-    mac_address: ''
+    mac_address: '',
+    purchase_date: '',
+    warranty_end: ''
   })
 
   // 搜索配置
@@ -599,6 +627,8 @@
       formData.business_unit = row.business_unit || ''
       formData.asset_description = row.asset_description || ''
       formData.mac_address = row.mac_address || ''
+      formData.purchase_date = row.purchase_date || ''
+      formData.warranty_end = row.warranty_end || ''
     } else {
       formData.id = ''
       formData.name = ''
@@ -612,6 +642,8 @@
       formData.business_unit = ''
       formData.asset_description = ''
       formData.mac_address = ''
+      formData.purchase_date = ''
+      formData.warranty_end = ''
     }
 
     nextTick(() => {
