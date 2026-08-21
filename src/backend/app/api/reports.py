@@ -24,7 +24,11 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models import User
 from app.models.security_report import REPORT_TYPES
-from app.services.report_generator import SecurityReportService
+from app.services.report_generator import (
+    DEFAULT_INCIDENT_THRESHOLD,
+    SecurityReportService,
+    _get_config,
+)
 
 router = APIRouter()
 
@@ -157,7 +161,7 @@ async def check_incident_trigger(
     start = now - timedelta(hours=24)
     opensearch_ok, err, alerts = svc._collect_alert_trends(start, now)
     crit_high = alerts.get("critical", 0) + alerts.get("high", 0)
-    threshold = svc._get_config(db, "incident_threshold", svc.DEFAULT_INCIDENT_THRESHOLD)
+    threshold = _get_config(db, "incident_threshold", DEFAULT_INCIDENT_THRESHOLD)
     payload = {
         "triggered": False,
         "critical_high_count": crit_high,
