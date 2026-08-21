@@ -30,5 +30,5 @@ export interface FeedbackSummaryRow {
 }
 
 export const getFeedbackSummary = (days = 30): Promise<Http.BaseResponse<{ days: number; summary: FeedbackSummaryRow[] }>> => {
-  return httpClient.get({ url: `${API_PREFIX}/feedback/summary`, params: { days } })
+  return httpClient.get({ url: `${API_PREFIX}/feedback/summary`, params: { days }, keepFullResponse: true })
 }

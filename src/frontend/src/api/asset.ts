@@ -235,11 +235,11 @@ export interface RiskOverview {
 }
 
 export const getAssetRisk = (id: string): Promise<Http.BaseResponse<AssetRiskDetail>> => {
-  return httpClient.get({ url: `${API_PREFIX}/${id}/risk` })
+  return httpClient.get({ url: `${API_PREFIX}/${id}/risk`, keepFullResponse: true })
 }
 
 export const getAssetRiskHistory = (id: string, days = 90): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/${id}/risk/history`, params: { days } })
+  return httpClient.get({ url: `${API_PREFIX}/${id}/risk/history`, params: { days }, keepFullResponse: true })
 }
 
 export const batchScoreRisk = (): Promise<any> => {
@@ -249,11 +249,11 @@ export const batchScoreRisk = (): Promise<any> => {
 }
 
 export const getRiskOverview = (): Promise<Http.BaseResponse<RiskOverview>> => {
-  return httpClient.get({ url: `${API_PREFIX}/risk/overview` })
+  return httpClient.get({ url: `${API_PREFIX}/risk/overview`, keepFullResponse: true })
 }
 
 export const getRiskRules = (): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/risk/rules` })
+  return httpClient.get({ url: `${API_PREFIX}/risk/rules`, keepFullResponse: true })
 }
 
 export const updateRiskRules = (override: Record<string, any>): Promise<any> => {
@@ -276,9 +276,9 @@ export interface AskResult {
 }
 
 export const askAssetQuery = (question: string, sessionId?: string): Promise<Http.BaseResponse<AskResult>> => {
-  return httpClient.post({ url: `${API_PREFIX}/ask`, data: { question, session_id: sessionId || null } })
+  return httpClient.post({ url: `${API_PREFIX}/ask`, data: { question, session_id: sessionId || null }, keepFullResponse: true })
 }
 
 export const getAskHistory = (limit = 20): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/ask/history`, params: { limit } })
+  return httpClient.get({ url: `${API_PREFIX}/ask/history`, params: { limit }, keepFullResponse: true })
 }
