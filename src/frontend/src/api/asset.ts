@@ -675,3 +675,105 @@ export const getDataHealth = (deadLetterLimit = 5): Promise<any> => {
     keepFullResponse: true
   })
 }
+
+// ==================== P3/F2.2 AI 安全报告 ====================
+
+export type ReportType = 'weekly' | 'monthly' | 'on_demand' | 'incident_driven'
+
+export interface ReportDataCoverage {
+  window_start: string
+  window_end: string
+  window_hours: number
+  opensearch_available: boolean
+  opensearch_error?: string | null
+  source_health: Array<{
+    source_key: string
+    source_type?: string
+    last_success_at?: string | null
+    overdue: boolean
+    reason?: string | null
+  }>
+  gaps: Array<{
+    scope: string
+    reason: string
+    impact: string
+  }>
+  data_degraded: boolean
+  generated_at: string
+}
+
+export interface SecurityReport {
+  id: string
+  report_type: ReportType
+  period_start: string
+  period_end: string
+  title: string
+  summary: string
+  content: {
+    overview: string
+    trends: string
+    risks: string
+    data_notes: string
+  }
+  risk_highlights: string
+  recommendations: string
+  data_coverage: ReportDataCoverage
+  prompt_version?: string | null
+  triggered_by?: string | null
+  trigger_meta?: Record<string, any> | null
+  created_at: string
+}
+
+/** 触发报告生成（weekly/monthly/on_demand） */
+export const generateReport = (body: {
+  report_type: ReportType
+  period_start?: string
+  period_end?: string
+  force_glm?: boolean
+}): Promise<any> => {
+  return httpClient.post({
+    url: '/api/v1/reports/generate',
+    data: body,
+    keepFullResponse: true,
+    timeout: 180000
+  })
+}
+
+/** 报告列表 */
+export const listReports = (params: {
+  report_type?: ReportType
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: '/api/v1/reports',
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 最新一份报告 */
+export const getLatestReport = (reportType: ReportType): Promise<any> => {
+  return httpClient.get({
+    url: '/api/v1/reports/latest',
+    params: { report_type: reportType },
+    keepFullResponse: true
+  })
+}
+
+/** 报告详情 */
+export const getReport = (id: string): Promise<any> => {
+  return httpClient.get({
+    url: `/api/v1/reports/${id}`,
+    keepFullResponse: true
+  })
+}
+
+/** 事件驱动触发检查 */
+export const checkIncidentTrigger = (): Promise<any> => {
+  return httpClient.post({
+    url: '/api/v1/reports/check-incident-trigger',
+    keepFullResponse: true,
+    timeout: 60000
+  })
+}

@@ -25,6 +25,7 @@ export enum RoutesAlias {
   AssetCompliance = '/asset/compliance/index', // 合规基线（P3/F3.3）
   AssetReconciliation = '/asset/reconciliation/index', // 资产对账（P3/F1.3）
   AssetDataHealth = '/asset/data-health/index', // 数据健康：源健康/死信/对账三层（P3/F1.3）
+  SecurityReports = '/reports/list/index', // 安全报告列表/详情（P3/F2.2）
   Incidents = '/incidents/list', // 事件管理
   Alerts = '/alert/list/index', // 告警管理
   AlertGovernance = '/alert/governance/index', // 告警治理
