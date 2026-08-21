@@ -11,7 +11,7 @@
 #   3. 检查无 uncommitted
 #   4. pip install backend deps
 #   5. alembic check（不升级，仅告警）
-#   6. npx vite build 前端
+#   6. npx vite build 前端（清空 dist 重建，失败自动回退上一版）
 #   7. systemctl restart aisoc-backend
 #   8. 健康检查：HTTP 端点 + DB 探活（v2.2 加）
 #   9. 任何步骤失败 → 全局 trap 自动 git reset 回滚 (R5 修复)
@@ -48,6 +48,35 @@ log() {
     echo "[$ts] $*" | tee -a "$LOG_FILE"
 }
 
+# ===== 前端构建：清空重建 + 失败回退 =====
+# vite 未开 emptyOutDir，历次 build 的旧 chunk 会无限堆在 dist/，既涨磁盘，
+# 也让「当前生效的到底是哪个构建」无法判断（部署 #62 事后排查被这点误导过）。
+# 但直接 rm -rf dist 引入新风险：build 失败就留下空目录让 nginx 全站 404。
+# 故先把旧 dist 原子挪到 dist.prev，成功才删、失败则挪回。
+build_frontend() {
+    cd "$PROJECT_DIR/src/frontend"
+    rm -rf dist.prev
+    if [[ -d dist ]]; then
+        mv dist dist.prev
+    fi
+    if npx vite build 2>&1 | tail -20 | tee -a "$LOG_FILE" && [[ -f dist/index.html ]]; then
+        rm -rf dist.prev
+        local entry
+        entry=$(grep -o 'assets/index-[A-Za-z0-9_-]*\.js' dist/index.html | head -1 || true)
+        log "前端 build 完成，dist 已全量重建（入口: ${entry:-unknown}）"
+        return 0
+    fi
+    log "ERROR: vite build 失败，回退到上一版 dist"
+    rm -rf dist
+    if [[ -d dist.prev ]]; then
+        mv dist.prev dist
+        log "已恢复上一版 dist（前端仍可访问旧版本）"
+    else
+        log "WARN: 无 dist.prev 可恢复，前端目录为空"
+    fi
+    return 1
+}
+
 # ===== 全局回滚 trap (R5 修复) =====
 # 任何步骤失败（除 rollback_failed 标记外）→ 自动回滚到 PREVIOUS_SHA
 ROLLBACK_DONE=0
@@ -76,7 +105,7 @@ rollback() {
     git reset --hard "$prev" 2>&1 | tee -a "$LOG_FILE" || true
 
     log "回滚步骤 2/3: 重新 build 前端"
-    cd "$PROJECT_DIR/src/frontend" && npx vite build 2>&1 | tail -5 | tee -a "$LOG_FILE" || true
+    build_frontend || log "WARN: 回滚 build 失败，前端可能停留在旧构建"
 
     log "回滚步骤 3/3: 重启 backend"
     sudo -n systemctl restart aisoc-backend 2>&1 || systemctl restart aisoc-backend 2>&1 || true
@@ -150,9 +179,8 @@ log "===== alembic check (非阻塞，仅告警) ====="
 log "===== 前端 build (npx vite build) ====="
 cd "$PROJECT_DIR/src/frontend"
 npm ci --silent 2>&1 | tail -10 | tee -a "$LOG_FILE"
-npx vite build 2>&1 | tail -20 | tee -a "$LOG_FILE"
-if [[ ! -f dist/index.html ]]; then
-    log "ERROR: 前端 build 失败，dist/index.html 不存在"
+if ! build_frontend; then
+    log "ERROR: 前端 build 失败"
     exit 4   # trap 会回滚
 fi
 

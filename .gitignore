@@ -19,6 +19,9 @@ __pycache__/
 *.egg
 *.egg-info/
 dist/
+# 前端 build 失败时的上一版快照（deploy.sh build_frontend 回退用），
+# 不忽略会重现部署 #61 的 uncommitted 门禁卡死
+dist.prev/
 build/
 venv/
 env/
