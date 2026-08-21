@@ -150,8 +150,13 @@ export interface WazuhPort {
   pid: number | null
 }
 
-export const getAssetWazuhPorts = (assetId: string): Promise<{ items: WazuhPort[]; not_applicable?: boolean; reason?: string }> => {
-  return httpClient.get({ url: `${API_PREFIX}/${assetId}/wazuh-ports`, keepFullResponse: true }) as Promise<any>
+export const getAssetWazuhPorts = (
+  assetId: string
+): Promise<{ items: WazuhPort[]; not_applicable?: boolean; reason?: string }> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${assetId}/wazuh-ports`,
+    keepFullResponse: true
+  }) as Promise<any>
 }
 
 export const addAssetPort = (assetId: string, data: any): Promise<any> => {
@@ -214,14 +219,17 @@ export interface AssetRiskDetail {
   score_breakdown?: {
     total: number
     delta_7d?: number
-    dimensions: Record<string, {
-      score: number
-      weight: number
-      effective_weight: number
-      data_gap: boolean
-      reasons: string[]
-      inputs?: Record<string, any>
-    }>
+    dimensions: Record<
+      string,
+      {
+        score: number
+        weight: number
+        effective_weight: number
+        data_gap: boolean
+        reasons: string[]
+        inputs?: Record<string, any>
+      }
+    >
   } | null
   summary_source?: 'glm' | 'rule' | null
 }
@@ -229,8 +237,20 @@ export interface AssetRiskDetail {
 export interface RiskOverview {
   distribution: { low: number; medium: number; high: number; critical: number; na: number }
   total_assets: number
-  top10: Array<{ asset_id: string; name?: string; ip: string; risk_score: number; risk_summary?: string }>
-  rising: Array<{ asset_id: string; name?: string; ip: string; risk_score: number; delta_7d: number }>
+  top10: Array<{
+    asset_id: string
+    name?: string
+    ip: string
+    risk_score: number
+    risk_summary?: string
+  }>
+  rising: Array<{
+    asset_id: string
+    name?: string
+    ip: string
+    risk_score: number
+    delta_7d: number
+  }>
   budget: Record<string, any>
 }
 
@@ -239,14 +259,22 @@ export const getAssetRisk = (id: string): Promise<Http.BaseResponse<AssetRiskDet
 }
 
 export const getAssetRiskHistory = (id: string, days = 90): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/${id}/risk/history`, params: { days }, keepFullResponse: true })
+  return httpClient.get({
+    url: `${API_PREFIX}/${id}/risk/history`,
+    params: { days },
+    keepFullResponse: true
+  })
 }
 
 /** 单资产按需生成风险摘要（详情页「刷新」；N/A 资产返回 message） */
 export const refreshAssetRiskSummary = (
   id: string
 ): Promise<Http.BaseResponse<AssetRiskDetail & { message?: string }>> => {
-  return httpClient.post({ url: `${API_PREFIX}/${id}/risk/refresh-summary`, keepFullResponse: true, timeout: 30000 })
+  return httpClient.post({
+    url: `${API_PREFIX}/${id}/risk/refresh-summary`,
+    keepFullResponse: true,
+    timeout: 30000
+  })
 }
 
 // ========== P3/F1.2 资产安全态势摘要（告警簇+事件+风险聚合 → GLM 摘要） ==========
@@ -292,7 +320,11 @@ export const getAssetSecuritySummary = (
 export const batchScoreRisk = (): Promise<any> => {
   // 批量评分含 GLM 摘要时可达数十秒（per_run_cap=20 × 摘要耗时），
   // 单独放宽到 120s（全局默认 15s 会超时报"网络错误"）
-  return httpClient.post({ url: `${API_PREFIX}/risk/batch-score`, keepFullResponse: true, timeout: 120000 })
+  return httpClient.post({
+    url: `${API_PREFIX}/risk/batch-score`,
+    keepFullResponse: true,
+    timeout: 120000
+  })
 }
 
 export const getRiskOverview = (): Promise<Http.BaseResponse<RiskOverview>> => {
@@ -304,7 +336,11 @@ export const getRiskRules = (): Promise<any> => {
 }
 
 export const updateRiskRules = (override: Record<string, any>): Promise<any> => {
-  return httpClient.put({ url: `${API_PREFIX}/risk/rules`, data: { override }, keepFullResponse: true })
+  return httpClient.put({
+    url: `${API_PREFIX}/risk/rules`,
+    data: { override },
+    keepFullResponse: true
+  })
 }
 
 // ========== P3/F2.1 L1 自然语言查询 ==========
@@ -322,12 +358,23 @@ export interface AskResult {
   session_id?: string
 }
 
-export const askAssetQuery = (question: string, sessionId?: string): Promise<Http.BaseResponse<AskResult>> => {
-  return httpClient.post({ url: `${API_PREFIX}/ask`, data: { question, session_id: sessionId || null }, keepFullResponse: true })
+export const askAssetQuery = (
+  question: string,
+  sessionId?: string
+): Promise<Http.BaseResponse<AskResult>> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/ask`,
+    data: { question, session_id: sessionId || null },
+    keepFullResponse: true
+  })
 }
 
 export const getAskHistory = (limit = 20): Promise<any> => {
-  return httpClient.get({ url: `${API_PREFIX}/ask/history`, params: { limit }, keepFullResponse: true })
+  return httpClient.get({
+    url: `${API_PREFIX}/ask/history`,
+    params: { limit },
+    keepFullResponse: true
+  })
 }
 
 // ========== P3/F3.2 资产生命周期（EOL / 保修） ==========
@@ -339,8 +386,8 @@ export interface LifecycleItem {
   os: string
   eol_date?: string
   days_left?: number
-  source?: string          // preset=参考表匹配 / manual=人工指定
-  eol_ref?: string         // 命中的参考条目名（如 "Ubuntu 24.04 LTS"）
+  source?: string // preset=参考表匹配 / manual=人工指定
+  eol_ref?: string // 命中的参考条目名（如 "Ubuntu 24.04 LTS"）
   eol_unverified?: boolean // true=该参考条目为预估口径，待人工核实
   eol_note?: string
   warranty_end?: string
@@ -506,6 +553,125 @@ export const interpretCompliance = (limit = 10, force = false): Promise<any> => 
 export const getAssetCompliance = (assetId: string): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/compliance/assets/${assetId}`,
+    keepFullResponse: true
+  })
+}
+
+// ==================== P3/F1.3 资产对账 + 数据健康 ====================
+
+export type ReconciliationType = 'shadow' | 'offline' | 'mismatch'
+export type ReconciliationStatus = 'pending' | 'confirmed' | 'ignored' | 'resolved'
+
+/** 数据新鲜度快照。degraded 为 true 时页面必须显示告警横幅 */
+export interface ReconFreshness {
+  checked_at: string
+  wazuh_reachable: boolean
+  wazuh_error?: string | null
+  last_sync_at?: string | null
+  last_sync_status?: string | null
+  sync_stale: boolean
+  unhealthy_sources: Array<{
+    source_key: string
+    source_type?: string
+    reason: string
+    last_success_at?: string | null
+    last_failure_message?: string | null
+  }>
+  dead_letter_pending: number
+  degraded: boolean
+}
+
+export interface ReconciliationItem {
+  id: string
+  run_id: string
+  task_id?: string | null
+  asset_id?: string | null
+  reconciliation_type: ReconciliationType
+  details: {
+    freshness?: ReconFreshness
+    agent?: Record<string, any>
+    ledger?: Record<string, any>
+    diffs?: Array<{
+      field: string
+      label: string
+      ledger_value: any
+      actual_value: any
+    }>
+    reason?: string
+    disconnected_days?: number | null
+    last_keep_alive?: string | null
+    suggestion?: string
+    linked_by?: string
+  }
+  status: ReconciliationStatus
+  resolved_by?: string | null
+  resolved_at?: string | null
+  resolve_note?: string | null
+  created_at: string
+}
+
+/** 触发对账。Wazuh 不可达时后端返回 503，不会伪装成「无差异」 */
+export const runReconcile = (): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/reconcile`,
+    keepFullResponse: true,
+    timeout: 120000
+  })
+}
+
+/** 最近一次对账摘要（差异分布 + 数据新鲜度） */
+export const getReconcileSummary = (runId?: string): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/reconcile/summary`,
+    params: runId ? { run_id: runId } : undefined,
+    keepFullResponse: true
+  })
+}
+
+/** AI 对账报告（带数据窗口标注；失败自动降级模板） */
+export const getReconcileReport = (runId?: string, force = false): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/reconcile/report`,
+    params: { ...(runId ? { run_id: runId } : {}), force },
+    keepFullResponse: true,
+    timeout: 180000
+  })
+}
+
+/** 对账差异列表 */
+export const getReconciliations = (params: {
+  run_id?: string
+  all_runs?: boolean
+  reconciliation_type?: ReconciliationType
+  status?: ReconciliationStatus
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/reconciliations`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 处理差异。重复处理后端返回 409 */
+export const resolveReconciliation = (
+  id: string,
+  status: 'confirmed' | 'ignored' | 'resolved',
+  note?: string
+): Promise<any> => {
+  return httpClient.put({
+    url: `${API_PREFIX}/reconciliations/${id}/resolve`,
+    data: { status, note },
+    keepFullResponse: true
+  })
+}
+
+/** 数据健康总览：源健康 / 同步死信 / 对账差异 三层聚合 */
+export const getDataHealth = (deadLetterLimit = 5): Promise<any> => {
+  return httpClient.get({
+    url: '/api/v1/data-health',
+    params: { dead_letter_limit: deadLetterLimit },
     keepFullResponse: true
   })
 }
