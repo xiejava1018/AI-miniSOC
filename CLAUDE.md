@@ -116,6 +116,7 @@ AI-miniSOC/
 | 同步任务 | `app/api/sync.py` | 同步任务状态查询 |
 | 资产对账 | `app/api/asset_reconciliation.py` | P3/F1.3：触发对账、差异列表/摘要、AI 报告、差异处理（Wazuh 不可达返 503，不退化为无差异） |
 | 数据健康 | `app/api/data_health.py` | P3/F1.3：源健康 + 同步死信 + 对账差异三层聚合（`soc_source_health`/`soc_sync_dead_letter` 的首个对外出口） |
+| 安全报告 | `app/api/reports.py` | P3/F2.2：weekly/monthly/on_demand/incident_driven 四种触发；`data_coverage` JSONB NOT NULL 是硬门槛 |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -633,5 +634,37 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 
 ---
 
-**文档版本**: v2.4
+## 今日补充（2026-08-21 P3/F2.2 上线）
+
+### 本次交付
+- **F2.2 AI 安全报告**。`soc_security_reports` 表 + `report_generator.py` 服务 + `/reports` 五个端点 + 前端报告列表/详情页。
+- 迁移 `f2a3b4c5d6e7`（已在生产手跑，当前 head）；新增顶级菜单 `/reports` 与子菜单「报告列表」`/reports/list`。
+- 事件驱动走 `POST /reports/check-incident-trigger` 同步端点（可被 cron 或前端按钮调），不引入消息队列（PRD 硬约束）。
+
+### 实测（生产，2026-08-21）
+- 真 AI 调用走通 GLM 3 次（weekly + 2× incident_driven）。
+- summary 都开头声明「数据可信度降级，结果可能不全」；`data_coverage.gaps` 显式列「`loki:browsing_detection` 已 75 小时无成功记录」。
+- incident_driven 阈值 3 触发：过去 24h critical+high 累计 48 条。
+- prompt_version = `security-report-v1`。
+
+### 踩过的坑（避开再犯）
+1. **迁移里别写 Python 状态变量 + INSERT 后回读 SELECT**——`--sql` dry-run 不执行 INSERT，回读会报 `NoneType.scalar()`。改成纯 SQL 的 `INSERT … SELECT` + `NOT EXISTS`，与 F1.3 同款
+2. **router `prefix` 与 endpoint 路径不要双重前缀**——`prefix="/reports"` + `endpoint="/reports/generate"` 会得到 `/api/v1/reports/reports/generate`。F1.3 是无 router 前缀、各 endpoint 写完整路径
+3. **GLM prompt 里不要同时说「输出 JSON」和「用列表」**——LLM 会选 JSON 数组去装列表元素，导致 risk_highlights 变 `["a","b"]` 字符串。明确「每行以 - 开头，不要 JSON 数组、不要 Markdown 代码块」
+4. **HTTP 路由级 bug service 层测试抓不到**——service 测过了不代表 endpoint 通。`check_incident-trigger` 因为调了 `svc._get_config()`（`_get_config` 是模块级不是方法），线上 500。本地端到端一定要用 `httpx.AsyncClient` 或起个 uvicorn test_client 跑过路由，不是只调 service 方法
+5. **多级 ssh 转义会破坏 curl**——不要在 ssh 命令里嵌 `\"username\":\"admin\"`，改用 heredoc 或 base64 包
+
+### F2.2 后的 P3 缺口
+- ~~F1.3 资产对账~~ ✅
+- ~~`/api/v1/data-health`~~ ✅
+- ~~F2.2 AI 安全报告~~ ✅（本次）
+- F4.2 推送场景 3/5（影子资产发现可接 F1.3、报告生成完成可接 F2.2）
+- F2.1 L2 复合查询（P2/P3）
+- F3.1 变更影响分析（P3）
+- X1 权限矩阵补齐（横切）
+- W0 准备阶段（前置）、§十一 Go/No-Go（上线门槛）
+
+---
+
+**文档版本**: v2.5
 **最后更新**: 2026-08-21
