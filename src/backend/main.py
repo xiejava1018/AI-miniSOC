@@ -37,6 +37,10 @@ from app.services.cisa_kev_service import (
     start_cisa_kev_scheduler,
     stop_cisa_kev_scheduler,
 )
+from app.services.push_scheduler import (
+    start_push_scheduler,
+    stop_push_scheduler,
+)
 from app.services.task_observability import (
     bootstrap_task_observability,
     shutdown_task_observability,
@@ -64,6 +68,7 @@ async def lifespan(app: FastAPI):
     start_alert_group_snapshot()
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
+    start_push_scheduler()
     try:
         yield
     finally:
@@ -71,6 +76,7 @@ async def lifespan(app: FastAPI):
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
+        await stop_push_scheduler()
         # 任务可观测性最后关，保证业务 scheduler 完结后的 run 能被对账
         await shutdown_task_observability()
 

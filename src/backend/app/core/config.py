@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     CISA_KEV_URL: str = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
     CISA_KEV_SCHEDULER_ENABLED: bool = True  # 24h 自动同步（启动后首次延迟 120s）
 
+    # P3/F4.2 主动推送（PRD ai-asset-management-prd.md）
+    PUSH_SCHEDULER_ENABLED: bool = True
+    PUSH_SCHEDULER_INTERVAL_MINUTES: int = 30  # 巡检周期（最小 5 分钟）
+
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

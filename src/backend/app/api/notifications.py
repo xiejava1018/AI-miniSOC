@@ -13,6 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -112,3 +113,55 @@ async def test_notification(
         link=body.link,
     )
     return _to_out(n)
+
+
+# ============ P3/F4.2 主动推送：规则配置 + 手动巡检 ============
+
+
+class PushRulesUpdate(BaseModel):
+    override: dict  # 仅覆盖要改的键，与默认规则深合并
+
+
+@router.get("/push-rules")
+async def get_push_rules(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """当前生效的推送规则（默认 + DB 覆盖深合并）"""
+    from app.services.push_notification_service import PushNotificationService
+    return {"rules": PushNotificationService(db).load_rules(force=True)}
+
+
+@router.put("/push-rules")
+async def update_push_rules(
+    body: PushRulesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """调整推送规则（admin）：开关/阈值/去重窗口，落审计"""
+    from app.services.push_notification_service import PushNotificationService
+    from app.models.audit_log import AuditLog
+    svc = PushNotificationService(db)
+    merged = svc.save_rules(body.override, user_id=current_user.id)
+    db.add(AuditLog(
+        user_id=current_user.id,
+        username=current_user.username,
+        action="update",
+        resource_type="system_config",
+        resource_name="push_rules",
+        new_values=body.override,
+        status="success",
+    ))
+    db.commit()
+    return {"message": "推送规则已更新", "rules": merged}
+
+
+@router.post("/push-check")
+async def run_push_check(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """手动触发一轮巡检推送（admin；正常由调度器每 30 分钟执行）"""
+    from app.services.push_notification_service import PushNotificationService
+    result = await PushNotificationService(db).run_all()
+    return {"message": "巡检完成", "stats": result}
