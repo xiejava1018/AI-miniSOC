@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "*",
-    "@earendil-works/pi-ai": "*"
+    "@earendil-works/pi-ai": "*",
+    "openai": "^6.26.0"
   }
 }
