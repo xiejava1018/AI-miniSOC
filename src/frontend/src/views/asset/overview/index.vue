@@ -103,7 +103,7 @@
         <ElCard shadow="never" class="top-card">
           <template #header>
             <span class="chart-title">近期评分上升最快</span>
-            <span class="chart-subtitle">(与上次评分对比 · Δ ≥ 5)</span>
+            <span class="chart-subtitle">(与首次评分对比 · Δ ≥ 5)</span>
           </template>
           <div class="top-table-wrap">
             <ElTable
@@ -124,7 +124,7 @@
                   </ElTag>
                 </template>
               </ElTableColumn>
-              <ElTableColumn label="Δ vs 上次" width="110" align="right">
+              <ElTableColumn label="Δ vs 首次" width="110" align="right">
                 <template #default="{ row }">
                   <span class="text-danger fw-600">+{{ row.delta }}</span>
                 </template>

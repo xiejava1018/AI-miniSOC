@@ -623,33 +623,30 @@ class AssetRiskService:
             for a in top10
         ]
 
-        # 评分上升最快：当前分 vs "上次评分"（每个资产 history 中第二新的快照）
-        # 语义：以倒数第二条快照为基线，与当前 Asset.risk_score 对比。
-        # 这样跑一次 batch-score 后，W0 baseline 的最末一条即"上次评分"；
-        # 当前分 - 上次分 = 累计异动，能立即反映重打分产生的真实变化。
-        # 不卡 "1d 窗口 + >=2 快照"——本场景没有定时 batch，窗口假设不成立。
-        # 历史快照 < 2 条的资产（首次评分）跳过，无 prev 可对比。
+        # 评分上升最快：当前分 vs "首次评分"（每个资产 history 中最早的快照）
+        # 语义：自首次评分以来的累计变化，能反映任一次 batch-score 产生的异动。
+        # 为什么不用"上次评分"（次新快照）做基线：
+        #   生产场景下两次 batch-score 之间 score 常常不变（输入数据稳定），
+        #   次新快照 = 当前，Δ=0，会错过真实异动（如 jumpserver 42→50）。
+        # 历史快照 < 2 条的资产（首次评分）跳过，无 baseline 可对比。
         rising = []
         if scored:
             asset_ids = [a.id for a in scored]
             rows = (
                 self.db.query(AssetRiskHistory.asset_id, AssetRiskHistory.risk_score)
                 .filter(AssetRiskHistory.asset_id.in_(asset_ids))
-                .order_by(AssetRiskHistory.asset_id.asc(), AssetRiskHistory.scored_at.desc())
+                .order_by(AssetRiskHistory.asset_id.asc(), AssetRiskHistory.scored_at.asc())
                 .all()
             )
-            prev_by_asset: dict = {}
-            seen_count: dict = {}
+            baseline_by_asset: dict = {}
             for h in rows:
-                seen_count[h.asset_id] = seen_count.get(h.asset_id, 0) + 1
-                if seen_count[h.asset_id] == 2:  # 第二条（次新）= 上次评分
-                    prev_by_asset[h.asset_id] = h.risk_score
+                baseline_by_asset.setdefault(h.asset_id, h.risk_score)  # asc 首条 = 首次评分
             for a in scored:
-                prev = prev_by_asset.get(a.id)
-                if prev is None:
+                baseline = baseline_by_asset.get(a.id)
+                if baseline is None:
                     continue
-                delta = a.risk_score - prev
-                if delta >= 5:  # score_asset 输入波动量级通常 ±3~8，10 太严
+                delta = a.risk_score - baseline
+                if delta >= 5:  # score_asset 输入波动量级 ±3~8，10 太严
                     rising.append({"asset_id": str(a.id), "name": a.name, "ip": a.asset_ip,
                                    "risk_score": a.risk_score, "delta": delta})
         rising.sort(key=lambda x: x["delta"], reverse=True)
