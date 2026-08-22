@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 # 集中上报，即可覆盖全部资产类同步源（未来新采集器自动纳入）。
 _SOURCE_HEALTH_KEYS = {
     "tplink": "tplink:collector",
+    "tplink-router": "tplink:collector",  # 采集器实际推送的 source 值（生产实测）
     "wazuh": "wazuh:agents",
 }
 
