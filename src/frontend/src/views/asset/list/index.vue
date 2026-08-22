@@ -45,12 +45,138 @@
             <ElButton size="small" type="primary" plain @click="applyAskToSearch">在列表中筛选</ElButton>
           </div>
         </template>
-        <template v-else-if="askResult.intent === 'stats'">
+        <template v-else-if="askResult.intent === 'template'">
+          <!-- L2 模板查询结果 -->
           <div class="ai-query-summary">
+            <ElTag size="small" type="warning" effect="dark" style="margin-right: 8px">L2</ElTag>
             <span class="ai-query-summary-text">{{ askResult.summary }}</span>
             <AiFeedback target-type="query" :target-id="askResult.session_id || aiQuestion" />
           </div>
+
+          <!-- 降级横幅：告警数据源不可用时置顶，不能让用户把“查不到”误认为“没有” -->
+          <ElAlert
+            v-if="askResult.data_degraded"
+            type="warning"
+            :closable="false"
+            show-icon
+            title="告警数据源不可用，当前结果不包含告警统计（不代表该资产无告警）"
+            style="margin-bottom: 10px"
+          />
+
+          <!-- 形态一：分组统计 -->
+          <div v-if="askResult.stats" class="ai-query-l2-block">
+            <div class="ai-query-l2-stats">
+              <div v-for="(v, k) in askResult.stats" :key="k" class="ai-query-stat-item">
+                <span class="stat-key">{{ k }}</span>
+                <span class="stat-val">{{ v }}</span>
+              </div>
+              <ElEmpty v-if="!Object.keys(askResult.stats).length" description="无分组数据" :image-size="48" />
+            </div>
+            <!-- 覆盖率必须与统计结果同屏，不能只给分子 -->
+            <div v-if="coverageRatio !== null" class="ai-query-coverage">
+              <ElProgress
+                :percentage="coverageRatio"
+                :status="coverageRatio >= 90 ? 'success' : coverageRatio >= 60 ? 'warning' : 'exception'"
+                :stroke-width="10"
+                style="max-width: 320px"
+              />
+              <span class="coverage-text">
+                数据覆盖率 {{ coverageRatio }}%
+                （{{ askResult.coverage?.counted }}/{{ askResult.coverage?.total }} 台有该字段）
+              </span>
+            </div>
+          </div>
+
+          <!-- 形态二：告警分级 -->
+          <div v-if="askResult.alerts?.buckets" class="ai-query-l2-block">
+            <div class="ai-query-alert-buckets">
+              <div class="bucket is-critical">
+                <span class="bucket-label">critical</span>
+                <span class="bucket-num">{{ askResult.alerts.buckets.critical }}</span>
+              </div>
+              <div class="bucket is-high">
+                <span class="bucket-label">high</span>
+                <span class="bucket-num">{{ askResult.alerts.buckets.high }}</span>
+              </div>
+              <div class="bucket is-medium">
+                <span class="bucket-label">medium</span>
+                <span class="bucket-num">{{ askResult.alerts.buckets.medium }}</span>
+              </div>
+              <div class="bucket is-low">
+                <span class="bucket-label">low</span>
+                <span class="bucket-num">{{ askResult.alerts.buckets.low }}</span>
+              </div>
+              <div class="bucket is-total">
+                <span class="bucket-label">合计（{{ askResult.alerts.buckets.window_days || askResult.alerts.days }} 天）</span>
+                <span class="bucket-num">{{ askResult.alerts.buckets.total }}</span>
+              </div>
+            </div>
+            <div v-if="askResult.alerts.high_samples?.length" class="ai-query-alert-samples">
+              <div class="samples-title">高危告警样例（level ≥ 10）</div>
+              <div v-for="(s, i) in askResult.alerts.high_samples" :key="i" class="sample-row">
+                <ElTag size="small" :type="s.level >= 13 ? 'danger' : 'warning'" effect="plain">
+                  L{{ s.level }}
+                </ElTag>
+                <span class="sample-desc">{{ s.description }}</span>
+                <span class="sample-ts">{{ formatSampleTs(s.timestamp) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 形态三：资产列表 -->
+          <div v-if="askResult.assets?.length" class="ai-query-l2-block">
+            <ElTable :data="askResult.assets" size="small" max-height="260" border>
+              <ElTableColumn prop="name" label="资产名" min-width="150" show-overflow-tooltip />
+              <ElTableColumn prop="ip" label="IP" width="130" />
+              <ElTableColumn prop="os_name" label="操作系统" min-width="130" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.os_name || '—' }}</template>
+              </ElTableColumn>
+              <ElTableColumn prop="criticality" label="重要性" width="90" />
+              <ElTableColumn
+                v-if="askResult.template_id === 'port_open'"
+                prop="matched_ports"
+                label="匹配端口"
+                min-width="120"
+              >
+                <template #default="{ row }">{{ (row.matched_ports || []).join('、') || '—' }}</template>
+              </ElTableColumn>
+              <ElTableColumn
+                v-if="askResult.template_id === 'offline_since'"
+                prop="offline_days"
+                label="离线天数"
+                width="100"
+              >
+                <template #default="{ row }">
+                  {{ row.offline_days == null ? '未知' : row.offline_days + ' 天' }}
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </div>
+
+          <!-- 参数透明：用户能看到 AI 到底用了什么参数查的 -->
+          <div class="ai-query-chips">
+            <ElTag size="small" type="info" effect="plain">
+              模板: {{ askResult.template_name || askResult.template_id }}
+            </ElTag>
+            <ElTag
+              v-for="(v, k) in askResult.params"
+              :key="k"
+              size="small"
+              type="primary"
+              effect="plain"
+            >
+              {{ k }}: {{ v }}
+            </ElTag>
+          </div>
+
+          <!-- 口径/覆盖率说明：后端拼装，不经 LLM 潦话化 -->
+          <ul v-if="askResult.notes?.length" class="ai-query-notes">
+            <li v-for="(n, i) in askResult.notes" :key="i">{{ n }}</li>
+          </ul>
         </template>
+        <div v-else-if="askResult.intent === 'invalid_params'" class="ai-query-notice is-warn">
+          {{ askResult.summary || askResult.message }}
+        </div>
         <div v-else-if="askResult.intent === 'unsupported'" class="ai-query-notice">{{ askResult.summary || askResult.message }}</div>
         <div v-else-if="askResult.intent === 'unavailable'" class="ai-query-notice is-warn">{{ askResult.message }}</div>
       </div>
@@ -709,6 +835,27 @@
     handleAsk()
   }
 
+  /**
+   * L2 统计类查询的数据覆盖率。
+   * 故意不在 total 为 0 时返回 100%——无数据就是无数据，不能披露成全覆盖。
+   */
+  const coverageRatio = computed<number | null>(() => {
+    const c = askResult.value?.coverage
+    if (!c) return null
+    const total = c.total ?? c.offline_total
+    const counted = c.counted ?? c.judged
+    if (!total || counted == null) return null
+    return Math.round((counted / total) * 1000) / 10
+  })
+
+  const formatSampleTs = (ts: string | null) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    if (Number.isNaN(d.getTime())) return String(ts).slice(0, 16)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+
   const loadAskHistory = async () => {
     try {
       const res = await getAskHistory(10)
@@ -907,6 +1054,135 @@
           &.is-warn {
             color: var(--el-color-warning);
           }
+        }
+
+        // ── L2 复合查询结果 ──
+        .ai-query-l2-block {
+          margin-top: 10px;
+        }
+
+        .ai-query-l2-stats {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          .ai-query-stat-item {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--el-fill-color-light);
+            border-radius: 4px;
+
+            .stat-key {
+              font-size: 12px;
+              color: var(--el-text-color-secondary);
+            }
+
+            .stat-val {
+              font-size: 16px;
+              font-weight: 600;
+              color: var(--el-color-primary);
+            }
+          }
+        }
+
+        .ai-query-coverage {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+
+          .coverage-text {
+            font-size: 12px;
+            color: var(--el-text-color-secondary);
+          }
+        }
+
+        .ai-query-alert-buckets {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+
+          .bucket {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 84px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border-left: 3px solid var(--el-border-color);
+            background: var(--el-fill-color-light);
+
+            .bucket-label {
+              font-size: 12px;
+              color: var(--el-text-color-secondary);
+            }
+
+            .bucket-num {
+              font-size: 18px;
+              font-weight: 600;
+            }
+
+            &.is-critical {
+              border-left-color: var(--el-color-danger);
+              .bucket-num { color: var(--el-color-danger); }
+            }
+
+            &.is-high {
+              border-left-color: var(--el-color-warning);
+              .bucket-num { color: var(--el-color-warning); }
+            }
+
+            &.is-medium {
+              border-left-color: var(--el-color-primary);
+            }
+
+            &.is-total {
+              border-left-color: var(--el-text-color-secondary);
+            }
+          }
+        }
+
+        .ai-query-alert-samples {
+          margin-top: 10px;
+
+          .samples-title {
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--el-text-color-secondary);
+          }
+
+          .sample-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 13px;
+
+            .sample-desc {
+              flex: 1;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .sample-ts {
+              flex-shrink: 0;
+              font-size: 12px;
+              color: var(--el-text-color-secondary);
+            }
+          }
+        }
+
+        // 口径/覆盖率说明：字号小但不能弱到看不见
+        .ai-query-notes {
+          margin: 10px 0 0;
+          padding-left: 18px;
+          font-size: 12px;
+          line-height: 1.7;
+          color: var(--el-text-color-secondary);
         }
       }
     }

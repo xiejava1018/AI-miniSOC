@@ -343,10 +343,32 @@ export const updateRiskRules = (override: Record<string, any>): Promise<any> => 
   })
 }
 
-// ========== P3/F2.1 L1 自然语言查询 ==========
+// ========== P3/F2.1 L1 + L2 自然语言查询 ==========
+
+/** L2 告警分级计数（服务端聚合，exact=true 表示无截断） */
+export interface AskAlertBuckets {
+  critical: number
+  high: number
+  medium: number
+  low: number
+  total: number
+  window_days?: number
+  exact?: boolean
+}
+
+/** 统计类查询的数据覆盖率——missing 不为 0 时必须向用户披露 */
+export interface AskCoverage {
+  total?: number
+  counted?: number
+  missing?: number
+  offline_total?: number
+  judged?: number
+  unknown?: number
+}
 
 export interface AskResult {
-  level: 'L1'
+  level: 'L1' | 'L2'
+  /** L1: filter/stats/detail/unsupported/unavailable；L2: template/invalid_params/error */
   intent: string
   params?: Record<string, any>
   total?: number
@@ -356,6 +378,18 @@ export interface AskResult {
   summary?: string
   message?: string
   session_id?: string
+  // ── L2 特有 ──
+  template_id?: string
+  template_name?: string
+  templates_version?: number
+  notes?: string[]
+  coverage?: AskCoverage
+  alerts?: {
+    days?: number
+    buckets?: AskAlertBuckets
+    high_samples?: Array<{ level: number; description: string; timestamp: string | null }>
+  }
+  data_degraded?: boolean
 }
 
 export const askAssetQuery = (
@@ -365,7 +399,9 @@ export const askAssetQuery = (
   return httpClient.post({
     url: `${API_PREFIX}/ask`,
     data: { question, session_id: sessionId || null },
-    keepFullResponse: true
+    keepFullResponse: true,
+    // L2 走 OpenSearch 聚合 + 两次 GLM（路由 + 摘要），实测可达 30s+
+    timeout: 120000
   })
 }
 
