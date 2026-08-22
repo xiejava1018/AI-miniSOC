@@ -602,7 +602,6 @@ class AssetRiskService:
         assets = self.db.query(Asset).all()
         buckets = {"low": 0, "medium": 0, "high": 0, "critical": 0, "na": 0}
         scored = []
-        now = _utcnow()
         for a in assets:
             s = a.risk_score
             if s is None:
@@ -624,36 +623,36 @@ class AssetRiskService:
             for a in top10
         ]
 
-        # 评分上升最快（1 天窗口：最新分 - 窗口内最早分；批量一次查询防 N+1）
-        # v1.3 改：窗口从 7d 改 1d。原因：W0 冷启动回填在 2026-08-21 同一天批量造了
-        # 11 个快照 / 70 资产，所有快照 score 都一样（delta=0），7d 窗口在生产
-        # 从未产生过 rising 数据。等真实 7d 数据需要等历史积累。改 1d 窗口后，
-        # 只要 W0 批后隔天有自然 score 异动（新增告警/端口/漏洞触发重打分），
-        # 即可看到 rising。验证后可以再调回 7d。
+        # 评分上升最快：当前分 vs "上次评分"（每个资产 history 中第二新的快照）
+        # 语义：以倒数第二条快照为基线，与当前 Asset.risk_score 对比。
+        # 这样跑一次 batch-score 后，W0 baseline 的最末一条即"上次评分"；
+        # 当前分 - 上次分 = 累计异动，能立即反映重打分产生的真实变化。
+        # 不卡 "1d 窗口 + >=2 快照"——本场景没有定时 batch，窗口假设不成立。
+        # 历史快照 < 2 条的资产（首次评分）跳过，无 prev 可对比。
         rising = []
         if scored:
-            since = now - timedelta(days=1)
-            hrows = (
+            asset_ids = [a.id for a in scored]
+            rows = (
                 self.db.query(AssetRiskHistory.asset_id, AssetRiskHistory.risk_score)
-                .filter(
-                    AssetRiskHistory.asset_id.in_([a.id for a in scored]),
-                    AssetRiskHistory.scored_at >= since,
-                )
-                .order_by(AssetRiskHistory.scored_at.asc())
+                .filter(AssetRiskHistory.asset_id.in_(asset_ids))
+                .order_by(AssetRiskHistory.asset_id.asc(), AssetRiskHistory.scored_at.desc())
                 .all()
             )
-            first_by_asset: dict = {}
-            count_by_asset: dict = {}
-            for h in hrows:  # asc 扫描，首条即窗口内最早
-                first_by_asset.setdefault(h.asset_id, h.risk_score)
-                count_by_asset[h.asset_id] = count_by_asset.get(h.asset_id, 0) + 1
+            prev_by_asset: dict = {}
+            seen_count: dict = {}
+            for h in rows:
+                seen_count[h.asset_id] = seen_count.get(h.asset_id, 0) + 1
+                if seen_count[h.asset_id] == 2:  # 第二条（次新）= 上次评分
+                    prev_by_asset[h.asset_id] = h.risk_score
             for a in scored:
-                if count_by_asset.get(a.id, 0) >= 2:
-                    delta = a.risk_score - first_by_asset[a.id]
-                    if delta >= 10:
-                        rising.append({"asset_id": str(a.id), "name": a.name, "ip": a.asset_ip,
-                                       "risk_score": a.risk_score, "delta_7d": delta})
-        rising.sort(key=lambda x: x["delta_7d"], reverse=True)
+                prev = prev_by_asset.get(a.id)
+                if prev is None:
+                    continue
+                delta = a.risk_score - prev
+                if delta >= 5:  # score_asset 输入波动量级通常 ±3~8，10 太严
+                    rising.append({"asset_id": str(a.id), "name": a.name, "ip": a.asset_ip,
+                                   "risk_score": a.risk_score, "delta": delta})
+        rising.sort(key=lambda x: x["delta"], reverse=True)
 
         return {
             "distribution": buckets,

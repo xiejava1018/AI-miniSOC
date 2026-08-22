@@ -249,7 +249,7 @@ export interface RiskOverview {
     name?: string
     ip: string
     risk_score: number
-    delta_7d: number
+    delta: number
   }>
   budget: Record<string, any>
 }

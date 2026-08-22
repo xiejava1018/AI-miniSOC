@@ -36,9 +36,9 @@
       </ElCol>
     </ElRow>
 
-    <!-- 2. 分布区:类型 + 状态 + 重要度 -->
-    <ElRow :gutter="16" class="chart-row">
-      <ElCol :sm="24" :md="8">
+    <!-- 2. 分布区:4 个环图并排（类型/状态/重要度/风险），节省 1 行 + 1 gap -->
+    <ElRow :gutter="12" class="chart-row">
+      <ElCol :sm="12" :md="6">
         <ElCard shadow="never" class="chart-card">
           <template #header>
             <span class="chart-title">资产类型分布</span>
@@ -52,7 +52,7 @@
           />
         </ElCard>
       </ElCol>
-      <ElCol :sm="24" :md="8">
+      <ElCol :sm="12" :md="6">
         <ElCard shadow="never" class="chart-card">
           <template #header>
             <span class="chart-title">在线状态分布</span>
@@ -66,7 +66,7 @@
           />
         </ElCard>
       </ElCol>
-      <ElCol :sm="24" :md="8">
+      <ElCol :sm="12" :md="6">
         <ElCard shadow="never" class="chart-card">
           <template #header>
             <span class="chart-title">重要度分布</span>
@@ -80,11 +80,7 @@
           />
         </ElCard>
       </ElCol>
-    </ElRow>
-
-    <!-- 3. P3/F1.1：风险评分分布 + 上升最快（接 risk overview API） -->
-    <ElRow :gutter="16" class="chart-row">
-      <ElCol :sm="24" :md="8">
+      <ElCol :sm="12" :md="6">
         <ElCard shadow="never" class="chart-card">
           <template #header>
             <span class="chart-title">资产风险分布</span>
@@ -99,18 +95,22 @@
           />
         </ElCard>
       </ElCol>
-      <ElCol :sm="24" :md="16">
+    </ElRow>
+
+    <!-- 3. 近期评分上升最快（独立 1 行，全宽显示更舒服） -->
+    <ElRow :gutter="12" class="top-row">
+      <ElCol :span="24" class="top-col">
         <ElCard shadow="never" class="top-card">
           <template #header>
-            <span class="chart-title">近 1 天评分上升最快</span>
-            <span class="chart-subtitle">(Δ ≥ 10，需关注异动)</span>
+            <span class="chart-title">近期评分上升最快</span>
+            <span class="chart-subtitle">(与上次评分对比 · Δ ≥ 5)</span>
           </template>
           <div class="top-table-wrap">
             <ElTable
               :data="risingRows"
               size="small"
               class="top-table"
-              empty-text="近 1 天无评分异动资产"
+              empty-text="近期无评分异动资产"
               @row-click="goDetailById"
             >
               <ElTableColumn prop="name" label="名称" min-width="150" show-overflow-tooltip>
@@ -124,9 +124,9 @@
                   </ElTag>
                 </template>
               </ElTableColumn>
-              <ElTableColumn label="1d 变化" width="100" align="right">
+              <ElTableColumn label="Δ vs 上次" width="110" align="right">
                 <template #default="{ row }">
-                  <span class="text-danger fw-600">+{{ row.delta_7d }}</span>
+                  <span class="text-danger fw-600">+{{ row.delta }}</span>
                 </template>
               </ElTableColumn>
             </ElTable>
@@ -141,7 +141,7 @@
         <ElCard shadow="never" class="top-card">
           <template #header>
             <span class="chart-title">Top 10 高危资产</span>
-            <span class="chart-subtitle">(按风险评分排序)</span>
+            <span class="chart-subtitle">(综合风险分，D7 加权和)</span>
           </template>
           <div class="top-table-wrap">
             <ElTable
@@ -170,7 +170,19 @@
                   <span v-else>-</span>
                 </template>
               </ElTableColumn>
-              <ElTableColumn prop="score" label="评分" min-width="80" align="right" />
+              <ElTableColumn prop="score" min-width="80" align="right">
+                <template #header>
+                  <span class="th-with-tip">
+                    评分
+                    <ElTooltip placement="top" effect="light">
+                      <template #content>
+                        <div class="d7-tooltip-content">{{ D7_TOOLTIP }}</div>
+                      </template>
+                      <el-icon class="th-tip-icon" :size="12"><QuestionFilled /></el-icon>
+                    </ElTooltip>
+                  </span>
+                </template>
+              </ElTableColumn>
               <ElTableColumn label="风险因子" min-width="280">
                 <template #default="{ row }">
                   <ElTag
@@ -293,7 +305,7 @@
   import { ref, onMounted, computed } from 'vue'
   import { useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
-  import { Refresh } from '@element-plus/icons-vue'
+  import { Refresh, QuestionFilled } from '@element-plus/icons-vue'
   import {
     getAssetOverview,
     getRiskOverview,
@@ -327,6 +339,16 @@
   const RISK_LABELS: Record<string, string> = {
     critical: '危险(80+)', high: '高危(60+)', medium: '中危(40+)', low: '低危(<40)', na: '未评分'
   }
+
+  // D7 加权和口径说明（列 header tooltip），与后端 AssetOverviewService 一致
+  const D7_TOOLTIP =
+    '综合风险分（D7 加权和）:\n' +
+    '· 关键资产（criticality=critical/core） +100\n' +
+    '· 每个高危端口 ×20\n' +
+    '· 每个未关闭事件 ×30\n' +
+    '· 开放端口 ≥5 +10\n' +
+    '· 每条 24h 告警 ×1\n' +
+    '注: 与 F1.1 风险评分（Asset.risk_score 0–100）不同；F1.1 由 batch-score 落库快照'
 
   const riskRingData = computed(() => {
     const d = riskOverview.value?.distribution
@@ -647,6 +669,23 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--el-text-color-primary, #303133);
+  }
+
+  .th-with-tip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: help;
+  }
+  .th-tip-icon {
+    color: var(--el-text-color-secondary, #909399);
+    cursor: help;
+  }
+  :deep(.d7-tooltip-content) {
+    white-space: pre-line;
+    max-width: 320px;
+    line-height: 1.6;
+    text-align: left;
   }
 
   .chart-subtitle {
