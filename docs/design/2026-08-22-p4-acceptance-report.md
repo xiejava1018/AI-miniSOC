@@ -89,3 +89,32 @@
 **P4 整体签字条件（文档 §5）当前未完全满足**：「任意采集源（含 wazuh/tplink）中断 → 标红 + 主动推送」对 wazuh/tplink 因 WO-2 缺口仍不成立（推送可达、dashboard 可达，但 `/data-health` 页面假绿）。建议 WO-2 补丁落地并复验后再宣布 P4 完成。
 
 > 诚实留痕：文档 §7 当前写「WO-1~WO-5 全部实施完成」，与本节核验结论不一致，建议追加 v1.3 段落记录 WO-2 wazuh/tplink 失败路径缺口（与 §0 既有的「诚实留痕、结论置信度须与验证深度成正比」文化一致）。
+
+---
+
+## 5. 复核（2026-08-22 16:13）：WO-2 返工已验收通过
+
+pi agent 据 §3 返工建议实施（提交 `dcee4a5` fix(wo2) + `fda3276` 文档记录），本 Agent 独立读码 + 跑测试复核，结论：**WO-2 真实缺口已闭环，P4 现可整体宣布完成。**
+
+### 复核证据
+- **`asset_sync_handler.py`**：`handle()`(`:59-129`) 整体包 try/except；成功路径 `record_success(key, expected_interval_seconds=_SOURCE_HEALTH_INTERVALS.get(source))`（`:96-101`）；源级异常走 `record_failure(key, source_type, error)` 且用**独立 session**(`fail_db=SessionLocal()`) 防被外层 rollback 灭掉（`:112-128`）后照 `raise`（上游 API 返 500）。✅
+- **`wazuh_agent_sync.py:52-71`**：`sync_agents` 异常分支独立 session 记 `record_failure("wazuh:agents")` — 兜住「Wazuh API 本身不可达、handle() 都没调」的情况。✅
+- **`asset_sync.py`**：`sync_from_wazuh` / `sync_single_asset` / `sync_single_agent_webhook` 均补成功+失败双路（双 session 隔离）。✅
+- **key 对齐**：`_SOURCE_HEALTH_KEYS`(`:29-33`) `"wazuh"→"wazuh:agents"`，与 `wazuh_agent_sync` 硬编码 `"wazuh:agents"` 同表同行；`tplink`/`tplink-router"→"tplink:collector"` 与生产实测一致 → 无双行错位。✅
+- **签名匹配**：`source_health.record_failure(source_key,*,source_type,error)` / `record_success(...,expected_interval_seconds)` 与调用完全一致。✅
+- **页面判红**：`data_health._source_status(:58-61)` 在 `last_failure_at` 晚于 `last_success_at` 时返回 `down` — 假绿根因已堵。✅
+- **迁移** `n1o2p3q4r5s6`：回填 `tplink:collector`/`wazuh:agents` 的 `expected_interval_seconds=300`，旧生产行 degraded 判定立即生效。✅
+- **测试**：删合成探针 `test_source_health_coverage.py`，新增 `test_wo2_real_failure_path.py`(5 项真失败路径：patch `wazuh_client.get_agents` 抛错 → 断言 `wazuh:agents` 行 `last_failure_at`/`failure_count`/`last_failure_message`)+ `test_source_health.py`(7 项)；独立运行 **12 passed**（4 warnings 为 uvicorn 启停噪声，exit 0）。✅
+
+### 签字更新
+| 工单 | 验收 | 说明 |
+|---|---|---|
+| WO-1 | ✅ 通过 | |
+| WO-2 | ✅ 通过（复验） | wazuh/tplink 失败标红 + interval 回填 + 真失败测试，缺口闭环 |
+| WO-3 | ✅ 通过 | |
+| WO-4 | ✅ 通过 | |
+| WO-5 | ✅ 通过 | |
+
+**P4 整体签字条件（文档 §5）现已满足**：「任意采集源（含 wazuh/tplink）中断 → 标红 + 主动推送」已对全部资产类同步源成立。可宣布 **P4（数据可靠性）完成**。
+
+> 小注（非阻断）：当 `wazuh_client.get_agents()` 抛错时，`handle()` 的 except 与 `sync_agents` 的 except 会**对同一 `wazuh:agents` 行各记一次 `record_failure`**（failure_count +2），无害仅冗余，可后续合并去重。

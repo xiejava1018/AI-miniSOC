@@ -44,7 +44,7 @@
             <span class="chart-title">资产类型分布</span>
           </template>
           <ArtRingChart
-            height="280px"
+            height="200px"
             :data="typeRingData"
             :show-legend="true"
             legend-position="right"
@@ -58,7 +58,7 @@
             <span class="chart-title">在线状态分布</span>
           </template>
           <ArtRingChart
-            height="280px"
+            height="200px"
             :data="statusRingData"
             :show-legend="true"
             legend-position="right"
@@ -72,7 +72,7 @@
             <span class="chart-title">重要度分布</span>
           </template>
           <ArtRingChart
-            height="280px"
+            height="200px"
             :data="criticalityRingData"
             :show-legend="true"
             legend-position="right"
@@ -91,7 +91,7 @@
             <span class="chart-subtitle">(F1.1 评分口径)</span>
           </template>
           <ArtRingChart
-            height="280px"
+            height="200px"
             :data="riskRingData"
             :show-legend="true"
             legend-position="right"
@@ -102,7 +102,7 @@
       <ElCol :sm="24" :md="16">
         <ElCard shadow="never" class="top-card">
           <template #header>
-            <span class="chart-title">7 天评分上升最快</span>
+            <span class="chart-title">近 1 天评分上升最快</span>
             <span class="chart-subtitle">(Δ ≥ 10，需关注异动)</span>
           </template>
           <div class="top-table-wrap">
@@ -110,7 +110,7 @@
               :data="risingRows"
               size="small"
               class="top-table"
-              empty-text="近 7 天无评分异动资产"
+              empty-text="近 1 天无评分异动资产"
               @row-click="goDetailById"
             >
               <ElTableColumn prop="name" label="名称" min-width="150" show-overflow-tooltip>
@@ -124,7 +124,7 @@
                   </ElTag>
                 </template>
               </ElTableColumn>
-              <ElTableColumn label="7天变化" width="100" align="right">
+              <ElTableColumn label="1d 变化" width="100" align="right">
                 <template #default="{ row }">
                   <span class="text-danger fw-600">+{{ row.delta_7d }}</span>
                 </template>
@@ -573,15 +573,15 @@
 
 <style lang="scss" scoped>
   .asset-overview-page {
-    padding: 16px;
+    padding: 10px 12px;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 10px;
   }
 
   .overview-alert {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
   }
 
   .kpi-row {
@@ -593,9 +593,9 @@
     flex-shrink: 0;
   }
 
-  // 显式给 Top 行一个最小高度,让两列等高(10 行表格 ~ 420px)
+  // 显式给 Top 行一个最小高度,让两列等高(8 行表格 ~ 300px，紧凑布局)
   .top-row {
-    min-height: 480px;
+    min-height: 320px;
   }
 
   .chart-card,
@@ -618,7 +618,11 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      padding: 12px;
+      padding: 8px 10px;
+    }
+
+    :deep(.el-card__header) {
+      padding: 8px 10px;
     }
   }
 
@@ -640,14 +644,14 @@
   }
 
   .chart-title {
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--el-text-color-primary, #303133);
   }
 
   .chart-subtitle {
-    margin-left: 8px;
-    font-size: 12px;
+    margin-left: 6px;
+    font-size: 11px;
     color: var(--el-text-color-secondary, #909399);
   }
 
@@ -685,14 +689,14 @@
   .metric-card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 14px 16px;
+    gap: 4px;
+    padding: 10px 12px;
     background: var(--el-fill-color-blank, #fff);
     border: 1px solid var(--el-border-color-lighter, #ebeef5);
     border-left-width: 3px;
     border-radius: 4px;
-    min-height: 92px;
-    margin-bottom: 16px;
+    min-height: 78px;
+    margin-bottom: 0;
 
     &--info {
       border-left-color: var(--el-color-primary, #409eff);

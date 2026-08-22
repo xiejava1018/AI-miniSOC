@@ -624,10 +624,15 @@ class AssetRiskService:
             for a in top10
         ]
 
-        # 评分上升最快（7 天窗口：最新分 - 窗口内最早分；批量一次查询防 N+1）
+        # 评分上升最快（1 天窗口：最新分 - 窗口内最早分；批量一次查询防 N+1）
+        # v1.3 改：窗口从 7d 改 1d。原因：W0 冷启动回填在 2026-08-21 同一天批量造了
+        # 11 个快照 / 70 资产，所有快照 score 都一样（delta=0），7d 窗口在生产
+        # 从未产生过 rising 数据。等真实 7d 数据需要等历史积累。改 1d 窗口后，
+        # 只要 W0 批后隔天有自然 score 异动（新增告警/端口/漏洞触发重打分），
+        # 即可看到 rising。验证后可以再调回 7d。
         rising = []
         if scored:
-            since = now - timedelta(days=7)
+            since = now - timedelta(days=1)
             hrows = (
                 self.db.query(AssetRiskHistory.asset_id, AssetRiskHistory.risk_score)
                 .filter(
