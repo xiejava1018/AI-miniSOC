@@ -217,17 +217,19 @@
           </template>
         </ElTableColumn>
 
-        <ElTableColumn label="操作" width="180" fixed="right">
+        <ElTableColumn label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <template v-if="row.status === 'pending' && hasAuth('resolve')">
-              <ElButton text type="primary" size="small" @click="openResolve(row, 'resolved')">
-                已处理
-              </ElButton>
-              <ElButton text size="small" @click="openResolve(row, 'confirmed')">确认</ElButton>
-              <ElButton text size="small" @click="openResolve(row, 'ignored')">忽略</ElButton>
-            </template>
-            <span v-else-if="row.status !== 'pending'" class="muted">—</span>
-            <span v-else class="muted">无权限</span>
+            <div class="op-cell">
+              <template v-if="row.status === 'pending' && hasAuth('resolve')">
+                <ElButton text type="primary" size="small" @click="openResolve(row, 'resolved')">
+                  已处理
+                </ElButton>
+                <ElButton text size="small" @click="openResolve(row, 'confirmed')">确认</ElButton>
+                <ElButton text size="small" @click="openResolve(row, 'ignored')">忽略</ElButton>
+              </template>
+              <span v-else-if="row.status !== 'pending'" class="muted">—</span>
+              <span v-else class="muted">无权限</span>
+            </div>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -351,7 +353,10 @@
   const objIp = (row: ReconciliationItem) =>
     row.details?.ledger?.asset_ip || row.details?.agent?.ip || ''
 
-  const goDataHealth = () => router.push('/assets/data-health')
+  // 数据健康菜单已在 /ops 菜单重组（迁移 j1k2l3m4n5o6）中从 /assets 移到 /ops 下，
+  // URL 是 /ops/data-health —— 不是 /assets/data-health。
+  // 注意：component 仍是 '/asset/data-health/index'（文件位置没动），别拿它当路由用。
+  const goDataHealth = () => router.push('/ops/data-health')
 
   const filterByType = (t: ReconciliationType) => {
     filterType.value = filterType.value === t ? '' : t
@@ -451,6 +456,12 @@
 
 <style lang="scss" scoped>
   .recon-page {
+    // 单一滚动容器：.art-full-height 的固定 height 会把卡片当 flex 项挤压，
+    // 超高内容既被裁切又可能在内层凒出滚动条。让页面随内容伸展，
+    // 滚动统一交给外层文档（与 asset/detail、asset/compliance 同款处理）。
+    height: auto;
+    min-height: var(--art-full-height);
+
     .freshness-alert {
       margin-bottom: 12px;
 
@@ -645,6 +656,22 @@
       margin-top: 2px;
       font-size: 11px;
       color: var(--art-text-gray-500);
+    }
+
+    // 操作列：3 个文字按钮必须同一行。
+    // Element Plus 默认给按钮左右 padding 11px + 相邻 margin-left 12px，
+    // 三个按钮累计 ~174px 超过 180 列宽减掉 cell padding 后的 160px → 换行。
+    // 文字按钮不需要水平 padding，去掉后约 100px 就够，列宽反而能从 180 收到 150。
+    .op-cell {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 10px;
+      align-items: center;
+
+      :deep(.el-button) {
+        margin-left: 0;
+        padding: 0;
+      }
     }
 
     .muted {

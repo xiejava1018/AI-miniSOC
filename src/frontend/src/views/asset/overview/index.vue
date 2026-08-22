@@ -595,8 +595,13 @@
 
 <style lang="scss" scoped>
   .asset-overview-page {
+    // 单一滚动容器：原先 art-full-height 的固定 height + overflow-y:auto 让页面根
+    // 自己成了一个滚动容器，嵌在文档滚动之内 → 两条滚动条。
+    // 改成随内容伸展，滚动统一交给外层文档。
+    // min-height 仍给 flex:1 子项留下拉伸空间，短内容时表格依旧贴底。
+    height: auto;
+    min-height: var(--art-full-height);
     padding: 10px 12px;
-    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
