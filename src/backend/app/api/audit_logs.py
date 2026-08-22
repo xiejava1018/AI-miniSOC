@@ -11,7 +11,7 @@ import csv
 from io import StringIO
 
 from app.core.database import get_db
-from app.core.permissions import require_admin
+from app.core.permissions import require_role
 from app.schemas.user import UserResponse
 from app.schemas.audit_log import AuditLogResponse, AuditLogListResponse, AuditLogExportRequest
 from app.services.audit_log_service import AuditLogService
@@ -31,13 +31,13 @@ async def get_audit_logs(
     status: Optional[str] = Query(None, description="状态筛选"),
     start_date: Optional[str] = Query(None, description="开始日期（ISO 8601格式）"),
     end_date: Optional[str] = Query(None, description="结束日期（ISO 8601格式）"),
-    current_user: UserResponse = Depends(require_admin()),
+    current_user: UserResponse = Depends(require_role("admin", "auditor")),
     db: Session = Depends(get_db)
 ):
     """
     获取审计日志列表
 
-    需要权限: 仅管理员
+    需要权限: 管理员或审计人员（PRD X1：auditor 核心职能）
     """
     service = AuditLogService(db)
     skip = (page - 1) * page_size
@@ -65,13 +65,13 @@ async def get_audit_logs(
 @router.get("/{log_id}", response_model=AuditLogResponse)
 async def get_audit_log(
     log_id: int,
-    current_user: UserResponse = Depends(require_admin()),
+    current_user: UserResponse = Depends(require_role("admin", "auditor")),
     db: Session = Depends(get_db)
 ):
     """
     获取审计日志详情
 
-    需要权限: 仅管理员
+    需要权限: 管理员或审计人员（PRD X1）
     """
     service = AuditLogService(db)
     audit_log = service.get_audit_log_by_id(log_id)
@@ -88,7 +88,7 @@ async def get_audit_log(
 @router.post("/export")
 async def export_audit_logs(
     filters: AuditLogExportRequest,
-    current_user: UserResponse = Depends(require_admin()),
+    current_user: UserResponse = Depends(require_role("admin", "auditor")),
     db: Session = Depends(get_db)
 ):
     """

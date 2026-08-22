@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.core.permissions import require_button_permission
 from app.models import Asset, ComplianceRun
 from app.models.user import User
 from app.services.compliance import ComplianceService, load_ruleset
@@ -98,7 +99,8 @@ async def get_rules(current_user: User = Depends(get_current_user)):
 @router.post("/compliance/run-check", summary="执行合规巡检（规则判定，不调 AI）")
 async def run_check(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # X1 权限矩阵：巡检属于运维写操作，viewer/auditor 不可触发
+    current_user: User = Depends(require_button_permission("compliance", "check")),
 ):
     run = ComplianceService(db).run_check(triggered_by=current_user.username)
     return {"message": "巡检完成", "run": _run_out(run)}
@@ -175,7 +177,8 @@ async def interpret(
     limit: int = Query(10, ge=1, le=50, description="单次生成上限（控成本）"),
     force: bool = Query(False, description="是否重新生成已有建议"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    # X1：AI 解读消耗 token 且产出可操作建议，与巡检同等控制
+    current_user: User = Depends(require_button_permission("compliance", "interpret")),
 ):
     svc = ComplianceService(db)
     if run_id:
