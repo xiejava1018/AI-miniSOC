@@ -249,14 +249,20 @@ def test_alert_stats_fallback_to_zero(db_session):
 
 @pytest.mark.unit
 def test_alert_stats_critical_threshold(db_session):
-    """level >= 12 应计入 critical(覆盖字符串 level 的解析路径)"""
-    asset = _make_asset(db_session, asset_ip="10.0.0.15")
+    """level >= LEVEL_HIGH(10) 应计入 critical（覆盖字符串 level 解析路径 +
+    double-count 回归：整数 key 只能计一次）
+
+    2026-08-22 统一：阈值从硬写 12 改为权威 LEVEL_HIGH=10，
+    与报告/L2/F3.1 口径一致；同时修复整数 level 被计两次的 bug。
+    """
+    asset = _make_asset(db_session, asset_ip="10.0.0.15", wazuh_agent_id="999")
 
     fake_stats = {
         "by_level": [
-            {"key": "5", "doc_count": 10},   # 普通
-            {"key": "12", "doc_count": 3},   # critical
-            {"key": "15", "doc_count": 2},   # critical
+            {"key": "5", "doc_count": 10},   # 不计（<10）
+            {"key": "12", "doc_count": 3},   # 计入（字符串 key）
+            {"key": 15, "doc_count": 2},      # 计入（整数 key，只能计一次）
+            {"key": 11, "doc_count": 4},      # 计入（新口径 11 也是高危，旧口径 12 漏掉）
             {"key": None, "doc_count": 99},  # 跳过
         ]
     }
@@ -267,8 +273,8 @@ def test_alert_stats_critical_threshold(db_session):
         service = AssetSummaryService(db_session)
         summary = service.build_summary(str(asset.id))
 
-    assert summary["alert_24h"] == 15  # 10 + 3 + 2
-    assert summary["alert_critical_24h"] == 5  # 3 + 2
+    assert summary["alert_24h"] == 19  # 10 + 3 + 2 + 4
+    assert summary["alert_critical_24h"] == 9  # 3 + 2 + 4（整数 15 只计一次，非旧 bug 的 2 倍）
 
 
 # ---------- HIGH_RISK_PORTS 常量自检 ----------

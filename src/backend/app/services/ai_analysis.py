@@ -4,6 +4,7 @@
 
 from zhipuai import ZhipuAI
 from app.core.config import settings
+from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM
 from app.models import AIAnalysis, AlertGroupAnalysis
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
@@ -178,12 +179,19 @@ class AIAnalysisService:
             }
 
     def _get_rule_level(self, rule_level: Optional[int]) -> str:
-        """根据规则级别返回风险描述"""
+        """根据规则级别返回风险描述。
+
+        阈值用全项目权威定义（app/core/alert_levels.py，13/10/7/4）——
+        此前这里是 12/7，导致 level 10-11 的告警在「AI 分析」页显示
+        "中风险"而在「安全报告」里计为 high（生产 7 天实测 4,921 条受影响）。
+        """
         if rule_level is None:
             return "未知风险"
-        if rule_level >= 12:
+        if rule_level >= LEVEL_CRITICAL:
             return "高风险 (严重)"
-        elif rule_level >= 7:
+        elif rule_level >= LEVEL_HIGH:
+            return "高风险"
+        elif rule_level >= LEVEL_MEDIUM:
             return "中风险"
         else:
             return "低风险"
@@ -325,13 +333,8 @@ class AIAnalysisService:
         import re
         match = re.search(r"规则级别[:\s]*(\d+)", prompt)
         if match:
-            level = int(match.group(1))
-            if level >= 12:
-                return "高风险 (严重)"
-            elif level >= 7:
-                return "中风险"
-            else:
-                return "低风险"
+            # 与 _get_rule_level 同一权威阈值（13/10/7/4）
+            return self._get_rule_level(int(match.group(1)))
         return "未知风险"
 
     def _save_analysis(
@@ -523,9 +526,12 @@ class AIAnalysisService:
         """无 AI 时的启发式 verdict：按最高等级 + 量级给 P 级，source='heuristic'。"""
         level_max = signature.get("level_max") or 0
         count = signature.get("count") or 0
-        if level_max >= 12:
+        # 阈值同权威定义（13/10/7/4）。此前 12/8：level 10-11 的告警簇在降级
+        # 路径下被判 P2 而非 P1，进而拉低 F1.1 风险分。P 级会持久化到
+        # soc_alert_group_analyses.priority 并喂给 _score_alerts。
+        if level_max >= LEVEL_CRITICAL:
             priority = "P1"
-        elif level_max >= 8:
+        elif level_max >= LEVEL_HIGH:
             priority = "P2"
         else:
             priority = "P3"

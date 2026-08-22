@@ -186,24 +186,25 @@ class AssetSummaryService:
         拉取近 24h 告警统计(总告警数 + 高危告警数)
         按 wazuh_agent_id 查询该资产的告警
 
-        Wazuh 高危告警阈值: level >= 12
+        高危阈值用全项目权威定义 LEVEL_HIGH=10（此前硬写 12，与报告/L2
+        口径不一致）；且原实现对整数 level 存在 double-count bug
+        （isinstance 判断加一次 + int() 转换又加一次，高危数翻倍）。
         失败兜底: 返回 (0, 0),不抛异常
         """
-        # 没有 agent_id 则返回 0
         if not wazuh_agent_id:
             return 0, 0
 
         try:
             alert_service = AlertQueryService(self.db)
             from datetime import timedelta
+            from app.core.alert_levels import LEVEL_HIGH
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(hours=24)
 
-            # 按 agent_id 查询统计
             stats = alert_service.get_alert_statistics(
                 start_time=start_time,
                 end_time=end_time,
-                agent_id=wazuh_agent_id  # 传入 agent_id 过滤
+                agent_id=wazuh_agent_id
             )
             by_level = stats.get("by_level", [])
 
@@ -215,14 +216,12 @@ class AssetSummaryService:
                 if level is None:
                     continue
                 total += count
-                if isinstance(level, (int, float)) and level >= 12:
-                    critical += count
-                # OpenSearch 返回 level 可能是字符串
+                # OpenSearch terms 聚合的 key 可能是 int 或 str，统一转一次
                 try:
-                    if int(level) >= 12:
+                    if int(level) >= LEVEL_HIGH:
                         critical += count
                 except (TypeError, ValueError):
-                    pass
+                    continue
             return total, critical
         except Exception as e:
             logger.warning(f"获取告警统计失败(agent_id={wazuh_agent_id}): {e}")

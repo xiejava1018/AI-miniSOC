@@ -169,11 +169,11 @@ class AlertQueryService:
 
     # ── 精确分级计数（服务端聚合）─────────────────────
 
-    # Wazuh rule.level 标准阈值（与 report_generator.py 一致）
-    LEVEL_CRITICAL = 13
-    LEVEL_HIGH = 10
-    LEVEL_MEDIUM = 7
-    LEVEL_LOW = 4
+    # 全项目唯一权威定义已下沉到 app/core/alert_levels.py（2026-08-22 统一）
+    # 此处 re-export 仅为兼容既有 import，不要在新代码里定义新阈值
+    from app.core.alert_levels import (  # noqa: F401
+        LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM, LEVEL_LOW, LEVEL_NOISE_BELOW,
+    )
 
     def get_level_buckets_by_ip(self, ip: str, days: int = 7) -> Dict[str, Any]:
         """按 IP + 时间窗做**服务端聚合**的精确分级计数。
