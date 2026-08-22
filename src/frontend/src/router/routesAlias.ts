@@ -23,8 +23,8 @@ export enum RoutesAlias {
   AssetOverview = '/asset/overview/index', // 资产概览
   AssetDetail = '/asset/detail/index', // 资产详情
   AssetCompliance = '/asset/compliance/index', // 合规基线（P3/F3.3）
-  AssetReconciliation = '/asset/reconciliation/index', // 资产对账（P3/F1.3）
-  AssetDataHealth = '/asset/data-health/index', // 数据健康：源健康/死信/对账三层（P3/F1.3）
+  AssetReconciliation = '/asset/reconciliation/index', // 资产稽核（P3/F1.3）
+  AssetDataHealth = '/asset/data-health/index', // 数据健康：源健康/死信/稽核三层（P3/F1.3）
   SecurityReports = '/reports/list/index', // 安全报告列表/详情（P3/F2.2）
   AssetImpactAnalysis = '/asset/impact-analysis/index', // 变更影响分析（P3/F3.1）
   Incidents = '/incidents/list', // 事件管理

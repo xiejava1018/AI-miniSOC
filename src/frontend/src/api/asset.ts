@@ -593,7 +593,7 @@ export const getAssetCompliance = (assetId: string): Promise<any> => {
   })
 }
 
-// ==================== P3/F1.3 资产对账 + 数据健康 ====================
+// ==================== P3/F1.3 资产稽核 + 数据健康 ====================
 
 export type ReconciliationType = 'shadow' | 'offline' | 'mismatch'
 export type ReconciliationStatus = 'pending' | 'confirmed' | 'ignored' | 'resolved'
@@ -646,7 +646,7 @@ export interface ReconciliationItem {
   created_at: string
 }
 
-/** 触发对账。Wazuh 不可达时后端返回 503，不会伪装成「无差异」 */
+/** 触发稽核。Wazuh 不可达时后端返回 503，不会伪装成「无差异」 */
 export const runReconcile = (): Promise<any> => {
   return httpClient.post({
     url: `${API_PREFIX}/reconcile`,
@@ -655,7 +655,7 @@ export const runReconcile = (): Promise<any> => {
   })
 }
 
-/** 最近一次对账摘要（差异分布 + 数据新鲜度） */
+/** 最近一次稽核摘要（差异分布 + 数据新鲜度） */
 export const getReconcileSummary = (runId?: string): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/reconcile/summary`,
@@ -664,7 +664,7 @@ export const getReconcileSummary = (runId?: string): Promise<any> => {
   })
 }
 
-/** AI 对账报告（带数据窗口标注；失败自动降级模板） */
+/** AI 稽核报告（带数据窗口标注；失败自动降级模板） */
 export const getReconcileReport = (runId?: string, force = false): Promise<any> => {
   return httpClient.get({
     url: `${API_PREFIX}/reconcile/report`,
@@ -674,7 +674,7 @@ export const getReconcileReport = (runId?: string, force = false): Promise<any> 
   })
 }
 
-/** 对账差异列表 */
+/** 稽核差异列表 */
 export const getReconciliations = (params: {
   run_id?: string
   all_runs?: boolean
@@ -703,7 +703,7 @@ export const resolveReconciliation = (
   })
 }
 
-/** 数据健康总览：源健康 / 同步死信 / 对账差异 三层聚合 */
+/** 数据健康总览：源健康 / 同步死信 / 稽核差异 三层聚合 */
 export const getDataHealth = (deadLetterLimit = 5): Promise<any> => {
   return httpClient.get({
     url: '/api/v1/data-health',

@@ -1,5 +1,5 @@
 <!--
-  资产对账（P3/F1.3）
+  资产稽核（P3/F1.3）
 
   设计要点，都是 PRD 的硬要求：
   - 数据新鲜度横幅置顶。源异常时先告诉用户"结果可能不全"，
@@ -39,21 +39,21 @@
     <!-- 摘要 -->
     <ElCard shadow="never" class="summary-card">
       <div v-if="!summary?.has_data" class="empty-run">
-        <ElEmpty description="尚未执行过对账">
+        <ElEmpty description="尚未执行过稽核">
           <ElButton
             v-if="hasAuth('reconcile')"
             type="primary"
             :loading="running"
             @click="handleRun"
           >
-            立即对账
+            立即稽核
           </ElButton>
         </ElEmpty>
       </div>
       <template v-else>
         <div class="summary-head">
           <div class="summary-title">
-            <span class="t">资产对账</span>
+            <span class="t">资产稽核</span>
             <ElTag size="small" effect="plain">规则判定</ElTag>
             <span class="meta">
               {{ formatTime(summary.checked_at) }} · 共 {{ summary.diff_total }} 项差异 · 待处理
@@ -67,10 +67,10 @@
               :loading="running"
               @click="handleRun"
             >
-              重新对账
+              重新稽核
             </ElButton>
             <ElButton v-if="hasAuth('report')" :loading="reporting" @click="handleReport">
-              AI 对账报告
+              AI 稽核报告
             </ElButton>
           </div>
         </div>
@@ -103,7 +103,7 @@
               <div class="stat-value small" :class="{ warning: freshness?.sync_stale }">
                 {{ formatTime(freshness?.last_sync_at) || '无记录' }}
               </div>
-              <div class="stat-sub">对账结果的可信度依据</div>
+              <div class="stat-sub">稽核结果的可信度依据</div>
             </div>
           </ElCol>
         </ElRow>
@@ -113,7 +113,7 @@
     <!-- AI 报告 -->
     <ElCard v-if="report" shadow="never" class="report-card">
       <div class="report-head">
-        <span class="t">对账报告</span>
+        <span class="t">稽核报告</span>
         <ElTag v-if="report.source === 'glm'" size="small" type="success" effect="plain">
           AI 生成
         </ElTag>
@@ -363,7 +363,7 @@
       const res = await getReconcileSummary()
       summary.value = res?.data || null
     } catch (e: any) {
-      ElMessage.error(e?.message || '加载对账摘要失败')
+      ElMessage.error(e?.message || '加载稽核摘要失败')
     }
   }
 
@@ -394,14 +394,14 @@
       const s = res?.data
       const by = s?.by_type || {}
       ElMessage.success(
-        `对账完成：影子 ${by.shadow || 0}、疑似下线 ${by.offline || 0}、不一致 ${by.mismatch || 0}`
+        `稽核完成：影子 ${by.shadow || 0}、疑似下线 ${by.offline || 0}、不一致 ${by.mismatch || 0}`
       )
       report.value = null
       await Promise.all([loadSummary(), loadList(1)])
     } catch (e: any) {
       // Wazuh 不可达时后端返回 503 且带明确原因，必须原样告知用户，
-      // 否则会误以为"对账失败=没差异"
-      ElMessage.error(e?.message || '对账执行失败')
+      // 否则会误以为"稽核失败=没差异"
+      ElMessage.error(e?.message || '稽核执行失败')
     } finally {
       running.value = false
     }

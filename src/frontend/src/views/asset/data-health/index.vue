@@ -4,7 +4,7 @@
   三层数据健康的统一入口。分层不是为了好看，而是排障时要先判断该找谁：
     源健康   基础设施层 —— 采集器/同步任务还在不在工作
     同步死信 数据层     —— 同步过程中被丢弃/失败的数据
-    对账差异 业务层     —— 台账与实际网络的差异
+    稽核差异 业务层     —— 台账与实际网络的差异
   上层异常往往是下层引起的，所以从上往下排。
 
   soc_source_health 与 soc_sync_dead_letter 以前只有后台任务在写表、
@@ -155,12 +155,12 @@
         </ElCard>
       </ElCol>
 
-      <!-- 第 3 层：对账差异 -->
+      <!-- 第 3 层：稽核差异 -->
       <ElCol :xs="24" :lg="8">
         <ElCard shadow="never" class="layer-card">
           <template #header>
             <div class="card-head">
-              <span class="t">台账对账</span>
+              <span class="t">台账稽核</span>
               <span class="sub">业务层</span>
               <div class="counter">
                 <ElTag size="small" :type="reconPending ? 'warning' : 'success'" effect="plain">
@@ -170,8 +170,8 @@
             </div>
           </template>
 
-          <ElEmpty v-if="!latestRun?.has_data" :image-size="60" description="尚未执行过对账">
-            <ElButton type="primary" size="small" @click="goRecon">前往对账</ElButton>
+          <ElEmpty v-if="!latestRun?.has_data" :image-size="60" description="尚未执行过稽核">
+            <ElButton type="primary" size="small" @click="goRecon">前往稽核</ElButton>
           </ElEmpty>
           <template v-else>
             <div class="rc-stats">
@@ -189,7 +189,7 @@
               </div>
             </div>
             <div class="rc-meta">
-              最近对账 {{ formatTime(latestRun.checked_at) }} · 共 {{ latestRun.diff_total }} 项
+              最近稽核 {{ formatTime(latestRun.checked_at) }} · 共 {{ latestRun.diff_total }} 项
             </div>
             <ElAlert
               v-if="latestRun.freshness?.degraded"
@@ -198,7 +198,7 @@
               show-icon
               class="rc-alert"
             >
-              <template #title>该次对账时数据源异常，结果可能不全</template>
+              <template #title>该次稽核时数据源异常，结果可能不全</template>
             </ElAlert>
             <div class="rc-status">
               <span v-for="(v, k) in latestRun.by_status || {}" :key="k" class="rs-item">
