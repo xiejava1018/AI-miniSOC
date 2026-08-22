@@ -120,6 +120,7 @@ AI-miniSOC/
 | 主动推送 | `app/services/push_notification_service.py` | P3/F4.2：5 个场景全落地（源健康/评分突变/EOL/影子资产/报告生成完成）；`/api/v1/notifications/push-check` 手动触发，`/api/v1/notifications/push-rules` admin 配置 |
 | 权限矩阵 | `app/core/permissions.py` | P3/X1：`require_role()` + `require_button_permission()`，P3 4 个写操作端点 + EOL 覆盖接权限；admin bypass、operator/viewer 实体测试通过 |
 | 变更影响分析 | `app/services/impact_analysis.py` | P3/F3.1：`POST /api/v1/assets/impact-analysis`，自然语言变更描述 → 定位资产 + 粗粒度关联（同网段/共享标签/告警历史）→ GLM 报告（带模板降级）；admin/operator 可用 |
+| L2 复合查询模板 | `app/services/query_templates.py` | P3/F2.1 L2：受限模板执行层（`configs/query_templates.yaml` 4 模板）。LLM 只选模板填参数，**不生成 SQL**；参数经类型/范围/枚举校验 + 维度二层白名单；统计类强制返回 coverage。入口仍为 `POST /api/v1/assets/ask`（自动路由 L1/L2） |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -801,12 +802,87 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 
 ### P3 缺口最新状态
 - F1.1 / F1.2 / F1.3 / F2.2 / F2.3 / F3.2 / F3.3 / F4.1 / F4.2 均 ✅
-- **F3.1 ✅ 降级版**（本轮；拓扑建模属 P5）
-- F2.1 L1 ✅ / L2 ❌（configs/query_templates.yaml 不存在）
+- **F3.1 ✅ 降级版**（拓扑建模属 P5）
+- **F2.1 L1 ✅ / L2 ✅**
 - X1 部分 ✅（端点 + 角色 + 5 菜单授权；全菜单 / 部门隔离未做）
 - W0 准备阶段 ❌（50 条标注评测集）/ §十一 Go/No-Go ❌
 
 ---
 
-**文档版本**: v2.8
+## 今日补充（2026-08-22 P3/F2.1 L2 复合查询 + 告警计数假阴性修复）
+
+### 本次交付
+- `configs/query_templates.yaml`（`templates_version: 1`，4 模板 + `unsupported_hint`）
+- `src/backend/app/services/query_templates.py`：`load_templates()` 缓存、
+  `template_catalog_for_prompt()`、`validate()`/`_coerce()`、`_DIMENSION_COLUMNS` 二层白名单、
+  4 个 `_exec_*` 执行器、`execute()`
+- `asset_query.py`：单次 LLM 调用完成 L1/L2 路由，`_run_l2()` + `_summarize_l2()`
+- 前端：资产列表页 AI 查询区渲染 L2 三形态（统计 / 告警分级 / 资产列表）
+
+### 四个模板
+`port_open`（跨 soc_asset_ports）/ `offline_since`（时间窗）/
+`asset_recent_alerts`（跨源 OpenSearch）/ `stats_group_by`（白名单维度分组）
+
+新增模板 = 一条 YAML + 一个执行器函数，Prompt 主逻辑不动（模板清单动态渲染）。
+
+### ❗ 本轮发现的生产假阴性 bug（已修）
+交叉比对 L2 与 F3.1 对同一 IP 的告警数字时发现两边不一致，查下去是
+**F3.1（已在生产运行）把 99 条 critical、635 条 high 报成了 0**：
+
+| | total | critical | high |
+|---|---|---|---|
+| 旧实现（取文档分桶） | 204 | **0** | **0** |
+| 服务端聚合（修复后） | 1637 | **99** | **635** |
+
+根因：`get_alerts_by_ip(ip, limit=1000)` 取回文档再客户端分桶。该 IP 在
+OpenSearch 里有 **47 万条 level-3 噪音告警**，按 @timestamp 倒序取「最近 1000 条」
+几乎全是噪音，真正的 critical/high 全落在截断窗口之外。
+
+附带两个问题：原实现算了 start/end 却从未传给查询（「近 7 天」名不副实）；
+取值路径写成扁平 `al["rule_level"]`，而 `_normalize_alerts` 产出的是
+嵌套 `al["rule"]["level"]`，恒取到 0。
+
+**修法**：`AlertQueryService` 新增唯一权威实现（`size=0` 的 terms 聚合）：
+- `get_level_buckets_by_ip(ip, days)` → 精确计数，返回 `exact=True`
+- `get_high_severity_samples(ip, days, limit)` → 高危样例单独取文档
+
+计数与样例分离：样例的 limit 截断不再污染计数准确性。
+F3.1 `_alert_history` 同步改用该方法，两处口径现完全一致。
+
+**教训**：在安全工具里把 99 条 critical 报成 0，比查询直接失败危险得多——
+失败会被看见，假阴性会让人放心。**计数类需求一律用服务端聚合，
+不要取 N 条文档再在客户端数**。
+
+### 分级阈值口径（项目现状）
+权威定义下沉到 `AlertQueryService.LEVEL_*` = **13/10/7/4**（critical/high/medium/low，
+level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注释一致。
+
+⚠️ **pre-existing 不一致（未修）**：`ai_analysis.py` 用 12/7 与 12/8 两套阈值。
+同一台资产在「AI 分析」页与「报告 / L2 查询」里可能显示不同的高危数量。
+影响面另算，需独立验证，已在代码注释标注。
+
+### 开发期踩坑（本轮新增）
+1. **`soc_assets` 无 `last_seen` 列**（用 `status_updated_at`，仅 7/73 非空）；
+   **无 `department_id`**（用 `business_unit`，72/73 为 NULL）
+2. **模糊字段名会直接造成 LLM 幻觉**：传给 GLM 的 facts 里叫 `total`（实为资产台数），
+   摘要就输出了自相矛盾的「有1个告警，其中高优先级告警635个」。
+   改名 `matched_asset_count` / `alert_counts.alert_total` + 硬约束后 3 次输出稳定。
+   → **事实字段名必须自成量纲**
+3. **同一问题不能因路由层不同而有不同诚实度**：「按操作系统统计」首问走 L2
+   （带「49 台字段为空」覆盖率警告），作为追问却走 L1（无警告）。
+   已把 L1 的 stats 意图**委托给 L2 `stats_group_by` 同一实现**。
+4. 前端 `coverageRatio` 在 total=0 时返回 `null` 而非 100%——无数据就是无数据
+5. 写 heredoc 测试脚本时，`cat > x.py` 如果没跟在 `cd ... &&` 同一行，
+   文件会落在仓库根而不是预期目录
+
+### 生产实测（d77eb8d，真 GLM + 真数据）
+- 路由准确率 6/6：含「开着 SSH」自行推出 `port=22`、「没打补丁」诚实 `unsupported`
+- `stats_group_by(os_name)` 披露 `coverage={total:73, counted:24, missing:49}`
+- `offline_since(7)` 披露 `{offline_total:7, judged:3, unknown:4}`，4 台无时间戳不蒙猜
+- F3.1 同步验证：生产现报 `critical 99 / high 635`（修前 0/0）
+- 本轮 3 个 commit 无 alembic 迁移，无需人工执行
+
+---
+
+**文档版本**: v2.9
 **最后更新**: 2026-08-22

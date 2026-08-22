@@ -38,7 +38,8 @@
 |------|--------|------|----------|
 | 资产风险评分 | F1.1 | ✅ 已完成 | 规则引擎打分 + AI 摘要；权重外置 `soc_system_config(category='risk_rules')`（非 PRD 设想的 YAML） |
 | 安全态势摘要 | F1.2 | ✅ 已完成 | 复用 P0/P1 关联数据做 AI 聚合，未新建关联机制 |
-| L1 自然语言查询 | F2.1 | ✅ 已完成 | 查询历史复用 `soc_chat_sessions`（`model_name='asset-query-l1'`）；L2 复合查询未做 |
+| L1 自然语言查询 | F2.1 | ✅ 已完成 | 查询历史复用 `soc_chat_sessions`（`model_name='asset-query-l1'`） |
+| L2 复合查询 | F2.1 | ✅ 已完成 | 受限模板路线，4 模板（`configs/query_templates.yaml`）；单入口 `/assets/ask` 自动路由 L1/L2；LLM 只选模板填参数不生成 SQL；统计类强制披露 coverage |
 | 生命周期 / EOL | F3.2 | ✅ 已完成 | `soc_eol_reference` 种子 32 条 |
 | 合规基线 | F3.3 | ✅ 已完成 | `configs/compliance_rules.yaml` 16 条规则；达标率与覆盖率同屏 |
 | AI 知识库 | F2.3 | ✅ 已完成 | 未引入 pgvector，按关键词检索 |
