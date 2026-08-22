@@ -52,15 +52,23 @@ INTENT_PROMPT_TEMPLATE = """你是 IT 资产管理助手。用户会用中文提
 {templates}
 
 【路由优先级】
-- 问题提到具体端口号、端口名（SSH/RDP/远程桌面）→ L2 port_open
+- 问题提到具体端口号，或提到服务名（SSH/远程桌面/RDP/MySQL/Redis/SQLServer/SMB/文件共享/Web 等）
+  问「谁开着/能不能访问/有没有暴露」→ L2 port_open（端口号按模板 hints 里的对照推理，如 Redis=6379）
+  【注意】「Redis 有没有暴露」= 问 6379 端口是否开放，不足 keywords 筛选“名字叫 Redis 的资产”
 - 问题问掉线/失联/多久没上线 → L2 offline_since
 - 问题问某台资产的告警 → L2 asset_recent_alerts
-- 问题是「按/每个…统计数量」且维度在 stats_group_by 的白名单内 → L2 stats_group_by
+- 问题是「按/每个/各…统计数量」且维度在 stats_group_by 的白名单内 → L2 stats_group_by
+- 列出全部/所有资产这类无过滤条件的 → L1 filter，params 留空
+- 机器与机器之间的连接、依赖、拓扑关系 → unsupported（无拓扑数据）
+- 补丁/漏洞状态类问题（如「没打补丁」「有哪些漏洞」）→ 一律 unsupported，
+  绝不能当成 keywords 去筛选——那会返回「没有找到」让人误以为没有风险
 - 其余能用 L1 参数表达的 → L1
-- 两层都表达不了（补丁/漏洞状态、多条件叠加、网络拓扑）→ unsupported
+- 两层都表达不了（多条件叠加）→ unsupported
 
-【严格要求】
-1. 只提取用户明确表达的参数，不要编造；不确定就用 unsupported
+【严禁编造参数】
+- network_segment/keywords 只能填用户原话里明确出现的词，一字不差；
+  禁止自行描述或拼凑（如「数据库服务器所在网段」这种用户没说过的值）
+- 只提取用户明确表达的参数，不要编造；不确定就用 unsupported
 2. 选了 L2 就必须给 template_id，且参数名取自上面模板声明
 3. 只输出 JSON，不要任何其他文字。格式二选一：
    L1: {{"level": "L1", "intent": "filter", "params": {{...}}}}
@@ -144,12 +152,35 @@ class AssetQueryService:
                 parsed["level"] = "L1"
             if parsed["level"] == "L1" and "intent" not in parsed:
                 parsed["intent"] = "unsupported"
+            parsed = self._strip_fabricated_text_params(question, parsed)
             return parsed
         except RuntimeError:
             raise
         except Exception as e:
             ai_budget.record_failure()
             raise RuntimeError(f"glm_error: {e}") from e
+
+    @staticmethod
+    def _strip_fabricated_text_params(question: str, parsed: dict) -> dict:
+        """反幻觉护栏（评测集 q42 实测抓到）：自由文本参数值必须是提问原文的子串。
+
+        GLM 会编造用户没说过的值（如「数据库服务器所在网段」），
+        Prompt 里写「严禁编造」不够——这里用代码强制不变量：
+          只时 keywords / network_segment / owner / os_name / asset 这些自由文本参数；
+          枚举（asset_type/criticality/…）与数字（port/days）不查，
+          因为合法值本来就常是推理结果而非原话。
+        不是子串 → 丢弃该参数（宁缺勿造）。"""
+        TEXT_PARAMS = ("keywords", "network_segment", "owner", "os_name", "asset")
+        q_lower = question.lower()
+        params = parsed.get("params")
+        if not isinstance(params, dict):
+            return parsed
+        for k in TEXT_PARAMS:
+            v = params.get(k)
+            if isinstance(v, str) and v and v.lower() not in q_lower:
+                logger.warning("丢弃编造参数 %s=%r（不在提问原文中）", k, v)
+                params.pop(k)
+        return parsed
 
     # ---------- 参数映射 → 查询 ----------
 
@@ -311,7 +342,17 @@ class AssetQueryService:
                 try:
                     qt.validate("stats_group_by", {"dimension": dim})
                 except qt.TemplateError:
-                    dim = "asset_type"  # 维度不在白名单则回退到默认
+                    # 维度不在白名单 → 诚实拒绝，不静默换成默认维度执行。
+                    # 静默替换会让「按 password 统计」返回「按 asset_type 统计」的结果，
+                    # 看似合理实则答非所问（评测集 q47 实测抓到过）。
+                    choices = qt.load_templates()["templates"]["stats_group_by"]["params"]["dimension"]["choices"]
+                    return self._persist(question, {
+                        "level": "L1", "intent": "invalid_params", "params": params,
+                        "summary": (
+                            f"不支持按「{dim}」统计。可选维度：{'、'.join(choices)}。"
+                            "请换一个维度重问，例如「按操作系统统计资产数量」。"
+                        ),
+                    }, user_id, session)
                 return self._run_l2(
                     question,
                     {"template_id": "stats_group_by", "params": {"dimension": dim}},
