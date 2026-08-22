@@ -751,8 +751,8 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 - F4.1 AI 反馈闭环 ✅
 - F4.2 推送 5 场景 ✅
 - X1 权限矩阵 部分 ✅（端点 + 角色 + 4 菜单授权）
-- W0 准备阶段 ❌（前置）
-- §十一 Go/No-Go ❌（上线门槛）
+- W0 准备阶段 ❌（前置，评测集部分已完成见下）
+- §十一 Go/No-Go ❌（安全项已审计通过）
 
 ---
 
@@ -805,7 +805,8 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 - **F3.1 ✅ 降级版**（拓扑建模属 P5）
 - **F2.1 L1 ✅ / L2 ✅**
 - X1 部分 ✅（端点 + 角色 + 5 菜单授权；全菜单 / 部门隔离未做）
-- W0 准备阶段 ❌（50 条标注评测集）/ §十一 Go/No-Go ❌
+- W0 准备阶段：**50 条标注评测集 ✅（2026-08-22，基线 98%）**；risk_history 冷启动回填 / 权重校准样本未做
+- §十一 Go/No-Go：**安全项 ✅**（无 LLM 生成 SQL 路径审计通过 + 参数白名单确认）；降级演练 / 全量指标基线未做
 
 ---
 
@@ -884,5 +885,35 @@ level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注
 
 ---
 
-**文档版本**: v2.9
+## 今日补充（2026-08-22 续：W0 评测集 + LLM-SQL 路径审计）
+
+### W0 评测集（commit 88ffb2a）
+- `configs/eval/asset_query_eval.yaml`（50 条）+ `scripts/eval_asset_query.py`
+- **基线：49/50 = 98%**（glm-4-flash，intent-only 口径），对抗样本 5/5 全拒；
+  分类最低 unsupported 85.7%；目标 ≥80%（PRD §九）
+- 重跑：`PYTHONPATH=src/backend venv/bin/python scripts/eval_asset_query.py`
+  （脚本内部会 chdir 到 src/backend——pydantic-settings 从 cwd 找 .env，
+  不 chdir 会拿不到 GLM key 报 401，再被 ai_budget 熔断掩盖）
+- 评测集抓到并修复 3 个真问题（详见 commit）：
+  1. L1 stats 委托时非白名单维度被静默换成 asset_type（答非所问）
+  2. GLM 编造 network_segment="数据库服务器所在网段"——新增
+     `_strip_fabricated_text_params`：自由文本参数必须是提问原文子串
+  3. 「没打补丁」被当 keywords 筛选（返回"没有找到"会被误读为没风险）
+- 已知残留：q42（机器间连接）被路由到 keywords 筛选，返回 0 结果无危害，
+  属 glm-4-flash 能力上限，记录不修
+
+### Go/No-Go 安全项审计（无代码变更，纯审计）
+**「系统中不存在任何 LLM 生成 SQL 的执行路径」——通过**：
+- `app/` 全部 `.execute()` 均接 SQLAlchemy select() 构造体，
+  零字符串拼接进 execute（f-string/format/% 全项目无命中）
+- 原生 `text()` 仅 2 处且均为静态 SQL + 绑定参数（`SELECT now()`、
+  DELETE 带绑定 cutoff）；另 3 处 import 未用
+- 四个 LLM 消费文件（ai_analysis/asset_query/impact_analysis/report_generator）
+  的查询均代码构造，LLM 只产文本摘要或选模板
+- L2 路径：template_id 取自 YAML 注册表 + validate() 白名单/枚举/范围，
+  执行器仅用 ORM；L1 参数全部流入 ORM filter（参数化）
+
+---
+
+**文档版本**: v2.10
 **最后更新**: 2026-08-22
