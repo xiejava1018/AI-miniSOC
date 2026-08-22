@@ -7,7 +7,7 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -166,6 +166,105 @@ class AlertQueryService:
             "total": total,
             "items": self._normalize_alerts(result.get("hits", {}).get("hits", [])),
         }
+
+    # ── 精确分级计数（服务端聚合）─────────────────────
+
+    # Wazuh rule.level 标准阈值（与 report_generator.py 一致）
+    LEVEL_CRITICAL = 13
+    LEVEL_HIGH = 10
+    LEVEL_MEDIUM = 7
+    LEVEL_LOW = 4
+
+    def get_level_buckets_by_ip(self, ip: str, days: int = 7) -> Dict[str, Any]:
+        """按 IP + 时间窗做**服务端聚合**的精确分级计数。
+
+        ⚠️ 必须用聚合，不能用「取 N 条文档再客户端分桶」——后者会严重失真：
+        实测 192.168.0.30 在 7 天窗内有 4805 条告警（level>=4 共 1637 条，
+        含 99 条 level-13 critical、635 条 level-10 high），但该 IP 同时有
+        47 万条 level-3 噪音告警。按 @timestamp 倒序取最近 1000 条文档，
+        几乎全是 level-3 噪音，critical/high 全被截断 → 客户端分桶得出
+        「total 204，critical 0，high 0」。
+
+        在安全工具里把 99 条 critical 报成 0，是会让人误判「这台机器很安全」的
+        假阴性，比查询失败更危险。故此处只用 size=0 的 terms 聚合。
+
+        返回 {critical, high, medium, low, total, window_days, exact}
+        """
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=days)
+        body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"match": {"agent.ip": ip}},
+                        {"range": {"@timestamp": {
+                            "gte": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "lte": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        }}},
+                    ]
+                }
+            },
+            # size=32 足以覆盖 Wazuh level 0-15 的全部取值
+            "aggs": {"by_level": {"terms": {"field": "rule.level", "size": 32}}},
+        }
+        result = self._os_search(body)
+        buckets = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
+        for b in result.get("aggregations", {}).get("by_level", {}).get("buckets", []):
+            try:
+                lvl = int(b["key"])
+            except (TypeError, ValueError):
+                continue
+            cnt = b.get("doc_count", 0)
+            if lvl >= self.LEVEL_CRITICAL:
+                buckets["critical"] += cnt
+            elif lvl >= self.LEVEL_HIGH:
+                buckets["high"] += cnt
+            elif lvl >= self.LEVEL_MEDIUM:
+                buckets["medium"] += cnt
+            elif lvl >= self.LEVEL_LOW:
+                buckets["low"] += cnt
+            # level<4 视为噪音，不计入（与 report_generator 口径一致）
+        buckets["total"] = buckets["critical"] + buckets["high"] + buckets["medium"] + buckets["low"]
+        buckets["window_days"] = days
+        buckets["exact"] = True  # 聚合计数，无截断
+        return buckets
+
+    def get_high_severity_samples(self, ip: str, days: int = 7, limit: int = 5) -> List[Dict[str, Any]]:
+        """取该 IP 近 days 天 level>=10 的高危告警样例（按时间倒序）。
+
+        与计数分离：计数用聚合，样例才取文档。这样样例的 limit 截断
+        不会影响计数准确性。
+        """
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(days=days)
+        body = {
+            "size": limit,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"match": {"agent.ip": ip}},
+                        {"range": {"rule.level": {"gte": self.LEVEL_HIGH}}},
+                        {"range": {"@timestamp": {
+                            "gte": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            "lte": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        }}},
+                    ]
+                }
+            },
+            "sort": [{"@timestamp": {"order": "desc"}}],
+        }
+        result = self._os_search(body)
+        out = []
+        for h in result.get("hits", {}).get("hits", []):
+            src = h.get("_source", {})
+            rule = src.get("rule", {}) or {}
+            out.append({
+                "level": rule.get("level"),
+                "description": (rule.get("description") or "")[:150],
+                "timestamp": src.get("@timestamp"),
+            })
+        return out
 
     # ── 单条告警详情 ──────────────────────────────────
 

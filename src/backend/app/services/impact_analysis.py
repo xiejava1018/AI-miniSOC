@@ -207,27 +207,24 @@ def _related_assets(db: Session, target: Asset) -> dict:
 # ---------------------------------------------------------------------------
 
 def _alert_history(svc: AlertQueryService, ip: str) -> tuple[bool, Optional[str], dict]:
-    """返回 (opensearch_ok, error, {critical, high, medium, low, total})"""
+    """返回 (opensearch_ok, error, {critical, high, medium, low, total})
+
+    历史 bug 修正（2026-08-22）：原实现用 get_alerts_by_ip(limit=1000) 取回文档
+    再客户端分桶，且算了 start/end 却从未传给查询。实测 192.168.0.30：
+      旧实现 → total 204，critical 0，high 0
+      服务端聚合 → total 1637，critical 99，high 635
+    相差 8 倍，且 critical/high 完全被抹平。根因：该 IP 有 47 万条 level-3 噪音告警，
+    按时间倒序取最近 1000 条几乎全是噪音，高危告警全被截断。
+    在安全工具里把 99 条 critical 报成 0 是危险的假阴性，故改为服务端聚合。
+    """
     if not ip:
         return True, None, {}
-    end = _utcnow()
-    start = end - timedelta(days=_LOOKBACK_DAYS)
     try:
-        resp = svc.get_alerts_by_ip(ip=ip, limit=1000)
+        buckets = svc.get_level_buckets_by_ip(ip, days=_LOOKBACK_DAYS)
     except httpx.HTTPError as exc:
         return False, f"OpenSearch HTTP 错误: {exc.__class__.__name__}", {}
     except Exception as exc:
         return False, f"OpenSearch 查询失败: {exc.__class__.__name__}: {exc}", {}
-
-    items = resp.get("items") or []
-    buckets = {"critical": 0, "high": 0, "medium": 0, "low": 0}
-    for it in items:
-        lv = (it.get("rule") or {}).get("level") or 0
-        if lv >= 13: buckets["critical"] += 1
-        elif lv >= 10: buckets["high"] += 1
-        elif lv >= 7:  buckets["medium"] += 1
-        elif lv >= 4:  buckets["low"] += 1
-    buckets["total"] = sum(buckets.values())
     return True, None, buckets
 
 
