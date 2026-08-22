@@ -110,28 +110,21 @@ def _extract_keywords(description: str) -> dict:
 def _locate_assets(db: Session, keywords: dict) -> list[Asset]:
     """按关键词查资产。
 
-    优先级：精确 IP > 名称（含 hint）> 标签值含 hint > 同 CIDR 网段。
+    优先级：精确 IP > 名称（含 hint）> 同 CIDR 网段。
+
+    重要：如果已经命中精确 IP，就不再做名称模糊匹配。
+    否则「升级 192.168.0.30 的 Wazuh Agent」会把 Wazuh/Agent 当主机名
+    ilike 匹配到一堆无关资产（生产实测：target_count 从 1 膚到 7）。
     """
     found: dict = {}  # asset.id -> Asset, 避免重复
 
-    # 1. 精确 IP 匹配
+    # 1. 精确 IP 匹配（最强信号）
     for ip in keywords.get("ips") or []:
         rows = db.query(Asset).filter(Asset.asset_ip == ip).all()
         for a in rows:
             found[str(a.id)] = a
 
-    # 2. 名称 hint 匹配（大小写不敏感）
-    for hint in keywords.get("name_hints") or []:
-        rows = (
-            db.query(Asset)
-            .filter(Asset.name.ilike(f"%{hint}%"))
-            .limit(5)
-            .all()
-        )
-        for a in rows:
-            found[str(a.id)] = a
-
-    # 3. CIDR 匹配（用 LIKE 前缀简化，避免 IPy 依赖）
+    # 2. CIDR 匹配（次强信号，用 LIKE 前缀避免 IPy 依赖）
     for cidr in keywords.get("cidrs") or []:
         prefix = cidr.split("/")[0].rsplit(".", 1)[0] + "."
         rows = (
@@ -142,6 +135,21 @@ def _locate_assets(db: Session, keywords: dict) -> list[Asset]:
         )
         for a in rows:
             found[str(a.id)] = a
+
+    # 3. 名称 hint 模糊匹配——仅当前两步都没命中时才做，
+    #    且排除长度 < 4 的短词（如 k8s/vm）避免大面积误伤
+    if not found:
+        for hint in keywords.get("name_hints") or []:
+            if len(hint) < 4:
+                continue
+            rows = (
+                db.query(Asset)
+                .filter(Asset.name.ilike(f"%{hint}%"))
+                .limit(5)
+                .all()
+            )
+            for a in rows:
+                found[str(a.id)] = a
 
     return list(found.values())
 
@@ -263,6 +271,37 @@ def _risk_trend(db: Session, asset: Asset, window_days: int = 7) -> dict:
         "delta": rows[-1][0] - rows[0][0],
         "samples": len(rows),
     }
+
+
+def _flatten_to_text(v: Any, depth: int = 0) -> str:
+    """把 GLM 可能返回的 dict/list 扁平成可读中文文本。
+
+    实测背景：prompt 说了「纯文本」但 GLM 仍可能嵌
+    {"maintenance_window": {"start": "2023-04-01T00:00:00", ...}}，
+    直接 str() 会把 Python repr 吐给前端（F2.2 踩过同款坑）。
+    """
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, (int, float, bool)):
+        return str(v)
+    indent = "  " * depth
+    if isinstance(v, list):
+        return "\n".join(
+            f"{indent}- {_flatten_to_text(item, depth + 1).lstrip('- ')}"
+            for item in v if item is not None
+        )
+    if isinstance(v, dict):
+        lines = []
+        for k, val in v.items():
+            sub = _flatten_to_text(val, depth + 1)
+            if "\n" in sub:
+                lines.append(f"{indent}- {k}:\n{sub}")
+            else:
+                lines.append(f"{indent}- {k}: {sub}")
+        return "\n".join(lines)
+    return str(v)
 
 
 def _serialize_asset(a: Asset) -> dict:
@@ -391,8 +430,15 @@ class ImpactAnalysisService:
             a = pt["alert_history_7d"]
             crit_count += a.get("critical", 0)
             high_count += a.get("high", 0)
+        # 降级原因显式传给 LLM：否则它只能写一句「数据可信度降级」
+        # 而说不出为什么（生产实测发现的信息量为 0 问题）
+        degrade_reasons = []
+        for s in sources:
+            if s.get("overdue"):
+                degrade_reasons.append(f"数据源 {s['source_key']} 过期：{s.get('reason') or '未知'}")
         return {
             "degraded": degraded,
+            "degrade_reasons": degrade_reasons,
             "targets": per_target,
             "source_health_summary": sources,
             "global_alert_7d": {"critical": crit_count, "high": high_count},
@@ -409,13 +455,21 @@ class ImpactAnalysisService:
             from zhipuai import ZhipuAI
             facts_str = json_dumps_safe(facts)
             sys_prompt = (
-                "你是 AI-miniSOC 变更影响分析助手。基于给定事实生成结构化报告：\n"
+                "你是 AI-miniSOC 变更影响分析助手。基于给定事实生成结构化报告。\n"
+                "硬约束（违反任一条即为不合格）：\n"
                 "1) 只使用给定事实，不得推测未提供的信息；\n"
-                "2) data_degraded=True 时，summary 必须开头先声明「数据可信度降级，结果可能不全」；\n"
-                "3) 按【summary / 影响资产 / 关联业务 / 告警历史 / 风险点 / 维护窗口建议】分节；\n"
-                "4) 中文 250-400 字，不用 Markdown 标题（用短横线），可用列表；\n"
-                "5) 维护窗口建议要具体（开始/结束/高风险时段）；\n"
-                "6) 严格输出 JSON：{\"summary\": \"...\", \"impact\": \"...\", \"recommendations\": \"...\"}"
+                "2) 严禁编造具体日期或时间戳。事实里没给日历日期，所以维护窗口只能写"
+                "相对表述（如「建议选夜间 02:00-06:00 低峰段」「预留 4 小时」），"
+                "绝不得出现 2023-xx-xx / 2024-xx-xx 这类具体日期；\n"
+                "3) data_degraded=True 时，summary 必须开头先声明「数据可信度降级，"
+                "结果可能不全」，并紧接说明降级原因（哪个数据源过期 / OpenSearch 不可达），"
+                "不得只写一句「数据可信度降级」就结束；\n"
+                "4) 三个字段必须都是「纯中文纯文本字符串」——不得嵌套 JSON 对象、"
+                "不得用 JSON 数组、不得用 Markdown 代码块；多条内容用每行以 - 开头的短横线列表；\n"
+                "5) 字数：summary 80-150 字；impact 100-200 字；recommendations 100-250 字；\n"
+                "6) recommendations 要包含维护窗口建议（相对表述）+ 回滚准备 + 通知对象；\n"
+                "7) 输出格式严格为："
+                '{"summary": "纯文本", "impact": "纯文本", "recommendations": "纯文本"}'
             )
             user_prompt = (
                 f"【变更描述】{description}\n"
@@ -443,8 +497,18 @@ class ImpactAnalysisService:
 
     @staticmethod
     def _parse_glm_json(text: str) -> Optional[dict]:
-        import json, re
-        m = re.search(r"\{[\s\S]*\}", text)
+        """解析 GLM 返回的 JSON。
+
+        均须为纯字符串：实测 GLM 会把 recommendations 嵌成一层
+        {"maintenance_window": {...}} 对象，直接 str(dict) 会把 Python repr
+        吐给前端（F2.2 同款坑）。这里做扁平化：
+          - str  → 直接用
+          - list → 逐项拼成 "- x" 多行
+          - dict → 递归拼成 "- key: value" 多行
+        """
+        import json
+        import re as _re
+        m = _re.search(r"\{[\s\S]*\}", text)
         if not m:
             return None
         try:
@@ -454,13 +518,20 @@ class ImpactAnalysisService:
         for k in ("summary", "impact", "recommendations"):
             if k not in data:
                 return None
-        return {k: str(data[k]) for k in ("summary", "impact", "recommendations")}
+        return {k: _flatten_to_text(data[k]) for k in ("summary", "impact", "recommendations")}
 
     def _template_report(self, per_target: list, sources: list, degraded: bool,
                           window_hours: int) -> dict:
         """AI 不可用时直接拼事实——安全稳妥，绝不编造。"""
         if degraded:
-            head = "数据可信度降级，结果可能不全（OpenSearch 不可达或数据源过期）。"
+            bad = [s for s in sources if s.get("overdue")]
+            if bad:
+                reasons = "；".join(
+                    f"{s['source_key']}（{s.get('reason') or '未知'}）" for s in bad[:3]
+                )
+                head = f"数据可信度降级，结果可能不全。原因：数据源过期 —— {reasons}。"
+            else:
+                head = "数据可信度降级，结果可能不全（OpenSearch 不可达，告警历史为空）。"
         else:
             head = "AI 解读未启用，以下为基于事实拼出的模板分析（未包含拓扑信息）。"
 
