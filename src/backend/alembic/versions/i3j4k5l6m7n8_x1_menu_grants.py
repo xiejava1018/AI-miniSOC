@@ -62,10 +62,15 @@ _GRANTS = [
 def upgrade() -> None:
     for role_code, menu_id, perms in _GRANTS:
         perms_sql = f"'{perms}'::jsonb" if perms else "NULL"
+        # JOIN soc_menus 而非硬编码 menu_id：空库（无业务种子菜单行）时
+        # SELECT 无行 → 静默跳过，不撞外键。对生产（菜单行存在）行为不变。
+        # 注：同 path 菜单在不同父下可能多行（如 'list'），OR 全匹配是故意的
+        # ——与 has_button_access 的同名 path 合并语义一致。
         op.execute(f"""
             INSERT INTO soc_role_menus (role_id, menu_id, permissions)
-            SELECT r.id, {menu_id}, {perms_sql}
+            SELECT r.id, m.id, {perms_sql}
             FROM soc_roles r
+            JOIN soc_menus m ON m.id = {menu_id}
             WHERE r.code = '{role_code}'
               AND NOT EXISTS (
                 SELECT 1 FROM soc_role_menus rm

@@ -86,3 +86,8 @@ def downgrade() -> None:
     op.execute("ALTER TABLE soc_alert_groups DROP COLUMN IF EXISTS ai_suggest_incident")
     op.execute("ALTER TABLE soc_alert_groups DROP COLUMN IF EXISTS ai_is_noise")
     op.execute("ALTER TABLE soc_alert_groups DROP COLUMN IF EXISTS ai_priority")
+    # 本迁移 upgrade 里建了 soc_alert_groups（IF NOT EXISTS 兑底），逆操作应删表。
+    # 否则 downgrade base 时链头 c5962ab1f662 删 soc_assets 会因本表的 FK 挂掉
+    # （§5.5 空库重建验证时实测抓到）。下游 analyses/digests 表在各自迁移的
+    # downgrade 中已先于本步删除，这里仅需删本表。
+    op.execute("DROP TABLE IF EXISTS soc_alert_groups")
