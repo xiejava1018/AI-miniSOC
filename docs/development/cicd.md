@@ -1260,3 +1260,28 @@ e2cb6db push 后服务器未能及时更新（服务器停在 8d1c649）。查�
 # CI/CD 修复验证 marker #4 2026-08-19 11:59:55
 # CI/CD 最终验证 marker #5 2026-08-19 12:15:28
 # CI/CD 文档更新 marker #6 2026-08-19 12:33:32
+
+### 12.14 CD 双跑去重（2026-08-22，方案 C）
+
+**现象**（GitHub API 实据）：每次 push 起两个 CD run（workflow_run 同时监听
+CI-Backend / CI-Frontend，各完成各触发），且 gate 的 API 去重实际失效——
+两 CI 几乎同一分钟完成（03:24/03:24、03:47/03:47），两个 CD 的 gate 都查到
+"双 CI success" → 双双放行。连续三个 push 每个真部署两遍（02:41+02:43、
+03:18+03:20、03:26+03:28），每次白跑 pip + vite build 1m+ × 2。
+
+**顺带发现**：67c2844 的首个 CD #116 因慢网 fetch 三策略全超时失败
+（`目标 commit 不存在`），第二个 CD 排队重试成功——双跑碰巧起了免费重试作用。
+
+**修复（方案 C：服务器本地日志去重）**：gate 在双 CI 检查后，加查
+`/tmp/aisoc-deploy.log` 是否已含 `部署成功: <full sha>`：
+- 已含 → `DEPLOY=no` 跳过（第二个 CD 秒退）
+- 不含（首个 CD 失败）→ 照常部署，**保留免费重试**
+- 竞态安全性：concurrency group 使两个 CD 严格串行，#2 的 gate 必然在
+  #1 写完成功行之后执行，无 API 超前问题
+- `workflow_dispatch` 不走 gate，手动重部署不受影响
+
+**为什么不用方案 A（合并双 CI 为单 workflow）**：用户拍板保留重试兜底
+（慢网 fetch 失败当天实际发生过）；合并需改 workflow 名，收益不够。
+
+**验证方法**：push docs-only commit → API 观察 CD #N/#N+1：#2 的
+Execute deploy.sh 步骤应 skipped，服务器日志该 sha 只有一行部署成功。

@@ -125,13 +125,23 @@ jobs:
           for n in REQUIRED:
               if runs[n]["conclusion"] != "success":
                   print("::error::" + n + " conclusion=" + str(runs[n]["conclusion"]) + "，阻断部署"); raise SystemExit(1)
-          # 注意：此处**不加** "同 sha 已有其他成功 CD → 跳过" 的去重规则。
-          # 原因（实测，参见 cicd.md §12.13）：在两 CI 几乎同时完成的快速路径下，
-          # 第一个 CD 的 gate 查询时 #2 已被 API 列为 completed/success（API 状态略超前），
-          # 会误判"已有部署"→ 跳过首次部署 → 服务器不更新（实测 a271f30）。
-          # 去重完全交给 workflow 的 concurrency group (deploy-prod, cancel-in-progress: false)：
-          # 两个 CD 全局串行部署同一 commit，幂等无害。
-          print("DEPLOY=yes（两个 CI 均 success）")
+          # 去重（方案 C，2026-08-22）：查服务器本地部署日志是否已有本 sha 的成功记录。
+          # 为什么查本地日志而不是 GitHub API：两 CI 几乎同时完成时，两个 CD 的
+          # gate 查 API 都看到 success → 双双放行（实测每 push 部署两遍，
+          # 参见 cicd.md §12.14）。本地日志无此竞态：concurrency group 使两个
+          # CD 严格串行，#2 的 gate 必然在 #1 部署完成后执行，日志已写成功行。
+          # 若 #1 失败（如慢网 fetch 拿不到 commit，实测 a271f30 / 67c2844 的首个
+          # CD），日志无成功行 → #2 照常部署，保留免费重试。
+          # 注意：workflow_dispatch 不走本 gate（if 条件限定 workflow_run），
+          # 手动重部署不受影响。
+          try:
+              with open("/tmp/aisoc-deploy.log", "r", errors="replace") as f:
+                  if ("部署成功: " + sha) in f.read():
+                      print("DEPLOY=no（该 commit 已部署成功，跳过重复部署）")
+                      out.write("deploy=no\n"); raise SystemExit(0)
+          except FileNotFoundError:
+              pass
+          print("DEPLOY=yes（两个 CI 均 success，且该 sha 未部署过）")
           out.write("deploy=yes\n")
           PYEOF
 
