@@ -31,10 +31,15 @@ class MenuService:
             if role:
                 # 获取角色关联的菜单ID集合
                 assigned_ids = {m.id for m in role.menus}
-                # 过滤：保留已分配的菜单，或其父菜单已被分配的菜单
+                # 因子菜单被授权而需保留的父容器（根菜单自身未授权但子菜单授权时仍要显示）
+                parent_ids = {m.parent_id for m in all_menus
+                              if m.parent_id is not None and m.id in assigned_ids}
+                # 仅保留：自身被授权的菜单，或作为容器的父菜单。
+                # 注意：父菜单被授权 ≠ 子菜单全放行——否则授权粒度被摧毁
+                # （X1 实测：给 viewer 授 /assets 根曾导致对账菜单泄漏给 viewer）
                 menus = [m for m in all_menus if
                          m.id in assigned_ids or
-                         (m.parent_id is not None and m.parent_id in assigned_ids)]
+                         m.id in parent_ids]
             else:
                 menus = all_menus
         else:
