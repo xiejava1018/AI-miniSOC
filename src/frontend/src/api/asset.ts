@@ -579,6 +579,10 @@ export const getComplianceFindings = (params: {
 export const interpretCompliance = (limit = 10, force = false): Promise<any> => {
   return httpClient.post({
     url: `${API_PREFIX}/compliance/interpret`,
+    // httpClient 拦截器会把 POST 的 params 搬进 body（当 data 为空时），
+    // 但后端 endpoint 用 Query() 解析，必须走 query string。
+    // 传空 data 阻止拦截器搬移，params 保留在 URL 上。
+    data: {},
     params: { limit, force },
     keepFullResponse: true,
     timeout: 180000

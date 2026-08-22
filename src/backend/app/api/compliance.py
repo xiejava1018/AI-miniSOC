@@ -172,7 +172,10 @@ async def asset_compliance(
 # ---------------------------------------------------------------------------
 
 @router.post("/compliance/interpret", summary="AI 生成整改建议（仅 fail 项）")
-async def interpret(
+# 注意：故意用 def 而非 async def。函数体是同步阻塞的（GLM 调用，单批可达
+# 百秒级），async def 会把它跑在事件循环上，整个后端在这期间对所有请求无响应
+# （含前端分批之间的 loadFindings）。def 交给 threadpool，不堵其他请求。
+def interpret(
     run_id: Optional[str] = Query(None, description="默认取最近一次巡检"),
     limit: int = Query(10, ge=1, le=50, description="单次生成上限（控成本）"),
     force: bool = Query(False, description="是否重新生成已有建议"),

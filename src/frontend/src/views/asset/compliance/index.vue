@@ -116,7 +116,13 @@
         <!-- 逐规则达标情况 -->
         <div class="rule-stats">
           <div class="rule-stats-title">逐规则判定分布</div>
-          <ElTable :data="ruleRows" size="small" :max-height="320" @row-click="onRuleRowClick">
+          <ElTable
+            :data="ruleRows"
+            size="small"
+            class="rule-table"
+            :row-class-name="ruleRowClass"
+            @row-click="onRuleRowClick"
+          >
             <ElTableColumn prop="id" label="规则" width="140">
               <template #default="{ row }">
                 <span class="rule-id">{{ row.id }}</span>
@@ -168,6 +174,11 @@
       <div class="findings-head">
         <div class="findings-title">
           问题项明细
+          <template v-if="filterRuleId">
+            <ElTag size="small" type="primary" effect="light" closable @close="clearRuleFilter">
+              仅看 {{ filterRuleId }}{{ ruleMap[filterRuleId]?.title ? ' ' + ruleMap[filterRuleId].title : '' }}
+            </ElTag>
+          </template>
           <span class="sub">（判定结论由规则引擎产出，AI 仅补充整改建议）</span>
         </div>
         <div class="findings-filters">
@@ -489,23 +500,68 @@
     }
   }
 
+  /** 单批条数：后端 deadline=90s，单条 GLM 实测 ~9s，取 8 留足余量 */
+  const INTERPRET_BATCH = 8
+  /** 批次上限：防止后端持续报 remaining>0（如全部 errors）时无限循环 */
+  const INTERPRET_MAX_BATCHES = 8
+
   const handleInterpret = async () => {
     interpreting.value = true
+    // 跨批汇总，消息只弹一次，避免每批一个 toast 刷屏
+    let generated = 0
+    let fallback = 0
+    let errors = 0
+    let remaining = 0
+    let batches = 0
     try {
-      const res = await interpretCompliance(10)
-      const s = res?.data?.stats || {}
-      if (!s.candidates) {
-        ElMessage.info('没有待生成建议的不达标项')
-      } else {
+      while (batches < INTERPRET_MAX_BATCHES) {
+        const res = await interpretCompliance(INTERPRET_BATCH)
+        const s = res?.data?.stats || {}
+        batches += 1
+
+        if (!s.candidates) {
+          if (batches === 1) ElMessage.info('没有待生成建议的不达标项')
+          remaining = 0
+          break
+        }
+
+        generated += s.generated || 0
+        fallback += s.fallback || 0
+        errors += s.errors || 0
+        remaining = s.remaining || 0
+
+        // 本批一条都没写成功——再试只会重复失败，直接收收
+        if (!(s.generated || 0) && !(s.fallback || 0)) break
+        if (remaining <= 0) break
+
+        // 多批时给个进度，否则用户对着一个转圈等几分钟不知道发生了什么
+        ElMessage.info(`已完成 ${generated + fallback} 条，剩余 ${remaining} 条继续生成中…`)
+        // 每批刷一次，让已生成的建议陆续可见，不必等全部跑完
+        await loadFindings()
+      }
+
+      if (generated || fallback) {
         ElMessage.success(
-          `已生成 ${s.generated || 0} 条 AI 建议` +
-            (s.fallback ? `，${s.fallback} 条降级为规则库预置文案` : '') +
-            (s.errors ? `，${s.errors} 条失败` : '')
+          `已生成 ${generated} 条 AI 建议` +
+            (fallback ? `，${fallback} 条降级为规则库预置文案` : '') +
+            (errors ? `，${errors} 条失败` : '') +
+            (remaining > 0 ? `，尚余 ${remaining} 条未生成（再点一次继续）` : '')
         )
+      } else if (errors) {
+        ElMessage.warning(`${errors} 条解读失败，未写入任何建议`)
       }
       await loadFindings()
-    } catch {
-      ElMessage.error('AI 解读失败')
+    } catch (e: any) {
+      // 区分「真失败」与「前端等不下去了」：后者后端仍在写入，
+      // 说「失败」会让用户以为没效果，而刷新后其实有。
+      const msg = String(e?.message || '')
+      if (msg.includes('网络错误') || msg.includes('timeout')) {
+        ElMessage.warning('等待响应超时，后台可能仍在生成。请稍后刷新查看，或再点一次继续未完成部分')
+      } else {
+        ElMessage.error('AI 解读失败')
+      }
+      // 无论哪种，都把已落库的部分拉出来（逐条 commit 后这部分是真实存在的）
+      await loadFindings()
     } finally {
       interpreting.value = false
     }
@@ -519,8 +575,22 @@
   }
 
   const onRuleRowClick = (row: any) => {
+    // 再次点击已选中的规则 = 取消筛选，避免用户找不到「回到全部」的入口
+    if (filterRuleId.value === row.id) {
+      clearRuleFilter()
+      return
+    }
     filterRuleId.value = row.id
     filterStatus.value = row.fail > 0 ? 'fail' : 'unknown'
+    loadFindings(1)
+  }
+
+  /** 选中规则行高亮：与 filterRuleId 单向同步，下拉框清空时高亮同步消失 */
+  const ruleRowClass = ({ row }: { row: any }) =>
+    row.id === filterRuleId.value ? 'is-selected-rule' : ''
+
+  const clearRuleFilter = () => {
+    filterRuleId.value = ''
     loadFindings(1)
   }
 
@@ -534,6 +604,12 @@
 
 <style lang="scss" scoped>
   .compliance-page {
+    // 单一滚动容器：.art-full-height 的固定 height 会让超高内容溢出不可滚，
+    // 叠加表格 max-height 后出现「上下两个下拉滚动条」。
+    // 这里让页面随内容伸展，滚动统一交给外层文档。
+    height: auto;
+    min-height: var(--art-full-height);
+
     .summary-card,
     .findings-card {
       margin-bottom: 12px;
@@ -644,6 +720,10 @@
 
     .rule-stats-title,
     .findings-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
       margin-bottom: 8px;
       font-size: 14px;
       font-weight: 600;
@@ -652,6 +732,37 @@
         font-size: 12px;
         font-weight: 400;
         color: var(--el-text-color-secondary);
+      }
+    }
+
+    // 规则表：行可点击 + 选中态与下方「问题项明细」联动
+    .rule-table {
+      :deep(.el-table__row) {
+        cursor: pointer;
+      }
+
+      // 选中行：底色 + 左侧主色标记，悬停时也不被 hover 色盖掉
+      :deep(.el-table__row.is-selected-rule) {
+        --el-table-tr-bg-color: var(--el-color-primary-light-9);
+
+        background-color: var(--el-color-primary-light-9);
+
+        &:hover > td.el-table__cell {
+          background-color: var(--el-color-primary-light-8) !important;
+        }
+
+        > td.el-table__cell {
+          background-color: var(--el-color-primary-light-9);
+        }
+
+        > td.el-table__cell:first-child {
+          box-shadow: inset 3px 0 0 0 var(--el-color-primary);
+        }
+
+        .rule-id {
+          font-weight: 600;
+          color: var(--el-color-primary);
+        }
       }
     }
 
