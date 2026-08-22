@@ -1099,5 +1099,46 @@ breakdown 确认与 alerts 维度无关（它们的 P 级变化未被任何资�
 
 ---
 
-**文档版本**: v2.16
+## 今日补充（2026-08-22 续六：资产稽核/安全报告 icon 修正 + 页面文案统一）
+
+### 本次交付
+
+**后端迁移 m1n2o3p4q5r6_fix_invalid_icons**
+- /assets/reconciliation icon 'ri:git-compare-line' → 'ri:scales-3-line'
+  — 根因：iconify-json/ri 库中**实际没有** git-compare-line（只有 fill/commit 等变体）
+  — 之前的迁移是照名字面猜的，没验过存在性
+- /reports icon 'Document' → 'ri:file-shield-2-line'
+  — 根因：'Document' 是 Material Icons 字符串（Font class），不是 iconify 格式
+  — iconify 静默失败不报错，肉眼看就是没图标
+
+**前端文案统一 对账 → 稽核（7 个文件）**
+- /asset/reconciliation/index.vue：13 处（标题、按钮、错误消息、注释）
+- /asset/data-health/index.vue：第 3 层卡片 7 处（台账稽核/前往稽核/最近稽核 等）
+- /api/asset.ts：JSDoc 注释 6 处
+- /router/routesAlias.ts：注释 2 处
+- **不改**：API 路径 /assets/reconcile*、reconciliation_type 字段（功能性）
+- **不改**：对账管理后端文件 asset_reconciliation.py（PRD §F1.3 原文 "资产对账"）
+
+### 踩过的坑（后续菜单改动需注意）
+1. **icon 字符串不能拍脑袋**—— iconify-json/ri 库实际可用图标名需到
+   https://icon-sets.iconify.design/ri/ 查询，常见拼写错误：git-compare-line
+   （不存在）、git-commit-line（存在）、git-merge-line（存在）
+2. **Material Icons 和 iconify 不能混用**—— 'Document' 'Settings' 'Shield'
+   这些是 Material 的 Font class 名，iconify 不认。系统统一用 ri:* (RemixIcon)
+3. **iconify 不存在的名字静默失败**——不报错也不显示，控制台无任何
+   警告，只能靠全量扫描 menu.icon 库才能发现
+
+### 验证
+- 本地 menu tree 查 icon 都更新成功
+- 生产 alembic upgrade head 跑过 m1n2o3p4q5r6
+- 生产 HTTP /menus/tree 返回 /reconciliation icon=ri:scales-3-line、/reports icon=ri:file-shield-2-line
+- 前端 vite build 1m6s 完成，dist 原子替换
+
+### 后续菜单 icon 健全性
+- 建议补一条 CI：检查 menu.icon 字符串必须在 iconify-json/ri/icons.json 中存在
+- 未来加新菜单时直接查 https://icones.js.org/ 避免同类坑
+
+---
+
+**文档版本**: v2.17
 **最后更新**: 2026-08-22
