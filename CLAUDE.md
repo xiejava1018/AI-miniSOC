@@ -1022,5 +1022,41 @@ breakdown 确认与 alerts 维度无关（它们的 P 级变化未被任何资�
 
 ---
 
-**文档版本**: v2.14
+## 今日补充（2026-08-22 续四：菜单重组 /ops 运维管理）
+
+### 本次交付
+- **新顶级菜单「运维管理」**(path=/ops, sort=8，icon=ri:tools-line，permissions=[])
+- **移动 4 个子菜单**到 /ops 下：
+  - 任务中心（原 /system sort=90 → /ops sort=1）
+  - 数据健康（原 /assets sort=6 → /ops sort=2）
+  - 变更影响分析（原 /assets sort=7 → /ops sort=3）
+  - 知识库（原顶级 /knowledge sort=65 → /ops sort=4，path 同步规范化 '/knowledge'→'knowledge'）
+- **资产对账 → 资产稽核**（仅 name/title，path 'reconciliation'/component/permissions 全保留）
+- **/ops 不显式插 soc_role_menus** —— X1 修复的 parent_ids 容器逻辑自动从子菜单反推
+- 迁移 `j1k2l3m4n5o6`，down_revision=i3j4k5l6m7n8，生产已手跑
+
+### 实测
+- 本地 4 角色菜单树：admin 4 子全在；operator 3 子（无 task-center）；viewer 2 子（仅 data-health + knowledge）；auditor 2 子 + /system 下 audit-log
+- HTTP 端到端：admin 登录 + /menus/tree 返回 27 个子菜单 URL，/ops 下 4 个新 URL 正确
+- downgrade→upgrade 循环幂等；/ops component 改 /index/index（与 /system /assets 容器一致）
+
+### 踩过的坑
+1. **/knowledge 的 path 要从 '/knowledge' 改成 'knowledge'**——顶级约定带前导斜杠、子菜单约定不带，原样保留会拼出 /ops//knowledge 双斜杠。downgrade WHERE 同时容错 `path IN ('knowledge', '/knowledge')` 处理中间态
+2. **container 菜单的 component 不能用 /<name>/index**——本想配 /ops/index，/ops 下没有 index.vue 会 404。改成 /index/index（layout）才是其它 /system /assets /incidents /alerts 同款
+3. **migration 文件写完别立刻迁移再修文件**——本地已升级后改文件，alembic_version 已记录新版本，重跑不再执行；只能 downgrade→upgrade 验证或手改 DB。教训：先把迁移代码 review 完再跑
+4. **downgrade 顺序反于 upgrade**——FK 要求先复原子菜单 parent_id 再删父菜单，不能直接删 /ops
+5. **空父菜单一开始没 WHERE parent_id IS NULL 也能匹配（path 唯一）**，反而更稳——重跑时 path 已规范化、parent_id 已更新但 migration 检测不到差异时仍能自我修复
+
+### 设计决策记录
+- **不移动前端 .vue 文件**（views/system/task-center/ 仍在原位）—— component loader 用字符串索引文件，URL 与文件路径解耦。最少改动面
+- **/ops 本身 permissions=[]**（无按钮）—— 是容器不是页面，不应被 v-auth 误拦
+- **资产对账 → 资产稽核 不改 button authMark**（reconcile/resolve/report）——这些是 IT 术语，稽核/对账都说得通；改 authMark 会牵动所有 require_button_permission 调用，风险大于收益
+
+### 待办（不阻塞）
+- 视觉确认：建议登录 admin 浏览器看侧边栏，验证 /ops 容器图标、子菜单展开/选中样式
+- 旧 URL 重定向：原 /system/task-center 现在 404，如果有人存了书签需手动改。考虑加 router redirect？
+
+---
+
+**文档版本**: v2.15
 **最后更新**: 2026-08-22
