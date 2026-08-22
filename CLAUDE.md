@@ -119,6 +119,7 @@ AI-miniSOC/
 | 安全报告 | `app/api/reports.py` | P3/F2.2：weekly/monthly/on_demand/incident_driven 四种触发；`data_coverage` JSONB NOT NULL 是硬门槛 |
 | 主动推送 | `app/services/push_notification_service.py` | P3/F4.2：5 个场景全落地（源健康/评分突变/EOL/影子资产/报告生成完成）；`/api/v1/notifications/push-check` 手动触发，`/api/v1/notifications/push-rules` admin 配置 |
 | 权限矩阵 | `app/core/permissions.py` | P3/X1：`require_role()` + `require_button_permission()`，P3 4 个写操作端点 + EOL 覆盖接权限；admin bypass、operator/viewer 实体测试通过 |
+| 变更影响分析 | `app/services/impact_analysis.py` | P3/F3.1：`POST /api/v1/assets/impact-analysis`，自然语言变更描述 → 定位资产 + 粗粒度关联（同网段/共享标签/告警历史）→ GLM 报告（带模板降级）；admin/operator 可用 |
 | Webhooks | `app/api/webhooks.py` | Wazuh Webhook接收 |
 | 公共依赖 | `app/api/deps.py` | `get_current_user` / `require_active_user` / `require_admin` / `require_menu_permission` |
 
@@ -754,5 +755,58 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 
 ---
 
-**文档版本**: v2.7
+## 今日补充（2026-08-22 P3/F3.1 变更影响分析）
+
+### 本次交付
+- **F3.1 变更影响分析**（PRD P3 最后一个零代码的主功能）。自然语言描述计划变更，
+  服务定位受影响资产 + 关联资产 + 历史告警，AI 输出可执行报告。
+- **诚实降级**（PRD §F3.1 v1.2 明确要求）：拓扑建模不在本期范围，
+  所以关联分析只做同网段 + 共享标签 + 告警历史三个粗粒度维度，
+  前端三处（模板横幅 / 关联卡 tooltip / 模板文案）显式写"未包含拓扑信息"。
+- 后端 `services/impact_analysis.py`：关键词提取（零 LLM 成本）→ 资产定位
+  → 粗粒度关联 → OpenSearch 近 7 天告警分级 → 风险评分趋势 → GLM/模板报告。
+- 前端 `views/asset/impact-analysis/index.vue`：左输入右报告，
+  含目标资产明细卡（告警分级/评分趋势/关联台数）+ 关键词卡（可解释性）。
+- 迁移 `h2i3j4k5l6m7`：菜单 #41 挂 /assets 下 sort=7，admin + operator 各授 view/analyze。
+
+### 生产实测（真资产 + 真 GLM）
+- admin 200 / operator 200 / viewer 403 / 未匹配资产 200+template
+- 审计日志落库（3 条 resource_type=impact_analysis）
+- 真实输出：`fnos-vm-ubuntu01/192.168.0.30`，近 7 天告警 medium 56 / low 146，
+  同网段 15 台；degraded 真触发并正确报出 `loki:browsing_detection 过期 84.3h`
+
+### 生产实测暴露并修复的 3 个真问题（commit d227d4f）
+1. **GLM 把 recommendations 嵌成 JSON 对象 + 编造 2023 年日期**
+   ——实测输出 `{'maintenance_window': {'start': '2023-04-01T00:00:00'}}`。
+   prompt 未约束三字段必须纯文本 + `str(dict)` 直接吐 Python repr。
+   修：prompt 加硬约束（禁嵌 JSON / 禁具体日期，只写相对表述）+ 新增
+   `_flatten_to_text()` 把 dict/list 递归扁平为可读文本。**F2.2 同款坑的通用解**。
+2. **target_count 从 1 膨胀到 7**（误匹配）——"升级 192.168.0.30 的 Wazuh Agent"
+   把 Wazuh/Agent 当主机名 ilike，把精确 IP 信号淹了。
+   修：信号强度分层 —— 精确 IP/CIDR 命中后跳过名称模糊匹配，
+   且模糊匹配排除长度 < 4 的短词（k8s/vm）。
+3. **degraded=True 但 summary 信息量 0**——只写"数据可信度降级"就结束。
+   修：`_build_facts` 新增 `degrade_reasons[]` 传给 LLM，prompt 要求紧接说明原因；
+   模板路径同步列出具体源名 + reason。
+
+### 开发期踩坑（6 条）
+1. `_serialize_asset` 定义成 @staticmethod 但 4 处按模块级函数调 → NameError
+2. `sources`/`opensearch_ok_all` 只在 if targets 分支定义，未匹配分支 return 时炸
+3. service 返回 `{"code":400}` 会被 API 再包一层变成 200 套 400；
+   改 raise ValueError；实际 pydantic min_length/le 更早拦成 422
+4. **soc_menus 没有 is_hidden 列，是 is_visible**（语义相反）——迁移首次直接失败
+5. **soc_menus.component 存带前导斜杠的 `/asset/xxx/index`**，不是相对名；
+   且有 title 列（旧数据大量 NULL，新增要补）
+6. GLM 实测 20-60s，测试脚本 timeout=30 直接 TimeoutError，前端 API 封装设 180s
+
+### P3 缺口最新状态
+- F1.1 / F1.2 / F1.3 / F2.2 / F2.3 / F3.2 / F3.3 / F4.1 / F4.2 均 ✅
+- **F3.1 ✅ 降级版**（本轮；拓扑建模属 P5）
+- F2.1 L1 ✅ / L2 ❌（configs/query_templates.yaml 不存在）
+- X1 部分 ✅（端点 + 角色 + 5 菜单授权；全菜单 / 部门隔离未做）
+- W0 准备阶段 ❌（50 条标注评测集）/ §十一 Go/No-Go ❌
+
+---
+
+**文档版本**: v2.8
 **最后更新**: 2026-08-22

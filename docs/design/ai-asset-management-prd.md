@@ -47,7 +47,7 @@
 | **资产自动对账** | **F1.3** | **✅ 已完成** | 三类差异纯规则判定 + AI 解读；见下方实现偏差 |
 | **数据健康聚合页** | **F1.3** | **✅ 已完成** | `GET /api/v1/data-health`，源健康/死信/对账三层统一入口 |
 | AI 安全报告 | F2.2 | ✅ 已完成 | 周报/月报/按需/事件驱动四种触发；data_coverage JSONB 硬门槛；不引入消息队列，事件驱动走 cron 或前端按钮调 `POST /reports/check-incident-trigger` |
-| 变更影响分析 | F3.1 | ❌ 未开始 | P3 优先级 |
+| 变更影响分析 | F3.1 | ✅ 降级版 | POST /assets/impact-analysis；关联分析降级为同网段 + 共享标签 + 告警历史三维（拓扑建模仍属 P5），前端三处显式标注"未包含拓扑信息"；admin/operator 可用 |
 | 推送场景 3/5 | F4.2 | ✅ 已完成 | 5 个场景全部落地：数据链路异常/评分突变/EOL/影子资产/报告生成完成；事件驱动走 `POST /api/v1/notifications/push-check` 同步端点（admin only，cron 可调） |
 | 权限矩阵（§6.5） | X1 | ✅ 部分 | P3 4 个写操作端点接 require_button_permission；operator/viewer/auditor 三角色 + 12 条菜单授权。**未完**：全菜单权限（仅 4 个菜单种了）、部门隔离（需独立工单建资产↔部门关联） |
 
