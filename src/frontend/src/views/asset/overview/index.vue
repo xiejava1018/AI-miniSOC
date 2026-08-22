@@ -97,20 +97,20 @@
       </ElCol>
     </ElRow>
 
-    <!-- 3. 近期评分上升最快（独立 1 行，全宽显示更舒服） -->
+    <!-- 3. 近期风险上升最快（独立 1 行，全宽显示更舒服） -->
     <ElRow :gutter="12" class="top-row">
       <ElCol :span="24" class="top-col">
         <ElCard shadow="never" class="top-card">
           <template #header>
-            <span class="chart-title">近期评分上升最快</span>
-            <span class="chart-subtitle">(与首次评分对比 · Δ ≥ 5)</span>
+            <span class="chart-title">近期风险上升最快</span>
+            <span class="chart-subtitle">(与首次风险对比 · Δ ≥ 5)</span>
           </template>
           <div class="top-table-wrap">
             <ElTable
               :data="risingRows"
               size="small"
               class="top-table"
-              empty-text="近期无评分异动资产"
+              empty-text="近期无风险异动资产"
               @row-click="goDetailById"
             >
               <ElTableColumn prop="name" label="名称" min-width="150" show-overflow-tooltip>
