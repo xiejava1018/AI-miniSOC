@@ -2,6 +2,7 @@
 行为检测 API
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -37,7 +38,7 @@ from app.services.browsing_detection.config import (
     config_cache,
     CONFIG_CATEGORY,
 )
-from app.services.browsing_detection.loki_client import LokiClient
+from app.services.browsing_detection.loki_client import LokiClient, LokiTruncationError
 from app.services.browsing_detection.log_parser import parse_loki_result
 from app.services.browsing_detection.rule_engine import RuleEngine
 from app.services.browsing_detection.baseline_service import BaselineService
@@ -387,8 +388,22 @@ async def test_rules(
     end_ns = int(end.timestamp() * 1_000_000_000)
 
     client = LokiClient()
+    # P4 WO-3：改用分页拉取，消除硬编码 limit=10000 的静默截断（与调度器
+    # WO-1 同构）；硬上限截断时降级单次拉取保证试运行可用，信号透出 stats。
     try:
-        streams = client.query_range('{exporter="OTLP"}', start_ns, end_ns, limit=10000)
+        try:
+            streams, _total, truncated = await asyncio.to_thread(
+                client.query_range_paginated, '{exporter="OTLP"}', start_ns, end_ns,
+            )
+        except LokiTruncationError as exc:
+            logger.warning(
+                "rules/test: Loki 硬上限截断 fetched=%d limit=%d，降级单次拉取",
+                exc.fetched, exc.limit,
+            )
+            truncated = True
+            streams = await asyncio.to_thread(
+                client.query_range, '{exporter="OTLP"}', start_ns, end_ns, 10000,
+            )
     finally:
         client.close()
 
@@ -412,6 +427,7 @@ async def test_rules(
             "fetched": sum(len(s.get("values", [])) for s in streams),
             "parsed": len(records),
             "findings": len(findings),
+            **({"loki_truncated": True} if truncated else {}),
         },
     )
 

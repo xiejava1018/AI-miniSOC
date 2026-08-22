@@ -1,9 +1,9 @@
 # P4 数据可靠性 — 剩余缺口详细设计与可执行工单
 
-**文档版本**: v1.1
+**文档版本**: v1.2
 **创建日期**: 2026-08-22
-**最后更新**: 2026-08-22（v1.1：按 pi agent 评审意见修订，含第三处误判留痕）
-**状态**: RevDraft（v1.0 评审后修订，待终审）
+**最后更新**: 2026-08-22（v1.2：WO-1~WO-5 实施完成，见 §7）
+**状态**: Implemented（待生产部署验证）
 **作者**: 主 Agent（代码核实）/ 交付 pi agent 评审
 **关联文档**:
 - `docs/design/2026-08-16-数据可靠性全面梳理与完善方案.md`（P4 原始梳理）
@@ -181,7 +181,7 @@ v1.0 断言 `check_source_health()` 无周期调度调用，拟新建 watchdog�
 - **修改文件**：`src/backend/app/services/browsing_detection/scheduler.py`（:76-84）。
 - **具体改法**：
   - `:79` 改 `client.query_range_paginated('{exporter="OTLP"}', start_ns, end_ns)`（位于 `app/services/browsing_detection/loki_client.py:106`）。
-  - `try/except LokiTruncationError`：捕获后 `logger.warning` + 在返回 stats dict 写 `loki_truncated: true` / `loki_total_values: N`（落点定案理由见 §3.2.1：不写 SourceHealthRecorder failure，避免误标红；不改 record_success 签名）；仍用已拉取 `results` 继续解析。
+  - `try/except LokiTruncationError as e`：捕获后 `logger.warning` + 在返回 stats dict 写 `loki_truncated: true` / `loki_total_values: e.fetched`（落点定案理由见 §3.2.1：不写 SourceHealthRecorder failure，避免误标红；不改 record_success 签名）；`e.fetched` 即已拉取的累计行数（`LokiTruncationError(fetched, limit, window)`，见 `loki_client.py:38`）；仍用已拉取 `results` 继续解析。
   - `streams` 变量名不变（paginated 返回 `results` 同为流列表）。
 - **验收标准**：
   1. 单测：mock `query_range` 返回超 `hard_limit` 的分片 → 断言抛 `LokiTruncationError` 且 `truncated=True`（扩展 `test_loki_client_pagination.py`）。
@@ -253,3 +253,19 @@ P4 视为"真正完成"的签字条件：
 |---|---|---|
 | v1.0 | 2026-08-22 | 初版：基于代码级核实收敛剩余缺口。修正上一轮两处误判（GAP C 模型 FK 实际已声明、GAP A 的 SourceHealthRecorder 已在 browsing scheduler 接线）；将"真正的剩余缺口"定为 GAP A（A.1/A.2/A.3）+ GAP B（B.1/B.2/B.3）+ GAP E/F 卫生项，GAP C/D 留痕关闭；拆 6 张可执行工单（WO-1~WO-6），含精确文件/行号与验收口径 |
 | v1.1 | 2026-08-22 | pi agent 评审后修订：①撤销 GAP A.2 / 原 WO-1（新建 watchdog）——`check_source_health` 已被 `push_scheduler` 30 分钟巡检周期调用，生产日志 2026-08-22 08:20:09 实锤发出过 2 条 critical 通知，原断言"无周期调度"误报；工单编号顺移（原 WO-2 升为 WO-1）；②原 WO-3 依赖行解除（告警出口已存在，可独立实施）；③GAP E 补注同前缀双文件（另一个 `a1b2c3d4e5f6_*.py` 内部 revision 真为 e5f6，不可动）；④WO-1（原 WO-2）截断信号落点定案为 `soc_task_runs.stats.loki_truncated`——`record_success` 实测无 warning 参数，且截断写 failure 会误标红 `is_healthy()`；⑤§5.3 验收修正："P3 py_compile"→P4 对应测试套件（py_compile 覆盖不了调度逻辑）；⑥`loki_client.py` 引用补目录前缀 `browsing_detection/`。核心教训（写入 §0）：结论置信度必须与验证深度成正比，severity 最高的断言尤需生产实据背书 |
+
+## 7. 实施记录（v1.2，2026-08-22）
+
+WO-1~WO-5 全部实施完成，测试 37 passed（分页 10 + 覆盖 3 + 既有 loki 分页 7 +
+push_notifications / source_health 17）。实施中的有据偏离与新发现：
+
+| 项 | 偏离/发现 | 理由 |
+|---|---|---|
+| WO-1 | 截断时"用部分流继续解析"不可实现——`LokiTruncationError` 不携带已拉取数据；改为**降级单次拉取**（limit=10000）保证检测不中断 + stats 透出 `loki_truncated` | 客户端 API 现状（改异常携带数据需动共享接口与其单测）；降级路径与旧版行为一致，可用性目标达成 |
+| WO-2 | **新发现**：decorator 成功路径原调用 `SourceHealthRecorder(source_key=...)` 构造即 TypeError（构造器要求 db），被 `except Exception` 静默吞掉——即"成功路径已记录"实际从未生效；一并修正 | v1.0 文档误判"已生效"的文末勘误：连 v1.1 评审也没抓到这处 |
+| WO-2 | wazuh agent 同步与 tplink 采集都流经 `AssetSyncHandler.handle`，在该处**集中上报**一次即覆盖两源（未来新采集器自动纳入）；source_key 用 `tplink:collector` / `wazuh:agents`（非 v1.0 建议的 `wazuh:alerts`——该同步的是 agents 不是 alerts） | 比逐源改 except 更少侵入；key 语义准确 |
+| WO-3 | 工单范围收窄：仅 `:391`（POST /rules/test）改分页；`:487`/`:683` 是**用户指定 limit 的 UI 查询**（截断是参数契约非事故）；`:546` 是 **LogQL 聚合查询**（返回 metric 序列非明细流，分页合并不适用） | 逐端点语义核实后分类；对 :487/:683 强行分页会违背 limit 参数语义且可能拖垮 UI |
+| WO-4 | decorator 的 source_key 改 `loki:browsing_detection`；历史 `loki:browsing` 行保留只读 | 按计划 |
+| WO-5 | `git mv` 完成，alembic history 27 步、head `i3j4k5l6m7n8` 不变 | 按计划 |
+
+**验收**：§5 全部满足——测试套件全绿、import 冒烟通过、alembic 链不变。

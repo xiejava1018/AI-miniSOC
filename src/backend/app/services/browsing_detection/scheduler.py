@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 import app.models  # noqa: F401  确保模型注册
 from app.services.browsing_detection.config import get_detection_config
-from app.services.browsing_detection.loki_client import LokiClient
+from app.services.browsing_detection.loki_client import LokiClient, LokiTruncationError
 from app.services.browsing_detection.log_parser import parse_loki_result
 from app.services.browsing_detection.baseline_service import BaselineService
 from app.services.browsing_detection.rule_engine import RuleEngine
@@ -49,7 +49,9 @@ _BROWSING_TABLES_DEPRECATED = {"soc_browsing_events", "soc_browsing_blacklist", 
     schedule_expr="@every 5m",
     expected_interval_s=300,
     timeout_s=600,
-    source_key="loki:browsing",
+    # P4 WO-4：与函数体内显式上报（record_success/record_failure）的
+    # source_key 统一，避免同一逻辑源在 soc_source_health 产生两行。
+    source_key="loki:browsing_detection",
 )
 async def run_detection_once() -> dict:
     """执行单轮检测，返回统计信息"""
@@ -72,16 +74,39 @@ async def run_detection_once() -> dict:
         end_ns = int(end.timestamp() * 1_000_000_000)
 
         # 1. 拉取（同步 httpx 放到线程池，避免阻塞事件循环）
+        # P4 WO-1：改用分页拉取，消除单次 limit=10000 的静默截断。
+        # 硬上限 HARD_RESULT_LIMIT=500k 超限时抛 LokiTruncationError（异常不携带
+        # 已拉取数据，无法“继续用部分流解析”），降级回单次拉取保证本轮检测
+        # 可用性，并透出 loki_truncated 信号（持久化到 soc_task_runs.stats）。
         update_progress_stage("fetch", processed=0, total=5)
         client = LokiClient()
         try:
-            streams = await asyncio.to_thread(
-                client.query_range,
-                '{exporter="OTLP"}',
-                start_ns,
-                end_ns,
-                10000,
-            )
+            try:
+                streams, total_values, truncated = await asyncio.to_thread(
+                    client.query_range_paginated,
+                    '{exporter="OTLP"}',
+                    start_ns,
+                    end_ns,
+                )
+                if truncated:
+                    stats["loki_truncated"] = True
+                    stats["loki_total_values"] = total_values
+            except LokiTruncationError as exc:
+                # 降级：单次拉取（可能与旧版一样截断，但检测不中断；信号已透出）
+                stats["loki_truncated"] = True
+                stats["loki_total_values"] = exc.fetched
+                logger.warning(
+                    "browsing detection: Loki 硬上限截断 fetched=%d limit=%d，"
+                    "降级单次拉取（本轮样本可能不完整）",
+                    exc.fetched, exc.limit,
+                )
+                streams = await asyncio.to_thread(
+                    client.query_range,
+                    '{exporter="OTLP"}',
+                    start_ns,
+                    end_ns,
+                    10000,
+                )
         finally:
             client.close()
         stats["fetched"] = sum(len(s.get("values", [])) for s in streams)

@@ -372,9 +372,33 @@ class OpenSearchSCAPSyncService:
             stats["processed_agents"] = len(agents_seen)
             db.commit()
             logger.info("OpenSearch SCAP sync completed: %s", stats)
+            # P4 WO-2：数据源健康上报（成功）
+            try:
+                from app.services.source_health import SourceHealthRecorder
+                SourceHealthRecorder(db).record_success(
+                    "opensearch:vuln",
+                    source_type="opensearch",
+                    records_count=stats.get("processed_agents"),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.debug("source_health record failed", exc_info=True)
         except Exception as e:
             db.rollback()
             logger.error("OpenSearch SCAP sync failed: %s", e)
+            # P4 WO-2：数据源健康上报（整体失败——逐条 errors 不算，整体异常才是源级故障）
+            try:
+                from app.services.source_health import SourceHealthRecorder
+                SourceHealthRecorder(db).record_failure(
+                    "opensearch:vuln",
+                    source_type="opensearch",
+                    error=f"{type(e).__name__}: {e}"[:1000],
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.debug("source_health record failed", exc_info=True)
             raise
         finally:
             svc.close()

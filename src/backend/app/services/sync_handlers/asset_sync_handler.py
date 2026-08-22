@@ -23,6 +23,14 @@ from app.services.sync_handlers.base import BaseSyncHandler
 
 logger = logging.getLogger(__name__)
 
+# P4 WO-2：source → source_health source_key 映射。
+# 采集器推送（tplink）与 wazuh agent 同步都流经本 handler，在 handle() 收尾
+# 集中上报，即可覆盖全部资产类同步源（未来新采集器自动纳入）。
+_SOURCE_HEALTH_KEYS = {
+    "tplink": "tplink:collector",
+    "wazuh": "wazuh:agents",
+}
+
 # Asset 模型上允许 Collector 写入的字段白名单
 # T4（决策1，2026-08-15）：移除 criticality —— 关键度是业务属性，
 # 只能由安全运营人工维护（资产页/手动提升），采集器无权覆盖；
@@ -65,6 +73,21 @@ class AssetSyncHandler(BaseSyncHandler):
                 f"see dead_letter batch={stats['dead_letter_batch_id']}"
             )
         db.commit()
+
+        # P4 WO-2：数据源健康上报（成功/部分失败都算“采集活着”；
+        # failed>0 不记 failure——逐条失败已入死信，整体中断才是源级故障）
+        try:
+            from app.services.source_health import SourceHealthRecorder
+            key = _SOURCE_HEALTH_KEYS.get(source, f"{source}:assets")
+            SourceHealthRecorder(db).record_success(
+                key,
+                source_type=source,
+                records_count=stats.get("total"),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.debug("source_health record failed", exc_info=True)
         return stats
 
     def _item_key(self, item: dict) -> str:

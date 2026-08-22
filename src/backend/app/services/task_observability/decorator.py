@@ -333,14 +333,31 @@ def track_task(
                         error_text=error_text,
                         stats=stats,
                     )
-                    # 数据源健康
-                    if source_key and status == TaskRunStatus.SUCCESS:
+                    # 数据源健康（P4 WO-2：修成功路径构造错误 + 补失败路径）
+                    # v1.0 文档以为成功路径已生效——实测 SourceHealthRecorder(db)
+                    # 构造器要求 db，原代码传 source_key 会 TypeError，被下面
+                    # except 静默吞掉，即成功上报从未真正写入。此处一并修正。
+                    if source_key:
                         try:
-                            SourceHealthRecorder(
-                                source_key=source_key,
-                                source_type=source_key.split(":", 1)[0] if ":" in source_key else "unknown",
-                            ).record_success(records_count=(stats or {}).get("processed"))
+                            recorder = SourceHealthRecorder(db)
+                            src_type = (
+                                source_key.split(":", 1)[0] if ":" in source_key else "unknown"
+                            )
+                            if status == TaskRunStatus.SUCCESS:
+                                recorder.record_success(
+                                    source_key,
+                                    source_type=src_type,
+                                    records_count=(stats or {}).get("processed"),
+                                )
+                            else:
+                                recorder.record_failure(
+                                    source_key,
+                                    source_type=src_type,
+                                    error=error_text or status.value,
+                                )
+                            db.commit()
                         except Exception:
+                            db.rollback()
                             logger.debug("source_health record failed", exc_info=True)
                 finally:
                     db.close()
