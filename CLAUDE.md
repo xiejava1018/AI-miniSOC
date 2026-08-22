@@ -804,7 +804,7 @@ git push https://github.com/xiejava1018/AI-miniSOC.git master
 - F1.1 / F1.2 / F1.3 / F2.2 / F2.3 / F3.2 / F3.3 / F4.1 / F4.2 均 ✅
 - **F3.1 ✅ 降级版**（拓扑建模属 P5）
 - **F2.1 L1 ✅ / L2 ✅**
-- X1 部分 ✅（端点 + 角色 + 5 菜单授权；全菜单 / 部门隔离未做）
+- X1 权限矩阵：**✅ 基本完成（2026-08-22）**——全菜单授权回填 + 合规/审计日志端点补齐 + 菜单树粒度 bug 修复；剩部门隔离（独立工单）
 - W0 准备阶段：**✅ 基本完成**——50 条评测集（基线 98%）+ risk_history 回填（69/73）+ 权重校准显式推迟（触发条件已记录）
 - §十一 Go/No-Go：**安全项 ✅**（LLM-SQL 路径审计）+ **降级演练 ✅**（7 个 AI 消费点全部诚实降级）；全量指标基线未做（需数据积累）
 
@@ -950,5 +950,33 @@ level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注
 
 ---
 
-**文档版本**: v2.11
+## 今日补充（2026-08-22 续二：X1 权限矩阵收尾）
+
+### 交付（commit 6b943a6 + 5483945，迁移 i3j4k5l6m7n8）
+- **菜单树粒度 bug（真安全漏洞）**：`menu_service.get_menu_tree` 原逻辑
+  「父菜单在授权集合 → 全部子菜单放行」——给 viewer 授 /assets 根等于
+  授了全部资产子菜单（对账/影响分析泄漏）。修正为子菜单须自身被授权，
+  父菜单仅作为容器保留。存量 user/readonly 同获修复
+- **合规两个写端点无保护**（run-check / interpret 登录即可触发，viewer
+  也能烧 GLM token）→ `require_button_permission("compliance", ...)`
+- **审计日志只许 admin**：auditor 有菜单无接口（摆设）→ admin+auditor
+- **全菜单授权回填**：operator +9（含知识库编辑/验证、合规巡检/解读）、
+  viewer +9 只读且**移除对账**（矩阵 ❌，此前误授）、auditor = viewer
+  只读 + /system + audit-log + 对账只读；auto_extract 留 admin
+
+### 生产实测（5483945）
+- 端点矩阵 7/7：合规巡检/AI 解读/对账/报告/影响分析（admin+op 200，
+  view+aud 403）、AI 查询四角色全 200、审计日志 admin+aud 200
+- 菜单树 3/3：viewer 无对账/审计/影响分析、auditor 有审计日志、
+  operator 无 /system
+- 迁移 downgrade→upgrade 幂等验证过；临时测试用户已清理
+
+### X1 剩余（显式推迟）
+- **部门隔离**：`soc_assets` 无 `department_id` 列（用 `business_unit`，
+  72/73 为 NULL），需 schema 改造 + 数据回填，独立工单；当前
+  operator 对账处理无部门限制（仅限内网单人使用场景，风险可接受）
+
+---
+
+**文档版本**: v2.12
 **最后更新**: 2026-08-22

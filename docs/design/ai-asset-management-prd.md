@@ -50,7 +50,7 @@
 | AI 安全报告 | F2.2 | ✅ 已完成 | 周报/月报/按需/事件驱动四种触发；data_coverage JSONB 硬门槛；不引入消息队列，事件驱动走 cron 或前端按钮调 `POST /reports/check-incident-trigger` |
 | 变更影响分析 | F3.1 | ✅ 降级版 | POST /assets/impact-analysis；关联分析降级为同网段 + 共享标签 + 告警历史三维（拓扑建模仍属 P5），前端三处显式标注"未包含拓扑信息"；admin/operator 可用 |
 | 推送场景 3/5 | F4.2 | ✅ 已完成 | 5 个场景全部落地：数据链路异常/评分突变/EOL/影子资产/报告生成完成；事件驱动走 `POST /api/v1/notifications/push-check` 同步端点（admin only，cron 可调） |
-| 权限矩阵（§6.5） | X1 | ✅ 部分 | P3 4 个写操作端点接 require_button_permission；operator/viewer/auditor 三角色 + 12 条菜单授权。**未完**：全菜单权限（仅 4 个菜单种了）、部门隔离（需独立工单建资产↔部门关联） |
+| 权限矩阵（§6.5） | X1 | ✅ 基本完成 | 核心写操作端点全接权限（对账/报告/合规/影响分析/EOL/推送/审计日志）；全菜单授权回填（operator 14 / viewer 12 / auditor 15，迁移 i3j4k5l6m7n8）；菜单树粒度 bug 修复。**未完**：部门隔离（需独立工单建资产↔部门关联，soc_assets 无 department_id） |
 
 > **F1.3 实现偏差（已实测，2026-08-21 生产验证）**：
 > - 表结构相对 §1.3 增加 `run_id`（批次）与 `resolve_note`。无批次标识无法查询「最近一次对账结果」；未采用 compliance 的 runs/findings 双表，避免为一张结果表再引一张表。
@@ -1152,7 +1152,7 @@ CLAUDE.md 已记录 alembic 迁移历史不完整的已知问题（`soc_menus` �
 - [ ] §4.4 预算/限流/熔断参数生效，且演练过一次降级路径（§八-C）——**✅ 演练已完成（2026-08-22）**：7 个 AI 消费点全部诚实降级（详见 CLAUDE.md v2.11）；ai_budget QPS/日限/熔断在演练中实际生效
 
 **安全与权限**
-- [ ] 权限矩阵（X1）逐功能落到 `require_menu_permission` + 前端 `v-auth`
+- [ ] 权限矩阵（X1）逐功能落到 `require_menu_permission` + 前端 `v-auth`——**✅ 后端全落地（2026-08-22，生产端点矩阵 7/7 + 菜单树 3/3 实测）**；前端 P3 页面已用 useAuth/hasAuth 等价实现，旧系统页属 admin 域无加固必要；部门隔离独立工单
 - [ ] 对账处理 / 权重调整 / EOL 覆盖 / 知识编辑写操作落 `soc_audit_logs`（X1）
 - [ ] NL 查询参数经白名单校验；系统中不存在任何 LLM 生成 SQL 的执行路径（F2.1）——**✅ 已审计通过（2026-08-22）**：全部 execute 接 ORM 构造体，text() 仅 2 处静态 SQL；L2 模板参数过白名单/枚举/范围校验；详见 CLAUDE.md v2.10
 
