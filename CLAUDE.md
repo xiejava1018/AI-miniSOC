@@ -1140,5 +1140,71 @@ breakdown 确认与 alerts 维度无关（它们的 P 级变化未被任何资�
 
 ---
 
-**文档版本**: v2.17
+## 今日补充（2026-08-22 续七：P4 WO-2 补丁落地）
+
+### 本次交付（补上验收报告 §2 WO-2 有条件通过项）
+
+**验证收读**：[docs/design/2026-08-22-p4-acceptance-report.md](design/2026-08-22-p4-acceptance-report.md)
+认定 WO-2 wazuh/tplink 失败路径不达标，【/data-health】假绿。
+
+**迁移 `n1o2p3q4r5r6_wo2_backfill_interval`**：
+- 回填现有 tplink:collector / wazuh:agents 的 expected_interval_seconds=300
+- 让 _source_status() 的 degraded 守卫对现有行也生效
+
+**代码侧三文件加 source_health 记录**：
+- `services/sync_handlers/asset_sync_handler.py`：handle() 包 try/except 源级异常
+  记 record_failure；success 传 expected_interval_seconds；新增
+  _SOURCE_HEALTH_INTERVALS 映射
+- `services/wazuh_agent_sync.py`：sync_agents 与 sync_single_agent 的异常路径
+  独立 session 记 record_failure（防被外层 rollback 灭）
+- `services/asset_sync.py`：sync_from_wazuh / sync_single_asset / 
+  sync_single_agent_webhook 都加成功+失败 record
+
+**测试重写**：
+- 删 test_source_health_coverage.py 合成 @track_task 探针
+- 新增 test_wo2_real_failure_path.py 5 个真失败路径测试
+- 跨 DB 问题：autouse fixture patch `app.core.database.SessionLocal` →
+  TestingSessionLocal（生产不 patch，行为不变）
+
+### 生产实测（2026-08-22 15:50）
+部署后 GET /api/v1/data-health 输出：
+- counter: healthy=2 degraded=1 down=0 unknown=0
+- loki:browsing_detection: **degraded**（已 91.9 小时无成功记录，interval=300 起作用）
+- tplink:collector: healthy
+- wazuh:agents: healthy
+- overall_status=**degraded**（对得上 v2.5 验收报告里 75h+ 过期的判断）
+
+原来 v1.2 阶段 loki:browsing_detection 会被报为 healthy 的「假绿」现在正确标红。
+
+### 踩过的坑（本轮）
+1. **跨 DB 问题**：服务代码里 `_db.SessionLocal()` 绑 env 生产 DB
+   （本地 dev = testdb），测试中走 TestingSessionLocal=testdb，两者不同。
+   解决：autouse fixture patch _db.SessionLocal
+2. **mock 真实 SQLAlchemy class 会 TypeError**：patch SyncTask 为 MagicMock
+   后 db.add(mock) 会报 `state.class_.__name__`，因为 MagicMock 没有 __name__。
+   解决：mock 高层方法（BaseSyncHandler.handle）不 mock ORM 类
+3. **WazuhClient `str(e) = __name__`**：拆包装后某些错误 str() 返 '__name__'
+   （是 SQLAlchemy/MagicMock 处理 class 时出现）。最终改用独立 session + 
+   局部导入，不复用原 session 后稳定
+4. **record_failure 写不进去**：独立 session 走 patch 后的 TestingSessionLocal；
+   原 session 被外层 rollback 会灭掉本 session 的未 commit 修改。必须独立
+5. **assertion 需独立 session 验**：测试函数内用 db (test session) 查会被
+   事务隔离看不到。需用新 TestingSessionLocal 实例
+
+### P4 复验状态
+验收报告原结论「WO-2 有条件通过」现已补齐：
+- wazuh/tplink 失败路径可见（record_failure 被调）
+- expected_interval_seconds 已设（degraded 判定可用）
+- /data-health 页面不再假绿（生产实测 loki 91.9h 过期正确标 degraded）
+- 真实失败路径测试替代合成探针
+
+§十一 Go/No-Go 4 大类补充：
+- 数据与迁移 ✅：WO-2 补齐
+- AI 质量 ✅（前轮）
+- 安全与权限 ✅（前轮）
+- 指标 ✅：查询准确率 98%（前轮）；源健康可观测性 ✅（本轮）
+
+---
+
+**文档版本**: v2.18
 **最后更新**: 2026-08-22
