@@ -463,12 +463,15 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - 需要分页查询大量数据
 - 时戳使用纳秒级
 
-### Alembic 迁移历史不完整（2026-08-19 更新）
-- 生产库 `soc_menus.component` / `permissions` 列是手工 ALTER 加的，alembic 历史漏写迁移
-- 后果：`alembic upgrade head` 在空库必败；`alembic check` 一直 WARN（CI 里是 advisory）
-- 另外 `soc_source_health` 等 8 张 P4 表在 model 但不在迁移链
-- **当前对策**：CI 用 `scripts/ci_create_tables.py`（Base.metadata.create_all + 补列）建测试库；生产 schema 与 model 一致（head=a0b1c2d3e4f5）
-- **待修**：补一个迁移把这些表/列写进历史，之后 `alembic check` 才能改阻塞
+### Alembic 迁移历史 ~~不完整~~（✅ 已修复 2026-08-22，commit 9238f78）
+- 新迁移 `ab9cd0e1f2a3` 补齐 7 张手工建表 + 7 个手工列（幂等，生产零操作）
+- 修 `i3j4k5l6m7n8`（menu_id 改 JOIN）、`d1e2f3a4b5c6`（downgrade 补删表）、
+  `c5962ab1f662`（downgrade 删 autogenerate 倒置产物）
+- **已验证**：空库 upgrade head（27 步 48 表）→ downgrade base（零错误零残留）
+  → 再 upgrade 干净；生产 head 未变无需执行
+- `alembic check` 仍有索引命名约定类 diff（pre-existing 噪音，CI advisory 不阻塞）
+- 空库重建验证命令：`DB_NAME=<新库> ../../venv/bin/python -m alembic -c alembic.ini upgrade head`
+  （DB_NAME 环境变量会覆盖 .env，经 pydantic-settings 生效）
 
 ### Lint 历史欠账（2026-08-19）
 - 前端 ESLint 2614 个错误（2590 可 --fix）、后端 ruff 数百条、vue-tsc 类型错
@@ -978,5 +981,35 @@ level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注
 
 ---
 
-**文档版本**: v2.12
+## 今日补充（2026-08-22 续三：todo#4 空库 alembic 跑通 → P3 收官）
+
+### 交付（commit 9238f78）
+- 新迁移 `ab9cd0e1f2a3`（插在断点前）：7 张手工表 + 7 个手工列幂等补齐；
+  建表用 `Base.metadata` 局部 `CreateTable(if_not_exists)`，与 ORM 永远一致，
+  避免第三份 schema 漂移
+- 修三处旧迁移（详见 commit message）
+- 验证：空库 upgrade head（27 步/48 表）→ downgrade base（零错误、
+  仅剩 alembic_version）→ 再 upgrade 干净；**生产 head 未变，零操作**
+
+### 排查中的认知修正（值得记）
+1. 「upgrade 失败后表数量为 0」不是没跑——alembic 单事务模式，
+   失败整体回滚，看版本号和表数都看不出跑到哪，要看最后一条
+   Running upgrade + 错误
+2. 空库建不出**业务种子行**（基础菜单/角色是运营数据不是 schema）：
+   迁移里所有引用菜单行的 INSERT 必须 JOIN 菜单表而非硬编码 id，
+   行不存在 → 静默 0 行跳过（g1 等旧迁移已是这个写法，i3j4k5l6m7n8
+   之前违反了）
+3. `DB_NAME=<库> alembic upgrade head` 可直接切库：pydantic-settings
+   环境变量优先于 .env，`DATABASE_URL` property 动态拼
+
+### P3 收官状态
+§十一 Go/No-Go 四大类：
+- 数据与迁移 ✅（空库 upgrade/downgrade + 对账源健康展示 + 报告完整性校验）
+- AI 质量 ✅（breakdown 可见 / 溯源 / 合规无 LLM / EOL 来源标识 / 降级演练）
+- 安全与权限 ✅（X1 矩阵落地 + 审计 + 白名单 + 无 LLM-SQL）
+- 指标：查询准确率基线 ✅（98%）；其余指标需运行数据积累，待一个月后采集
+
+---
+
+**文档版本**: v2.13
 **最后更新**: 2026-08-22

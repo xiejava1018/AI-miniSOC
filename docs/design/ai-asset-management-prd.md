@@ -1141,7 +1141,7 @@ CLAUDE.md 已记录 alembic 迁移历史不完整的已知问题（`soc_menus` �
 发布前逐项确认，任一未通过则不发布（对应章节见括号）：
 
 **数据与迁移**
-- [ ] 全部 schema 变更已入 alembic 迁移，空库 `upgrade head` 通过，含 downgrade（§5.5）
+- [x] 全部 schema 变更已入 alembic 迁移，空库 `upgrade head` 通过，含 downgrade（§5.5）——**✅ 2026-08-22（commit 9238f78）**：补齐迁移 ab9cd0e1f2a3（7 表 7 列）+ 修三处旧迁移；空库 upgrade 27 步全过 → downgrade base 零残留 → 再 upgrade 干净
 - [ ] 对账页面展示源健康状态与"最近成功同步时间"，源异常有横幅提示（F1.3）
 - [ ] 报告生成前完成时间窗数据完整性校验，缺口显式写入"数据说明"章节（F2.2）
 
