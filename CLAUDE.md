@@ -1058,5 +1058,46 @@ breakdown 确认与 alerts 维度无关（它们的 P 级变化未被任何资�
 
 ---
 
-**文档版本**: v2.15
+## 今日补充（2026-08-22 续五：菜单顺序重排 + title/icon 补全）
+
+### 本次交付（2 个迁移，一块提交）
+
+**迁移 1：`k1l2m3n4o5p6_misc_menu_cleanup`**（修正 CLAUDE.md 过期注释时发现）
+- /vulnerabilities title='脆弱性管理'
+- /browsing title='上网行为'
+- /incidents/list component '/incident/index' → '/incidents/index'（与文件目录对齐）
+- 配套 git mv views/incident/ → views/incidents/
+
+**迁移 2：`l1m2n3o4p5q6_top_menu_reorder_and_icons`**
+- 顶级菜单重排按用户指定顺序：概览仪表板、资产管理、脆弱性管理、事件管理、告警管理、上网行为、安全报告、运维管理、系统管理（sort 1→9）
+- /reports sort 50→7, /system sort 7→9（其它 7 个 sort 不变）
+- 补中文 title：/dashboard='概览仪表板'、/assets='资产管理'、/system='系统管理'
+- 补/修 icon：
+  - /reports/list NULL→ri:file-list-2-line（唯一真无 icon）
+  - /ops/impact-analysis '&#xe6a0;'→ri:flow-chart（HTML entity 不会渲染——是当初迁移手滑写错）
+
+### 踩过的坑
+1. **HTML entity 当 icon 不会渲染**——以前的人以为 iconify 支持 '&#xe6a0;'，实际不会。系统统一用 ri:* 格式（RemixIcon via iconify）。这类隐藏 bug 只能靠 menu 全量 icon 扫描发现
+2. **CLAUDE.md 过期注释会误导**——「事件/告警/脆弱性管理前端页面（仍占位）」这条 P3 初期写的 checkbox 一直没更新，实际这些都已实现。光看文档会以为有 3 个占位，实际只有 1 个无 icon 的子菜单
+
+### 最终菜单（生产实测）
+```
+[1] 概览仪表板      ri:bar-chart-box-line
+[2] 资产管理        ri:computer-line
+[3] 脆弱性管理      ri:shield-check-line
+[4] 事件管理        ri:alert-line
+[5] 告警管理        ri:notification-3-line
+[6] 上网行为        ri:radar-line
+[7] 安全报告        Document（非 iconify 格式但有 icon，待统一）
+[8] 运维管理        ri:tools-line
+[9] 系统管理        ri:settings-3-line
+```
+
+### 待办（不阻塞）
+- /reports 顶级 icon 'Document' 是 Material 风格，与其它 8 个 ri:* 不一致——要不要换成 'ri:file-shield-2-line'（安全报告主题）？
+- /system 子菜单 title=NULL（显示英文 path 'user' 'role' 'menu' 'department' 'dict'）—— 跟以前 /vulnerabilities 一样的 cleanup 工作
+
+---
+
+**文档版本**: v2.16
 **最后更新**: 2026-08-22
