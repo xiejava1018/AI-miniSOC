@@ -857,13 +857,24 @@ F3.1 `_alert_history` 同步改用该方法，两处口径现完全一致。
 失败会被看见，假阴性会让人放心。**计数类需求一律用服务端聚合，
 不要取 N 条文档再在客户端数**。
 
-### 分级阈值口径（项目现状）
-权威定义下沉到 `AlertQueryService.LEVEL_*` = **13/10/7/4**（critical/high/medium/low，
-level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注释一致。
+### 分级阈值口径
+~~权威定义下沉到 AlertQueryService.LEVEL_*~~ → **已进一步下沉到
+`app/core/alert_levels.py`（全项目唯一权威，commit 72c9a6a，2026-08-22）**：
+13/10/7/4（critical/high/medium/low，level<4 视为噪音不计入）。
 
-⚠️ **pre-existing 不一致（未修）**：`ai_analysis.py` 用 12/7 与 12/8 两套阈值。
-同一台资产在「AI 分析」页与「报告 / L2 查询」里可能显示不同的高危数量。
-影响面另算，需独立验证，已在代码注释标注。
+**ai_analysis 三处旧阈值（12/7 与 12/8）已统一**：生产量化依据——近 7 天
+47,928 条告警中 level-10 有 4,921 条（10.3%），旧口径在「AI 分析」页标
+"中风险"、在报告里计为 high。统一后 level 10-12 都标"高风险"。
+
+**附带修复 asset_summary 双计 bug**：整数 level 被 isinstance 和 int()
+各计一次，资产概览页高危数长期虚报约 2 倍；高危阈值同步 12→10。
+
+**生产分数回归实测：零影响**——69 台重算仅 2 台 IOT 设备 -2 分，
+breakdown 确认与 alerts 维度无关（它们的 P 级变化未被任何资产关联，
+ 属离线天数等其它维度正常波动）；主梯队分数全部不变。
+
+新代码一律 `from app.core.alert_levels import LEVEL_*`，禁止再写裸数字比较；
+`AlertQueryService.LEVEL_*` 保留 re-export 兼容。
 
 ### 开发期踩坑（本轮新增）
 1. **`soc_assets` 无 `last_seen` 列**（用 `status_updated_at`，仅 7/73 非空）；
@@ -1011,5 +1022,5 @@ level<4 视为噪音不计入），与 `report_generator.py` 的 Wazuh 标准注
 
 ---
 
-**文档版本**: v2.13
+**文档版本**: v2.14
 **最后更新**: 2026-08-22
