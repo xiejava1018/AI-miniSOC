@@ -35,13 +35,10 @@ MAX_RESULTS = 50
 # 分级阈值的权威定义已下沉到 AlertQueryService.LEVEL_*（服务端聚合计数），
 # 本模块不再自己分桶，避免项目里再多一个口径变体。
 #
-# ⚠️ pre-existing 口径不一致：ai_analysis.py 用 12/7 与 12/8 两套阈值，
-# 与 report_generator / alert_query / impact_analysis 的 13/10/7/4 不同。
-# 本次不顺手改 ai_analysis（影响面另算，需独立验证）。
-_LEVEL_CRITICAL = 13
-_LEVEL_HIGH = 10
-_LEVEL_MEDIUM = 7
-_LEVEL_LOW = 4
+# 阈值统一引用中央模块（2026-08-22），本模块不再持有任何口径副本。
+# （此前这里的注释还在说“不顺手改 ai_analysis”——那是第一轮修复时的 stale
+# 记录，ai_analysis 已在后续统一修复完毕。）
+from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM, LEVEL_LOW  # noqa: F401
 
 # stats_group_by 允许的维度 → ORM 列（第二层白名单：即使 YAML 被改坏也不会拿到任意列）
 _DIMENSION_COLUMNS = {

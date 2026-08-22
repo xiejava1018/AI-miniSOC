@@ -4,7 +4,7 @@
 
 from zhipuai import ZhipuAI
 from app.core.config import settings
-from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM
+from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM, level_to_priority
 from app.models import AIAnalysis, AlertGroupAnalysis
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
@@ -526,22 +526,19 @@ class AIAnalysisService:
         """无 AI 时的启发式 verdict：按最高等级 + 量级给 P 级，source='heuristic'。"""
         level_max = signature.get("level_max") or 0
         count = signature.get("count") or 0
-        # 阈值同权威定义（13/10/7/4）。此前 12/8：level 10-11 的告警簇在降级
-        # 路径下被判 P2 而非 P1，进而拉低 F1.1 风险分。P 级会持久化到
-        # soc_alert_group_analyses.priority 并喂给 _score_alerts。
-        if level_max >= LEVEL_CRITICAL:
-            priority = "P1"
-        elif level_max >= LEVEL_HIGH:
-            priority = "P2"
-        else:
-            priority = "P3"
+        # P 级与权威口径对齐（13/10/7/4 → P0/P1/P2/P3）：
+        # 第一轮修复只改了数字（13→P1/10→P2）但没对齐 _PRIORITY_TO_SEVERITY
+        # 语义（P0=critical），导致整个 P 链比 severity 链低一格
+        # （level 13 → P1 → high，应为 critical；level 7-9 → P3 → low，
+        # 应为 medium）。2026-08-22 收尾：统一走 level_to_priority。
+        priority = level_to_priority(level_max)
         return {
             "priority": priority,
             "is_noise": False,
             "confidence": 0.4,
             "rationale": f"{reason}：按最高等级 L{level_max}、告警量 {count} 给 {priority}。",
             "recommended_action": "建议人工复核该簇日志，确认是否需要处置或加白。",
-            "suggest_incident": priority == "P1",
+            "suggest_incident": priority in ("P0", "P1"),
             "source": "heuristic",
             "model_name": "heuristic",
         }

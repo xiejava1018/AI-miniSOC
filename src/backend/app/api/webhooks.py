@@ -3,13 +3,15 @@ Webhook 接收端点
 用于接收来自 Wazuh 的实时通知
 
 - POST /webhooks/wazuh                资产同步（已有）
-- POST /webhooks/wazuh/alert          严重告警（level >= 12）→ 触发站内通知
+- POST /webhooks/wazuh/alert          严重告警（level >= SEVERE_LEVEL(12)）→ 触发站内通知
 """
 
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
+
+from app.core.alert_levels import SEVERE_LEVEL
 from app.core.database import get_db
 from app.schemas.sync import WebhookPayload, WebhookResponse
 from app.services.asset_sync import AssetSyncService
@@ -85,7 +87,7 @@ async def wazuh_webhook(
 class AlertWebhookPayload(BaseModel):
     """严重告警 webhook 负载
 
-    来源：Wazuh / 第三方 SIEM 在 level >= 12 时主动推送
+    来源：Wazuh / 第三方 SIEM 在 level >= SEVERE_LEVEL(12) 时主动推送
     """
     agent_id: Optional[str] = None
     rule_id: Optional[str] = None
@@ -103,11 +105,11 @@ async def wazuh_alert_webhook(
     db: Session = Depends(get_db),
     _: bool = Depends(verify_webhook_request),
 ):
-    """严重告警 webhook：level >= 12 时触发站内通知 + WS 推送
+    """严重告警 webhook：level >= SEVERE_LEVEL(12) 时触发站内通知 + WS 推送
 
     目标用户：payload.target_user_id 指定；否则发给所有 is_admin=True 的用户。
     """
-    if payload.rule_level < 12:
+    if payload.rule_level < SEVERE_LEVEL:
         # 等级不够，直接忽略
         return WebhookResponse(success=True, message="alert level below threshold, ignored")
 

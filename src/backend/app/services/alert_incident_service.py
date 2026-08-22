@@ -23,20 +23,11 @@ logger = logging.getLogger(__name__)
 # AI 优先级 P0-P3 → 事件 severity
 _PRIORITY_TO_SEVERITY = {"P0": "critical", "P1": "high", "P2": "medium", "P3": "low"}
 
-
-def _level_to_severity(level) -> str:
-    """Wazuh rule.level(1-15) → 事件 severity。"""
-    try:
-        lv = int(level)
-    except (TypeError, ValueError):
-        return "medium"
-    if lv >= 12:
-        return "critical"
-    if lv >= 9:
-        return "high"
-    if lv >= 6:
-        return "medium"
-    return "low"
+# Wazuh rule.level → 事件 severity。2026-08-22 统一：此前硬写 12/9/6，与
+# 权威 13/10/7/4 冲突（level 12 被标 critical 应为 high；且同一簇告警走
+# P 级缓存路径得 medium、不走缓存 fallback 得 high，两条路径矛盾）。
+# 现委托中央模块，禁止再写裸数字；:119/:239 调用点无需改动。
+from app.core.alert_levels import level_to_severity as _level_to_severity  # noqa: E402,F401
 
 
 def _find_asset_id_by_ip(db: Session, ip: Optional[str]) -> Optional[UUID]:
