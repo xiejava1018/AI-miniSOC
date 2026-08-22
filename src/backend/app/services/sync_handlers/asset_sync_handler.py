@@ -32,6 +32,14 @@ _SOURCE_HEALTH_KEYS = {
     "wazuh": "wazuh:agents",
 }
 
+# P4 WO-2 补丁：预期间隔（秒），不传会让 _source_status() 跳过 degraded 判定（验收报告 #2）
+# 300s = 5min，与现有采集器实测推送频率一致
+_SOURCE_HEALTH_INTERVALS = {
+    "tplink": 300,
+    "tplink-router": 300,
+    "wazuh": 300,
+}
+
 # Asset 模型上允许 Collector 写入的字段白名单
 # T4（决策1，2026-08-15）：移除 criticality —— 关键度是业务属性，
 # 只能由安全运营人工维护（资产页/手动提升），采集器无权覆盖；
@@ -49,47 +57,76 @@ class AssetSyncHandler(BaseSyncHandler):
     data_type = "asset"
 
     def handle(self, source: str, items: list[dict], db: Session) -> dict:
-        # P2-T4：创建批次 sync_task（保留 sync_tasks 跟踪能力），
-        # 然后逐条调 _handle_one（base 已 try/except，失败入死信）。
-        sync_task = SyncTask(
-            sync_type="collector",
-            status="running",
-            total_count=len(items),
-            started_at=datetime.now(timezone.utc),
-        )
-        db.add(sync_task)
-        db.flush()
-
-        # 调 base.handle（逐条 try/except + 死信）
-        stats = super().handle(source, items, db)
-        # 同步任务状态更新
-        sync_task.status = "completed"
-        sync_task.created_count = stats["created"]
-        sync_task.updated_count = stats["updated"]
-        sync_task.failed_count = stats["failed"]
-        sync_task.completed_at = datetime.now(timezone.utc)
-        if stats["failed"] > 0:
-            sync_task.error_message = (
-                f"{stats['failed']} items failed; "
-                f"see dead_letter batch={stats['dead_letter_batch_id']}"
-            )
-        db.commit()
-
-        # P4 WO-2：数据源健康上报（成功/部分失败都算“采集活着”；
-        # failed>0 不记 failure——逐条失败已入死信，整体中断才是源级故障）
+        # P4 WO-2 补丁：handle() 整体包 try/except，源级失败时记 record_failure
+        # （之前只有 record_success，且只在成功路径——handle() 抛错时
+        #  任何 source_health 都不写，/data-health 页面假绿）
         try:
-            from app.services.source_health import SourceHealthRecorder
-            key = _SOURCE_HEALTH_KEYS.get(source, f"{source}:assets")
-            SourceHealthRecorder(db).record_success(
-                key,
-                source_type=source,
-                records_count=stats.get("total"),
+            # P2-T4：创建批次 sync_task（保留 sync_tasks 跟踪能力），
+            # 然后逐条调 _handle_one（base 已 try/except，失败入死信）。
+            sync_task = SyncTask(
+                sync_type="collector",
+                status="running",
+                total_count=len(items),
+                started_at=datetime.now(timezone.utc),
             )
+            db.add(sync_task)
+            db.flush()
+
+            # 调 base.handle（逐条 try/except + 死信）
+            stats = super().handle(source, items, db)
+            # 同步任务状态更新
+            sync_task.status = "completed"
+            sync_task.created_count = stats["created"]
+            sync_task.updated_count = stats["updated"]
+            sync_task.failed_count = stats["failed"]
+            sync_task.completed_at = datetime.now(timezone.utc)
+            if stats["failed"] > 0:
+                sync_task.error_message = (
+                    f"{stats['failed']} items failed; "
+                    f"see dead_letter batch={stats['dead_letter_batch_id']}"
+                )
             db.commit()
-        except Exception:
-            db.rollback()
-            logger.debug("source_health record failed", exc_info=True)
-        return stats
+
+            # P4 WO-2：数据源健康上报（成功/部分失败都算“采集活着”；
+            # failed>0 不记 failure——逐条失败已入死信，整体中断才是源级故障）
+            # v1.2 补丁：传 expected_interval_seconds 让 _source_status() 能判 degraded
+            try:
+                from app.services.source_health import SourceHealthRecorder
+                key = _SOURCE_HEALTH_KEYS.get(source, f"{source}:assets")
+                SourceHealthRecorder(db).record_success(
+                    key,
+                    source_type=source,
+                    records_count=stats.get("total"),
+                    expected_interval_seconds=_SOURCE_HEALTH_INTERVALS.get(source),
+                )
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.debug("source_health record_success failed", exc_info=True)
+            return stats
+        except Exception as e:
+            # P4 WO-2 补丁：源级失败（接 Wazuh API / DB 炸 / 未知异常）记 record_failure
+            # 不吞异常——base.handle() 已有逐条 try/except，能逃到这里的都是真源级故障
+            # 必须 raise，让上游 API 返 500（v1.0-v1.1 验收中也明确要求）
+            logger.error("AssetSyncHandler.handle 源级失败 source=%s err=%s", source, e)
+            try:
+                from app.services.source_health import SourceHealthRecorder
+                key = _SOURCE_HEALTH_KEYS.get(source, f"{source}:assets")
+                # 用独立 session 防被外层 rollback 灭掉
+                from app.core import database as _db
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        key,
+                        source_type=source,
+                        error=str(e)[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("source_health record_failure failed", exc_info=True)
+            raise
 
     def _item_key(self, item: dict) -> str:
         """用于死信 item_key 字段（便于按 IP 排查）。"""

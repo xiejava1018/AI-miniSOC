@@ -50,11 +50,44 @@ class AssetSyncService:
                     stats["failed"] += 1
 
             self.db.commit()
+            # P4 WO-2 补丁：同步完成上报（独立 session）
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                ok_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(ok_db).record_success(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        records_count=len(agents),
+                        expected_interval_seconds=300,
+                    )
+                    ok_db.commit()
+                finally:
+                    ok_db.close()
+            except Exception:
+                logger.debug("wazuh sync_from_wazuh record_success failed", exc_info=True)
             logger.info(f"资产同步完成: {stats}")
             return stats
 
         except Exception as e:
             logger.error(f"资产同步失败: {e}")
+            # P4 WO-2 补丁：wazuh_client 不可达时记失败
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        error=str(e)[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("wazuh sync_from_wazuh record_failure failed", exc_info=True)
             self.db.rollback()
             raise
 
@@ -194,9 +227,42 @@ class AssetSyncService:
             asset, _ = self._create_or_update_asset(asset_data)
             self.db.commit()
             self.db.refresh(asset)
+            # P4 WO-2 补丁：成功上报（独立 session防被外层接管）
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                ok_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(ok_db).record_success(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        records_count=1,
+                        expected_interval_seconds=300,
+                    )
+                    ok_db.commit()
+                finally:
+                    ok_db.close()
+            except Exception:
+                logger.debug("wazuh single_asset record_success failed", exc_info=True)
             return asset
         except Exception as e:
             logger.error(f"同步单个资产 {agent_id} 失败: {e}")
+            # P4 WO-2 补丁：wazuh 不可达时记失败（独立 session）
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        error=f"agent_id={agent_id}: {e}"[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("wazuh single_asset record_failure failed", exc_info=True)
             self.db.rollback()
             raise
 
@@ -236,6 +302,48 @@ class AssetSyncService:
 
     def sync_single_agent_webhook(self, agent_id: str) -> Asset:
         """Webhook触发的单个agent同步"""
+        try:
+            asset = self._sync_single_agent_webhook_inner(agent_id)
+            # P4 WO-2 补丁：成功上报
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                ok_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(ok_db).record_success(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        records_count=1,
+                        expected_interval_seconds=300,
+                    )
+                    ok_db.commit()
+                finally:
+                    ok_db.close()
+            except Exception:
+                logger.debug("wazuh webhook record_success failed", exc_info=True)
+            return asset
+        except Exception as e:
+            logger.error(f"Webhook 同步 agent {agent_id} 失败: {e}")
+            # P4 WO-2 补丁：失败上报
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        error=f"webhook agent_id={agent_id}: {e}"[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("wazuh webhook record_failure failed", exc_info=True)
+            raise
+
+    def _sync_single_agent_webhook_inner(self, agent_id: str) -> Asset:
+        """Webhook 同步内部实现（不含 source_health 上报）"""
         agent = wazuh_client.get_agent_info(agent_id)
         asset_data = self._map_agent_to_asset(agent)
 

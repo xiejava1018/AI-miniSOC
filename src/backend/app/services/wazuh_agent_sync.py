@@ -39,7 +39,7 @@ class WazuhAgentSyncService:
             # 转换为资产数据格式
             asset_items = self._convert_agents_to_assets(agents)
 
-            # 使用 AssetSyncHandler 处理
+            # 使用 AssetSyncHandler 处理（内部已含 source_health 成功/失败上报）
             result = self.sync_handler.handle(
                 source="wazuh",
                 items=asset_items,
@@ -51,6 +51,23 @@ class WazuhAgentSyncService:
 
         except Exception as e:
             logger.error(f"Wazuh Agent 同步失败: {e}")
+            # P4 WO-2 补丁：wazuh_client 本身不可达时（handle() 都不会调用）也要记失败
+            # 独立 session 防被外层 rollback 灭掉
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        error=str(e)[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("wazuh record_failure failed", exc_info=True)
             raise
 
     def _convert_agents_to_assets(self, agents: List[Dict]) -> List[Dict]:
@@ -152,7 +169,7 @@ class WazuhAgentSyncService:
             if not assets:
                 return {"success": False, "message": "转换失败"}
 
-            # 使用 AssetSyncHandler 处理
+            # 使用 AssetSyncHandler 处理（内部已含 source_health 成功上报）
             result = self.sync_handler.handle(
                 source="wazuh",
                 items=assets,
@@ -163,4 +180,21 @@ class WazuhAgentSyncService:
 
         except Exception as e:
             logger.error(f"同步单个 agent 失败: {e}")
+            # P4 WO-2 补丁：wazuh_client 单个 agent 不可达时记失败
+            # 独立 session（sync_single_agent 的 return-path 不走 raise，self.db 不会被外层接管）
+            try:
+                from app.core import database as _db
+                from app.services.source_health import SourceHealthRecorder
+                fail_db = _db.SessionLocal()
+                try:
+                    SourceHealthRecorder(fail_db).record_failure(
+                        "wazuh:agents",
+                        source_type="wazuh",
+                        error=f"agent_id={agent_id}: {e}"[:1000],
+                    )
+                    fail_db.commit()
+                finally:
+                    fail_db.close()
+            except Exception:
+                logger.debug("wazuh single record_failure failed", exc_info=True)
             return {"success": False, "message": str(e)}
