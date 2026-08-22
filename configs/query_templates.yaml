@@ -1,0 +1,151 @@
+# ============================================================================
+# AI-miniSOC L2 复合查询模板库（PRD F2.1 L2）
+#
+# 【核心原则】LLM 只选模板 + 填参数，绝不生成 SQL。
+#
+# L1 只能表达「单表筛选」。跨表（端口）、时间窗（掉线）、跨源（告警）、
+# 分组统计这四类查询本质上无法用 filter 参数硬凑 —— 硬凑的结果是
+# 「看起来回答了，其实答的不是用户问的问题」，比诚实拒答更糟。
+#
+# 所以 L2 的路线是：
+#   用户提问 → LLM 输出 {template_id, params} → 后端按本文件校验参数类型/白名单
+#            → 执行「已经写死在 Python 里」的固定实现 → 结果 + AI 摘要
+#
+# 执行层 100% 不经过 LLM。LLM 选错模板最多是答非所问（用户能看出来，
+# 且前端会回显模板名与参数供核对），绝不可能变成越权查询或删库。
+#
+# 【扩展方式】新增模板 = 一条本文件条目 + 一个 app/services/query_templates.py
+# 里的 _exec_xxx 函数，Prompt 主逻辑不用改（模板清单是从本文件动态渲染进 Prompt 的）。
+#
+# 【为什么不用裸 SQL / NL2SQL】
+#   - 安全：LLM 生成的 SQL 无法穷举审计，注入与越权面太大
+#   - 稳定：同一问题两次生成的 SQL 可能不同，结果不可复现，无法做回归测试
+#   - 可解释：模板 ID + 参数是可回显、可重放、可讲清楚的；SQL 对业务用户不可读
+#
+# 【数据覆盖率纪律】
+# 凡是统计类模板，必须同时返回 coverage（参与统计 / 数据缺失的台数）。
+# 本项目 73 台资产里 os_name 有 49 台为空 —— 若只报「Ubuntu 12 台」而不说
+# 「另有 49 台无 OS 数据」，用户会以为全网只有 12 台 Linux。这与
+# compliance_rules.yaml 里「合规率必须与数据覆盖率一起呈现」是同一条纪律。
+# ============================================================================
+
+# 模板库版本：任何模板的语义变更都要递增（结果落库时记录，便于回溯）
+templates_version: 1
+
+# param 支持的类型（校验器白名单，见 query_templates.py 的 _COERCERS）
+# int / str / enum(choices) / date / days(int + 上限)
+templates:
+  # ── 1. 跨表：资产 ← 端口 ────────────────────────────────────────────────
+  - id: port_open
+    name: 开放端口查询
+    description: 查询开放了指定端口的资产。适用于"哪些资产开放了 3389 端口""谁开了 SSH"这类问题。
+    # 用户问"哪些机器开了远程桌面"时，LLM 需要自己把 3389 填进来，
+    # 所以 description 里给了常见端口的语义映射线索
+    hints: "常见端口语义：22=SSH，3389=远程桌面/RDP，445=SMB文件共享，1433=SQLServer，3306=MySQL，6379=Redis，80/443=Web"
+    params:
+      port:
+        type: int
+        required: true
+        min: 1
+        max: 65535
+        desc: 端口号
+      protocol:
+        type: enum
+        required: false
+        choices: [tcp, udp]
+        default: tcp
+        desc: 协议
+      state:
+        type: enum
+        required: false
+        choices: [open, closed, filtered]
+        default: open
+        desc: 端口状态
+    examples:
+      - 哪些资产开放了 3389 端口？
+      - 有哪些机器开着 SSH？
+      - 谁开放了 udp 53？
+
+  # ── 2. 时间窗：掉线设备 ─────────────────────────────────────────────────
+  - id: offline_since
+    name: 掉线设备查询
+    description: 查询已离线、且离线状态持续超过指定天数的资产。适用于"哪些设备掉线了""上周就掉线的机器"。
+    # 注意：本项目 soc_assets 没有 last_seen 列，判定依据是
+    # asset_status='offline' AND status_updated_at 早于 N 天前。
+    # status_updated_at 为空的资产无法判定，计入 unknown 而非当成"没掉线"。
+    params:
+      days:
+        type: days
+        required: false
+        min: 0
+        max: 365
+        default: 7
+        desc: 离线持续天数下限（0 = 只要当前离线就算）
+    examples:
+      - 有哪些设备掉线了？
+      - 掉线超过 30 天的资产
+      - 上次同步以来哪些设备没再上线？
+
+  # ── 3. 跨源：资产 ← OpenSearch 告警 ─────────────────────────────────────
+  - id: asset_recent_alerts
+    name: 资产近期告警查询
+    description: 查询某台指定资产近期产生的安全告警（按等级分级 + 高危明细）。适用于"这台服务器最近有什么告警"。
+    # 数据来自 OpenSearch（wazuh-alerts-*），不是本地库。
+    # OpenSearch 不可达时必须显式报降级，绝不能返回空列表让用户以为"很安全"。
+    params:
+      asset:
+        type: str
+        required: true
+        max_length: 100
+        desc: 资产名称或 IP（支持模糊匹配资产名）
+      days:
+        type: days
+        required: false
+        min: 1
+        max: 30
+        default: 7
+        desc: 回溯天数
+    examples:
+      - 192.168.0.30 最近有什么告警？
+      - k3s-master 这台机器近 3 天的告警
+      - nas 最近一周告警情况
+
+  # ── 4. 分组统计 ─────────────────────────────────────────────────────────
+  - id: stats_group_by
+    name: 分组统计
+    description: 按指定维度统计资产数量。适用于"按操作系统统计资产""各网段有多少台"。
+    # PRD 原文写的维度含 department，但本项目 soc_assets 并无 department_id 列
+    # （部门只挂在用户上），实际可用的组织维度是 business_unit —— 已按现状调整，
+    # 并在 coverage 里如实报告该字段 72/73 为空。
+    params:
+      dimension:
+        type: enum
+        required: true
+        choices:
+          - os_name
+          - asset_type
+          - criticality
+          - exposure_level
+          - network_segment
+          - business_unit
+          - asset_status
+        desc: 统计维度
+    examples:
+      - 按操作系统统计资产数量
+      - 各种资产类型各有多少台？
+      - 按重要性分组看看
+
+# ── 不在 L2 范围内（诚实边界）────────────────────────────────────────────
+# 以下问题两层都答不了，intent=unsupported 直接告知，不要编造：
+#   - 漏洞/补丁状态："哪些机器没打补丁" —— 无补丁数据源
+#   - 跨维度组合："开了 3389 且是 critical 的 Windows" —— 单模板不支持复合条件叠加
+#   - 趋势预测："下个月哪些资产会到 EOL" —— EOL 有独立页面，不走 NL 查询
+#   - 拓扑关系："这台机器连着哪些设备" —— 拓扑建模属 P5
+unsupported_hint: |
+  我目前支持这些类型的问题：
+  【简单筛选】有哪些 Windows 服务器？/ critical 资产有哪些？/ 负责人张三的资产
+  【开放端口】哪些资产开放了 3389 端口？
+  【掉线设备】掉线超过 7 天的设备有哪些？
+  【资产告警】192.168.0.30 最近有什么告警？
+  【分组统计】按操作系统统计资产数量
+  暂不支持：补丁/漏洞状态（无数据源）、多条件叠加的复合查询、网络拓扑关系。
