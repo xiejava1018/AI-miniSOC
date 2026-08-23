@@ -1402,11 +1402,79 @@ CI/CD 导致。**实测结论：与 CI/CD 完全无关**，是采集器代码缺
    `src/collectors/.env`。服务器 `git status src/collectors/` 干净（无漂移）
 2. 采集器**镜像**才是真正的手工维护面（本轮已纳入 CD）
 
+### 追加：重建容器引爆了 wazuh 的隐形故障（同一天，commit 1810cd4）
+`deploy_collectors.sh` 的健康门禁**第一次运行就抓到一个真问题**：tplink 变
+healthy 的同时，wazuh-collector 起来即 `401 Unauthorized` 重启循环。
+
+**凭证本身是好的**——拿 `.env` 里的值直连 Wazuh API 手工验证返回 HTTP 200，
+且与 `src/backend/.env` 的 WAZUH_* 三项 md5 完全一致。
+
+根因两层：
+1. **`yaml.safe_load` 不展开 `${VAR}`**。仓库的 config.yaml 故意写
+   `user: ${WAZUH_USER:-wazuh}` / `password: ${WAZUH_PASSWORD}`（不入库明文），
+   而 `WazuhCollector.__init__` 只做 `wazuh_cfg.get("user", ...)` →
+   把字面量字符串 `"${WAZUH_USER:-wazuh}"` 拿去认证 → 401
+2. 那行的 fallback `config.extra.get("WAZUH_USER")` 是**无效代码**——
+   `extra` 就是解析后的 YAML dict，根本没有顶层 `WAZUH_USER` 键。
+   所以环境变量从头到尾没被读过一次
+
+**为什么两周没暴露**：容器 2026-08-08 启动时读的是当时带真值的 config.yaml，
+凭证已在内存里；后来某次部署的 `git reset --hard` 把该文件换成占位符版本，
+进程没重启就一直正常。**一个「只要重启就挂」的地雷**——和 tplink 那个
+「只要跑 healthcheck 就报错」一样，都是靠「从不重建容器」掩盖着的。
+→ **这正是「不在 CI/CD 里」的真实代价：不是改了不生效，而是攒了一堆
+只在下次重启时才一起爆的雷。**
+
+修法：新增 `collector_framework.config.resolve()`——env 优先 → YAML → default，
+并**识别未展开的 `${VAR}` / `${VAR:-default}` 占位符，绝不当值用**；
+占位符且无 default（如 password）→ **启动期抛 ValueError**。
+宁可启动失败，也不拿 `${}` 去发请求：一个启动期异常比日志里一万条 401 好查。
+
+### 本轮最终实测（生产，2026-08-23 01:44）
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| 宿主机僵尸进程 | 233 | **0** |
+| tplink health | unhealthy（streak 20531） | **healthy**（streak 0） |
+| tplink `--test` 退出码 | 1 + traceback | **0**（路由器 OK / AI-miniSOC OK） |
+| wazuh health | healthy（但重启即挂） | **healthy**（且重启后仍 healthy） |
+| `init` / RestartCount | 无 init | `init=true` / restarts=0 |
+
+### 又踩的坑（本轮追加）
+1. **`PYTHONPATH` shadow 对 PEP 660 editable 安装无效**。wazuh 的
+   `wazuh_collector` 装在 `/app/src`（不是 site-packages），且 editable 安装注册的是
+   **meta-path finder**，它排在 `sys.path` 之前 → `PYTHONPATH=/patch` 被完全绕过
+   （同样手法在 tplink 上是有效的，两个包安装方式不同）。
+   验证补丁前先 `python -c "import x; print(x.__file__)"` 确认真实路径，
+   再按该路径覆盖挂载
+2. **`"\$"` 在 Python 里是反斜杠+美元**，`startswith("\$")` 恒 False，
+   把「是不是占位符」判反了（还伴随 SyntaxWarning: invalid escape sequence）。
+   用 `chr(36)` 或 `"$"` 才对——一个转义把整条结论带偏了
+3. **同一个「验证脚本」在 ssh 里套多层引号极易失真**，本轮又中一次；
+   多层嵌套时优先 `docker run --rm` 一次性容器 + 覆盖挂载，别改运行中的容器
+
+### 顺带发现（未修，需决策）
+**`sync_client` 把 `body.code=400` 当成同步成功**。wazuh 采集日志实录：
+```
+同步成功: {'code': 400, 'msg': '不支持的数据类型: baseline，当前支持: asset'}
+```
+即 CLAUDE.md 注意事项 #11 那个 envelope 陷阱（HTTP 恒 200、业务状态在
+`body.code`）在采集器侧**没有遵守**——只看 HTTP 200 就记 success，
+于是 vulnerability / baseline 两类数据其实一条都没进库，却一直报「同步成功」，
+`soc_source_health` 也跟着记 success。**这是假绿，与「99 条 critical 报成 0」
+同类**（失败会被看见，假成功不会）。
+未直接修的原因：改成如实报失败会让 `wazuh:baseline`/`vulnerability` 立刻
+record_failure → `/data-health` 转 degraded。这是**正确**的，但会改变面板颜色，
+应由人决定是先补后端 `data/sync` 的类型支持、还是先让面板诚实变红。
+
 ### 待办（不阻塞）
-- 本轮修复要等下次 CD 跑 `deploy_collectors.sh` 才生效（会重建容器、
-  丢一个采集周期）；重建后确认 tplink 变 healthy 且僵尸数归 0
+- ~~等下次 CD 跑 `deploy_collectors.sh` 生效~~ ✅ 已于 2026-08-23 01:44 生效并实测（见上表）
 - `run_daemon.py` 里 `subprocess.Popen` 那套守护逻辑与 docker
   `restart: unless-stopped` 功能重叠，线上未使用，建议后续评估是否删除
+- **`sync_client` 不看 `body.code`**（见上「顺带发现」）：要么补后端
+  `data/sync` 对 vulnerability/baseline 的支持，要么让采集器如实报失败
+  并接受 `/data-health` 转 degraded。二者都行，但不能继续假绿
+- 采集器凭证目前 backend/.env 与 collectors/.env 各存一份（值相同），
+  建议后续收敛为单一来源，避免只改一处
 
 ---
 
