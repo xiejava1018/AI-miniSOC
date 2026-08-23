@@ -199,3 +199,26 @@ jobs:
             echo "WARN: 跳过 DB 探活（.env 缺连接信息）"
           fi
           echo "健康检查通过 ✓"
+
+      # 5. 采集器容器部署（仅当 src/collectors/ 有变更时才 build）
+      #
+      #    放在 backend 健康检查之后：backend 没起来就没必要动采集器
+      #    （采集器要往 backend 推数据）。
+      #
+      #    不并入 deploy.sh：deploy.sh 的全局 trap 会在任何失败时 git reset 回滚，
+      #    而采集器 build 失败不该把已验证通过的 backend 一起回滚掉。
+      #    本步骤失败 → workflow 变红（可见），backend 保持新版本（不回滚）。
+      #
+      #    脚本存在性守卫：CD 没有 checkout 步骤，workflow_run 用的是默认分支的
+      #    workflow 定义，但工作树要等 deploy.sh 里的 git reset 才更新。首次上线
+      #    本步骤时会出现「workflow 已有、脚本还没有」的鸡生蛋（gate 步骤注释里
+      #    记着上次踩过同款），所以这里显式跳过而不是报错。
+      - name: Deploy collectors (path-filtered)
+        if: success() && steps.gate.outputs.deploy != 'no'
+        run: |
+          cd /home/xiejava/AIproject/AI-miniSOC
+          if [ ! -f deploy/deploy_collectors.sh ]; then
+            echo "deploy/deploy_collectors.sh 不存在于该 commit，跳过采集器部署"
+            exit 0
+          fi
+          bash deploy/deploy_collectors.sh

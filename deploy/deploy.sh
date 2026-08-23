@@ -251,6 +251,17 @@ fi
 trap - ERR INT TERM
 ROLLBACK_DONE=1   # 防止任何后续错误触发回滚
 
+# ===== 11. 采集器变更提示 =====
+# 采集器容器不由本脚本部署（理由见 deploy/deploy_collectors.sh 头部注释：
+# 不能让采集器 build 失败触发 backend 回滚）。CD workflow 会在本脚本之后自动
+# 调 deploy_collectors.sh；但**手工**跑 deploy.sh 的人不会经过那一步，所以这里
+# 明确提示一句，避免又出现「代码改了、线上镜像还是两周前那个」的情况。
+if [[ -n "${PREVIOUS_SHA:-}" ]] \
+   && ! git diff --quiet "$PREVIOUS_SHA" "$TARGET_SHA" -- src/collectors/ 2>/dev/null; then
+    log "NOTE: 本次 src/collectors/ 有变更，采集器镜像需要重建"
+    log "      CD 会自动执行；手工部署请补跑: bash deploy/deploy_collectors.sh"
+fi
+
 log "====== 部署成功: $TARGET_SHA ======"
 log ""
 exit 0
