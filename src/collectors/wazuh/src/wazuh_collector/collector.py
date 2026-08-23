@@ -11,7 +11,7 @@ from typing import Optional
 
 from collector_framework.base import BaseCollector, CollectResult, DataType
 from collector_framework.sync_client import MiniSOCClient
-from collector_framework.config import CollectorConfig
+from collector_framework.config import CollectorConfig, resolve
 
 from .wazuh_client import WazuhClient
 from .transformers import (
@@ -34,14 +34,32 @@ class WazuhCollector(BaseCollector):
 
         # 从 extra 配置中提取 Wazuh 连接信息
         wazuh_cfg = config.extra.get("wazuh", {})
-        self.wazuh_url = wazuh_cfg.get(
-            "url", config.extra.get("WAZUH_URL", "https://192.168.0.40:55000")
+        # Wazuh 连接信息：**环境变量优先**，YAML 其次。
+        #
+        # 原写法是 `wazuh_cfg.get("user", config.extra.get("WAZUH_USER", ...))`，
+        # 两个问题：
+        #   1) 完全不看环境变量。仓库里的 config.yaml 写的是
+        #      `user: ${WAZUH_USER:-wazuh}` 占位符，yaml.safe_load 不展开，
+        #      于是拿着字面量 "${WAZUH_USER:-wazuh}" 去认证 → 401。
+        #   2) fallback 写的 `config.extra.get("WAZUH_USER")` 是无效的——
+        #      extra 就是解析后的 YAML dict，根本没有顶层 WAZUH_USER 键。
+        #
+        # 生产真事故（2026-08-23）：这个容器 2026-08-08 启动时读的是当时带真值的
+        # config.yaml，凭证已在内存里；后来部署的 `git reset --hard` 把该文件换成了
+        # 占位符版本，而进程没重启就一直正常——直到今天重建容器才引爆。
+        # 一个“只要重启就挂”的隱形故障埋了两周。
+        self.wazuh_url = resolve(
+            "WAZUH_URL",
+            wazuh_cfg.get("url"),
+            "https://192.168.0.40:55000",
+            field_name="wazuh.url",
         )
-        self.wazuh_user = wazuh_cfg.get(
-            "user", config.extra.get("WAZUH_USER", "wazuh-wui")
+        self.wazuh_user = resolve(
+            "WAZUH_USER", wazuh_cfg.get("user"), "wazuh-wui", field_name="wazuh.user"
         )
-        self.wazuh_password = wazuh_cfg.get(
-            "password", config.extra.get("WAZUH_PASSWORD", "")
+        # password 不给 default：缺就招——空密码只会换来一串看不出原因的 401
+        self.wazuh_password = resolve(
+            "WAZUH_PASSWORD", wazuh_cfg.get("password"), field_name="wazuh.password"
         )
 
         # 创建客户端
