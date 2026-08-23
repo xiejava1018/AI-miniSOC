@@ -265,7 +265,8 @@ Self-hosted runner @ 192.168.0.102 → HTTPS/443 → api.github.com
 └── 既有组件（不动）
     ├── nginx (port 8080, 服务 src/frontend/dist)
     ├── docker collectors (独立 compose)
-    └── PostgreSQL remote (111.228.57.2:25432, DB=AI-miniSOC-db)
+    └── PostgreSQL local (192.168.0.102:5432, DB=AI-miniSOC-db)
+        # 2026-08-23 前为远端 111.228.57.2:25432，已整库迁移至本机
 ```
 
 ### 2.4 GitHub Actions Workflow 矩阵（v2.2）

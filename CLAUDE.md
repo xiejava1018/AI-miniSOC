@@ -588,7 +588,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 
 ### 生产拓扑（本节为准）
 - **生产服务器**: 192.168.0.102（xiejava-8g-host），后端 systemd `aisoc-backend`（port 8000），前端 nginx:8080 服务 dist
-- **数据库**: 远端 PostgreSQL 111.228.57.2:25432；**生产库 `AI-miniSOC-db`**（服务器 .env 指向）；本地 Mac dev 用 `AI-miniSOC-testdb`；pytest 专用 `AI-miniSOC-db_test`——三个库严格分离，**本地 .env 绝不指向生产**
+- **数据库**: **本机 PostgreSQL 16.15 `192.168.0.102:5432`**，生产库 `AI-miniSOC-db`（2026-08-23 从远端 111.228.57.2:25432 迁移过来，见「续八」）；本地 Mac dev 用 `AI-miniSOC-testdb`；pytest 专用 `AI-miniSOC-db_test`——三个库严格分离，**本地 .env 绝不指向生产**
 - **CI/CD**: GitHub Actions；CI 跑 GitHub 托管 runner，CD 跑装在 102 的 self-hosted runner `aisoc-prod-deployer`（label `prod-deployer`）
 - **部署脚本**: `deploy/deploy.sh`（fetch depth+timeout / pip / vite build / systemd restart / HTTP+DB 双探活 / 失败全局 trap 回滚）
 - **sudoers**: `/etc/sudoers.d/aisoc-deployer`（10 条 NOPASSWD 最小权限，deploy 无人值守）
@@ -1478,5 +1478,59 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 
 ---
 
-**文档版本**: v2.22
+## 今日补充（2026-08-23 续八：生产库从远端迁到 102 本机）
+
+### 变更
+生产 DB 由 **远端 `111.228.57.2:25432`** 切到 **102 本机 `192.168.0.102:5432`**（PostgreSQL 16.15），
+库名/账号不变（`AI-miniSOC-db` / `aisoc`）。改的只有 `src/backend/.env` 的 `DB_HOST`/`DB_PORT`
+（systemd `EnvironmentFile` 就是这份 .env，改完 restart 即生效）。
+
+### 前置事实（勘察结论，非推演）
+- 102 上早已跑着 PostgreSQL 16.15，`0.0.0.0:5432`；角色 `aisoc` 已存在且密码一致
+- 本机 `AI-miniSOC-db` 已存在但**空库**（0 表）→ 可直接 restore，无需建库（`aisoc` 无 createdb/superuser，
+  `sudo -u postgres` 也要密码，真要建库得先解决权限）
+- 源库 52 MB / 49 表 / head `n1o2p3q4r5s6`；扩展只有 plpgsql（无需额外权限）
+
+### 迁移过程
+1. 停写：`systemctl stop aisoc-backend` + `docker stop` 两个 collector → 源库连接数 0
+2. `pg_dump -Fc --no-owner --no-privileges -Z6`（88s，7.3 MB）
+3. `pg_restore --exit-on-error -j2`（12s）
+4. **逐表精确 count 比对**（不是 `n_live_tup` 估算，用 `query_to_xml` 动态 count）：49/49 表全等
+5. 切 .env → restart → 探活 → 恢复 collector
+
+### 实测核验
+| 项 | 结果 |
+|---|---|
+| 表数 / 行数 | 49 / 49 全等（`diff` 零差异） |
+| 序列 last_value | 13 个逐一与源库一致（含 NULL 的那几个） |
+| 索引 / 外键 | 122 / 39，两边一致 |
+| alembic head | `n1o2p3q4r5s6`（新库 `alembic current` 确认 head） |
+| 业务探活 | 登录 200、`/menus/tree` 9 顶级、`/assets` total=74、`/data-health` 200 |
+| 写入落点 | 新库 sync_tasks 40334 且 max(created_at) 持续增长；**旧库冻结在 10:15:58** |
+| collector | wazuh / tplink 均 healthy，`POST /data/sync` 200 |
+
+### 注意点
+1. **`.env` 在 `src/backend/.gitignore` 第 1 行** → CI/CD 的 `git reset --hard` 不会把 DB_HOST 打回去；
+   `deploy.sh` 的 DB 探活也是从 .env 动态读 `DB_HOST`，无硬编码 → **后续发版无需额外处理**
+2. **目标库多出 2 个 view 属正常**：`pg_stat_statements` / `pg_stat_statements_info`（owner=postgres），
+   是本机实例的扩展视图，不是应用对象。核验时按 `relkind in ('r','p')` 判空才不会误报
+3. **序列 `last_value` 为 NULL 的 9 个表不是迁移丢了**——源库本身就是 NULL（那些表不走 serial）。
+   判断「序列有没有丢」必须两边对照，不能只看目标库有没有值
+4. `/health` 仍报 `degraded`（`browsing_detector` 自 08-18 未跑）——**迁移前就存在**，
+   与本次无关（即 CLAUDE.md 里 loki:browsing_detection 过期那条）
+5. **DB 现在监听 `0.0.0.0:5432`**，LAN 内可直连（迁移中就看到 192.168.0.8 的 DBeaver 连进来）。
+   内网单人场景可接受，但比原先「远端库 + 固定出口」暴露面更大，建议后续收紧 `pg_hba` / 防火墙
+6. 回滚素材保留在 102：dump 在 `/tmp/aisoc-db-migrate-20260823-021834/`，
+   旧 .env 在 `src/backend/.env.bak.dbswitch.20260823-022120`。**旧远端库未删、数据完整冻结**，
+   回滚 = 复原 .env + restart（脚本里已内置失败自动回滚路径）
+
+### 待办（不阻塞）
+- 旧远端库 `111.228.57.2:25432/AI-miniSOC-db` **暂不要删**，观察 1~2 周确认无回滚需求后再处理
+- 本机库**目前没有备份机制**（原远端库是否有备份未知）→ 建议加 `pg_dump` 定时 + 保留策略，
+  这是本次迁移引入的新风险点：数据从「别人运维的库」变成「自己运维的库」
+- `pg_hba` / UFW 收紧 5432 访问源
+
+---
+
+**文档版本**: v2.23
 **最后更新**: 2026-08-23
