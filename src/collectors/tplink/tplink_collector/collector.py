@@ -43,3 +43,12 @@ class TPLinkCollector(BaseCollector):
         except Exception as e:
             logger.error(f"路由器连通性测试失败: {e}")
             return False
+
+    async def close(self) -> None:
+        """释放底层 httpx 客户端。
+
+        BaseCollector 没有定义 close()，此前谁都没关过路由器侧的
+        AsyncClient（test_tplink.py 调 collector.close() 其实会 AttributeError）。
+        必须与调用方在同一个事件循环内 await —— 原因见 __main__.py 头部说明。
+        """
+        await self.client.close()

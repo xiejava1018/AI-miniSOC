@@ -5,6 +5,12 @@ services:
       dockerfile: tplink/Dockerfile
     container_name: minisoc-tplink-collector
     restart: unless-stopped
+    # 用 tini 当 PID 1 负责收养并回收孤儿进程。
+    # 不加的话 PID 1 是业务 python 进程，它从不调用 wait()，而 docker
+    # HEALTHCHECK 的 exec 子进程在容器 PID 命名空间内会被 reparent 到 PID 1，
+    # 于是无人收尸 —— 生产实测两周堆积 233 个 <defunct>（全部 PPID=容器 PID 1）。
+    # 这是「PID 1 不收养孤儿」的标准解，比在业务代码里塞 SIGCHLD SIG_IGN 干净。
+    init: true
     environment:
       - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
       - MINISOC_API_KEY=${MINISOC_API_KEY}
@@ -28,6 +34,10 @@ services:
       dockerfile: wazuh/Dockerfile
     container_name: minisoc-wazuh-collector
     restart: unless-stopped
+    # 同上。wazuh 侧目前没堆僵尸（healthcheck 一直成功、正常退出即被回收），
+    # 但它的 healthcheck 同样是 exec 子进程，一旦哪天超时被 SIGKILL 就会漏。
+    # 属防御性配置，不是在修现存故障。
+    init: true
     environment:
       - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
       - MINISOC_API_KEY=${MINISOC_API_KEY}
