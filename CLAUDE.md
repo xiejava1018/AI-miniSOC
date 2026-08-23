@@ -1341,5 +1341,74 @@ v2.20 升上生产后，rising 仍为空。补查发现：**生产环境两次 b
 
 ---
 
-**文档版本**: v2.21
-**最后更新**: 2026-08-22
+## 今日补充（2026-08-23：采集器 unhealthy / 僵尸进程 → CI/CD 缺口）
+
+### 起因与结论
+巡检报告 192.168.0.102 两个问题（233 僵尸进程 + tplink 容器 unhealthy），怀疑
+CI/CD 导致。**实测结论：与 CI/CD 完全无关**，是采集器代码缺陷，从容器第一天
+（2026-08-08）就存在。排除证据：
+- `grep -ci docker /tmp/aisoc-deploy.log` = **0**（deploy.sh 只碰 git/pip/vite/systemd）
+- 容器 `RestartCount=0`、`Created=2026-08-08`，两周内几十次部署一次没动过
+- `FailingStreak=20531` × 60s ≈ 14.25 天 ≈ 容器全生命周期 → 从第一次检查就在失败
+
+### 真正的根因（两个问题同源）
+**`tplink_collector/__main__.py` 的 `--test` 分支连开 3 个 `asyncio.run`**。
+`MiniSOCClient.__init__` 里就构造 `httpx.AsyncClient`，连接池绑定到**首次使用**
+的那个循环；第 3 个循环里 `aclose()` 去关第 2 个（已关闭）循环上的 transport →
+`RuntimeError: Event loop is closed`。
+
+关键认知：**健康检查日志显示路由器登录和后端 `/health` 都返回 200** ——
+是收尾代码把成功的检查判成了失败，采集主循环一直正常（每 5 分钟同步 24-25 条）。
+`/data-health` 把 tplink 报 healthy 是**对的**，docker 那个 unhealthy 才是虚警。
+
+对照组说明一切：`wazuh/src/wazuh_collector/__main__.py` 把三步放进**一个**协程、
+只 `asyncio.run` 一次 → 始终 healthy。同机、同框架、同天构建，唯一差别是这个写法。
+
+僵尸进程：233 个**全部** PPID = 容器 PID 1。HEALTHCHECK 的 exec 子进程在容器 PID
+命名空间里被 reparent 到 PID 1，而 PID 1 是普通 python 进程、从不 `wait()`。
+
+### 交付（commit baad179 + 0b3c615）
+- `__main__.py` 三个分支各收敛为**单次 asyncio.run**，收尾同循环内做；
+  signal 改 `loop.add_signal_handler`
+- `TPLinkCollector` 补 `close()`（BaseCollector 没这方法，路由器侧 client
+  从来没人关过；`test_tplink.py` 调它其实会 AttributeError）
+- compose 两服务加 `init: true`（tini 收尸），tplink HEALTHCHECK
+  `timeout 5s→15s` + `start-period=15s`
+- **`deploy/deploy_collectors.sh`** + deploy-prod.yml step 5：补上
+  `src/collectors/` 完全在 CI/CD 之外的缺口（路径过滤触发、健康门禁、
+  僵尸数核查、不自动回滚）
+
+### 踩过的坑（本轮新增）
+1. **本地 Mac 复现不出这个 bug**。httpx/httpcore/anyio 版本与容器**完全相同**
+   （0.28.1 / 1.0.9 / 4.14.2），差异只在 Python 3.13.2 vs 3.12.13。
+   一开始误判为「依赖版本差异」，实际是 Python 版本的 asyncio 行为差异。
+   → **这类运行时行为 bug 必须在目标运行时里验**，本地跑通不代表线上跑通
+   （与 F2.2「service 测过了路由未必通」同一类教训）
+2. **第一次复现脚本用 HTTP/1.0 stub 服务器，连接不 keep-alive → 池里没有活
+   transport → `aclose()` 无事可做，复现失败**。必须 `protocol_version="HTTP/1.1"`
+   + Content-Length，或者直接打真后端（uvicorn keep-alive）
+3. **验证修复不要直接改运行中容器的 site-packages**。用
+   `docker cp` 到 `/tmp/patch` + `docker exec -e PYTHONPATH=/tmp/patch` shadow
+   掉镜像里的旧包，既验证真代码又不污染运行中的容器
+4. **僵尸进程别按「会耗尽 PID 表」定优先级**：`pid_max=4194304`，233 个差
+   4 个数量级。修它的理由是它是 bug 的可见症状，不是资源风险
+5. **`docker restart` 治不了本**：能清掉僵尸，但 healthcheck 继续失败 →
+   原速重新堆积
+
+### 顺手纠正 CLAUDE.md 两处过期记载
+1. ~~「wazuh collector 的 config.yaml 明文密码在服务器端手工维护（未入库）」~~
+   —— **已过期**。`src/collectors/wazuh/config.yaml` 是**入库**的，且内容全是
+   `${WAZUH_PASSWORD}` 这类占位符，无明文密码；真凭证在 gitignore 的
+   `src/collectors/.env`。服务器 `git status src/collectors/` 干净（无漂移）
+2. 采集器**镜像**才是真正的手工维护面（本轮已纳入 CD）
+
+### 待办（不阻塞）
+- 本轮修复要等下次 CD 跑 `deploy_collectors.sh` 才生效（会重建容器、
+  丢一个采集周期）；重建后确认 tplink 变 healthy 且僵尸数归 0
+- `run_daemon.py` 里 `subprocess.Popen` 那套守护逻辑与 docker
+  `restart: unless-stopped` 功能重叠，线上未使用，建议后续评估是否删除
+
+---
+
+**文档版本**: v2.22
+**最后更新**: 2026-08-23
