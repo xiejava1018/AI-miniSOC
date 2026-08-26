@@ -1606,6 +1606,14 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 14. **裸机 PYTHONPATH 跑 scanner（docker.io 被墙时的备选）**：collector.py 用
     `from nmap_runner import ...` 绝对导入会失败，必须 `from .nmap_runner import ...` + fallback；
     Kali 上 `pip3 install --user --break-system-packages httpx pyyaml python-dotenv` 即可
+15. **前端按钮权限必须种在「子菜单」自己的 permissions 上，不是父容器**：
+    `hasAuth(authMark)` 读当前路由（子菜单）的 `meta.authList`（来自 soc_menus.permissions）。
+    o1p2q3r4s5t6 第一版把 scan_run 等全种在父容器 /scan，子菜单 perms=[] 导致
+    `v-if="hasAuth('scan_run')"` 恒 false。修复迁移 p1q2r3s4t5u6：子菜单各自写 permissions。
+    同时**父容器（有 children）的 component 必须是 `/index/index`（Layout）**，不能写 `/scan/index`。
+16. **`git bundle create A..B` 报 "Refusing to create empty bundle"**——即使 `git log A..B`
+    显示有 commit（原因不明）。应急直接全量 `git bundle create /tmp/full.bundle master`（5.9M），
+    102 端 `git fetch /tmp/full.bundle master:refs/remotes/bundle/master` 拿到目标 commit 再手动 deploy。
 
 ### 生产真实部署（2026-08-26，192.168.0.45 Kali）
 - docker.io 被墙拉不到 python:3.13-slim → 走裸机方案（Kali 自带 nmap 7.95 + python3）
@@ -1618,12 +1626,13 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 - 待办：裸机是 nohup 临时方案，后续应配 systemd unit 或解决 docker mirror 后回容器
 
 ### 待办（不阻塞，按优先级）
-1. **部署 192.168.0.45（Kali）真扫描器**：admin 注册 scanner → docker compose up → 真实 nmap 扫一轮 → 看门狗/心跳验证（final.md S11，进行中）
-2. **`/data-health` 展示 scanner:* 键**：DB 有记录（success=1）但端点展示层未覆盖新键，小 PR 补键清单
-3. **Phase 3 前端**：按 control-plane-prototype.html 实现 5-tab 页面（扫描器/任务/目标/发现/健康）
+1. ~~部署 192.168.0.45（Kali）真扫描器~~ ✅ 已完成（裸机 --loop 常驻，心跳/离线/通知全验证）
+2. **`/data-health` 展示 scanner:* 键**：DB 有记录（success=2）但端点展示层未覆盖新键，小 PR 补键清单
+3. ~~Phase 3 前端~~ ✅ 已完成（2026-08-26 commit 49f80bd）：scanners/tasks/findings 3 页面 + api/scan.ts + 迁移 p1q2r3s4t5u6；生产验证菜单 authMarks/API/scan chunk/nginx 200 全过。待人工浏览器点一遍 UI
 4. **生产 overall=degraded 是既有问题**：loki:browsing_detection 自 08-18 未跑，与本次无关
 5. **双 Key 收口**：Phase 1 让 scanner 共用 `MINISOC_API_KEY`；Phase 4 改独立 `SCANNER_API_KEY`（require_scanner_api_key 已就绪，只差 env 下发）
 6. **run_daemon.py 旧守护逻辑**与 docker restart 重叠，建议评估删除（续三遗留）
+7. **0.45 scanner 裸机 nohup 临时方案**：后续配 systemd unit 或解决 docker mirror 后回容器
 
 ---
 
