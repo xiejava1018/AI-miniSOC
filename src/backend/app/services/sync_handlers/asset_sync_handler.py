@@ -26,10 +26,17 @@ logger = logging.getLogger(__name__)
 # P4 WO-2：source → source_health source_key 映射。
 # 采集器推送（tplink）与 wazuh agent 同步都流经本 handler，在 handle() 收尾
 # 集中上报，即可覆盖全部资产类同步源（未来新采集器自动纳入）。
+#
+# P3/F-S2：加入 scanner 的两个通道键。
+# 旧设计由每个 handler 独立维护 _SOURCE_HEALTH_KEYS；P3 阶段集中到此处以减少重复。
+# PortSyncHandler.handle() 会镜像 AssetSyncHandler.handle() 的同款 source_health 上报逻辑。
 _SOURCE_HEALTH_KEYS = {
     "tplink": "tplink:collector",
     "tplink-router": "tplink:collector",  # 采集器实际推送的 source 值（生产实测）
     "wazuh": "wazuh:agents",
+    # P3 资产发现扫描器（docs/design/...-final.md §6.2.3）
+    "scanner": "scanner:discovery",       # data_type="discovery" 通道
+    "scanner-port": "scanner:ports",      # data_type="port" 通道
 }
 
 # P4 WO-2 补丁：预期间隔（秒），不传会让 _source_status() 跳过 degraded 判定（验收报告 #2）
@@ -38,6 +45,8 @@ _SOURCE_HEALTH_INTERVALS = {
     "tplink": 300,
     "tplink-router": 300,
     "wazuh": 300,
+    "scanner": 300,       # P3：scanner 发现通道（与现有采集器同频）
+    "scanner-port": 300,  # P3：scanner 端口通道
 }
 
 # Asset 模型上允许 Collector 写入的字段白名单

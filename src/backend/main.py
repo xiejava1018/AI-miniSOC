@@ -41,6 +41,15 @@ from app.services.push_scheduler import (
     start_push_scheduler,
     stop_push_scheduler,
 )
+# P3 资产扫描：scanner watchdog + 中央调度（final.md §8）
+from app.services.scanner_watchdog_scheduler import (
+    start_scanner_watchdog,
+    stop_scanner_watchdog,
+)
+from app.services.central_scan_scheduler import (
+    start_central_scan_scheduler,
+    stop_central_scan_scheduler,
+)
 from app.services.task_observability import (
     bootstrap_task_observability,
     shutdown_task_observability,
@@ -60,6 +69,17 @@ async def lifespan(app: FastAPI):
     from app.services.single_worker_guard import check_single_worker_or_warn
     check_single_worker_or_warn()
 
+    # 模型自建表（路径 B 即时落地，P3 资产扫描控制面/数据面 final.md §5.6）：
+    # 确保所有 models/*.py 中定义的表（包括 P3 ScannerTask/ScanTarget/ScanFinding/ScannerAgent）
+    # 在生产库存在。create_all 仅建缺失表，不动已有表与数据，与 P4 治理保持一致。
+    # ★ 必须在 bootstrap_task_observability 之前——后者依赖 sync_task 字典表的 status 列。
+    from app.core.database import engine
+    import app.models  # noqa: F401  触发所有 model 的 import，确保 Base.metadata 注册
+    from app.models.base import Base as _Base
+    _Base.metadata.create_all(engine)
+    logging.getLogger(__name__).info("metadata.create_all done; tables=%d",
+                                    len(_Base.metadata.tables))
+
     # 任务可观测性：启动对账 + watchdog + notification drain
     obs_stats = await bootstrap_task_observability()
     logging.getLogger(__name__).info("task observability bootstrapped: %s", obs_stats)
@@ -69,6 +89,9 @@ async def lifespan(app: FastAPI):
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
     start_push_scheduler()
+    # P3 资产扫描：L1+L2 在线检测（每 60s）+ 每天 03:00/04:00 自动建任务
+    start_scanner_watchdog()
+    start_central_scan_scheduler()
     try:
         yield
     finally:
@@ -77,6 +100,9 @@ async def lifespan(app: FastAPI):
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
         await stop_push_scheduler()
+        # P3 资产扫描：shutdown
+        await stop_central_scan_scheduler()
+        await stop_scanner_watchdog()
         # 任务可观测性最后关，保证业务 scheduler 完结后的 run 能被对账
         await shutdown_task_observability()
 

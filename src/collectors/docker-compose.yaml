@@ -76,6 +76,46 @@ services:
       retries: 3
       start_period: 10s
 
+  # P3/F-S2 资产发现与攻击面扫描采集器（公网暴露面）
+  # 设计：docs/design/2026-08-26-asset-discovery-and-attack-surface-scanner-final.md §10.1
+  # Phase 1: 公网端口扫描（-sV）；Phase 2 加 internal discovery
+  scanner-collector:
+    build:
+      context: .
+      dockerfile: scanner/Dockerfile
+    container_name: minisoc-scanner-collector
+    restart: unless-stopped
+    init: true
+    # nmap 需要 raw socket 发包；Phase 2 内部扫描 ARP 需 host 网络
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # Phase 1 bridge（公网扫描不需 ARP）；Phase 2 加 scanner-internal service 用 host
+    networks:
+      - minisoc-net
+    environment:
+      - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
+      - MINISOC_API_KEY=${MINISOC_API_KEY}
+      - SCAN_PUBLIC_TARGETS=${SCAN_PUBLIC_TARGETS:-203.0.113.10}
+      - NMAP_TIMEOUT=${SCANNER_NMAP_TIMEOUT:-300}
+      - NMAP_MAX_RATE=${SCANNER_MAX_RATE:-100}
+      - SCANNER_LOG_LEVEL=${SCANNER_LOG_LEVEL:-INFO}
+    mem_limit: 256m
+    cpus: 1.0
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # scanner 进程没有持续服务（一次性 --once），healthcheck 用 curl --version 验证 nmap 可用
+    healthcheck:
+      test: ["CMD-SHELL", "nmap --version >/dev/null 2>&1 || exit 1"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 networks:
   minisoc-net:
     driver: bridge

@@ -34,6 +34,7 @@ from app.models.asset_reconciliation import (
     AssetReconciliation,
 )
 from app.models.audit_log import AuditLog
+from app.models.scanner_models import ScanFinding
 from app.models.source_health import SourceHealth
 from app.models.sync_dead_letter import SyncDeadLetter
 from app.models.sync_task import SyncTask
@@ -371,6 +372,12 @@ class AssetReconciliationService:
 
         for r in rows:
             self.db.add(r)
+
+        # ---- P3/F-S1 扫描器发现 → 影子资产（final.md §9.1）
+        scanner_shadow_count = self.reconcile_scanner_findings(
+            run_id=run_id, task_id=task_id, lookback_hours=24,
+        )
+        # scanner shadow 另计（不走 Wazuh 主路）
         self.db.commit()
 
         summary = {
@@ -379,12 +386,13 @@ class AssetReconciliationService:
             "agent_count": len(agents),
             "asset_count": len(assets),
             "linked_count": len(matched_agent_ids),
-            "diff_total": len(rows),
+            "diff_total": len(rows) + scanner_shadow_count,
             "by_type": {
-                TYPE_SHADOW: sum(1 for r in rows if r.reconciliation_type == TYPE_SHADOW),
+                TYPE_SHADOW: sum(1 for r in rows if r.reconciliation_type == TYPE_SHADOW) + scanner_shadow_count,
                 TYPE_OFFLINE: sum(1 for r in rows if r.reconciliation_type == TYPE_OFFLINE),
                 TYPE_MISMATCH: sum(1 for r in rows if r.reconciliation_type == TYPE_MISMATCH),
             },
+            "scanner_shadow_count": scanner_shadow_count,
             "freshness": fr_snapshot,
         }
         logger.info(
@@ -396,6 +404,90 @@ class AssetReconciliationService:
             freshness.degraded,
         )
         return summary
+
+    def reconcile_scanner_findings(
+        self,
+        run_id: uuid.UUID,
+        task_id: Optional[uuid.UUID] = None,
+        lookback_hours: int = 24,
+    ) -> int:
+        """扫描器发现 → 影子资产补齐（final.md §9.1 扩展点）。
+
+        遍历 ``soc_scan_findings``（finding_status in ('new', 'known')），
+        产 ``AssetReconciliation(type=TYPE_SHADOW, asset_id=None)``。
+        关键不变量（ADR-6）：
+          - matched_asset_id 非空的 finding → IP 已在台账，不产 shadow（F1.3 跳过）
+          - finding_status in ('adopted', 'ignored') → 已处置，不重复产
+          - 按 ``(asset_ip, run_id)`` 去重：避免每轮重复产同一条 shadow（R7 修正）
+          - 最近 24h 不重复产同 IP 的 shadow（lookback_hours 参数）
+        返回：本次新增的 shadow 行数。
+        """
+        lookback_cutoff = _utcnow() - timedelta(hours=lookback_hours)
+        # 先查最近一批 (run_id, asset_ip) 的 pending shadow（避免每轮重复产）
+        recent_shadows = (
+            self.db.query(AssetReconciliation)
+            .filter(
+                AssetReconciliation.reconciliation_type == TYPE_SHADOW,
+                AssetReconciliation.status == STATUS_PENDING,
+                AssetReconciliation.created_at >= lookback_cutoff,
+            )
+            .all()
+        )
+        recent_ips = {str((r.details or {}).get("asset_ip", "")).strip() for r in recent_shadows}
+        recent_ips.discard("")
+
+        findings = (
+            self.db.query(ScanFinding)
+            .filter(ScanFinding.finding_status.in_(("new", "known")))
+            .all()
+        )
+
+        new_rows: list[AssetReconciliation] = []
+        for f in findings:
+            ip = (f.asset_ip or "").strip()
+            if not ip or ip in recent_ips:
+                continue
+            # matched_asset_id 非空 → IP 已在台账，不产 shadow
+            if f.matched_asset_id:
+                # 同步状态：new → known（让前端展示一致）—— 仅内存修改，不 commit
+                if f.finding_status == "new":
+                    f.finding_status = "known"
+                continue
+            # status=="known"但 matched_asset_id 为空：可能是历史脏数据/异常，
+            # 产 shadow 让运维通过「一键纳管」/「忽略」处置（不入死信）
+            new_rows.append(
+                AssetReconciliation(
+                    run_id=run_id,
+                    task_id=task_id,
+                    asset_id=None,    # 资产不在台账
+                    reconciliation_type=TYPE_SHADOW,
+                    details={
+                        "source": "scanner",                       # 标注来源（final.md §9.2 分支文案）
+                        "scanner_id": f.scanner_id,
+                        "asset_ip": ip,
+                        "mac_address": f.mac_address,
+                        "os_guess": f.os_guess,
+                        "exposure": f.exposure,
+                        "finding_id": f.id,                          # 便于 「一键纳管」反查
+                        "scan_task_uuid": str(f.scan_task_uuid),
+                        "suggestion": "内网扫描发现但未纳管，建议确认后一键纳管或标记忽略",
+                    },
+                    status=STATUS_PENDING,
+                    created_at=_utcnow(),
+                )
+            )
+            recent_ips.add(ip)  # 同一 IP 在本次 run 内也只产一次
+
+        for r in new_rows:
+            self.db.add(r)
+        if new_rows:
+            self.db.commit()
+        if new_rows:
+            logger.info(
+                "scanner findings → shadow: %d new rows (run_id=%s, lookback=%dh)",
+                len(new_rows), run_id, lookback_hours,
+            )
+        return len(new_rows)
 
     def _field_diffs(self, asset: Asset, agent: dict) -> list[dict]:
         diffs = []

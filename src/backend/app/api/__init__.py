@@ -8,7 +8,8 @@ from app.api import (auth, users, assets, asset_ports, asset_tags, asset_inciden
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance, asset_reconciliation, data_health, reports, impact_analysis)
+    compliance, asset_reconciliation, data_health, reports, impact_analysis,
+    scan_agents, scan_human_agents, scan_tasks)
 from app.api.deps import get_current_user
 
 api_router = APIRouter()
@@ -58,6 +59,13 @@ api_router.include_router(asset_lifecycle.router, prefix="/assets", tags=["资�
 api_router.include_router(impact_analysis.router, prefix="/assets", tags=["变更影响分析"])
 api_router.include_router(data_health.router, tags=["数据健康"])
 api_router.include_router(reports.router, tags=["AI安全报告"])
+# P3 资产扫描控制面（final.md §6.4 / §7）：3 块按职责拆开
+# - scan_agents：扫描器鉴权（X-API-Key）专用端点（heartbeat/pending/claim/report）
+# - scan_human_agents：人类管理（admin 注册/编辑/注销扫描器）
+# - scan_tasks：人类建任务/任务列表/详情/取消/发现/一键纳管/忽略
+api_router.include_router(scan_agents.router, prefix="/scan", tags=["扫描器控制面"])
+api_router.include_router(scan_human_agents.router, prefix="/scan", tags=["扫描器管理"])
+api_router.include_router(scan_tasks.router, prefix="/scan", tags=["扫描任务"])
 api_router.include_router(menus.router, prefix="/menus", tags=["菜单管理"])
 api_router.include_router(roles.router, prefix="/roles", tags=["角色管理"])
 api_router.include_router(departments.router, prefix="/departments", tags=["部门管理"])

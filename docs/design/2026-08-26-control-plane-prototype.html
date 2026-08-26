@@ -1,0 +1,515 @@
+<style>
+  :root {
+    /* font */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+    /* text */
+    --color-text-primary: #1f2329;
+    --color-text-secondary: #646a73;
+    --color-text-tertiary: #8f959e;
+    --color-text-info: #3370ff;
+    --color-text-success: #00b42a;
+    --color-text-warning: #ff7d00;
+    --color-text-danger: #f53f3f;
+    /* background */
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f7f8fa;
+    --color-background-info: #e8f3ff;
+    /* border */
+    --color-border-tertiary: #e5e6eb;
+    --color-border-secondary: #c9cdd4;
+    --color-border-info: #3370ff;
+    /* radius */
+    --border-radius-md: 6px;
+    --border-radius-lg: 8px;
+  }
+</style>
+
+<div style="font-family: var(--font-sans); color: var(--color-text-primary); max-width: 760px;">
+
+  <!-- header -->
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+    <div>
+      <p style="font-weight: 500; font-size: 15px; margin: 0;">资产扫描 · 控制面</p>
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0;">AI-miniSOC 中央调度 — 扫描器/任务/发现统一管理</p>
+    </div>
+    <button onclick="openNewTask()" style="border: 0.5px solid var(--color-border-info); border-radius: var(--border-radius-md); padding: 8px 14px; background: var(--color-background-info); color: var(--color-text-info); font-size: 13px; cursor: pointer;">+ 新建扫描任务</button>
+  </div>
+
+  <!-- metric cards -->
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px;">
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px;">
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0;">扫描器在线</p>
+      <p style="font-size: 22px; font-weight: 500; margin: 6px 0 0;">2 / 2</p>
+    </div>
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px;">
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0;">今日任务</p>
+      <p style="font-size: 22px; font-weight: 500; margin: 6px 0 0;">5</p>
+    </div>
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px;">
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0;">成功 / 失败</p>
+      <p style="font-size: 22px; font-weight: 500; margin: 6px 0 0; color: var(--color-text-success);">4 <span style="font-size:14px; color:var(--color-text-secondary);">/ 1</span></p>
+    </div>
+    <div style="background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 12px;">
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0;">离线告警</p>
+      <p style="font-size: 22px; font-weight: 500; margin: 6px 0 0; color: var(--color-text-success);">0</p>
+    </div>
+  </div>
+
+  <!-- tabs -->
+  <div style="display: flex; gap: 18px; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 14px;">
+    <span class="tab active" onclick="showTab('scanners')" style="padding: 8px 2px; font-size: 13px; cursor: pointer; border-bottom: 2px solid var(--color-border-info); color: var(--color-text-info);">扫描器</span>
+    <span class="tab" onclick="showTab('tasks')" style="padding: 8px 2px; font-size: 13px; cursor: pointer; color: var(--color-text-secondary);">扫描任务</span>
+    <span class="tab" onclick="showTab('targets')" style="padding: 8px 2px; font-size: 13px; cursor: pointer; color: var(--color-text-secondary);">扫描目标</span>
+    <span class="tab" onclick="showTab('findings')" style="padding: 8px 2px; font-size: 13px; cursor: pointer; color: var(--color-text-secondary);">发现清单</span>
+    <span class="tab" onclick="showTab('health')" style="padding: 8px 2px; font-size: 13px; cursor: pointer; color: var(--color-text-secondary);">健康看板</span>
+  </div>
+
+  <!-- view: scanners -->
+  <div id="scanners" class="view">
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 1.4fr 1fr 0.7fr 1fr 0.8fr; padding: 10px 14px; background: var(--color-background-secondary); font-size: 12px; color: var(--color-text-secondary);">
+        <span>名称 / IP</span><span>状态</span><span>在跑</span><span>能力 / 子网</span><span>操作</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.4fr 1fr 0.7fr 1fr 0.8fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+        <div><div style="font-weight:500;">kali-45</div><div style="font-size:12px; color:var(--color-text-secondary);">192.168.0.45</div></div>
+        <span style="color: var(--color-text-success);">● online</span>
+        <span>1</span>
+        <div style="font-size:12px;">internal,public<br/>192.168.0.0/24</div>
+        <button onclick="openScanner('kali-45')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">详情</button>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.4fr 1fr 0.7fr 1fr 0.8fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+        <div><div style="font-weight:500;">dmz-scanner</div><div style="font-size:12px; color:var(--color-text-secondary);">10.0.0.20</div></div>
+        <span style="color: var(--color-text-success);">● online</span>
+        <span>0</span>
+        <div style="font-size:12px;">public<br/>10.0.0.0/24</div>
+        <button onclick="openScanner('dmz-scanner')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">详情</button>
+      </div>
+    </div>
+    <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;">看门狗每 60s 检测：last_heartbeat 超 90s → 自动标 offline 并触发通知。点「详情」下钻到单台扫描器视图。</p>
+  </div>
+
+  <!-- view: tasks -->
+  <div id="tasks" class="view" style="display:none;">
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr 0.9fr 0.7fr; padding: 10px 14px; background: var(--color-background-secondary); font-size: 12px; color: var(--color-text-secondary);">
+        <span>任务 UUID</span><span>模式</span><span>指派</span><span>执行者</span><span>状态</span><span>操作</span>
+      </div>
+      <div id="tasks-rows">
+        <div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr 0.9fr 0.7fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+          <span style="font-family: var(--font-mono); font-size:12px;">a1b2c3d4…</span>
+          <span>internal</span><span>auto</span><span>kali-45</span>
+          <span style="color: var(--color-text-success);">success</span>
+          <button onclick="openScanner('kali-45')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">详情</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr 0.9fr 0.7fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+          <span style="font-family: var(--font-mono); font-size:12px;">e5f6a7b8…</span>
+          <span>public</span><span>pinned</span><span>dmz-scanner</span>
+          <span style="color: var(--color-text-warning);">running</span>
+          <button style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">取消</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1.1fr 0.8fr 0.8fr 1fr 0.9fr 0.7fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+          <span style="font-family: var(--font-mono); font-size:12px;">c9d0e1f2…</span>
+          <span>internal</span><span>auto</span><span style="color:var(--color-text-tertiary);">—</span>
+          <span style="color: var(--color-text-danger);">failed</span>
+          <button style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">重试</button>
+        </div>
+      </div>
+    </div>
+    <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;">提交新建任务后会在此生成 pending 行，等待扫描器 <code style="font-family:var(--font-mono);">GET /scan/tasks/pending</code> 轮询认领。</p>
+  </div>
+
+  <!-- view: targets -->
+  <div id="targets" class="view" style="display:none;">
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr; padding: 10px 14px; background: var(--color-background-secondary); font-size: 12px; color: var(--color-text-secondary);">
+        <span>范围</span><span>值</span><span>启用</span><span>说明</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px;">
+        <span>internal</span><span style="font-family:var(--font-mono);">192.168.0.0/24</span><span style="color:var(--color-text-success);">●</span><span style="font-size:12px; color:var(--color-text-secondary);">内网 CIDR</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 0.8fr 1.4fr 0.8fr 0.8fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px;">
+        <span>public</span><span style="font-family:var(--font-mono);">203.0.113.10</span><span style="color:var(--color-text-success);">●</span><span style="font-size:12px; color:var(--color-text-secondary);">公网资产 IP</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- view: findings -->
+  <div id="findings" class="view" style="display:none;">
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.9fr 0.9fr; padding: 10px 14px; background: var(--color-background-secondary); font-size: 12px; color: var(--color-text-secondary);">
+        <span>IP</span><span>MAC / OS</span><span>暴露</span><span>状态</span><span>操作</span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.9fr 0.9fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+        <span style="font-family:var(--font-mono);">192.168.0.55</span>
+        <span style="font-size:12px;">AA:BB:CC:00:11:22<br/>Linux 5.x</span>
+        <span>internal</span><span style="color:var(--color-text-warning);">new</span>
+        <div style="display:flex; gap:6px;">
+          <button style="border:0.5px solid var(--color-border-info); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; color:var(--color-text-info); cursor:pointer;">纳管</button>
+          <button style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">忽略</button>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.1fr 1fr 1fr 0.9fr 0.9fr; padding: 12px 14px; border-top: 0.5px solid var(--color-border-tertiary); font-size: 13px; align-items: center;">
+        <span style="font-family:var(--font-mono);">192.168.0.61</span>
+        <span style="font-size:12px;">—<br/>Windows 10</span>
+        <span>internal</span><span style="color:var(--color-text-secondary);">known</span>
+        <button style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">查看</button>
+      </div>
+    </div>
+    <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;">发现落 soc_scan_findings，不直接写台账；「纳管」为显式、带权限、带审计动作（ADR-2/6）。</p>
+  </div>
+
+  <!-- view: health -->
+  <div id="health" class="view" style="display:none;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+      <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px;">
+        <p style="font-weight: 500; font-size: 13px; margin: 0 0 10px;">采集器在线 (L1)</p>
+        <div style="font-size:13px; margin-bottom:8px;">kali-45 <span style="color:var(--color-text-success);">● online</span> <span style="font-size:12px; color:var(--color-text-tertiary);">心跳 8s 前</span></div>
+        <div style="font-size:13px;">dmz-scanner <span style="color:var(--color-text-success);">● online</span> <span style="font-size:12px; color:var(--color-text-tertiary);">心跳 12s 前</span></div>
+      </div>
+      <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px;">
+        <p style="font-weight: 500; font-size: 13px; margin: 0 0 10px;">数据通道 (L2)</p>
+        <div style="font-size:13px; margin-bottom:8px;">scanner:discovery <span style="color:var(--color-text-success);">healthy</span></div>
+        <div style="font-size:13px;">scanner:ports <span style="color:var(--color-text-success);">healthy</span></div>
+      </div>
+      <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px;">
+        <p style="font-weight: 500; font-size: 13px; margin: 0 0 10px;">反向探活 (L3)</p>
+        <div style="font-size:13px; margin-bottom:8px;">kali-45 <span style="color:var(--color-text-success);">● reachable</span></div>
+        <div style="font-size:13px;">dmz-scanner <span style="color:var(--color-text-tertiary);">— N/A (NAT 后)</span></div>
+      </div>
+    </div>
+    <p style="font-size: 12px; color: var(--color-text-tertiary); margin-top: 10px;">L1（心跳存活）+ L2（source_health 数据通道）+ L3（反向探活，仅同 LAN 启用）合并展示，补掉 P4「采集中断无感知」缺口。L3 在 NAT/异地场景留空不判定，由 L1+L2 双信号决策（详见最终稿 §11 O-2 回退指标）。</p>
+  </div>
+
+  <!-- view: scanner detail (drill-down, hidden by default) -->
+  <div id="scannerDetail" class="view" style="display:none;">
+    <button onclick="showTab('scanners')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:5px 12px; background:transparent; font-size:12px; cursor:pointer; margin-bottom:12px;">← 返回扫描器列表</button>
+    <div id="sd-card"></div>
+  </div>
+
+  <!-- view: NEW TASK FORM (hidden by default) -->
+  <div id="newTask" class="view" style="display:none;">
+    <button onclick="showTab('tasks')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:5px 12px; background:transparent; font-size:12px; cursor:pointer; margin-bottom:12px;">← 返回任务列表</button>
+
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 18px;">
+      <p style="font-weight: 500; font-size: 15px; margin: 0 0 4px;">新建扫描任务</p>
+      <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0 0 16px;">按 v1.2 附录 C 字段契约 · 权限门 <code style="font-family:var(--font-mono);">require_role("admin","operator")</code></p>
+
+      <!-- 基本 -->
+      <p style="font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 10px; letter-spacing:0.5px;">基本</p>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">任务名称（可选）</label>
+        <input id="nt-name" type="text" placeholder="如：内网季度资产复核" style="width:100%; box-sizing:border-box; padding:8px 10px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:13px; background:var(--color-background-primary); color:var(--color-text-primary);" />
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">扫描模式 <span style="color:var(--color-text-danger);">*</span></label>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="seg active" data-grp="mode" data-val="internal" onclick="seg(this)" style="flex:1; padding:8px; border:0.5px solid var(--color-border-info); border-radius:6px; font-size:12px; cursor:pointer; background:var(--color-background-info); color:var(--color-text-info);">内网发现</button>
+          <button type="button" class="seg" data-grp="mode" data-val="public" onclick="seg(this)" style="flex:1; padding:8px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:12px; cursor:pointer; background:transparent; color:var(--color-text-secondary);">公网暴露面</button>
+          <button type="button" class="seg" data-grp="mode" data-val="ports" onclick="seg(this)" style="flex:1; padding:8px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:12px; cursor:pointer; background:transparent; color:var(--color-text-secondary);">端口扫描</button>
+        </div>
+        <p style="font-size:11px; color:var(--color-text-tertiary); margin:6px 0 0;">决定默认 nmap 参数与允许的目标类型。</p>
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">扫描目标（CIDR 或 IP，每行一个） <span style="color:var(--color-text-danger);">*</span></label>
+        <textarea id="nt-targets" rows="3" placeholder="192.168.0.0/24&#10;10.0.0.5" style="width:100%; box-sizing:border-box; padding:8px 10px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:13px; font-family:var(--font-mono); background:var(--color-background-primary); color:var(--color-text-primary); resize:vertical;"></textarea>
+        <p style="font-size:11px; color:var(--color-text-tertiary); margin:6px 0 0;">校验 R1：每行须为合法 CIDR 或 IPv4。auto 路由时按 CIDR 匹配扫描器可达子网。</p>
+      </div>
+
+      <!-- 指派 -->
+      <p style="font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 10px; letter-spacing:0.5px;">指派</p>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">指派方式 <span style="color:var(--color-text-danger);">*</span></label>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="seg active" data-grp="assign" data-val="auto" onclick="seg(this); toggleAssign()" style="flex:1; padding:8px; border:0.5px solid var(--color-border-info); border-radius:6px; font-size:12px; cursor:pointer; background:var(--color-background-info); color:var(--color-text-info);">auto 自动路由</button>
+          <button type="button" class="seg" data-grp="assign" data-val="pinned" onclick="seg(this); toggleAssign()" style="flex:1; padding:8px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:12px; cursor:pointer; background:transparent; color:var(--color-text-secondary);">pinned 指定扫描器</button>
+        </div>
+        <p style="font-size:11px; color:var(--color-text-tertiary); margin:6px 0 0;">auto：后端按 CIDR + 能力自动派发（如 192.168.0.0/24 → kali-45）；pinned：强制指定某台。</p>
+      </div>
+
+      <div id="nt-scanner-wrap" style="margin-bottom: 16px; display:none;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">目标扫描器 <span style="color:var(--color-text-danger);">*</span></label>
+        <select id="nt-scanner" style="width:100%; box-sizing:border-box; padding:8px 10px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:13px; background:var(--color-background-primary); color:var(--color-text-primary);">
+          <option value="">— 请选择 —</option>
+          <option value="kali-45">kali-45 · 192.168.0.45 · [internal,public,ports] @192.168.0.0/24</option>
+          <option value="dmz-scanner">dmz-scanner · 10.0.0.20 · [public] @10.0.0.0/24</option>
+        </select>
+        <p style="font-size:11px; color:var(--color-text-tertiary); margin:6px 0 0;">校验 R2：pinned 时必须选择。选项受 capabilities + reachable_subnets 过滤。</p>
+      </div>
+
+      <!-- 调度 -->
+      <p style="font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 10px; letter-spacing:0.5px;">调度</p>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">执行时机 <span style="color:var(--color-text-danger);">*</span></label>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="seg active" data-grp="timing" data-val="now" onclick="seg(this); toggleTiming()" style="flex:1; padding:8px; border:0.5px solid var(--color-border-info); border-radius:6px; font-size:12px; cursor:pointer; background:var(--color-background-info); color:var(--color-text-info);">立即执行</button>
+          <button type="button" class="seg" data-grp="timing" data-val="cron" onclick="seg(this); toggleTiming()" style="flex:1; padding:8px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:12px; cursor:pointer; background:transparent; color:var(--color-text-secondary);">定时 cron</button>
+        </div>
+      </div>
+
+      <div id="nt-cron-wrap" style="margin-bottom: 16px; display:none;">
+        <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">cron 表达式 <span style="color:var(--color-text-danger);">*</span></label>
+        <input id="nt-cron" type="text" placeholder="0 3 * * *" style="width:100%; box-sizing:border-box; padding:8px 10px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:13px; font-family:var(--font-mono); background:var(--color-background-primary); color:var(--color-text-primary);" />
+        <p style="font-size:11px; color:var(--color-text-tertiary); margin:6px 0 0;">校验 R4：由 central_scan_scheduler 解析，非法表达式阻断提交（原型不校验语法，仅演示）。</p>
+      </div>
+
+      <!-- 高级 -->
+      <details style="margin-bottom: 16px;">
+        <summary style="font-size:12px; font-weight:500; color:var(--color-text-secondary); cursor:pointer;">高级（收起）</summary>
+        <div style="margin-top:12px;">
+          <label style="display:block; font-size:12px; color:var(--color-text-secondary); margin-bottom:5px;">nmap 参数覆盖（留空用模式默认）</label>
+          <input id="nt-nmap" type="text" placeholder="-sV --top-ports 1000" style="width:100%; box-sizing:border-box; padding:8px 10px; border:0.5px solid var(--color-border-secondary); border-radius:6px; font-size:13px; font-family:var(--font-mono); background:var(--color-background-primary); color:var(--color-text-primary);" />
+          <div style="display:flex; align-items:center; gap:8px; margin-top:12px;">
+            <input type="checkbox" id="nt-notify" checked style="width:15px; height:15px;" />
+            <label for="nt-notify" style="font-size:12px; color:var(--color-text-secondary); cursor:pointer;">完成后通知（F4.2 推送任务结果）</label>
+          </div>
+        </div>
+      </details>
+
+      <!-- 系统只读 -->
+      <p style="font-size: 12px; font-weight: 500; color: var(--color-text-secondary); margin: 0 0 10px; letter-spacing:0.5px;">系统自动填充（不可编辑）</p>
+      <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:18px;">
+        <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;">
+          <p style="font-size:11px; color:var(--color-text-secondary); margin:0;">run_reason</p>
+          <p style="font-size:13px; margin:4px 0 0; font-family:var(--font-mono);">manual</p>
+        </div>
+        <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;">
+          <p style="font-size:11px; color:var(--color-text-secondary); margin:0;">capabilities</p>
+          <p style="font-size:13px; margin:4px 0 0; font-family:var(--font-mono);">[internal]</p>
+        </div>
+        <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;">
+          <p style="font-size:11px; color:var(--color-text-secondary); margin:0;">scanner_id</p>
+          <p style="font-size:13px; margin:4px 0 0; color:var(--color-text-tertiary);">认领后回写</p>
+        </div>
+      </div>
+
+      <!-- actions -->
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button type="button" onclick="submitNewTask()" style="border:0.5px solid var(--color-border-info); border-radius:6px; padding:9px 20px; background:var(--color-background-info); color:var(--color-text-info); font-size:13px; cursor:pointer;">创建任务</button>
+        <button type="button" onclick="showTab('tasks')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:9px 16px; background:transparent; font-size:13px; cursor:pointer;">取消</button>
+        <span id="nt-msg" style="font-size:12px; margin-left:4px;"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+  .tab:hover { color: var(--color-text-primary) !important; }
+  .seg:hover { opacity: 0.85; }
+</style>
+
+<script>
+  // ============================================================
+  // MOCK 数据声明（v1.3 O-5）
+  // ============================================================
+  // 以下 SCANNERS / SCAN_DETAIL / SCOLOR 是演示用静态数据，非真实接口返回。
+  // 真实数据来源：
+  //   GET /api/v1/scan/agents      → SCANNERS
+  //   GET /api/v1/scan/tasks       → 任务列表行
+  //   GET /api/v1/scan/tasks/{uuid} → SCAN_DETAIL[].cur / .hist
+  //   GET /api/v1/data/health      → 健康看板（L1/L2/L3）
+  // 与真实 API 不一致的演示差异：
+  //   - 目标扫描器下拉：真实由 /scan/agents 返回的 enabled=true 列表
+  //   - 校验 R3：真实由后端做 CIDR 与 reachable_subnets 子网匹配，原型仅按字符串前缀 mock
+  //   - capabilities：真实由 mode 推导（internal→[internal], public→[public]）
+  // 本原型为前端UX 演示，不含真实后端调用。
+  // ============================================================
+
+  function showTab(id) {
+    document.querySelectorAll('.view').forEach(function(v){ v.style.display = 'none'; });
+    document.getElementById(id).style.display = 'block';
+    document.querySelectorAll('.tab').forEach(function(t){
+      t.style.color = 'var(--color-text-secondary)';
+      t.style.borderBottom = '2px solid transparent';
+    });
+    var tabs = { scanners:'扫描器', tasks:'扫描任务', targets:'扫描目标', findings:'发现清单', health:'健康看板' };
+    document.querySelectorAll('.tab').forEach(function(t){
+      if (t.textContent.trim() === tabs[id]) {
+        t.style.color = 'var(--color-text-info)';
+        t.style.borderBottom = '2px solid var(--color-border-info)';
+      }
+    });
+  }
+
+  var SCANNERS = {
+    'kali-45':     { ip:'192.168.0.45', status:'online', hb:'8s 前',  ver:'1.2.0', caps:'internal,public,ports', sub:'192.168.0.0/24', running:1 },
+    'dmz-scanner': { ip:'10.0.0.20',    status:'online', hb:'12s 前', ver:'1.2.0', caps:'public',               sub:'10.0.0.0/24',    running:0 }
+  };
+  var SCAN_DETAIL = {
+    'kali-45': {
+      cur: { uuid:'f0a1b2c3', mode:'internal', prog:'已发现 18/37 主机', pct:48, status:'running' },
+      hist: [
+        { uuid:'a1b2c3d4', mode:'internal', status:'success', found:37 },
+        { uuid:'c9d0e1f2', mode:'internal', status:'failed',  found:0 }
+      ]
+    },
+    'dmz-scanner': {
+      cur: { uuid:'e5f6a7b8', mode:'public', prog:'已扫 142/260 端口', pct:55, status:'running' },
+      hist: [
+        { uuid:'e5f6a7b8', mode:'public', status:'running', found:'—' }
+      ]
+    }
+  };
+  var SCOLOR = { online:'var(--color-text-success)', running:'var(--color-text-warning)', success:'var(--color-text-success)', failed:'var(--color-text-danger)' };
+
+  function openScanner(name) {
+    var s = SCANNERS[name] || SCANNERS['kali-45'];
+    var d = SCAN_DETAIL[name] || { cur:null, hist:[] };
+
+    var curHtml = d.cur
+      ? '<div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:12px 14px; margin-bottom:14px; font-size:13px;">'
+        + '<div style="display:flex; justify-content:space-between;"><span style="font-family:var(--font-mono);">' + d.cur.uuid + '…</span><span style="color:' + SCOLOR[d.cur.status] + ';">' + d.cur.status + '</span></div>'
+        + '<p style="font-size:12px; color:var(--color-text-secondary); margin:6px 0 0;">' + d.cur.mode + ' · ' + d.cur.prog + '</p>'
+        + '<div style="height:6px; background:var(--color-background-secondary); border-radius:4px; margin-top:8px; overflow:hidden;"><div style="width:' + d.cur.pct + '%; height:100%; background:var(--color-border-info);"></div></div>'
+        + '</div>'
+      : '<p style="font-size:13px; color:var(--color-text-secondary); margin:0 0 14px;">当前无执行中任务</p>';
+
+    var histHtml = d.hist.map(function(h){
+      return '<div style="display:grid; grid-template-columns:1.1fr 0.8fr 0.9fr 0.9fr 0.7fr; padding:10px 14px; border-top:0.5px solid var(--color-border-tertiary); font-size:13px; align-items:center;">'
+        + '<span style="font-family:var(--font-mono); font-size:12px;">' + h.uuid + '…</span>'
+        + '<span>' + h.mode + '</span>'
+        + '<span style="color:' + SCOLOR[h.status] + ';">' + h.status + '</span>'
+        + '<span>' + h.found + '</span>'
+        + '<button style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:3px 8px; background:transparent; font-size:12px; cursor:pointer;">详情</button>'
+        + '</div>';
+    }).join('');
+
+    var card =
+      '<div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:16px 18px; margin-bottom:14px;">'
+      + '  <div style="display:flex; align-items:center; gap:12px;">'
+      + '    <div style="width:42px; height:42px; border-radius:50%; background:var(--color-background-info); color:var(--color-text-info); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:500;">' + name.charAt(0).toUpperCase() + '</div>'
+      + '    <div><p style="font-size:15px; font-weight:500; margin:0;">' + name + ' <span style="color:' + SCOLOR[s.status] + '; font-size:13px;">● ' + s.status + '</span></p>'
+      + '    <p style="font-size:12px; color:var(--color-text-secondary); margin:3px 0 0;">' + s.ip + ' · v' + s.ver + ' · 心跳 ' + s.hb + '</p></div>'
+      + '  </div>'
+      + '  <div style="display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:14px;">'
+      + '    <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;"><p style="font-size:11px; color:var(--color-text-secondary); margin:0;">能力</p><p style="font-size:13px; margin:4px 0 0;">' + s.caps + '</p></div>'
+      + '    <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;"><p style="font-size:11px; color:var(--color-text-secondary); margin:0;">可达子网</p><p style="font-size:13px; margin:4px 0 0; font-family:var(--font-mono);">' + s.sub + '</p></div>'
+      + '    <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;"><p style="font-size:11px; color:var(--color-text-secondary); margin:0;">在跑任务</p><p style="font-size:13px; margin:4px 0 0;">' + s.running + '</p></div>'
+      + '    <div style="background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px;"><p style="font-size:11px; color:var(--color-text-secondary); margin:0;">状态</p><p style="font-size:13px; margin:4px 0 0; color:' + SCOLOR[s.status] + ';">' + s.status + '</p></div>'
+      + '  </div>'
+      + '</div>'
+      + '<p style="font-size:13px; font-weight:500; margin:0 0 8px;">当前执行中任务</p>' + curHtml
+      + '<p style="font-size:13px; font-weight:500; margin:0 0 8px;">任务历史（按 scanner_id 过滤）</p>'
+      + '<div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden;">'
+      + '  <div style="display:grid; grid-template-columns:1.1fr 0.8fr 0.9fr 0.9fr 0.7fr; padding:9px 14px; background:var(--color-background-secondary); font-size:12px; color:var(--color-text-secondary);"><span>任务 UUID</span><span>模式</span><span>状态</span><span>发现数</span><span></span></div>'
+      + histHtml
+      + '</div>'
+      + '<p style="font-size:12px; color:var(--color-text-tertiary); margin-top:10px;">L2 数据通道：scanner:discovery healthy · scanner:ports healthy</p>';
+
+    document.getElementById('sd-card').innerHTML = card;
+    document.querySelectorAll('.view').forEach(function(v){ v.style.display = 'none'; });
+    document.getElementById('scannerDetail').style.display = 'block';
+    document.querySelectorAll('.tab').forEach(function(t){ t.style.color='var(--color-text-secondary)'; t.style.borderBottom='2px solid transparent'; });
+  }
+
+  /* ---------- NEW TASK FORM ---------- */
+  function openNewTask() {
+    // reset dependent panels to default
+    document.getElementById('nt-scanner-wrap').style.display = 'none';
+    document.getElementById('nt-cron-wrap').style.display = 'none';
+    document.getElementById('nt-msg').textContent = '';
+    document.querySelectorAll('.view').forEach(function(v){ v.style.display = 'none'; });
+    document.getElementById('newTask').style.display = 'block';
+    document.querySelectorAll('.tab').forEach(function(t){ t.style.color='var(--color-text-secondary)'; t.style.borderBottom='2px solid transparent'; });
+  }
+
+  function seg(btn) {
+    var grp = btn.getAttribute('data-grp');
+    document.querySelectorAll('.seg[data-grp="' + grp + '"]').forEach(function(b){
+      b.classList.remove('active');
+      b.style.background = 'transparent';
+      b.style.color = 'var(--color-text-secondary)';
+      b.style.borderColor = 'var(--color-border-secondary)';
+    });
+    btn.classList.add('active');
+    btn.style.background = 'var(--color-background-info)';
+    btn.style.color = 'var(--color-text-info)';
+    btn.style.borderColor = 'var(--color-border-info)';
+  }
+  function segVal(grp){ var a = document.querySelector('.seg.active[data-grp="' + grp + '"]'); return a ? a.getAttribute('data-val') : null; }
+
+  function toggleAssign() {
+    var v = segVal('assign');
+    document.getElementById('nt-scanner-wrap').style.display = (v === 'pinned') ? 'block' : 'none';
+  }
+  function toggleTiming() {
+    var v = segVal('timing');
+    document.getElementById('nt-cron-wrap').style.display = (v === 'cron') ? 'block' : 'none';
+  }
+
+  function isValidCidrOrIp(s){
+    s = s.trim();
+    if (!s) return false;
+    // IPv4
+    if (/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(s)) {
+      return s.split('.').every(function(x){ return +x >= 0 && +x <= 255; });
+    }
+    // CIDR
+    var m = s.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+    if (m) {
+      var oct = [m[1],m[2],m[3],m[4]].every(function(x){ return +x >= 0 && +x <= 255; });
+      var pre = +m[5];
+      return oct && pre >= 0 && pre <= 32;
+    }
+    return false;
+  }
+
+  function submitNewTask() {
+    var msg = document.getElementById('nt-msg');
+    msg.style.color = 'var(--color-text-danger)';
+
+    var name = document.getElementById('nt-name').value.trim();
+    var mode = segVal('mode');
+    var targets = document.getElementById('nt-targets').value.split('\n').map(function(x){ return x.trim(); }).filter(Boolean);
+    var assign = segVal('assign');
+    var scanner = document.getElementById('nt-scanner').value;
+    var timing = segVal('timing');
+    var cron = document.getElementById('nt-cron').value.trim();
+    var nmap = document.getElementById('nt-nmap').value.trim();
+    var notify = document.getElementById('nt-notify').checked;
+
+    // R1 targets
+    if (targets.length === 0) { msg.textContent = '✗ 校验 R1：请填写至少一个扫描目标'; return; }
+    var bad = targets.filter(function(t){ return !isValidCidrOrIp(t); });
+    if (bad.length) { msg.textContent = '✗ 校验 R1：非法目标 → ' + bad.join(', '); return; }
+
+    // R2 pinned requires scanner
+    if (assign === 'pinned' && !scanner) { msg.textContent = '✗ 校验 R2：pinned 必须指定目标扫描器'; return; }
+
+    // R3 auto reachability pre-check (simulated)
+    if (assign === 'auto') {
+      var reachable = targets.every(function(t){ return t.indexOf('192.168') === 0 || t.indexOf('10.0') === 0; });
+      if (!reachable) { msg.textContent = '✗ 校验 R3：auto 路由无可用扫描器覆盖该目标（需匹配 reachable_subnets）'; return; }
+    }
+
+    // R4 cron
+    if (timing === 'cron' && !cron) { msg.textContent = '✗ 校验 R4：定时任务需填写 cron 表达式'; return; }
+
+    // success → build payload (Appendix C.3) and prepend a pending row
+    var capsMap = { internal:'["internal"]', public:'["public"]', ports:'["ports"]' };
+    var execBy = assign === 'pinned' ? scanner : '— (auto 认领)';
+    var uuid = Math.random().toString(16).slice(2, 10);
+
+    var row = document.createElement('div');
+    row.style.cssText = 'display:grid; grid-template-columns:1.1fr 0.8fr 0.8fr 1fr 0.9fr 0.7fr; padding:12px 14px; border-top:0.5px solid var(--color-border-tertiary); font-size:13px; align-items:center; background:var(--color-background-info);';
+    row.innerHTML =
+        '<span style="font-family:var(--font-mono); font-size:12px;">' + uuid + '…</span>'
+      + '<span>' + mode + '</span>'
+      + '<span>' + assign + '</span>'
+      + '<span>' + execBy + '</span>'
+      + '<span style="color:var(--color-text-warning);">pending</span>'
+      + '<button onclick="showTab(\'tasks\')" style="border:0.5px solid var(--color-border-secondary); border-radius:6px; padding:4px 8px; background:transparent; font-size:12px; cursor:pointer;">跟踪</button>';
+    var rows = document.getElementById('tasks-rows');
+    rows.insertBefore(row, rows.firstChild);
+
+    msg.style.color = 'var(--color-text-success)';
+    msg.textContent = '✓ 已创建（run_reason=manual，等待扫描器认领）→ POST /api/v1/scan/run';
+    setTimeout(function(){ showTab('tasks'); }, 900);
+  }
+</script>

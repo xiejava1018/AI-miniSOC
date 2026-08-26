@@ -42,3 +42,5 @@ class DataSyncResponse(BaseModel):
     skipped: int = 0
     failed: int = 0
     errors: list[str] = Field(default_factory=list)
+    # P3 资产扫描（P2-T4 死信机制）：每条 handle 返回的死信 batch id（全部成功时为 None）
+    dead_letter_batch_id: Optional[str] = None

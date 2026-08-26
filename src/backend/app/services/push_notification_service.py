@@ -32,6 +32,7 @@ from app.models import Asset
 from app.models.asset_risk import AssetRiskHistory
 from app.models.asset_reconciliation import AssetReconciliation, TYPE_SHADOW
 from app.models.notification import Notification
+from app.models.scanner_models import ScannerAgent
 from app.models.security_report import SecurityReport
 from app.models.source_health import SourceHealth
 from app.models.user import User, UserStatus
@@ -54,6 +55,11 @@ DEFAULT_PUSH_RULES: dict = {
     "shadow_assets": {"enabled": True, "lookback_minutes": 10},
     "report_completion": {"enabled": True, "lookback_minutes": 10,
                            "types": ["weekly", "monthly", "incident_driven"]},
+    # P3 资产扫描控制面（final.md §9.2 + §13 RV-4）：
+    # 场景6 scanner_offline（critical）：soc_scanner_agents.last_heartbeat 超阈值
+    # 场景7 scanner_source_health（critical）：scanner:discovery/scanner:ports 通道异常
+    #    — 实际复用 check_source_health()，对 scanner:* 键自动覆盖，无需另写场景。
+    "scanner_offline": {"enabled": True, "offline_minutes": 90},
 }
 
 _rules_cache = {"value": None, "at": 0.0}
@@ -432,4 +438,48 @@ class PushNotificationService:
             "eol": await self.check_eol(),
             "shadow_assets": await self.check_shadow_assets(),
             "report_completion": await self.check_report_completion(),
+            "scanner_offline": await self.check_scanner_offline(),
         }
+
+    # ---------- P3 资产扫描：场景6 scanner 离线告（final.md §13 RV-4） ----------
+
+    async def check_scanner_offline(self) -> int:
+        """扫描器 L1 心跳超时告警。
+
+        判据：soc_scanner_agents.last_heartbeat < now - offline_minutes 且 status != 'offline'。
+        复用 _push() 的 dedup 机制（同 scanner_id 不重复）。
+        """
+        rules = self.load_rules()
+        if not (rules.get("enabled") and rules.get("scanner_offline", {}).get("enabled")):
+            return 0
+        offline_minutes = int(rules["scanner_offline"].get("offline_minutes", 90))
+        cutoff = _utcnow() - timedelta(minutes=offline_minutes)
+        # 只查 enabled=True 且 未已标 offline 的扫描器（避免重复推送）
+        candidates = (
+            self.db.query(ScannerAgent)
+            .filter(
+                ScannerAgent.enabled == True,                                       # noqa: E712
+                ScannerAgent.status != "offline",
+                ScannerAgent.last_heartbeat < cutoff,
+            )
+            .all()
+        )
+        sent_total = 0
+        for a in candidates:
+            # 计算离线时长（小时）
+            offline_h = (cutoff - a.last_heartbeat).total_seconds() / 3600 if a.last_heartbeat else None
+            sent = await self._push(
+                dedup_title=f"【扫描器离线】{a.name}",
+                severity="critical",
+                title=f"【扫描器离线】{a.name}（{a.scanner_id[:8]}）",
+                content=(
+                    f"扫描器「{a.name}」（IP {a.ip or '?'}、{a.scanner_id[:8]}）已离线"
+                    f"{offline_h:.1f}h（阈值 {offline_minutes/60:.1f}h）。"
+                    f"最后心跳 {a.last_heartbeat.isoformat() if a.last_heartbeat else '从未'}。"
+                    "控制面将自动跳过该扫描器的任务派发；"
+                    "请检查扫描器主机状态 / 网络 / heartbeat 拉任务循环。"
+                ),
+                link_path="/assets/scan?tab=scanners",
+            )
+            sent_total += sent
+        return sent_total

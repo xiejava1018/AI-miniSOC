@@ -8,7 +8,7 @@
 新代码优先从本模块导入，便于后续将 `core/auth.py` 收敛为纯 token 编解码原语。
 """
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, HTTPException, Header, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,48 @@ async def require_api_key(
 
 
 # ---------------------------------------------------------------------------
+# 扫描器鉴权依赖（P3 资产扫描控制面）
+# ---------------------------------------------------------------------------
+async def require_scanner_api_key(
+    request: Request,
+    x_api_key: str = Header(..., alias="X-API-Key"),
+    db: Session = Depends(get_db),
+):
+    """扫描器端点鉴权：从 X-API-Key 反查 soc_scanner_agents.api_key_hash。
+
+    与 require_api_key（普通采集器）的区别：
+      - 普通采集器鉴权走环境变量 COLLECTOR_API_KEYS（多机共享）
+      - 扫描器鉴权走 soc_scanner_agents.api_key_hash（每台扫描器独立 Key）
+
+    admin bypass 不提供（扫描器不是人）；hash反查提供 scanner_id 注入 request.state。
+    """
+    import hashlib
+    from app.models.scanner_models import ScannerAgent
+
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="missing X-API-Key",
+        )
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    scanner = (
+        db.query(ScannerAgent)
+        .filter(
+            ScannerAgent.api_key_hash == key_hash,
+            ScannerAgent.enabled == True,  # noqa: E712
+        )
+        .first()
+    )
+    if not scanner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="invalid or disabled scanner",
+        )
+    request.state.scanner_id = scanner.scanner_id
+    return scanner
+
+
+# ---------------------------------------------------------------------------
 # 统一导出
 # ---------------------------------------------------------------------------
 
@@ -86,6 +128,7 @@ __all__ = [
     "require_admin",
     "require_active_user",
     "require_api_key",
+    "require_scanner_api_key",
 ]
 
 

@@ -52,6 +52,11 @@ from .sca import ScaCheck, AssetScaCheck
 from .source_health import SourceHealth
 from .sync_dead_letter import SyncDeadLetter
 
+# P3 资产扫描（控制面+数据面）：scanner_models 必须导入，否则 alembic/env.py
+# 的 Base.metadata 漏 4 张表（soc_scanner_tasks/targets/findings/agents），
+# 与上方 P4 注释同因。设计依据：docs/design/2026-08-26-asset-discovery-and-attack-surface-scanner-final.md §6.3。
+from .scanner_models import ScannerTask, ScanTarget, ScanFinding, ScannerAgent
+
 __all__ = [
     "Base",
     "Asset",
@@ -105,4 +110,9 @@ __all__ = [
     "AssetScaCheck",
     "SourceHealth",
     "SyncDeadLetter",
+    # P3 资产扫描
+    "ScannerTask",
+    "ScanTarget",
+    "ScanFinding",
+    "ScannerAgent",
 ]

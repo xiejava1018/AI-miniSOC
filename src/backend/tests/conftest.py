@@ -10,6 +10,12 @@
 > 不会触碰生产数据。
 """
 
+import os
+
+# 测试环境：禁用 MCP SSE server（避免后台线程启 uvicorn 抢 8100 端口
+# 引发 SystemExit(3) 干扰测试 session）
+os.environ.setdefault("MCP_SSE_ENABLED", "false")
+
 import pytest
 from sqlalchemy.orm import Session
 from typing import Generator
@@ -31,6 +37,8 @@ from app.models import (  # noqa: F401  (imports register all models with Base.m
     AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
     CisaKev, SocTaskRegistry, SocTaskRun,
     AssetRiskHistory, AiFeedback,
+    # P3 资产扫描（docs/design/...-final.md §6.3）
+    ScannerTask, ScanTarget, ScanFinding, ScannerAgent,
 )
 # P3：风险评分「系统健康度」维度依赖漏洞表（不在 __init__ 导出，需显式注册供 create_all）
 from app.models.vulnerability import Vulnerability, AssetVulnerability, ScanTask  # noqa: F401
@@ -68,7 +76,12 @@ def client(db_session: Session) -> TestClient:
 
     Returns:
         TestClient: FastAPI测试客户端
+
+    跳过 lifespan（不是 close-on-err shutdown）：main.py lifespan 会启5个后台
+    scheduler，第一个 stop_xxx() 遇到没启的 scheduler 会返 None，
+    造成 ``object NoneType can't be used in 'await' expression``。
     """
+    from contextlib import asynccontextmanager
     from fastapi.testclient import TestClient
 
     def override_get_db():
@@ -79,10 +92,18 @@ def client(db_session: Session) -> TestClient:
 
     app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
-        yield test_client
+    # 覆盖 lifespan 为 no-op（避免启动业务 scheduler）
+    @asynccontextmanager
+    async def _noop_lifespan(_app):
+        yield
 
-    app.dependency_overrides.clear()
+    app.router.lifespan_context = _noop_lifespan
+
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.fixture
