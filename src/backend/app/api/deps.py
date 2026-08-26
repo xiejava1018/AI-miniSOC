@@ -58,22 +58,47 @@ async def require_active_user(
 
 async def require_api_key(
     x_api_key: str = Header(..., alias="X-API-Key"),
+    db: Session = Depends(get_db),
 ) -> str:
     """
     Collector 服务间认证 — 校验 X-API-Key 请求头。
+
+    两个有效来源（任一命中即通过）：
+      1. 环境变量 COLLECTOR_API_KEYS（普通采集器共享 Key）
+      2. soc_scanner_agents.api_key_hash（扫描器独立 Key）——
+         P3 双 Key 收口前的过渡：scanner 进程只有一个 Key，
+         但 heartbeat 走 require_scanner_api_key、/data/sync 走本依赖，
+         不兼容scanner 就推不了数据。此处同时接受两类 Key。
 
     用法：
         @router.post("/sync")
         async def sync(_auth: str = Depends(require_api_key)):
             ...
     """
+    # 1. 普通采集器共享 Key
     valid_keys = settings.collector_api_keys_list
-    if not valid_keys or x_api_key not in valid_keys:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的 API Key",
+    if valid_keys and x_api_key in valid_keys:
+        return x_api_key
+
+    # 2. 扫描器独立 Key（sha256 hash 反查 soc_scanner_agents）
+    import hashlib
+    from app.models.scanner_models import ScannerAgent
+    key_hash = hashlib.sha256(x_api_key.encode()).hexdigest()
+    scanner = (
+        db.query(ScannerAgent)
+        .filter(
+            ScannerAgent.api_key_hash == key_hash,
+            ScannerAgent.enabled == True,  # noqa: E712
         )
-    return x_api_key
+        .first()
+    )
+    if scanner:
+        return x_api_key
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无效的 API Key",
+    )
 
 
 # ---------------------------------------------------------------------------
