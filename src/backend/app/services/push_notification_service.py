@@ -446,28 +446,30 @@ class PushNotificationService:
     async def check_scanner_offline(self) -> int:
         """扫描器 L1 心跳超时告警。
 
-        判据：soc_scanner_agents.last_heartbeat < now - offline_minutes 且 status != 'offline'。
-        复用 _push() 的 dedup 机制（同 scanner_id 不重复）。
+        判据：soc_scanner_agents.status = 'offline'（由 scanner_watchdog_scheduler
+        每 60s 判定并标红）。通知不在 watchdog 里发（后台线程调 async _push 会
+        RuntimeWarning），统一由 push_scheduler 每 30min 调本方法负责。
+        去重复用 _push() 的 dedup_title 机制（同 scanner 名不重复推送）。
         """
         rules = self.load_rules()
         if not (rules.get("enabled") and rules.get("scanner_offline", {}).get("enabled")):
             return 0
         offline_minutes = int(rules["scanner_offline"].get("offline_minutes", 90))
-        cutoff = _utcnow() - timedelta(minutes=offline_minutes)
-        # 只查 enabled=True 且 未已标 offline 的扫描器（避免重复推送）
+        # watchdog 已把超时扫描器标成 offline；这里查它们并发通知。
+        # _push 的 dedup_title 会拦住重复推送，所以不用自己维护 "已通知" 状态。
         candidates = (
             self.db.query(ScannerAgent)
             .filter(
-                ScannerAgent.enabled == True,                                       # noqa: E712
-                ScannerAgent.status != "offline",
-                ScannerAgent.last_heartbeat < cutoff,
+                ScannerAgent.enabled == True,  # noqa: E712
+                ScannerAgent.status == "offline",
             )
             .all()
         )
         sent_total = 0
         for a in candidates:
             # 计算离线时长（小时）
-            offline_h = (cutoff - a.last_heartbeat).total_seconds() / 3600 if a.last_heartbeat else None
+            now = _utcnow()
+            offline_h = (now - a.last_heartbeat).total_seconds() / 3600 if a.last_heartbeat else None
             sent = await self._push(
                 dedup_title=f"【扫描器离线】{a.name}",
                 severity="critical",

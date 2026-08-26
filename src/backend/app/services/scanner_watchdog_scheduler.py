@@ -94,8 +94,10 @@ def _watchdog_tick() -> None:
             for a in offline_candidates:
                 try:
                     a.status = "offline"
-                    # 通知用独立 session（避免污染本 tick）
-                    _notify_scanner_offline(a.name, a.scanner_id, a.ip or "", a.last_heartbeat)
+                    # 通知不在 watchdog 里发（后台线程调 async _push 会 RuntimeWarning）。
+                    # 统一由 push_scheduler 每 30min 调 check_scanner_offline() 负责，
+                    # 它查 status='offline' 且靠 _push 的 dedup_title 去重。
+                    session.flush()
                 except Exception:
                     logger.exception("watchdog: 处理 scanner %s 失败", a.scanner_id)
                     session.rollback()
