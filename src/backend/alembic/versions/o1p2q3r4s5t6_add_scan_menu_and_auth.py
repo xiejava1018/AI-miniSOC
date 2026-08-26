@@ -49,7 +49,7 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     # 1. 种顶级 /scan 菜单（path 是 kebab-case 顶级约定）
-    op.execute(
+    bind.execute(
         sa.text(
             """
             INSERT INTO soc_menus (parent_id, name, title, path, icon, component,
@@ -75,7 +75,7 @@ def upgrade() -> None:
          "component": "/scan/findings/index", "sort_order": 3},
     ]
     for m in sub_menus:
-        op.execute(
+        bind.execute(
             sa.text(
                 """
                 INSERT INTO soc_menus (parent_id, name, title, path, icon, component,
@@ -129,11 +129,11 @@ def upgrade() -> None:
         ("auditor", "findings", '["scan_view"]'),
     ]
     for code, menu_name, perms_json in auth_grants:
-        op.execute(
+        bind.execute(
             sa.text(
-                f"""
-                INSERT INTO soc_role_menus (role_id, menu_id, permissions, created_at, updated_at)
-                SELECT r.id, m.id, :perms::jsonb, NOW(), NOW()
+                """
+                INSERT INTO soc_role_menus (role_id, menu_id, permissions)
+                SELECT r.id, m.id, CAST(:perms AS jsonb)
                 FROM soc_roles r, soc_menus m
                 WHERE r.code = :code AND m.name = :menu_name
                   AND NOT EXISTS (
