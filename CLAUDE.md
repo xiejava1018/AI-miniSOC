@@ -1599,6 +1599,23 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 11. **`reconcile_scanner_findings` 里 `finding_status=new + matched_asset_id=None` 才产 shadow**；
     `known` 且无 matched 视为脏数据也产 shadow 让人处置（测试期望与之一致）
 12. **102 的 venv 在 `src/backend/venv`**（不是仓库根 venv）；ssh 跑 python 用 `./venv/bin/python`
+13. **后台 scheduler 线程里不能 `_asyncio.run(svc._push(...))`**——uvicorn 已有 event loop，
+    会 RuntimeWarning: coroutine was never awaited，通知静默丢失。修法：watchdog 只改状态，
+    通知统一交给 push_scheduler（async 主线程）调 check_xxx()；过滤条件要查 `status='offline'`
+    而非 `!= 'offline'`（否则 watchdog 标红后 push 永远查不到），重复推送靠 _push 的 dedup_title 挡
+14. **裸机 PYTHONPATH 跑 scanner（docker.io 被墙时的备选）**：collector.py 用
+    `from nmap_runner import ...` 绝对导入会失败，必须 `from .nmap_runner import ...` + fallback；
+    Kali 上 `pip3 install --user --break-system-packages httpx pyyaml python-dotenv` 即可
+
+### 生产真实部署（2026-08-26，192.168.0.45 Kali）
+- docker.io 被墙拉不到 python:3.13-slim → 走裸机方案（Kali 自带 nmap 7.95 + python3）
+- 代码 scp 到 ~/scanner-collectors/，.env 注入 SCANNER_ID/MINISOC_API_KEY(=scanner Key)/MINISOC_URL
+- **首次真实扫描**：nmap -sV -Pn --top-ports 1000 192.168.0.102 → 7 items → /data/sync created=6 updated=1
+  （用扫描器自己的 Key，require_api_key 双收修复验证通过）；生产库实见 10 端口含 OpenSSH 9.6p1/nginx 1.24/PostgreSQL/Uvicorn
+- **--loop 常驻**：30s 心跳 200，控制面 status=online；杀进程后 90s 看门狗标 offline
+- **离线通知**：修复线程 async bug 后，手动 push-check 返回 scanner_offline=2，通知表落库
+- scanner 已恢复 online（pid 244932 在 0.45 常驻）
+- 待办：裸机是 nohup 临时方案，后续应配 systemd unit 或解决 docker mirror 后回容器
 
 ### 待办（不阻塞，按优先级）
 1. **部署 192.168.0.45（Kali）真扫描器**：admin 注册 scanner → docker compose up → 真实 nmap 扫一轮 → 看门狗/心跳验证（final.md S11，进行中）
