@@ -1532,5 +1532,83 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 
 ---
 
-**文档版本**: v2.23
-**最后更新**: 2026-08-23
+## 今日补充（2026-08-26：P3+ 资产发现与攻击面扫描采集器 Phase 1+2 全量落地）
+
+### 背景与设计
+用户需求：① 扫内网发现未纳管资产 ② 扫台账公网资产暴露面端口/服务。
+经 v1.0 初稿 → v1.1（发现/台账解耦）→ v1.2（控制面/数据面分离+拉模型）→ v1.3（评审修复）→ final 整合稿：
+- `docs/design/2026-08-26-asset-discovery-and-attack-surface-scanner-final.md`（单一权威稿）
+- `docs/design/2026-08-26-control-plane-prototype.html`（5-tab 交互原型，CSS 变量自包含）
+- `docs/design/2026-08-26-deployment-architecture.svg`
+
+核心架构（ADR-6/7/8）：
+- **发现/台账解耦**：scanner 落独立的 `soc_scan_findings`，**永不直接写 `soc_assets`**；
+  台账写入仅限「一键纳管」`POST /scan/findings/{id}/adopt`（带权限带审计）
+- **控制面/数据面分离 + 拉模型**：任务创建/调度/编排/看门狗全在 AI-miniSOC（102）；
+  扫描器只做「心跳 + 拉任务 + 跑 nmap + 推数据 + 回写」——只出向请求，天然穿 NAT
+- **扫描器显式注册**：admin `POST /scan/agents` 分配 scanner_id + API Key（sha256 哈希存库）
+
+### 本次交付（commit 9304549 + 00d9216）
+
+**后端（控制面）**：
+- 4 张新表：`soc_scanner_tasks`（注意：类名 `ScannerTask`，`ScanTask` 被 vulnerability.py 占用！）/ `soc_scan_targets` / `soc_scan_findings` / `soc_scanner_agents`
+- 2 个新 handler：`DiscoverySyncHandler`（data_type=discovery → findings）+ `PortSyncHandler`（data_type=port → asset_ports）；均镜像 AssetSyncHandler 的 sync_task+source_health 包装
+- 15 个新端点（3 个 router）：`scan_agents`（扫描器 X-API-Key 4 个）/ `scan_human_agents`（admin 4 个）/ `scan_tasks`（人类 7 个含 adopt/ignore）
+- `require_scanner_api_key`（deps.py）：X-API-Key → sha256 → soc_scanner_agents.api_key_hash 反查
+- `scanner_watchdog_scheduler`：60s tick，L1 离线判定（90s）+ F-3 超时重派（6h，clone pending + parent_task_id，链上限 3 次）
+- `central_scan_scheduler`：**固定秒数间隔**对齐每天 03:00/04:00（不引入 cron 字符串，v1.3 F-1）
+- F1.3 扩展：`AssetReconciliationService.reconcile_scanner_findings()` —— 遍历 findings 产 `TYPE_SHADOW, asset_id=None, details.source="scanner"`，按 IP+24h 窗口去重；`run()` 主流程已调用，summary 加 `scanner_shadow_count`
+- F4.2 场景 6：`check_scanner_offline()` + `DEFAULT_PUSH_RULES.scanner_offline`
+- main.py lifespan：注册两个 scheduler + **`Base.metadata.create_all(engine)`**（此前启动不建表，新模型靠它即时落地）
+- 迁移 `o1p2q3r4s5t6`：种 `/scan` 顶级菜单（sort=10）+ scanners/tasks/findings 3 子菜单 + 4 角色 × 授权（viewer/auditor 只读）
+
+**采集器（数据面）**：
+- `MiniSOCClient` 新增 4 方法：`heartbeat` / `fetch_pending` / `claim` / `report_status`（复用 envelope 解包 + 重试）
+- `src/collectors/scanner/`：ScannerCollector + nmap_runner（XML 解析容错）+ run_scanner.py
+  - `--once`：单次扫（cron/调试）
+  - `--loop`：拉模型（30s 心跳 + 10s 拉任务 + 认领 + nmap + 推数据 + 回写）
+- docker-compose 加 `scanner-collector` service（bridge + NET_RAW，init:true）
+
+**前端**：routesAlias 加 5 个 alias（AssetScan/Scanners/Tasks/Findings/Targets）；页面渲染留 Phase 3
+
+### 验证（全部实测）
+- 单元测试 **35/35**：test_port_sync_handler.py 16 + test_reconcile_scanner.py 12 + test_port_sync_e2e.py 7
+- 本地端到端 dry_run 11/11（/tmp/dry_run_phase2.py）
+- **生产（102）端到端 11/11**：登录→注册 scanner→心跳 online→空任务→建任务→拉任务→claim→推数据 created=1→report→详情→清理
+- 生产 DB 实查：4 张表 EXISTS、菜单树 4 条、`scanner:ports success=1`、scanner_tasks/asset_ports 落库
+- 迁移 `o1p2p3q4r5s6 → o1p2q3r4s5t6` 生产实跑成功（head 已同步）
+
+### 踩过的坑（本轮新增，后续必看）
+1. **`ScanTask` 类名被 `vulnerability.py` 占用**——新模型必须叫 `ScannerTask`（final.md 硬伤 2 的预言成真）
+2. **`ScanFinding.matched_asset_id` 类型必须是 UUID**（与 `Asset.id` 一致），第一版写成 BigInteger 导致 `DatatypeMismatch`，已修
+3. **`AuditLog` 在 `app.models.audit_log`**，不在 asset_reconciliation（又一次手滑 import）
+4. **alembic 迁移三连坑**（o1p2q3r4s5t6 实跑才暴露）：
+   - `op.execute(text, params)` 双位置参数不兼容 → `bind = op.get_bind(); bind.execute(...)`
+   - `:perms::jsonb` 与 SQLAlchemy 绑定冲突（`::` 被当参数）→ `CAST(:perms AS jsonb)`
+   - `soc_role_menus` 没有 `created_at/updated_at` 列（CLAUDE.md 既有坑重踩）
+5. **GitHub secret scanning 把文档示例 `sk_live_xxx...` 误判为 Stripe key 拒 push**——示例 key 改成
+   `<由控制面返回的明文 Key>` 占位符 + amend 重写 commit 才过。**文档里别用 sk_live_ 前缀的假 key**
+6. **测试链路三件套**（conftest 改动）：
+   - `MCP_SSE_ENABLED=false`（否则后台线程抢 8100 端口 → SystemExit(3) 干扰 pytest）
+   - `app.router.lifespan_context = noop`（否则 TestClient 跑 lifespan → stop_* 空 await 崩 teardown）
+   - `Settings.collector_api_keys_list` 是 property，mock 用 `patch.object(type(settings), ..., new_callable=PropertyMock)`
+7. **conftest 的 `from app.models import (...)` 是显式子集**——新模型必须加进列表，否则 create_all 漏建表
+8. **envelope 断言口径**：X-API-Key 缺失是 422（Header 必填）不是 401；业务码全看 `body.code` 不看 HTTP status
+9. **`Asset` 字段名是 `name` 不是 `asset_name`**（schema 里看着像，实际不是）
+10. **测试 fixture 不自动 commit**：`_handle_one` 后必须手动 `db_session.commit()` 才能查到
+11. **`reconcile_scanner_findings` 里 `finding_status=new + matched_asset_id=None` 才产 shadow**；
+    `known` 且无 matched 视为脏数据也产 shadow 让人处置（测试期望与之一致）
+12. **102 的 venv 在 `src/backend/venv`**（不是仓库根 venv）；ssh 跑 python 用 `./venv/bin/python`
+
+### 待办（不阻塞，按优先级）
+1. **部署 192.168.0.45（Kali）真扫描器**：admin 注册 scanner → docker compose up → 真实 nmap 扫一轮 → 看门狗/心跳验证（final.md S11，进行中）
+2. **`/data-health` 展示 scanner:* 键**：DB 有记录（success=1）但端点展示层未覆盖新键，小 PR 补键清单
+3. **Phase 3 前端**：按 control-plane-prototype.html 实现 5-tab 页面（扫描器/任务/目标/发现/健康）
+4. **生产 overall=degraded 是既有问题**：loki:browsing_detection 自 08-18 未跑，与本次无关
+5. **双 Key 收口**：Phase 1 让 scanner 共用 `MINISOC_API_KEY`；Phase 4 改独立 `SCANNER_API_KEY`（require_scanner_api_key 已就绪，只差 env 下发）
+6. **run_daemon.py 旧守护逻辑**与 docker restart 重叠，建议评估删除（续三遗留）
+
+---
+
+**文档版本**: v2.24
+**最后更新**: 2026-08-26
