@@ -16,7 +16,10 @@ import os
 from typing import Optional
 
 from collector_framework.base import BaseCollector, CollectResult, DataType
-from nmap_runner import NmapRunner, NmapResult
+try:
+    from .nmap_runner import NmapRunner, NmapResult   # 包内正常路径
+except ImportError:  # 兼容直接把 scanner_collector 目录塞 PYTHONPATH 的跑法
+    from nmap_runner import NmapRunner, NmapResult
 
 
 logger = logging.getLogger(__name__)
