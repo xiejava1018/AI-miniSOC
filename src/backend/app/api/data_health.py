@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.asset_reconciliation import STATUS_PENDING, AssetReconciliation
+from app.models.scanner_models import ScannerAgent
 from app.models.source_health import SourceHealth
+from app.services.scanner_watchdog_scheduler import HEARTBEAT_OFFLINE_SECONDS
 from app.models.sync_dead_letter import SyncDeadLetter
 from app.models.sync_task import SyncTask
 from app.models.user import User
@@ -179,6 +181,41 @@ async def data_health(
         or last_success_at < _utcnow() - timedelta(hours=STALE_SYNC_HOURS)
     )
 
+    # ---------- 第 4 层（P4-H）：scanner agent 健康汇总 ----------
+    # 注意：必须 select_from 才能继续 .where()，func.count() 返回 int 不能 .filter
+    scanner_total = db.execute(select(func.count()).select_from(ScannerAgent)).scalar() or 0
+    scanner_online = db.execute(select(func.count()).select_from(ScannerAgent).where(ScannerAgent.status == "online")).scalar() or 0
+    scanner_offline = db.execute(select(func.count()).select_from(ScannerAgent).where(ScannerAgent.status == "offline")).scalar() or 0
+    scanner_disabled = db.execute(select(func.count()).select_from(ScannerAgent).where(ScannerAgent.status == "disabled")).scalar() or 0
+    scanner_unknown = db.execute(select(func.count()).select_from(ScannerAgent).where(ScannerAgent.status == "unknown")).scalar() or 0
+    # 上次心跳检查（与 watchdog 同步口径：> HEARTBEAT_OFFLINE_SECONDS 未跳视为延迟）
+    online_overdue: list[dict] = []
+    for r in db.execute(
+        select(ScannerAgent).where(ScannerAgent.status == "online")
+    ).scalars():
+        if r.last_heartbeat and (
+            datetime.now(timezone.utc) - r.last_heartbeat
+        ).total_seconds() > HEARTBEAT_OFFLINE_SECONDS:
+            online_overdue.append({
+                "scanner_id": r.scanner_id,
+                "name": r.name,
+                "last_heartbeat": _iso(r.last_heartbeat),
+                "overdue_seconds": int(
+                    (datetime.now(timezone.utc) - r.last_heartbeat).total_seconds()
+                ),
+            })
+    # 最近 10 分钟扫描器通道（scanner-port / scanner-discovery）的 source_health
+    scanner_channel_health = [
+        s for s in sources if s["source_key"].startswith("scanner")
+    ]
+    scanner_overall = "healthy"
+    if scanner_offline > 0 or scanner_disabled > 0:
+        scanner_overall = "degraded"
+    if online_overdue:
+        scanner_overall = "degraded"
+    if any(c["status"] == "down" for c in scanner_channel_health):
+        scanner_overall = "down"
+
     # ---------- 总体结论 ----------
     # 就绪度取三层里最差的一层。宁可显示 degraded 让人去看，
     # 也不要用平均值把一个 down 的源摊薄成"基本健康"。
@@ -208,10 +245,32 @@ async def data_health(
     if not sources:
         issues.append("尚无任何数据源健康记录（采集链路可能未接入监控）")
 
+    # ---------- 把 scanner 状态纳入总体 ----------
+    if scanner_overall == "down" and overall != "down":
+        overall = "down"
+    elif scanner_overall == "degraded" and overall == "healthy":
+        overall = "degraded"
+    if scanner_offline > 0:
+        issues.append(f"{scanner_offline} 个扫描器离线")
+    if scanner_disabled > 0:
+        issues.append(f"{scanner_disabled} 个扫描器已禁用")
+    if online_overdue:
+        issues.append(f"{len(online_overdue)} 个在线扫描器心跳延迟")
+
     return {
         "overall_status": overall,
         "issues": issues,
         "checked_at": _iso(_utcnow()),
+        "scanners": {
+            "overall": scanner_overall,
+            "total": scanner_total,
+            "online": scanner_online,
+            "offline": scanner_offline,
+            "disabled": scanner_disabled,
+            "unknown": scanner_unknown,
+            "online_overdue": online_overdue,
+            "channel_health": scanner_channel_health,
+        },
         "source_health": {
             "counter": counter,
             "total": len(sources),

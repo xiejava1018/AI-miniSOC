@@ -68,13 +68,21 @@
             <ElButton link type="primary" size="small" @click="openEdit(row)">编辑</ElButton>
             <ElButton link type="warning" size="small" @click="rotateKey(row)">轮换Key</ElButton>
             <ElPopconfirm
-              title="注销后该扫描器将无法再连接，确认？"
+              v-if="row.status !== 'online'"
+              :title="row.status === 'offline'
+                ? `删除离线扫描器 ${row.name}？该记录将从列表移除（数据保留在审计日志）`
+                : `删除 ${row.status} 扫描器 ${row.name}？`"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
               @confirm="removeAgent(row)"
             >
               <template #reference>
-                <ElButton link type="danger" size="small">注销</ElButton>
+                <ElButton link type="danger" size="small">删除</ElButton>
               </template>
             </ElPopconfirm>
+            <ElTooltip v-else content="online 状态扫描器需先停止进程（约 90s 后自动 offline）才能删除">
+              <ElButton link type="danger" size="small" disabled>删除</ElButton>
+            </ElTooltip>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -167,7 +175,7 @@
   const form = ref({
     name: '',
     ip: '',
-    capabilities: ['public'] as string[],
+    capabilities: ['public', 'internal', 'ports'] as string[],
     enabled: true
   })
   const subnetsText = ref('')
@@ -203,7 +211,7 @@
   }
 
   const resetForm = () => {
-    form.value = { name: '', ip: '', capabilities: ['public'], enabled: true }
+    form.value = { name: '', ip: '', capabilities: ['public','internal','ports'], enabled: true }
     subnetsText.value = ''
     editing.value = null
   }
