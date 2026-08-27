@@ -114,7 +114,7 @@
           <ElRadioGroup v-model="runForm.mode" class="mode-group">
             <div class="mode-option" :class="{ active: runForm.mode === 'public' }">
               <ElRadio value="public">公网暴露面</ElRadio>
-              <div class="mode-desc">台账 <code>exposure_level=public</code> 资产 → nmap <code>-sV -Pn --top-ports 1000</code> → 落库 <code>soc_asset_ports</code></div>
+              <div class="mode-desc">台账 <code>exposure_level=public</code> 资产 → nmap <code>-sV --script=vulners</code> → 落库 <code>soc_asset_ports.vulnerabilities</code>（含 CVE 映射）</div>
             </div>
             <div class="mode-option" :class="{ active: runForm.mode === 'internal' }">
               <ElRadio value="internal">内网发现</ElRadio>
@@ -122,7 +122,7 @@
             </div>
             <div class="mode-option" :class="{ active: runForm.mode === 'ports' }">
               <ElRadio value="ports">端口扫描</ElRadio>
-              <div class="mode-desc">对指定 IP 扫端口 → nmap <code>-sV -Pn --top-ports 1000</code> → 落库 <code>soc_asset_ports</code>（当前与 public 同实现，P4-B 加 NSE 漏洞脚本）</div>
+              <div class="mode-desc">对指定 IP 扫端口 + <b>CVE 漏洞映射</b>（vulners 脚本）→ nmap <code>-sV --script=vulners</code> → 落库 <code>soc_asset_ports.vulnerabilities</code>（JSONB 存 CVE 列表）</div>
             </div>
           </ElRadioGroup>
         </ElFormItem>

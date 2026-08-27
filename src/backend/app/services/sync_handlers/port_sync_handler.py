@@ -154,8 +154,12 @@ class PortSyncHandler(BaseSyncHandler):
             existing.service_banner = item.get("service_banner") or existing.service_banner
             existing.last_seen = item.get("scan_time") or datetime.now(timezone.utc)
             existing.state = item.get("state", existing.state or "open")
-            # vulnerability 留空：Phase 4 由 nmap NSE 脚本（vulners/http-title）填充
-            # 现有 v0/v1 已有值不覆盖（保留运维/历史标注）
+            # P4-B-α：合并新扫到的 CVE 列表（去重 + 保留历史 CVE）
+            new_cves = item.get("cves") or []
+            if new_cves:
+                existing_vulns = list(existing.vulnerabilities or [])
+                merged = sorted(set(existing_vulns) | set(new_cves))
+                existing.vulnerabilities = merged
             return {"updated": 1}
 
         # 新建：反查 asset_id（IP 命中则挂上，纯公网 IP 允许 NULL）
@@ -169,6 +173,7 @@ class PortSyncHandler(BaseSyncHandler):
             service=item.get("service"),
             version=item.get("version"),
             service_banner=item.get("service_banner"),
+            vulnerabilities=list(item.get("cves") or []),
             # scan_time 字段为非空；缺则用 now()
             last_seen=item.get("scan_time") or datetime.now(timezone.utc),
         )

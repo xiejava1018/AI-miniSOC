@@ -3,9 +3,9 @@
 """
 
 from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, INET
+from sqlalchemy.dialects.postgresql import UUID, INET, JSONB
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from app.models.base import Base
 
 
@@ -27,6 +27,9 @@ class AssetPort(Base):
     scan_time = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     service_banner = Column(Text, nullable=True)
     vulnerability = Column(Text, nullable=True)
+    vulnerabilities = Column(JSONB, nullable=True, server_default=text("'[]'::jsonb"))
+    # P4-B-α：JSONB 存 vulners 返回的 CVE 列表（如 ["CVE-2024-12345", "CVE-2023-67890"]）
+    # 与 vulnerability (Text 单条描述) 并存；后续 unified 处理待 P5
     last_seen = Column(DateTime(timezone=True), nullable=True, server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

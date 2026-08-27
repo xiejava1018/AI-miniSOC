@@ -47,6 +47,11 @@ class NmapPort:
     service: Optional[str] = None
     version: Optional[str] = None
     banner: Optional[str] = None
+    cves: list[str] = None  # type: ignore  # P4-B-α: vulners 脚本输出的 CVE 列表
+
+    def __post_init__(self):
+        if self.cves is None:
+            self.cves = []
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -243,6 +248,41 @@ class NmapRunner:
             self.timeout_per_ip = old_timeout
         hosts = parse_nmap_xml(xml)
         return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
+
+    async def scan_ports_with_vulners_multi(
+        self,
+        targets: list[str],
+        top_ports: int = 1000,
+        version_intensity: int = 5,
+        timeout: int = 600,
+    ) -> NmapResult:
+        """P4-B-α：nmap -sV + --script=vulners 扫多目标，每个 open port 产 CVE 列表。
+
+        vulners 脚本：根据 service version 字段查 vulners.com 漏洞库，返回匹配的 CVE。
+        实测 192.168.0.30 (top 100 + vulners) ~30 秒；top 1000 + vulners ~60-90 秒。
+        超时建议 600s（NSE 库下载 + 网络抖动留 buffer）。
+        """
+        args = [
+            "-sV",
+            "-Pn",
+            "--top-ports", str(top_ports),
+            "--version-intensity", str(version_intensity),
+            "--max-rate", str(self.max_rate),
+            "--script=vulners",                # 关键：CVE 数据库映射
+            "-n",
+            *targets,
+        ]
+        import time
+        old_timeout = self.timeout_per_ip
+        self.timeout_per_ip = timeout
+        try:
+            t0 = time.monotonic()
+            xml = await self.run(args)
+            duration_ms = int((time.monotonic() - t0) * 1000)
+        finally:
+            self.timeout_per_ip = old_timeout
+        hosts = parse_nmap_xml(xml)
+        return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
 # ============================================================================
 def parse_nmap_xml(xml_str: str) -> list[NmapHost]:
     """nmap XML → List[NmapHost]。
@@ -307,6 +347,23 @@ def parse_nmap_xml(xml_str: str) -> list[NmapHost]:
                     # 实测 nmap -sV 不会把 banner 写进 XML，需独立 nmap -sV --script=banner
                     # Phase 1 不实现 banner（避免 -sV 复杂度上升）
 
+                # P4-B-α：解析 vulners 脚本输出
+                # nmap --script=vulners 输出结构：
+                #   <port><script id="vulners" output="...">
+                #     <table key="id"><elem key="id">CVE-XXXX-XXXXX</elem>
+                #     <table><elem key="cvss">N.N</elem><elem key="type">cve</elem><elem key="id">CVE-XXXX-XXXXX</elem></table>
+                #     ...多个 <table> 每个一个 CVE
+                cves: list[str] = []
+                scripts_el = port_el.find("script")
+                if scripts_el is not None and scripts_el.get("id") == "vulners":
+                    for tbl in scripts_el.findall("table"):
+                        for inner in tbl.findall("table"):
+                            cve_id_el = inner.find("elem[@key='id']")
+                            if cve_id_el is not None and cve_id_el.text:
+                                cid = cve_id_el.text.strip()
+                                if cid.startswith("CVE-"):
+                                    cves.append(cid)
+
                 ports.append(NmapPort(
                     port=port_num,
                     protocol=protocol,
@@ -314,6 +371,7 @@ def parse_nmap_xml(xml_str: str) -> list[NmapHost]:
                     service=service_name,
                     version=version,
                     banner=banner,
+                    cves=cves,
                 ))
 
         hosts.append(NmapHost(

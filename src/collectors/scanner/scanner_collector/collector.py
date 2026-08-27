@@ -198,7 +198,10 @@ class ScannerCollector(BaseCollector):
 
         if mode == "internal":
             return await self._collect_discovery(targets, task_uuid)
-        return await self._collect_ports_for_targets(targets, task_uuid)
+        # P4-B-α：public 和 ports 都加 vulners CVE 映射（用户确认双模式）
+        return await self._collect_ports_for_targets(
+            targets, task_uuid, with_vulners=True,
+        )
 
     async def _collect_discovery(self, targets: list[str], task_uuid) -> CollectResult:
         """内网主机发现：一次 nmap -sn 跑所有 target，存活主机产 DISCOVERY items。
@@ -279,10 +282,13 @@ class ScannerCollector(BaseCollector):
             },
         )
 
-    async def _collect_ports_for_targets(self, targets: list[str], task_uuid) -> CollectResult:
+    async def _collect_ports_for_targets(
+        self, targets: list[str], task_uuid, with_vulners: bool = False,
+    ) -> CollectResult:
         """端口扫描：一次 nmap -sV 跑所有 target，开放端口产 PORT items。
 
-        P4-A 优化：合并多目标为单次 nmap 调用，共享主机发现/路由缓存。
+        P4-A：合并多目标为单次 nmap 调用，共享主机发现/路由缓存。
+        P4-B-α：with_vulners=True 时附加 --script=vulners，每个 open port 带 cves 列表。
         """
         import datetime
         all_items: list[dict] = []
@@ -295,12 +301,21 @@ class ScannerCollector(BaseCollector):
                 metadata={"scan_task_uuid": task_uuid, "scanned_targets": 0, "failed_targets": [], "items_count": 0},
             )
         try:
-            result = await self.nmap.scan_ports_multi(
-                targets=targets,
-                top_ports=1000,
-                version_intensity=5,
-                timeout=self._dynamic_timeout(targets, base=300, per_target=10),
-            )
+            if with_vulners:
+                result = await self.nmap.scan_ports_with_vulners_multi(
+                    targets=targets,
+                    top_ports=1000,
+                    version_intensity=5,
+                    # vulners 多 ~30s/IP + NSE 库下载 + 网络抖动
+                    timeout=self._dynamic_timeout(targets, base=300, per_target=30),
+                )
+            else:
+                result = await self.nmap.scan_ports_multi(
+                    targets=targets,
+                    top_ports=1000,
+                    version_intensity=5,
+                    timeout=self._dynamic_timeout(targets, base=300, per_target=10),
+                )
         except (asyncio.TimeoutError, RuntimeError) as e:
             logger.error("nmap port scan failed for batch [%s]: %s",
                          ",".join(targets)[:120], e)
@@ -331,6 +346,7 @@ class ScannerCollector(BaseCollector):
                     "service": port.service or "",
                     "version": port.version or "",
                     "service_banner": port.banner or "",
+                    "cves": list(port.cves or []),   # P4-B-α：vulners 输出的 CVE 列表
                     "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 })
 
