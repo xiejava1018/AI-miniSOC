@@ -111,22 +111,36 @@
     <ElDialog v-model="runVisible" title="触发扫描" width="560px">
       <ElForm :model="runForm" label-width="110px">
         <ElFormItem label="扫描类型" required>
-          <ElRadioGroup v-model="runForm.mode">
-            <ElRadio value="public">公网暴露面</ElRadio>
-            <ElRadio value="internal">内网发现</ElRadio>
-            <ElRadio value="ports">端口扫描</ElRadio>
+          <ElRadioGroup v-model="runForm.mode" class="mode-group">
+            <div class="mode-option" :class="{ active: runForm.mode === 'public' }">
+              <ElRadio value="public">公网暴露面</ElRadio>
+              <div class="mode-desc">台账 <code>exposure_level=public</code> 资产 → nmap <code>-sV -Pn --top-ports 1000</code> → 落库 <code>soc_asset_ports</code></div>
+            </div>
+            <div class="mode-option" :class="{ active: runForm.mode === 'internal' }">
+              <ElRadio value="internal">内网发现</ElRadio>
+              <div class="mode-desc"><b>必须填 CIDR</b>（如 <code>192.168.0.0/24</code>）→ nmap <code>-sn</code> 主机发现 → 落库 <code>soc_scan_findings</code>（需一键纳管才入台账）</div>
+            </div>
+            <div class="mode-option" :class="{ active: runForm.mode === 'ports' }">
+              <ElRadio value="ports">端口扫描</ElRadio>
+              <div class="mode-desc">对指定 IP 扫端口 → nmap <code>-sV -Pn --top-ports 1000</code> → 落库 <code>soc_asset_ports</code>（当前与 public 同实现，P4-B 加 NSE 漏洞脚本）</div>
+            </div>
           </ElRadioGroup>
-          <div class="form-hint">
-            public 扫台账公网资产；internal 扫内网 CIDR 发现新设备；ports 按指定目标扫端口。
-          </div>
         </ElFormItem>
         <ElFormItem label="目标">
           <ElInput
             v-model="runForm.targets"
             type="textarea"
             :rows="2"
-            placeholder="逗号分隔，如 192.168.0.0/24 或 1.2.3.4,5.6.7.8；留空按类型自动选目标"
+            :placeholder="targetsPlaceholder"
           />
+          <div v-if="targetEstimate" class="form-hint" :class="{ warn: targetEstimate.warn && !targetEstimate.error, error: targetEstimate.error }">
+            <template v-if="targetEstimate.error">⚠️ {{ targetEstimate.error }}</template>
+            <template v-else>
+              预估扫描主机数：<b>{{ targetEstimate.hosts }}</b>
+              <span v-if="targetEstimate.warn" class="warn-tag">（较大，建议确认耗时）</span>
+            </template>
+          </div>
+          <div class="form-hint">提示：逗号分隔 IP 或 CIDR；CIDR 前缀范围 /16–/22，单 IP 不限。</div>
         </ElFormItem>
         <ElFormItem label="分配方式">
           <ElRadioGroup v-model="runForm.assign_mode">
@@ -192,6 +206,54 @@
     target_scanner_id: null as string | null,
     nmap_args: '',
     notify: true
+  })
+
+  // P4-D: 扫描类型 → 目标 placeholder 提示
+  const targetsPlaceholder = computed(() => {
+    switch (runForm.value.mode) {
+      case 'internal':
+        return 'CIDR 网段，必填。如 192.168.0.0/24（可多个，逗号分隔）'
+      case 'public':
+        return '公网资产 IP 或 CIDR。如 203.0.113.10 或 198.51.100.0/24'
+      case 'ports':
+        return '目标 IP，逗号分隔。如 192.168.0.1,192.168.0.8 或 192.168.0.0/28'
+      default:
+        return '逗号分隔 IP 或 CIDR'
+    }
+  })
+
+  // P4-E: 实时计算输入 targets 的预估主机数
+  type TargetEstimate = {
+    hosts: number
+    warn: boolean  // 主机数 > 256 视为较大
+    error: string | null
+  }
+  const targetEstimate = computed<TargetEstimate | null>(() => {
+    const raw = runForm.value.targets.trim()
+    if (!raw) return null
+    const items = raw.split(',').map(s => s.trim()).filter(Boolean)
+    if (items.length === 0) return null
+
+    let total = 0
+    let firstError: string | null = null
+    for (const it of items) {
+      if (it.includes('/')) {
+        // CIDR：用 /24 /28 /30 等长度估算（不展开 IP，只按位长计算）
+        const m = it.match(/^([0-9.]+)\/(\d+)$/)
+        if (!m) { firstError = firstError || `非法 CIDR: ${it}`; continue }
+        const prefix = parseInt(m[2])
+        if (prefix < 0 || prefix > 32) { firstError = firstError || `前缀越界: ${it}`; continue }
+        total += Math.pow(2, 32 - prefix)
+      } else {
+        // 单 IP：1 台
+        total += 1
+      }
+    }
+    return {
+      hosts: total,
+      warn: total > 256,
+      error: firstError,
+    }
   })
 
   const onlineAgents = ref<any[]>([])
@@ -347,5 +409,63 @@
     font-size: 12px;
     color: var(--el-text-color-secondary);
     line-height: 1.5;
+    margin-top: 4px;
+  }
+  .form-hint.warn {
+    color: var(--el-color-warning);
+  }
+  .form-hint.error {
+    color: var(--el-color-danger);
+  }
+  .warn-tag {
+    margin-left: 4px;
+    color: var(--el-color-warning);
+  }
+
+  /* P4-D: 扫描类型卡片化 */
+  .mode-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+  .mode-group :deep(.el-radio) {
+    margin-right: 0;
+  }
+  .mode-group :deep(.el-radio__input) {
+    margin-right: 6px;
+  }
+  .mode-option {
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: var(--el-fill-color-blank);
+    transition: border-color 0.15s;
+  }
+  .mode-option.active {
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+  }
+  .mode-option :deep(.el-radio) {
+    margin-right: 6px;
+    height: auto;
+  }
+  .mode-desc {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    line-height: 1.5;
+    margin-top: 2px;
+    margin-left: 22px;
+  }
+  .mode-desc code {
+    background: var(--el-fill-color-light);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--el-color-primary);
+    margin: 0 2px;
+  }
+  .mode-desc b {
+    color: var(--el-color-danger);
   }
 </style>

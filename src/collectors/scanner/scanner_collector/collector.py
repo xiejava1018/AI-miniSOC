@@ -201,34 +201,71 @@ class ScannerCollector(BaseCollector):
         return await self._collect_ports_for_targets(targets, task_uuid)
 
     async def _collect_discovery(self, targets: list[str], task_uuid) -> CollectResult:
-        """内网主机发现：每个 CIDR/IP 跑 nmap -sn，存活主机产 DISCOVERY items。"""
+        """内网主机发现：一次 nmap -sn 跑所有 target，存活主机产 DISCOVERY items。
+
+        P4-A 优化：合并多目标为单次 nmap 调用，nmap 自己负责探测所有 IP。
+        单次 nmap 异常 → 整批 failed；否则按 XML 只产 up 主机的 item。
+        """
         import datetime
         all_items: list[dict] = []
         failed: list[str] = []
-        for target in targets:
-            try:
-                result = await self.nmap.scan_discovery(target)
-            except (asyncio.TimeoutError, RuntimeError) as e:
-                logger.error("nmap discovery failed for %s: %s", target, e)
-                failed.append(target)
-                continue
-            for host in result.hosts:
-                if host.status != "up" or not host.ip:
-                    continue
-                all_items.append({
+        if not targets:
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.DISCOVERY,
+                items=[],
+                metadata={"scan_task_uuid": task_uuid, "scanned_targets": 0, "failed_targets": [], "items_count": 0},
+            )
+        try:
+            # 单次 nmap 跑所有 target
+            result = await self.nmap.scan_discovery_multi(
+                targets=targets,
+                timeout=self._dynamic_timeout(targets, base=300, per_target=5),
+            )
+        except (asyncio.TimeoutError, RuntimeError) as e:
+            logger.error("nmap discovery failed for batch [%s]: %s",
+                         ",".join(targets)[:120], e)
+            failed = list(targets)
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.DISCOVERY,
+                items=[],
+                metadata={
                     "scan_task_uuid": task_uuid,
-                    "asset_ip": host.ip,
-                    "mac_address": host.mac_address,
-                    "os_guess": host.os_guess,
-                    "exposure": "internal",
-                    "discovery_source": "scanner",
-                    "open_ports": [],
-                    "raw_data": {
-                        "nmap_status": host.status,
-                        "target_cidr": target,
-                    },
-                    "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                })
+                    "scanned_targets": len(targets),
+                    "failed_targets": failed,
+                    "items_count": 0,
+                    "error": str(e),
+                },
+            )
+
+        # 记录哪些 target 在 nmap 结果里出现过，未出现的视为超时/无响应
+        seen_ips: set[str] = set()
+        for host in result.hosts:
+            if host.status != "up" or not host.ip:
+                continue
+            seen_ips.add(host.ip)
+            all_items.append({
+                "scan_task_uuid": task_uuid,
+                "asset_ip": host.ip,
+                "mac_address": host.mac_address,
+                "os_guess": host.os_guess,
+                "exposure": "internal",
+                "discovery_source": "scanner",
+                "open_ports": [],
+                "raw_data": {
+                    "nmap_status": host.status,
+                    "target_batch": targets[:5],  # 存前 5 个作溯源
+                },
+                "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            })
+        # targets 中单 IP/CIDR（纯 IP）未出现在结果 → 可能是被 ping 探测的"无响应主机"，不算失败
+        # CIDR 类目标不计入"failed"（CIDR 里 254 个 IP 只有部分是 up）
+        failed = [
+            t for t in targets
+            if "/" not in t and not any(h.ip == t for h in result.hosts)
+        ]
+
         return CollectResult(
             source=self.source_name,
             data_type=DataType.DISCOVERY,
@@ -238,36 +275,71 @@ class ScannerCollector(BaseCollector):
                 "scanned_targets": len(targets),
                 "failed_targets": failed,
                 "items_count": len(all_items),
+                "seen_ips": len(seen_ips),
             },
         )
 
     async def _collect_ports_for_targets(self, targets: list[str], task_uuid) -> CollectResult:
-        """端口扫描：按任务目标跑（与 _collect_ports 同逻辑，但目标来自任务）。"""
+        """端口扫描：一次 nmap -sV 跑所有 target，开放端口产 PORT items。
+
+        P4-A 优化：合并多目标为单次 nmap 调用，共享主机发现/路由缓存。
+        """
         import datetime
         all_items: list[dict] = []
         failed: list[str] = []
-        for target_ip in targets:
-            try:
-                result = await self.nmap.scan_ports(target_ip=target_ip, top_ports=1000, version_intensity=5)
-            except (asyncio.TimeoutError, RuntimeError) as e:
-                logger.error("nmap scan failed for %s: %s", target_ip, e)
-                failed.append(target_ip)
-                continue
-            for host in result.hosts:
-                for port in host.ports:
-                    if port.state != "open":
-                        continue
-                    all_items.append({
-                        "scan_task_uuid": task_uuid,
-                        "asset_ip": host.ip,
-                        "port": port.port,
-                        "protocol": port.protocol,
-                        "state": port.state,
-                        "service": port.service or "",
-                        "version": port.version or "",
-                        "service_banner": port.banner or "",
-                        "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    })
+        if not targets:
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.PORT,
+                items=[],
+                metadata={"scan_task_uuid": task_uuid, "scanned_targets": 0, "failed_targets": [], "items_count": 0},
+            )
+        try:
+            result = await self.nmap.scan_ports_multi(
+                targets=targets,
+                top_ports=1000,
+                version_intensity=5,
+                timeout=self._dynamic_timeout(targets, base=300, per_target=10),
+            )
+        except (asyncio.TimeoutError, RuntimeError) as e:
+            logger.error("nmap port scan failed for batch [%s]: %s",
+                         ",".join(targets)[:120], e)
+            failed = list(targets)
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.PORT,
+                items=[],
+                metadata={
+                    "scan_task_uuid": task_uuid,
+                    "scanned_targets": len(targets),
+                    "failed_targets": failed,
+                    "items_count": 0,
+                    "error": str(e),
+                },
+            )
+
+        for host in result.hosts:
+            for port in host.ports:
+                if port.state != "open":
+                    continue
+                all_items.append({
+                    "scan_task_uuid": task_uuid,
+                    "asset_ip": host.ip,
+                    "port": port.port,
+                    "protocol": port.protocol,
+                    "state": port.state,
+                    "service": port.service or "",
+                    "version": port.version or "",
+                    "service_banner": port.banner or "",
+                    "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                })
+
+        # targets 中纯 IP 未出现在结果 → 主机不可达/超时
+        failed = [
+            t for t in targets
+            if "/" not in t and not any(h.ip == t for h in result.hosts)
+        ]
+
         return CollectResult(
             source=self.source_name,
             data_type=DataType.PORT,
@@ -279,6 +351,12 @@ class ScannerCollector(BaseCollector):
                 "items_count": len(all_items),
             },
         )
+
+    @staticmethod
+    def _dynamic_timeout(targets: list[str], base: int = 300, per_target: int = 5) -> int:
+        """动态计算 nmap 超时 = max(base, N * per_target)，避免大批量被截断。"""
+        n = len(targets)
+        return max(base, n * per_target)
 
     async def test_connection(self) -> bool:
         """检查 nmap 是否可用 + 目标是否配置。"""

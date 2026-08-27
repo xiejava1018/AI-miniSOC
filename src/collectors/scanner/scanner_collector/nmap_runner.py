@@ -186,6 +186,63 @@ class NmapRunner:
 
         hosts = parse_nmap_xml(xml)
         return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
+
+    async def scan_discovery_multi(self, targets: list[str], timeout: int = 300) -> NmapResult:
+        """P4-A：一次 nmap -sn 扫多个目标（IP / CIDR 混合）。
+
+        nmap 原生支持多目标并行：nmap -sn ip1 ip2 /24 ...
+        比起逐个调用 scan_discovery() 快 5-10x（共享路由/探测缓存）。
+        """
+        args = [
+            "-sn",
+            "--max-rate", str(self.max_rate),
+            "-n",
+            *targets,
+        ]
+        import time
+        # 临时覆盖单次 timeout（run() 用 self.timeout_per_ip，这里复用但传 batch timeout）
+        old_timeout = self.timeout_per_ip
+        self.timeout_per_ip = timeout
+        try:
+            t0 = time.monotonic()
+            xml = await self.run(args)
+            duration_ms = int((time.monotonic() - t0) * 1000)
+        finally:
+            self.timeout_per_ip = old_timeout
+        hosts = parse_nmap_xml(xml)
+        return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
+
+    async def scan_ports_multi(
+        self,
+        targets: list[str],
+        top_ports: int = 1000,
+        version_intensity: int = 5,
+        timeout: int = 300,
+    ) -> NmapResult:
+        """P4-A：一次 nmap -sV 扫多个目标，开放端口 + 服务版本。
+
+        兼容 IP / CIDR 混合：nmap -sV ip1 ip2 /24 ...
+        """
+        args = [
+            "-sV",
+            "-Pn",                            # 多目标模式跳过 ping（防 batch 被 ping 干扰）
+            "--top-ports", str(top_ports),
+            "--version-intensity", str(version_intensity),
+            "--max-rate", str(self.max_rate),
+            "-n",
+            *targets,
+        ]
+        import time
+        old_timeout = self.timeout_per_ip
+        self.timeout_per_ip = timeout
+        try:
+            t0 = time.monotonic()
+            xml = await self.run(args)
+            duration_ms = int((time.monotonic() - t0) * 1000)
+        finally:
+            self.timeout_per_ip = old_timeout
+        hosts = parse_nmap_xml(xml)
+        return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
 # ============================================================================
 def parse_nmap_xml(xml_str: str) -> list[NmapHost]:
     """nmap XML → List[NmapHost]。

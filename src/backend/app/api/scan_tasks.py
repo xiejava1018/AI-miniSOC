@@ -50,6 +50,114 @@ def _parse_uuid(value: str, label: str) -> uuidlib.UUID:
         raise HTTPException(status_code=400, detail=f"{label} 格式不正确")
 
 
+def _validate_targets(
+    targets_str: str,
+    mode: str,
+    max_cidr_hosts: int = 1024,
+    min_prefix_len: int = 16,
+) -> list[dict]:
+    """P4-C：校验并归一化 targets 字符串。
+
+    严格例：
+      - '192.168.0.0/24'        → 合法 CIDR（ 254 台）
+      - '192.168.0.5'          → 合法 IPv4
+      - '192.168.0.5,10.0.0.1' → 混合，多个目标
+      - '192.168.0.5/24'       → 拒绝：单 IP 不应带 CIDR 记号
+      - '999.999.999.999'      → 拒绝：非法 IP
+      - '0.0.0.0/0'            → 拒绝：任意前缀 < min_prefix_len
+      - '10.0.0.0/8'           → 拒绝：主机数 > max_cidr_hosts (1.67千万 > 1024)
+
+    Returns:
+        target_summary: [{"type": "cidr"|"ip", "value": "..."}, ...]
+
+    Raises:
+        HTTPException(422)：校验失败，带具体错位位置和原因。
+    """
+    import ipaddress
+    raw_targets = [t.strip() for t in targets_str.split(",") if t.strip()]
+    if not raw_targets:
+        raise HTTPException(status_code=422, detail="targets 不能为空（仅逗号/空格也算空）")
+    if len(raw_targets) > 64:
+        raise HTTPException(status_code=422, detail=f"目标数过多: {len(raw_targets)} > 64（拆分多次提交）")
+
+    out: list[dict] = []
+    for idx, t in enumerate(raw_targets, 1):
+        # 判断是 CIDR 还是 IP
+        if "/" in t:
+            parts = t.split("/")
+            if len(parts) != 2:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 格式错误：CIDR 应为 IP/前缀长度",
+                )
+            ip_part, prefix_part = parts
+            # IP 合法性
+            try:
+                ipaddress.IPv4Address(ip_part)
+            except ipaddress.AddressValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 包含非法 IPv4 地址: {ip_part}",
+                )
+            # 前缀长度
+            try:
+                prefix_len = int(prefix_part)
+            except ValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 前缀长度非法: '{prefix_part}' 不是整数",
+                )
+            if prefix_len < 0 or prefix_len > 32:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 前缀长度越界: {prefix_len} (应为 0-32)",
+                )
+            if prefix_len < min_prefix_len:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 网段过大: 前缀 /{prefix_len} < /{min_prefix_len}"
+                           f"（安全门，避免扫整段公网）",
+                )
+            # 主机数计算
+            try:
+                net = ipaddress.IPv4Network(t, strict=False)
+                hosts = net.num_addresses
+                # 排除网络/广播地址（/31、/32 特例不在此考虑）
+                if hosts > max_cidr_hosts:
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"第 {idx} 个目标 '{t}' 主机数 {hosts} 超过上限 {max_cidr_hosts}"
+                               f"（前缀 /{prefix_len} 过大）",
+                    )
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 不是合法 CIDR: {e}",
+                )
+            out.append({"type": "cidr", "value": t})
+        else:
+            # 单 IP
+            try:
+                ipaddress.IPv4Address(t)
+            except ipaddress.AddressValueError:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"第 {idx} 个目标 '{t}' 不是合法 IPv4 地址",
+                )
+            out.append({"type": "ip", "value": t})
+
+    # mode 与目标格式的语义检查
+    if mode == "internal":
+        has_cidr = any(x["type"] == "cidr" for x in out)
+        if not has_cidr:
+            raise HTTPException(
+                status_code=422,
+                detail="mode=internal 要求至少一个 CIDR 网段（如 192.168.0.0/24），单 IP 不合法",
+            )
+
+    return out
+
+
 # ============================================================================
 # POST /scan/run  建扫描任务（控制面）
 # ============================================================================
@@ -81,10 +189,13 @@ async def run_scan(
     targets_str = body.get("targets", "")
     if not targets_str:
         raise HTTPException(status_code=400, detail="targets 不能为空")
-    target_summary = [
-        {"type": "cidr" if "/" in t else "ip", "value": t.strip()}
-        for t in targets_str.split(",") if t.strip()
-    ]
+    # P4-C：合法性校验 + 主机数预估 + CIDR 前缀长度限制
+    target_summary = _validate_targets(
+        targets_str,
+        mode=mode,
+        max_cidr_hosts=1024,        # 防 /8 扫整段公网
+        min_prefix_len=16,          # CIDR 前缀 16+ 才允许（/24=256，/16=65536）
+    )
 
     assign_mode = body.get("assign_mode", "auto")
     if assign_mode not in ("auto", "pinned"):
