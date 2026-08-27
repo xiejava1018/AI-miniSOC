@@ -641,6 +641,178 @@ async def ignore_finding(
     f = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
     if not f:
         raise HTTPException(status_code=404, detail="finding not found")
+    if f.finding_status == "adopted":
+        raise HTTPException(status_code=400, detail="finding 已被纳管，不可忽略")
     f.finding_status = "ignored"
     db.commit()
     return {"code": 200, "msg": "success", "data": {"finding_id": finding_id, "finding_status": "ignored"}}
+
+
+# ============================================================================
+# POST /scan/findings/{id}/unignore  解除忽略（恢复为 new / known）
+# ============================================================================
+@router.post("/findings/{finding_id}/unignore")
+async def unignore_finding(
+    finding_id: int,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    f = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="finding not found")
+    if f.finding_status != "ignored":
+        raise HTTPException(status_code=400, detail=f"finding 未被忽略（当前状态: {f.finding_status}）")
+    # 恢复原则：IP 已命中台账 -> known；否则 -> new（与 DiscoverySyncHandler._handle_one 一致）
+    f.finding_status = "known" if f.matched_asset_id else "new"
+    db.commit()
+    return {"code": 200, "msg": "success", "data": {"finding_id": finding_id, "finding_status": f.finding_status}}
+
+
+# ============================================================================
+# DELETE /scan/findings/{id}  删除发现（不允许 adopted状态）
+# ============================================================================
+@router.delete("/findings/{finding_id}")
+async def delete_finding(
+    finding_id: int,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    """删除一条发现记录。
+
+    保护：
+      - adopted 状态拒绝：已纳管的发现是台账来源（F1.3 / F4.2 依赖），不应人工删
+      - 重复删返 404（不泄露存在性）
+      - 同一事务内写 audit_log 留痕（action=scan_finding_delete）
+    """
+    from app.models.audit_log import AuditLog
+
+    f = db.query(ScanFinding).filter(ScanFinding.id == finding_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="finding not found")
+    if f.finding_status == "adopted":
+        raise HTTPException(status_code=400, detail="finding 已被纳管，不可删除")
+
+    snapshot = {
+        "id": f.id,
+        "asset_ip": f.asset_ip,
+        "mac_address": f.mac_address,
+        "finding_status": f.finding_status,
+        "matched_asset_id": str(f.matched_asset_id) if f.matched_asset_id else None,
+        "scan_task_uuid": str(f.scan_task_uuid),
+    }
+    db.delete(f)
+    db.flush()  # 保证删除与审计在同一事务
+    db.add(AuditLog(
+        user_id=current_user.id,
+        username=current_user.username,
+        action="scan_finding_delete",
+        resource_type="scan_finding",
+        resource_id=None,  # 已删，防 FK 报错
+        resource_name=str(finding_id),
+        old_values=snapshot,
+        new_values=None,
+    ))
+    db.commit()
+    logger.info("user %s 删除 finding %s (ip=%s status=%s)",
+                current_user.username, finding_id, snapshot["asset_ip"], snapshot["finding_status"])
+    return {"code": 200, "msg": "success", "data": {"finding_id": finding_id, "deleted": True}}
+
+
+# ============================================================================
+# POST /scan/findings/bulk-action  批量操作（ignore / unignore / delete）
+# ============================================================================
+@router.post("/findings/bulk-action")
+async def bulk_action_findings(
+    body: dict = Body(...),
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    """批量处理发现记录。
+
+    body: {"action": "ignore"|"unignore"|"delete", "ids": [int, ...]}
+
+    返回：{"code": 200, "data": {"succeeded": [ids], "failed": [{"id":..., "reason":"..."}]}}
+
+    设计要点：
+      - 单事务保证一致性，全部成功或全部回滚
+      - adopted 发现不计入 succeeded（且 action 返 reason）
+      - ids 去重 + 限制上限 500，防误传全表
+      - 删除走 audit_log（与单条 delete 一致）
+      - 已忽略的发现 unignore 报 reason（避免静默 noop）
+      - 未忽略的发现 ignore 走幂等（不加 reason）——同上
+      - 已 adopted 的任何 action 都报 reason
+    """
+    from app.models.audit_log import AuditLog
+
+    action = body.get("action")
+    if action not in ("ignore", "unignore", "delete"):
+        raise HTTPException(status_code=400, detail=f"invalid action: {action}")
+    ids = body.get("ids")
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="ids 必须为非空列表")
+    if len(ids) > 500:
+        raise HTTPException(status_code=400, detail=f"一次最多 500 条，当前 {len(ids)}")
+    # 去重 + 转 int
+    try:
+        ids = list({int(x) for x in ids})
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="ids 必须是整数列表")
+
+    rows = db.query(ScanFinding).filter(ScanFinding.id.in_(ids)).all()
+    found_ids = {r.id for r in rows}
+
+    succeeded: list[int] = []
+    failed: list[dict] = []
+
+    # id 不存在的全部报 not_found
+    for fid in ids:
+        if fid not in found_ids:
+            failed.append({"id": fid, "reason": "not_found"})
+
+    for f in rows:
+        if f.finding_status == "adopted":
+            failed.append({"id": f.id, "reason": "finding 已被纳管，不允许该操作"})
+            continue
+        if action == "ignore":
+            if f.finding_status == "ignored":
+                # 幂等：不算 success，也不报 reason（请求本身有效，状态已达期望）
+                continue
+            f.finding_status = "ignored"
+            succeeded.append(f.id)
+        elif action == "unignore":
+            if f.finding_status != "ignored":
+                failed.append({"id": f.id, "reason": f"未被忽略（当前: {f.finding_status}）"})
+                continue
+            f.finding_status = "known" if f.matched_asset_id else "new"
+            succeeded.append(f.id)
+        elif action == "delete":
+            snapshot = {
+                "id": f.id, "asset_ip": f.asset_ip,
+                "mac_address": f.mac_address, "finding_status": f.finding_status,
+                "matched_asset_id": str(f.matched_asset_id) if f.matched_asset_id else None,
+                "scan_task_uuid": str(f.scan_task_uuid),
+            }
+            db.delete(f)
+            db.flush()
+            db.add(AuditLog(
+                user_id=current_user.id,
+                username=current_user.username,
+                action="scan_finding_delete",
+                resource_type="scan_finding",
+                resource_id=None,
+                resource_name=str(f.id),
+                old_values=snapshot,
+                new_values={"action": "bulk_delete", "batch_size": len(ids)},
+            ))
+            succeeded.append(f.id)
+
+    db.commit()
+    logger.info(
+        "user %s 批量 %s findings: %d succeeded, %d failed (requested=%d)",
+        current_user.username, action, len(succeeded), len(failed), len(ids),
+    )
+    return {
+        "code": 200,
+        "msg": "success",
+        "data": {"action": action, "succeeded": succeeded, "failed": failed, "requested": len(ids)},
+    }

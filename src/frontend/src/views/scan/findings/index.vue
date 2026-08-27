@@ -3,9 +3,9 @@
 
   - scanner 发现的设备/端口（与台账解耦，ADR-6）
   - 筛选：finding_status / exposure / IP
-  - 一键纳管（adopt）：填资产名/重要性/负责人/业务组 → 写 soc_assets
-  - 忽略（ignore）
-  - 已纳管/已忽略的行不再给操作入口（后端也会拒绝）
+  - 单条操作：纳管（adopt）/ 忽略（ignore）/ 解除忽略（unignore）/ 删除（delete）
+  - 批量操作：多选 → 忽略/解除忽略/删除
+  - adopted 状态不可删除/忽略/解除忽略（已在台账）
 -->
 <template>
   <div class="findings-page art-full-height">
@@ -55,10 +55,48 @@
         show-icon
         class="hint"
         title="扫描发现不直接进入资产台账"
-        description="确认归属后点「一键纳管」写入台账并记录审计；确认为噪音/非自有资产点「忽略」。"
+        description="确认归属后点「一键纳管」写入台账并记录审计；确认为噪音/非自有资产点「忽略」。已纳管发现不可删除/忽略/解禁。"
       />
 
-      <ElTable v-loading="loading" :data="findings" stripe style="width: 100%">
+      <!-- 批量操作栏（仅选中时显示） -->
+      <div v-if="selectedRows.length" class="bulk-bar">
+        <span class="bulk-info">已选 <b>{{ selectedRows.length }}</b> 条</span>
+        <ElButton
+          type="info"
+          size="small"
+          :disabled="!canBulkIgnore"
+          @click="bulkIgnore"
+        >
+          批量忽略 ({{ selectedRows.length }})
+        </ElButton>
+        <ElButton
+          type="warning"
+          size="small"
+          :disabled="!canBulkUnignore"
+          @click="bulkUnignore"
+        >
+          批量解禁 ({{ selectedRows.length }})
+        </ElButton>
+        <ElButton
+          type="danger"
+          size="small"
+          :disabled="!canBulkDelete"
+          @click="bulkDelete"
+        >
+          批量删除 ({{ selectedRows.length }})
+        </ElButton>
+        <ElButton link size="small" @click="clearSelection">清空选择</ElButton>
+      </div>
+
+      <ElTable
+        ref="tableRef"
+        v-loading="loading"
+        :data="findings"
+        stripe
+        style="width: 100%"
+        @selection-change="onSelectionChange"
+      >
+        <ElTableColumn type="selection" width="50" :selectable="row => row.finding_status !== 'adopted'" />
         <ElTableColumn prop="asset_ip" label="IP" min-width="130" />
         <ElTableColumn label="暴露面" width="90">
           <template #default="{ row }">
@@ -97,7 +135,7 @@
         <ElTableColumn
           v-if="hasAuth('scan_finding_manage')"
           label="操作"
-          width="160"
+          width="260"
           fixed="right"
         >
           <template #default="{ row }">
@@ -109,7 +147,25 @@
                 </template>
               </ElPopconfirm>
             </template>
-            <span v-else class="muted">—</span>
+            <ElPopconfirm
+              v-if="row.finding_status === 'ignored'"
+              title="解除忽略？恢复为待处置/已知。"
+              @confirm="unignore(row)"
+            >
+              <template #reference>
+                <ElButton link type="warning" size="small">解禁</ElButton>
+              </template>
+            </ElPopconfirm>
+            <ElPopconfirm
+              v-if="row.finding_status !== 'adopted'"
+              :title="`删除该发现？${row.asset_ip}`"
+              @confirm="remove(row)"
+            >
+              <template #reference>
+                <ElButton link type="danger" size="small">删除</ElButton>
+              </template>
+            </ElPopconfirm>
+            <span v-if="row.finding_status === 'adopted'" class="muted">已纳管</span>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -163,13 +219,16 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted } from 'vue'
-  import { ElMessage } from 'element-plus'
+  import { ref, computed, onMounted } from 'vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
   import { useAuth } from '@/hooks/core/useAuth'
   import {
     getScanFindings,
     adoptFinding,
     ignoreFinding,
+    unignoreFinding,
+    deleteFinding,
+    bulkActionFindings,
     type ScanFinding
   } from '@/api/scan'
 
@@ -185,6 +244,28 @@
   const filterStatus = ref('')
   const filterExposure = ref('')
   const filterIp = ref('')
+
+  // 批量选择
+  const tableRef = ref()
+  const selectedRows = ref<ScanFinding[]>([])
+  const onSelectionChange = (rows: ScanFinding[]) => {
+    selectedRows.value = rows
+  }
+  const clearSelection = () => {
+    tableRef.value?.clearSelection()
+    selectedRows.value = []
+  }
+
+  // 批量按钮可用性：忽略只能对 new/known 操作；解禁只能对 ignored；删除只能对非 adopted
+  const canBulkIgnore = computed(() =>
+    selectedRows.value.some(r => ['new', 'known'].includes(r.finding_status))
+  )
+  const canBulkUnignore = computed(() =>
+    selectedRows.value.some(r => r.finding_status === 'ignored')
+  )
+  const canBulkDelete = computed(() =>
+    selectedRows.value.some(r => r.finding_status !== 'adopted')
+  )
 
   const adoptVisible = ref(false)
   const adopting = ref(false)
@@ -222,6 +303,7 @@
       })
       findings.value = res.items || []
       total.value = res.total || 0
+      clearSelection()
     } catch (e: any) {
       ElMessage.error(e?.message || '加载发现失败')
     } finally {
@@ -275,6 +357,80 @@
     }
   }
 
+  const unignore = async (row: ScanFinding) => {
+    try {
+      await unignoreFinding(row.id)
+      ElMessage.success('已解除忽略')
+      loadFindings()
+    } catch (e: any) {
+      ElMessage.error(e?.message || '解禁失败')
+    }
+  }
+
+  const remove = async (row: ScanFinding) => {
+    try {
+      await deleteFinding(row.id)
+      ElMessage.success('已删除')
+      loadFindings()
+    } catch (e: any) {
+      ElMessage.error(e?.message || '删除失败')
+    }
+  }
+
+  // ===================== 批量操作 =====================
+  // 统一封装：弹确认框 → 调 API → 显示结果摘要 → reload
+  const runBulk = async (
+    action: 'ignore' | 'unignore' | 'delete',
+    confirmMsg: string,
+    successMsg: string,
+    errMsg: string,
+  ) => {
+    if (!selectedRows.value.length) return
+    try {
+      await ElMessageBox.confirm(confirmMsg, '确认批量操作', {
+        type: action === 'delete' ? 'warning' : 'info',
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+      })
+    } catch {
+      return  // 用户取消
+    }
+    const ids = selectedRows.value.map(r => r.id)
+    try {
+      const res = await bulkActionFindings(action, ids)
+      const { succeeded, failed } = res
+      const total = res.requested
+      if (failed.length === 0) {
+        ElMessage.success(`${successMsg}（${succeeded.length}/${total}）`)
+      } else {
+        // 部分失败：弹 detail 看具体原因
+        const preview = failed
+          .slice(0, 5)
+          .map(f => `#${f.id}: ${f.reason}`)
+          .join('\n')
+        const more = failed.length > 5 ? `\n… 还有 ${failed.length - 5} 条` : ''
+        ElMessageBox.alert(
+          `成功 ${succeeded.length}/${total}。失败明细：\n${preview}${more}`,
+          errMsg,
+          { type: 'warning' },
+        )
+      }
+      loadFindings()
+    } catch (e: any) {
+      ElMessage.error(e?.message || errMsg)
+    }
+  }
+
+  const bulkIgnore = () =>
+    runBulk('ignore', `忽略选中的 ${selectedRows.value.length} 条发现？`,
+            '已忽略', '批量忽略')
+  const bulkUnignore = () =>
+    runBulk('unignore', `解除选中的 ${selectedRows.value.length} 条忽略？`,
+            '已解除忽略', '批量解禁')
+  const bulkDelete = () =>
+    runBulk('delete', `删除选中的 ${selectedRows.value.length} 条发现（不可恢复）？`,
+            '已删除', '批量删除')
+
   onMounted(loadFindings)
 </script>
 
@@ -297,6 +453,25 @@
   }
   .hint {
     margin-bottom: 12px;
+  }
+  .bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: var(--el-color-primary-light-9);
+    border: 1px solid var(--el-color-primary-light-5);
+    border-radius: 4px;
+    .bulk-info {
+      font-size: 13px;
+      color: var(--el-text-color-regular);
+      margin-right: 4px;
+      b {
+        color: var(--el-color-primary);
+        font-weight: 600;
+      }
+    }
   }
   .mono {
     font-family: monospace;

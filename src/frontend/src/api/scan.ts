@@ -194,6 +194,38 @@ export const ignoreFinding = (
   return httpClient.post({ url: `${API_PREFIX}/findings/${findingId}/ignore` })
 }
 
+/** 解除忽略（单条） */
+export const unignoreFinding = (
+  findingId: number
+): Promise<{ finding_id: number; finding_status: string }> => {
+  return httpClient.post({ url: `${API_PREFIX}/findings/${findingId}/unignore` })
+}
+
+/** 删除发现（单条；adopted 状态拒绝） */
+export const deleteFinding = (
+  findingId: number
+): Promise<{ finding_id: number; deleted: boolean }> => {
+  return httpClient.del({ url: `${API_PREFIX}/findings/${findingId}` })
+}
+
+export type BulkFindingAction = 'ignore' | 'unignore' | 'delete'
+
+/** 批量处理发现（ignore / unignore / delete） */
+export const bulkActionFindings = (
+  action: BulkFindingAction,
+  ids: number[]
+): Promise<{
+  action: string
+  succeeded: number[]
+  failed: { id: number; reason: string }[]
+  requested: number
+}> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/findings/bulk-action`,
+    data: { action, ids },
+  })
+}
+
 // ===================== 扫描器管理（admin） =====================
 
 /** 扫描器列表 */
