@@ -245,6 +245,17 @@
           </ElCol>
         </ElRow>
 
+        <ElRow :gutter="20">
+          <ElCol :span="12">
+            <ElFormItem label="公网IP" prop="public_ip">
+              <ElInput
+                v-model="formData.public_ip"
+                placeholder="内网资产留空；用于互联网暴露面扫描"
+              />
+            </ElFormItem>
+          </ElCol>
+        </ElRow>
+
         <!-- 第二档：业务分类（决定告警/事件处置优先级） -->
         <ElRow :gutter="20">
           <ElCol :span="12">
@@ -466,6 +477,13 @@
           formatter: (row: any) => row.asset_ip || '--'
         },
         {
+          prop: 'public_ip',
+          label: '公网IP',
+          align: 'center',
+          minWidth: 130,
+          formatter: (row: any) => row.public_ip || '--'
+        },
+        {
           prop: 'mac_address',
           label: 'MAC地址',
           align: 'center',
@@ -635,6 +653,7 @@
     business_unit: '',
     asset_description: '',
     mac_address: '',
+    public_ip: '',
     purchase_date: '',
     warranty_end: ''
   })
@@ -753,6 +772,7 @@
       formData.business_unit = row.business_unit || ''
       formData.asset_description = row.asset_description || ''
       formData.mac_address = row.mac_address || ''
+      formData.public_ip = row.public_ip || ''
       formData.purchase_date = row.purchase_date || ''
       formData.warranty_end = row.warranty_end || ''
     } else {
@@ -768,6 +788,7 @@
       formData.business_unit = ''
       formData.asset_description = ''
       formData.mac_address = ''
+      formData.public_ip = ''
       formData.purchase_date = ''
       formData.warranty_end = ''
     }

@@ -26,6 +26,10 @@
 
       <ElDescriptions :column="3" border>
         <ElDescriptionsItem label="IP地址">{{ assetDetail.asset_ip || '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="公网IP">
+          <ElTag v-if="assetDetail.public_ip" type="danger" effect="plain" size="small">{{ assetDetail.public_ip }}</ElTag>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
         <ElDescriptionsItem label="资产名称">{{ assetDetail.name || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="资产类型">{{ assetTypeLabelMap[assetDetail.asset_type] || '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="网络段">{{ assetDetail.network_segment || '--' }}</ElDescriptionsItem>
@@ -357,7 +361,19 @@
             <span class="tab-header-title">端口信息
               <ElTag v-if="wazuhPortsData.length" size="small" type="success" effect="plain" class="ml-2">Wazuh 实时 {{ wazuhPortsData.length }} 条</ElTag>
             </span>
-            <ElButton type="primary" size="small" @click="showPortDialog">添加端口</ElButton>
+            <div class="tab-header-actions">
+              <ElTooltip
+                :content="onlineScannerCount ? '发起端口扫描任务，完成后自动同步到下方端口清单' : '无在线扫描器，无法发起扫描'"
+                placement="top"
+              >
+                <span>
+                  <ElButton type="success" size="small" :disabled="!onlineScannerCount || scanStarting" :loading="scanStarting" @click="handleScanPorts">
+                    扫描端口
+                  </ElButton>
+                </span>
+              </ElTooltip>
+              <ElButton size="small" @click="showPortDialog">手动添加</ElButton>
+            </div>
           </div>
           <ElTable :data="pagedPortsData" v-loading="portsLoading" border stripe style="width: 100%">
             <ElTableColumn prop="port" label="端口" width="70" align="center">
@@ -366,11 +382,23 @@
               </template>
             </ElTableColumn>
             <ElTableColumn prop="protocol" label="协议" width="75" align="center" />
-            <ElTableColumn label="来源" width="85" align="center">
+            <ElTableColumn label="来源" width="110" align="center">
               <template #default="{ row }">
-                <ElTag :type="row.source === 'wazuh' ? 'success' : 'info'" size="small" effect="plain">
-                  {{ row.source === 'wazuh' ? 'Wazuh' : '本地' }}
-                </ElTag>
+                <template v-if="row.source === 'wazuh'">
+                  <ElTag type="success" size="small" effect="plain">Wazuh</ElTag>
+                </template>
+                <template v-else>
+                  <ElTag
+                    v-for="s in rowSources(row)"
+                    :key="s"
+                    :type="s === 'scanner' ? 'warning' : 'info'"
+                    size="small"
+                    effect="plain"
+                    style="margin-right: 3px"
+                  >
+                    {{ sourceLabel(s) }}
+                  </ElTag>
+                </template>
               </template>
             </ElTableColumn>
             <ElTableColumn prop="state" label="状态" width="85" align="center">
@@ -413,9 +441,9 @@
                 <span v-else class="text-placeholder">--</span>
               </template>
             </ElTableColumn>
-            <ElTableColumn label="扫描时间" width="160" align="center">
+            <ElTableColumn label="最近扫描" width="160" align="center">
               <template #default="{ row }">
-                <span v-if="row.scan_time" :title="formatTime(row.scan_time)">{{ relativeTime.format(row.scan_time) }}</span>
+                <span v-if="row.last_seen || row.scan_time" :title="formatTime(row.last_seen || row.scan_time)">{{ relativeTime.format(row.last_seen || row.scan_time) }}</span>
                 <span v-else class="text-placeholder">实时</span>
               </template>
             </ElTableColumn>
@@ -723,11 +751,12 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue'
+  import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ArrowLeft, Refresh, Plus, Box, Warning, Document, InfoFilled } from '@element-plus/icons-vue'
   import { FormInstance, ElMessageBox, ElMessage } from 'element-plus'
   import { getAssetVulnerabilities, createIncidentFromVulnerability } from '@/api/vulnerabilities'
+  import { runScan, getScanTask, getScannerAgents } from '@/api/scan'
   import {
     getAssetDetail,
     getAssetPorts,
@@ -961,6 +990,12 @@
   }
 
   const isHighRisk = (port: number) => getHighRiskPort(port) !== null
+
+  // 多源标签（方案 A）：本地行展示 sources 数组（scanner/manual/wazuh…）
+  const rowSources = (row: any): string[] =>
+    Array.isArray(row.sources) && row.sources.length ? row.sources : ['manual']
+  const sourceLabel = (s: string) =>
+    ({ scanner: '扫描器', manual: '手工', wazuh: 'Wazuh' } as Record<string, string>)[s] || s
   const riskLabel = (port: number) => getHighRiskPort(port)?.reason ?? ''
   const riskTagType = (port: number): 'danger' | 'warning' | 'info' => {
     const info = getHighRiskPort(port)
@@ -984,6 +1019,91 @@
     } finally {
       portsLoading.value = false
     }
+  }
+
+  // ========== 扫描端口（一键发起 ports 任务，完成后自动同步端口清单） ==========
+  const scanStarting = ref(false)
+  const onlineScannerCount = ref(0)
+  let scanWatchTimer: ReturnType<typeof setInterval> | null = null
+
+  const loadOnlineScanners = async () => {
+    try {
+      const res: any = await getScannerAgents()
+      const items = res?.items || []
+      onlineScannerCount.value = items.filter((a: any) => a.enabled && a.status === 'online').length
+    } catch {
+      onlineScannerCount.value = 0
+    }
+  }
+
+  const scanTargets = computed(() => {
+    // 有公网 IP 的资产两个视角都扫（公网/内网暴露面差异本身就是信息）；否则扫 asset_ip
+    const ips = [assetDetail.value.asset_ip, assetDetail.value.public_ip].filter(Boolean)
+    return Array.from(new Set(ips)).join(',')
+  })
+
+  const handleScanPorts = async () => {
+    if (!scanTargets.value) {
+      ElMessage.warning('资产无可用 IP，无法扫描')
+      return
+    }
+    try {
+      await ElMessageBox.confirm(
+        `将对 ${scanTargets.value} 发起端口扫描（含服务指纹识别），任务完成后端口自动同步到下方清单。继续？`,
+        '扫描端口',
+        { confirmButtonText: '开始扫描', cancelButtonText: '取消', type: 'info' }
+      )
+    } catch {
+      return
+    }
+    scanStarting.value = true
+    try {
+      const res: any = await runScan({
+        mode: 'ports',
+        targets: scanTargets.value,
+        assign_mode: 'auto',
+        target_scanner_id: null,
+        nmap_args: null,
+        notify: true
+      })
+      const taskUuid = res?.task_uuid || res?.data?.task_uuid
+      ElMessage.success('扫描任务已创建，正在等待扫描器执行…')
+      if (taskUuid) watchScanTask(taskUuid)
+    } catch (e: any) {
+      ElMessage.error(e?.message || e?.msg || '创建扫描任务失败')
+    } finally {
+      scanStarting.value = false
+    }
+  }
+
+  const watchScanTask = (taskUuid: string) => {
+    if (scanWatchTimer) clearInterval(scanWatchTimer)
+    let rounds = 0
+    scanWatchTimer = setInterval(async () => {
+      rounds += 1
+      if (rounds > 240) {
+        // 40 分钟兜底（后台 4 批 × ~8 分钟场景仍可覆盖；到点放弃轮询，用户可手动刷新）
+        if (scanWatchTimer) clearInterval(scanWatchTimer)
+        scanWatchTimer = null
+        return
+      }
+      try {
+        const t: any = await getScanTask(taskUuid)
+        const task = t?.data || t
+        if (['success', 'failed', 'cancelled'].includes(task?.status)) {
+          if (scanWatchTimer) clearInterval(scanWatchTimer)
+          scanWatchTimer = null
+          if (task.status === 'success') {
+            ElMessage.success(`端口扫描完成：新增 ${task.items_created ?? 0} / 更新 ${task.items_updated ?? 0} 条端口`)
+          } else {
+            ElMessage.error(`端口扫描${task.status === 'failed' ? '失败' : '已取消'}：${task.error_message || '原因见扫描任务详情'}`)
+          }
+          loadPorts()
+        }
+      } catch {
+        /* 轮询失败静默重试 */
+      }
+    }, 10000)
   }
 
   const showPortDialog = () => {
@@ -1454,6 +1574,7 @@
         loadBaseline()
         loadApplications()
         loadWazuhPorts()
+        loadOnlineScanners()
       }
     }
   )
@@ -1596,6 +1717,10 @@
     loadPorts()
     loadTags()
     loadDataSources()
+  })
+
+  onBeforeUnmount(() => {
+    if (scanWatchTimer) clearInterval(scanWatchTimer)
   })
 </script>
 

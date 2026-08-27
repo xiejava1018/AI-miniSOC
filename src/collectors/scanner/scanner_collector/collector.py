@@ -24,6 +24,37 @@ except ImportError:  # 兼容直接把 scanner_collector 目录塞 PYTHONPATH �
 
 logger = logging.getLogger(__name__)
 
+# 端口扫描分片：每批最大主机数（CIDR 展开后按此切批，每批独立超时）
+PORTS_BATCH_HOSTS = 16
+
+
+def _expand_scan_hosts(targets: list[str], cap: int = 1024) -> list[str]:
+    """把目标列表展开成主机 IP 列表（CIDR 展开，纯 IP 原样保留）。
+
+    cap 硬上限：防误操作（如 /16）把扫描器卡死；超限截断并记日志。
+    """
+    import ipaddress
+    hosts: list[str] = []
+    for t in targets:
+        t = t.strip()
+        if not t:
+            continue
+        if "/" in t:
+            try:
+                net = ipaddress.ip_network(t, strict=False)
+            except ValueError:
+                continue
+            for ip in net.hosts():
+                hosts.append(str(ip))
+                if len(hosts) >= cap:
+                    logger.warning("_expand_scan_hosts 达 cap=%d，截断（目标 %s 等）", cap, t)
+                    return hosts
+        else:
+            hosts.append(t)
+            if len(hosts) >= cap:
+                return hosts
+    return hosts
+
 
 # ============================================================================
 # 目标解析（Phase 1：环境变量 / config.yaml）
@@ -125,6 +156,7 @@ class ScannerCollector(BaseCollector):
 
         all_items: list[dict] = []
         failed_targets: list[str] = []
+        failed_reasons: list[str] = []
 
         for target_ip in targets:
             try:
@@ -135,10 +167,12 @@ class ScannerCollector(BaseCollector):
                 )
             except (asyncio.TimeoutError, RuntimeError) as e:
                 # 兜底：单 IP 失败不影响后续 IP（CLAUDE.md 教训：一条失败不挂整批）
+                reason = str(e) or ("nmap 超时" if isinstance(e, asyncio.TimeoutError) else repr(e))
                 logger.error(
-                    "nmap scan failed for %s: %s", target_ip, e,
+                    "nmap scan failed for %s: %s", target_ip, reason,
                 )
                 failed_targets.append(target_ip)
+                failed_reasons.append(f"{target_ip}: {reason}")
                 continue
 
             # 解析结果 → PortSyncHandler items
@@ -168,6 +202,7 @@ class ScannerCollector(BaseCollector):
                 "scanned_targets": len(targets),
                 "failed_targets": failed_targets,
                 "items_count": len(all_items),
+                **({"error": "; ".join(failed_reasons)[:900]} if failed_reasons else {}),
             },
         )
 
@@ -226,8 +261,13 @@ class ScannerCollector(BaseCollector):
                 timeout=self._dynamic_timeout(targets, base=300, per_target=5),
             )
         except (asyncio.TimeoutError, RuntimeError) as e:
+            # TimeoutError 的 str() 是空串，必须给出可读原因（否则任务 failed 但详情无原因）
+            reason = str(e) or (
+                f"nmap 超时（超过 timeout 秒被 kill）；目标: {','.join(targets)[:200]}"
+                if isinstance(e, asyncio.TimeoutError) else repr(e)
+            )
             logger.error("nmap discovery failed for batch [%s]: %s",
-                         ",".join(targets)[:120], e)
+                         ",".join(targets)[:120], reason)
             failed = list(targets)
             return CollectResult(
                 source=self.source_name,
@@ -238,7 +278,7 @@ class ScannerCollector(BaseCollector):
                     "scanned_targets": len(targets),
                     "failed_targets": failed,
                     "items_count": 0,
-                    "error": str(e),
+                    "error": reason,
                 },
             )
 
@@ -289,10 +329,16 @@ class ScannerCollector(BaseCollector):
 
         P4-A：合并多目标为单次 nmap 调用，共享主机发现/路由缓存。
         P4-B-α：with_vulners=True 时附加 --script=vulners，每个 open port 带 cves 列表。
+
+        分片批扫（2026-08-27）：CIDR 按主机数展开后分批（PORTS_BATCH_HOSTS/批），
+        每批独立超时——避免「一锅烩 + 按 CIDR 条目数算超时」导致整批被 300s
+        砍掉全部成果（f6ca67bb 教训：/24 实际 256 台，旧逻辑只算 1 个条目）。
+        部分批次失败不影响已成功批次的数据。
         """
         import datetime
         all_items: list[dict] = []
         failed: list[str] = []
+        failed_reasons: list[str] = []
         if not targets:
             return CollectResult(
                 source=self.source_name,
@@ -300,61 +346,69 @@ class ScannerCollector(BaseCollector):
                 items=[],
                 metadata={"scan_task_uuid": task_uuid, "scanned_targets": 0, "failed_targets": [], "items_count": 0},
             )
-        try:
-            if with_vulners:
-                result = await self.nmap.scan_ports_with_vulners_multi(
-                    targets=targets,
-                    top_ports=1000,
-                    version_intensity=5,
-                    # vulners 多 ~30s/IP + NSE 库下载 + 网络抖动
-                    timeout=self._dynamic_timeout(targets, base=300, per_target=30),
-                )
-            else:
-                result = await self.nmap.scan_ports_multi(
-                    targets=targets,
-                    top_ports=1000,
-                    version_intensity=5,
-                    timeout=self._dynamic_timeout(targets, base=300, per_target=10),
-                )
-        except (asyncio.TimeoutError, RuntimeError) as e:
-            logger.error("nmap port scan failed for batch [%s]: %s",
-                         ",".join(targets)[:120], e)
-            failed = list(targets)
-            return CollectResult(
-                source=self.source_name,
-                data_type=DataType.PORT,
-                items=[],
-                metadata={
-                    "scan_task_uuid": task_uuid,
-                    "scanned_targets": len(targets),
-                    "failed_targets": failed,
-                    "items_count": 0,
-                    "error": str(e),
-                },
-            )
 
-        for host in result.hosts:
-            for port in host.ports:
-                if port.state != "open":
-                    continue
-                all_items.append({
-                    "scan_task_uuid": task_uuid,
-                    "asset_ip": host.ip,
-                    "port": port.port,
-                    "protocol": port.protocol,
-                    "state": port.state,
-                    "service": port.service or "",
-                    "version": port.version or "",
-                    "service_banner": port.banner or "",
-                    "cves": list(port.cves or []),   # P4-B-α：vulners 输出的 CVE 列表
-                    "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                })
-
-        # targets 中纯 IP 未出现在结果 → 主机不可达/超时
-        failed = [
-            t for t in targets
-            if "/" not in t and not any(h.ip == t for h in result.hosts)
+        # 展开为目标主机列表（CIDR 展开；硬上限保护防 /16 级误操作）
+        host_targets = _expand_scan_hosts(targets, cap=1024)
+        # 分片：每批最多 PORTS_BATCH_HOSTS 台，批内共享 nmap 调用（主机发现/路由缓存）
+        chunks = [
+            host_targets[i:i + PORTS_BATCH_HOSTS]
+            for i in range(0, len(host_targets), PORTS_BATCH_HOSTS)
         ]
+        logger.info("port scan: %d hosts -> %d batches (batch=%d)",
+                    len(host_targets), len(chunks), PORTS_BATCH_HOSTS)
+
+        for chunk in chunks:
+            try:
+                if with_vulners:
+                    result = await self.nmap.scan_ports_with_vulners_multi(
+                        targets=chunk,
+                        top_ports=1000,
+                        version_intensity=5,
+                        # vulners 多 ~30s/IP + NSE 库下载 + 网络抖动；按批内主机数算
+                        timeout=self._dynamic_timeout(chunk, base=300, per_target=30),
+                    )
+                else:
+                    result = await self.nmap.scan_ports_multi(
+                        targets=chunk,
+                        top_ports=1000,
+                        version_intensity=5,
+                        timeout=self._dynamic_timeout(chunk, base=300, per_target=10),
+                    )
+            except (asyncio.TimeoutError, RuntimeError) as e:
+                # TimeoutError 的 str() 是空串，必须给出可读原因；单批失败不挂整体
+                reason = str(e) or (
+                    f"nmap 超时（超过 {self._dynamic_timeout(chunk, base=300, per_target=30)}s 被 kill）；"
+                    f"批内目标: {','.join(chunk)[:150]}"
+                    if isinstance(e, asyncio.TimeoutError) else repr(e)
+                )
+                logger.error("nmap port scan failed for batch [%s]: %s",
+                             ",".join(chunk)[:120], reason)
+                failed.extend(chunk)
+                failed_reasons.append(reason)
+                continue
+
+            for host in result.hosts:
+                for port in host.ports:
+                    if port.state != "open":
+                        continue
+                    all_items.append({
+                        "scan_task_uuid": task_uuid,
+                        "asset_ip": host.ip,
+                        "port": port.port,
+                        "protocol": port.protocol,
+                        "state": port.state,
+                        "service": port.service or "",
+                        "version": port.version or "",
+                        "service_banner": port.banner or "",
+                        "cves": list(port.cves or []),   # P4-B-α：vulners 输出的 CVE 列表
+                        "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    })
+
+            # 批内纯 IP 未出现在结果 → 主机不可达/无开放端口
+            failed.extend(
+                t for t in chunk
+                if not any(h.ip == t for h in result.hosts)
+            )
 
         return CollectResult(
             source=self.source_name,
@@ -362,15 +416,20 @@ class ScannerCollector(BaseCollector):
             items=all_items,
             metadata={
                 "scan_task_uuid": task_uuid,
-                "scanned_targets": len(targets),
+                "scanned_targets": len(host_targets),
                 "failed_targets": failed,
                 "items_count": len(all_items),
+                **({"error": "; ".join(failed_reasons)[:900]} if failed_reasons else {}),
             },
         )
 
     @staticmethod
     def _dynamic_timeout(targets: list[str], base: int = 300, per_target: int = 5) -> int:
-        """动态计算 nmap 超时 = max(base, N * per_target)，避免大批量被截断。"""
+        """动态计算 nmap 超时 = max(base, N * per_target)，避免大批量被截断。
+
+        注意：targets 应传**展开后的主机列表**，不要传含 CIDR 的原始列表
+        （CIDR 只算 1 个条目会严重低估，见 f6ca67bb 教训）。
+        """
         n = len(targets)
         return max(base, n * per_target)
 

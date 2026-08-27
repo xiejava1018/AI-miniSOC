@@ -191,6 +191,13 @@ async def run_loop(
 
                 # 3.4 回写结果
                 try:
+                    # 目标不可达不是扫描错误，但 items_failed>0 会标 failed——必须带上原因，
+                    # 否则用户看到「失败」却不知道为什么（ac4594ac 教训）
+                    fallback_reason = None
+                    if counts.get("items_failed") and not counts.get("error_message"):
+                        fallback_reason = "目标不可达或无开放端口: " + ",".join(
+                            counts.get("failed_targets") or []
+                        )[:300]
                     await client.report_status(
                         task_uuid=task_uuid,
                         status="success" if not counts.get("items_failed") else "failed",
@@ -200,6 +207,7 @@ async def run_loop(
                         items_updated=counts.get("items_updated", 0),
                         items_failed=counts.get("items_failed", 0),
                         duration_ms=counts.get("duration_ms", 0),
+                        error_message=counts.get("error_message") or fallback_reason,
                     )
                 except Exception as e:
                     logger.warning("report_status 失败 task %s: %s", task_uuid[:8], e)
@@ -238,6 +246,9 @@ async def _run_nmap_for_task(collector: ScannerCollector, task: dict) -> tuple[l
         "items_updated": 0,
         "items_failed": len(result.metadata.get("failed_targets", []) or []),
         "duration_ms": duration_ms,
+        "error_message": (result.metadata.get("error") or None),
+        # 供 report 时拼「目标不可达」美因（不是错误，但要让用户知道为什么 failed/0 端口）
+        "failed_targets": list(result.metadata.get("failed_targets", []) or []),
     }
     return items, counts, data_type
 

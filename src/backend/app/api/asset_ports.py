@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
 from app.models import AssetPort
+from app.models.asset import Asset
 from app.schemas.asset_port import AssetPortCreate, AssetPortUpdate, AssetPortResponse, AssetPortListResponse
 import uuid
 
@@ -29,7 +30,16 @@ async def list_asset_ports(
     except ValueError:
         raise HTTPException(status_code=400, detail="无效的资产ID格式")
 
-    query = db.query(AssetPort).filter(AssetPort.asset_id == asset_id_uuid)
+    from sqlalchemy import func
+    query = db.query(AssetPort).filter(
+        (AssetPort.asset_id == asset_id_uuid)
+        # 公网扫描落库的端口历史行可能 asset_id 为 NULL（public_ip 反查修复前落库），
+        # 但 asset_ip == 资产公网 IP，也属于这台资产。
+        # 注意：INET 的 text 表示带 /32 后缀，必须用 host() 取裸 IP 再比
+        | (func.host(AssetPort.asset_ip) == db.query(Asset.public_ip).filter(
+              Asset.id == asset_id_uuid
+          ).scalar_subquery())
+    )
 
     # 筛选条件
     if protocol:
@@ -59,6 +69,8 @@ async def list_asset_ports(
             vulnerability=port.vulnerability,
             scan_time=port.scan_time,
             last_seen=port.last_seen,
+            sources=list(port.sources or []),
+            last_seen_by_source=dict(port.last_seen_by_source or {}),
             created_at=port.created_at,
         ))
 
@@ -107,12 +119,19 @@ async def create_asset_port(
     ).first()
 
     if existing_port:
-        raise HTTPException(status_code=400, detail="该端口已存在")
+        # 方案 A：已存在则融合（source=manual），不再拒绠400
+        from app.services.port_fusion import apply_fusion
+        apply_fusion(existing_port, "manual", port_data.model_dump())
+        db.commit()
+        db.refresh(existing_port)
+        return AssetPortResponse.model_validate(existing_port)
 
-    # 创建端口
+    # 创建端口（manual 来源）
+    from app.services.port_fusion import new_port_fields
     port = AssetPort(
         asset_id=asset_id_uuid,
-        **port_data.model_dump()
+        **port_data.model_dump(),
+        **new_port_fields("manual", {}),
     )
     db.add(port)
     db.commit()

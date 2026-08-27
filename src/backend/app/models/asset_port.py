@@ -32,6 +32,11 @@ class AssetPort(Base):
     # 与 vulnerability (Text 单条描述) 并存；后续 unified 处理待 P5
     last_seen = Column(DateTime(timezone=True), nullable=True, server_default=func.now())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # 多源融合（方案 A：一端口一行，字段级融合）：
+    #   sources: 观测过此端口的来源清单，如 ["scanner","manual"]
+    #   last_seen_by_source: 每来源各自最后观测时间，如 {"scanner":"2026-08-27T..."}
+    sources = Column(JSONB, server_default=text("'[]'::jsonb"))
+    last_seen_by_source = Column(JSONB, server_default=text("'{}'::jsonb"))
 
     def __repr__(self):
         return f"<AssetPort(asset_ip={self.asset_ip}, port={self.port}, protocol={self.protocol}, state={self.state})>"

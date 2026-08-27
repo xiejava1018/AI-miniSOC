@@ -190,14 +190,14 @@ class PortSyncHandler(BaseSyncHandler):
         返回 {"created":1} 或 {"updated":1}。
 
         重要约束（避免污染既有数据）：
-          - asset_id 只在 IP 命中 soc_assets 时挂上；公网 IP 允许 asset_id=NULL
-          - vulnerability 列本期由 F-S2 留空，Phase 4 NSE 填充
-          - last_seen 每次都刷新（不论 created/updated）
+          - asset_id 只在 IP 命中 soc_assets（asset_ip 或 public_ip）时挂上；
+            公网扫描场景：scanner 推的是公网 IP，资产 asset_ip 是内网 IP，
+            必须经 public_ip 反查才能挂上台账资产
+          - 字段级多源融合（方案 A）见 app/services/port_fusion.py
           - 不动 asset_id（资产换 IP 时由人工编辑，避免越权修改）
-
-        F-S3 增强：把刚 upsert 的行信息写到 self._last_affected_ports，供 handle()
-        末尾回写 ScannerTask.affected_ports。Base.handle() 不感知（保持契约）。
         """
+        from app.services.port_fusion import apply_fusion, new_port_fields
+
         existing = db.query(AssetPort).filter(
             AssetPort.asset_ip == item["asset_ip"],
             AssetPort.port == item["port"],
@@ -205,18 +205,9 @@ class PortSyncHandler(BaseSyncHandler):
         ).one_or_none()
 
         if existing is not None:
-            # 更新：服务指纹 + 最后扫描时间（field-by-field，避免空值覆盖真值）
-            existing.service = item.get("service") or existing.service
-            existing.version = item.get("version") or existing.version
-            existing.service_banner = item.get("service_banner") or existing.service_banner
-            existing.last_seen = item.get("scan_time") or datetime.now(timezone.utc)
-            existing.state = item.get("state", existing.state or "open")
-            # P4-B-α：合并新扫到的 CVE 列表（去重 + 保留历史 CVE）
-            new_cves = item.get("cves") or []
-            if new_cves:
-                existing_vulns = list(existing.vulnerabilities or [])
-                merged = sorted(set(existing_vulns) | set(new_cves))
-                existing.vulnerabilities = merged
+            # 方案 A：字段级多源融合（service/version/banner 非空不覆盖、
+            # state 取更悲观、CVE 并集、sources/last_seen_by_source 记录）
+            apply_fusion(existing, "scanner", item)
             self._last_affected_ports.append({
                 "id": str(existing.id),
                 "ip": str(existing.asset_ip),
@@ -228,8 +219,10 @@ class PortSyncHandler(BaseSyncHandler):
             })
             return {"updated": 1}
 
-        # 新建：反查 asset_id（IP 命中则挂上，纯公网 IP 允许 NULL）
-        asset = db.query(Asset).filter(Asset.asset_ip == item["asset_ip"]).first()
+        # 新建：反查 asset_id（asset_ip 或 public_ip 命中则挂上，纯公网 IP 允许 NULL）
+        asset = db.query(Asset).filter(
+            (Asset.asset_ip == item["asset_ip"]) | (Asset.public_ip == item["asset_ip"])
+        ).first()
         port = AssetPort(
             asset_id=asset.id if asset else None,
             asset_ip=item["asset_ip"],
@@ -240,8 +233,8 @@ class PortSyncHandler(BaseSyncHandler):
             version=item.get("version"),
             service_banner=item.get("service_banner"),
             vulnerabilities=list(item.get("cves") or []),
-            # scan_time 字段为非空；缺则用 now()
-            last_seen=item.get("scan_time") or datetime.now(timezone.utc),
+            # 方案 A：多源融合字段（scan_time 缺则用 now()）
+            **new_port_fields("scanner", item),
         )
         db.add(port)
         db.flush()  # 拿 id 写 affected 列表

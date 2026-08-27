@@ -49,7 +49,9 @@ def _resolve_targets(mode: str) -> list[dict]:
     Phase 2 简化：
       - internal 模式：取 soc_scan_targets 中 scope='internal' 且 enabled=true
       - public   模式：取 soc_scan_targets 中 scope='public'   且 enabled=true
-        + soc_assets 中 exposure_level='public' 的所有 IP（自动汇总）
+        + soc_assets 中 public_ip 非空的所有公网 IP（自动汇总）
+        注意：不使用 asset_ip——云上资产的 asset_ip 是内网 IP（如 ECS 172.18.x），
+        拿去公网扫描会扫不到真实暴露面
     """
     from app.models.scanner_models import ScanTarget
     from app.models.asset import Asset
@@ -69,19 +71,19 @@ def _resolve_targets(mode: str) -> list[dict]:
                     "source": "soc_scan_targets",
                 })
             if mode == "public":
-                # 自动汇总 soc_assets 中 exposure_level=public 的所有 IP
+                # 自动汇总台账中登记了公网 IP 的资产（public_ip 字段）。
+                # 不再用 exposure_level+asset_ip：那个组合会把内网 IP 当公网目标
                 public_assets = (
                     session.query(Asset)
-                    .filter(Asset.exposure_level == "public")
+                    .filter(Asset.public_ip.isnot(None), Asset.public_ip != "")
                     .all()
                 )
                 for a in public_assets:
-                    if a.asset_ip:
-                        items.append({
-                            "type": "ip",
-                            "value": a.asset_ip,
-                            "source": f"soc_assets:{a.id}",
-                        })
+                    items.append({
+                        "type": "ip",
+                        "value": a.public_ip.strip(),
+                        "source": f"soc_assets:{a.id}",
+                    })
         except Exception as e:
             logger.warning("resolve_targets(%s) failed: %s", mode, e)
     return items

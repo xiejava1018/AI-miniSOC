@@ -197,6 +197,50 @@ async def run_scan(
         min_prefix_len=16,          # CIDR 前缀 16+ 才允许（/24=256，/16=65536）
     )
 
+    # ports 模式防呆：端口扫描适合点目标；大 CIDR 应走 internal 主机发现。
+    # 64 台上限 ≈ 分片后 4 批 × ~780s，可控；超了既耗时又容易撞看门狗 6h 超时
+    if mode == "ports":
+        import ipaddress
+        host_count = 0
+        for x in target_summary:
+            if x["type"] == "cidr":
+                try:
+                    host_count += max(1, ipaddress.ip_network(x["value"], strict=False).num_addresses - 2)
+                except ValueError:
+                    host_count += 256
+            else:
+                host_count += 1
+        if host_count > 64:
+            raise HTTPException(
+                status_code=422,
+                detail=f"ports 模式目标共 {host_count} 台，超过上限 64；"
+                       f"大网段请用 internal 模式做主机发现，再对重点资产点目标扫端口",
+            )
+
+    # 公网模式硬校验：单 IP 目标必须是台账登记的公网 IP，或 soc_scan_targets 显式配置的 public 目标。
+    # 不允许随意输入任意互联网 IP（防止拿平台去扫别人的资产）
+    if mode == "public":
+        from app.models.asset import Asset
+        from app.models.scanner_models import ScanTarget
+        allowed = {a.public_ip.strip() for a in db.query(Asset.public_ip).filter(
+            Asset.public_ip.isnot(None), Asset.public_ip != ""
+        ).all() if a.public_ip}
+        allowed |= {
+            t.value.strip() for t in db.query(ScanTarget).filter(
+                ScanTarget.scope == "public", ScanTarget.enabled == True  # noqa: E712
+            ).all()
+        }
+        bad = [
+            x["value"] for x in target_summary
+            if x["type"] == "ip" and x["value"] not in allowed
+        ]
+        if bad:
+            raise HTTPException(
+                status_code=422,
+                detail=f"公网目标 {bad} 不在台账登记的公网 IP 清单内；"
+                       f"请先在资产管理中补录公网IP，或在扫描目标中显式配置",
+            )
+
     assign_mode = body.get("assign_mode", "auto")
     if assign_mode not in ("auto", "pinned"):
         raise HTTPException(status_code=400, detail=f"invalid assign_mode: {assign_mode}")

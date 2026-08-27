@@ -86,6 +86,7 @@ async def list_assets(
             id=str(asset.id),
             name=asset.name,
             asset_ip=asset.asset_ip,
+            public_ip=asset.public_ip,
             asset_type=asset.asset_type,
             criticality=asset.criticality,
             owner=asset.owner,

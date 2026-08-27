@@ -24,12 +24,18 @@ class Asset(Base):
         # EOL 到期预警扫描用，只索引已知 EOL 的资产
         Index('idx_soc_assets_expected_eol', 'expected_eol',
               postgresql_where='expected_eol IS NOT NULL'),
+        # public_ip 防一 IP 挂多资产（NULL 不受约束）
+        Index('uq_soc_assets_public_ip', 'public_ip', unique=True,
+              postgresql_where='public_ip IS NOT NULL'),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     network_segment = Column(String(50), nullable=False, default="default")
     network_zone = Column(String(50), default="other")
     asset_ip = Column(Text, nullable=False)
+    # 互联网暴露面扫描用：公网 IP（云上资产 asset_ip 是内网 IP，如 ECS；内网资产保持 NULL）。
+    # central_scan_scheduler public 模式自动汇总此字段，而非 asset_ip
+    public_ip = Column(Text)
     asset_description = Column(Text)
     asset_status = Column(String)
     status_updated_at = Column(DateTime(timezone=True))

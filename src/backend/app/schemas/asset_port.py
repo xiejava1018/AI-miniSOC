@@ -40,6 +40,9 @@ class AssetPortResponse(AssetPortBase):
     asset_id: Optional[str] = None
     scan_time: datetime
     last_seen: Optional[datetime] = None
+    # 多源融合（方案 A）：观测来源清单
+    sources: Optional[list] = None
+    last_seen_by_source: Optional[dict] = None
     created_at: datetime
 
     model_config = {

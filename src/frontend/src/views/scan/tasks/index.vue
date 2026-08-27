@@ -266,20 +266,39 @@
           <ElRadioGroup v-model="runForm.mode" class="mode-group">
             <div class="mode-option" :class="{ active: runForm.mode === 'public' }">
               <ElRadio value="public">公网暴露面</ElRadio>
-              <div class="mode-desc">台账 <code>exposure_level=public</code> 资产 → nmap <code>-sV --script=vulners</code> → 落库 <code>soc_asset_ports.vulnerabilities</code>（含 CVE 映射）</div>
             </div>
             <div class="mode-option" :class="{ active: runForm.mode === 'internal' }">
               <ElRadio value="internal">内网发现</ElRadio>
-              <div class="mode-desc"><b>必须填 CIDR</b>（如 <code>192.168.0.0/24</code>）→ nmap <code>-sn</code> 主机发现 → 落库 <code>soc_scan_findings</code>（需一键纳管才入台账）</div>
             </div>
             <div class="mode-option" :class="{ active: runForm.mode === 'ports' }">
               <ElRadio value="ports">端口扫描</ElRadio>
-              <div class="mode-desc">对指定 IP 扫端口 + <b>CVE 漏洞映射</b>（vulners 脚本）→ nmap <code>-sV --script=vulners</code> → 落库 <code>soc_asset_ports.vulnerabilities</code>（JSONB 存 CVE 列表）</div>
             </div>
           </ElRadioGroup>
         </ElFormItem>
         <ElFormItem label="目标">
+          <!-- 公网模式：只能从台账登记了公网 IP 的资产里选，不允许随意输入 -->
+          <template v-if="runForm.mode === 'public'">
+            <ElSelect
+              v-model="runForm.publicTargets"
+              multiple
+              filterable
+              placeholder="从台账公网资产中选择（未登记公网IP的资产不会出现）"
+              style="width: 100%"
+              :loading="publicAssetsLoading"
+            >
+              <ElOption
+                v-for="a in publicAssetOptions"
+                :key="a.value"
+                :label="a.label"
+                :value="a.value"
+              />
+            </ElSelect>
+            <div class="form-hint">
+              可选范围＝资产台账中登记了「公网IP」的资产；若要新增目标，请先在资产管理里补录公网 IP。
+            </div>
+          </template>
           <ElInput
+            v-else
             v-model="runForm.targets"
             type="textarea"
             :rows="2"
@@ -326,9 +345,10 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted } from 'vue'
+  import { ref, computed, watch, onMounted } from 'vue'
   import { ElMessage } from 'element-plus'
   import { useAuth } from '@/hooks/core/useAuth'
+  import { getAssetList } from '@/api/asset'
   import {
     getScanTasks,
     runScan,
@@ -356,6 +376,7 @@
   const runForm = ref({
     mode: 'public' as ScanMode,
     targets: '',
+    publicTargets: [] as string[],
     assign_mode: 'auto',
     target_scanner_id: null as string | null,
     nmap_args: '',
@@ -411,6 +432,34 @@
   })
 
   const onlineAgents = ref<any[]>([])
+
+  // 公网模式可选目标：台账中登记了公网 IP 的资产
+  const publicAssetOptions = ref<{ label: string; value: string }[]>([])
+  const publicAssetsLoading = ref(false)
+  const loadPublicAssets = async () => {
+    if (publicAssetOptions.value.length || publicAssetsLoading.value) return
+    publicAssetsLoading.value = true
+    try {
+      const res: any = await getAssetList({ page: 1, page_size: 500 })
+      const rows = res?.data?.records || res?.data?.list || res?.data?.items || []
+      publicAssetOptions.value = rows
+        .filter((a: any) => a.public_ip)
+        .map((a: any) => ({
+          label: `${a.public_ip}（${a.name || a.asset_ip}）`,
+          value: a.public_ip
+        }))
+    } catch {
+      publicAssetOptions.value = []
+    } finally {
+      publicAssetsLoading.value = false
+    }
+  }
+  watch(
+    () => runForm.value.mode,
+    (m) => {
+      if (m === 'public') loadPublicAssets()
+    }
+  )
 
   const STATUS_OPTIONS = [
     { value: 'pending', label: '待认领' },
@@ -489,14 +538,24 @@
       onlineAgents.value = []
     }
     runVisible.value = true
+    if (runForm.value.mode === 'public') loadPublicAssets()
   }
 
   const submitRun = async () => {
+    // 公网模式：目标只能来自台账公网资产多选
+    const targets =
+      runForm.value.mode === 'public'
+        ? runForm.value.publicTargets.join(',')
+        : runForm.value.targets.trim()
+    if (runForm.value.mode === 'public' && !targets) {
+      ElMessage.warning('请至少选择一个台账公网资产')
+      return
+    }
     running.value = true
     try {
       await runScan({
         mode: runForm.value.mode,
-        targets: runForm.value.targets.trim() || undefined,
+        targets: targets || undefined,
         assign_mode: runForm.value.assign_mode as any,
         target_scanner_id:
           runForm.value.assign_mode === 'pinned' ? runForm.value.target_scanner_id : null,
@@ -651,8 +710,8 @@
   /* P4-D: 扫描类型卡片化 */
   .mode-group {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    flex-direction: row;
+    gap: 8px;
     width: 100%;
   }
   .mode-group :deep(.el-radio) {
@@ -662,11 +721,13 @@
     margin-right: 6px;
   }
   .mode-option {
+    flex: 1;
     border: 1px solid var(--el-border-color);
     border-radius: 4px;
     padding: 6px 10px;
     background: var(--el-fill-color-blank);
     transition: border-color 0.15s;
+    text-align: center;
   }
   .mode-option.active {
     border-color: var(--el-color-primary);
@@ -675,23 +736,5 @@
   .mode-option :deep(.el-radio) {
     margin-right: 6px;
     height: auto;
-  }
-  .mode-desc {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    line-height: 1.5;
-    margin-top: 2px;
-    margin-left: 22px;
-  }
-  .mode-desc code {
-    background: var(--el-fill-color-light);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 11px;
-    color: var(--el-color-primary);
-    margin: 0 2px;
-  }
-  .mode-desc b {
-    color: var(--el-color-danger);
   }
 </style>

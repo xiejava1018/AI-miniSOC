@@ -14,6 +14,8 @@ class AssetBase(BaseModel):
     network_segment: str = "default"
     network_zone: Optional[str] = "other"
     asset_ip: str
+    # 公网 IP（可空）：互联网暴露面扫描目标；云上资产 asset_ip 是内网 IP
+    public_ip: Optional[str] = None
     asset_type: Optional[str] = "other"
     criticality: Optional[str] = "medium"  # 决策1：四档 critical/high/medium/low（存量 normal 已回填 medium）
     owner: Optional[str] = None
@@ -53,6 +55,7 @@ class AssetUpdate(BaseModel):
     # P3/F3.2：生命周期（EOL 走专用覆盖接口 PUT /assets/{id}/eol，不走通用编辑）
     purchase_date: Optional[date] = None
     warranty_end: Optional[date] = None
+    public_ip: Optional[str] = None
 
 
 class AssetResponse(AssetBase):
