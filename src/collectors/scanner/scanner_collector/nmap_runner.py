@@ -166,9 +166,26 @@ class NmapRunner:
         hosts = parse_nmap_xml(xml)
         return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
 
+    async def scan_discovery(self, target: str) -> NmapResult:
+        """内网主机发现：nmap -sn（ping/ARP 发现，不扫端口）。
 
-# ============================================================================
-# XML 解析（容错版 — nmap XML 字段缺失时不全 crash）
+        target 可以是单 IP 或 CIDR（如 192.168.0.0/24）。
+        返回的 NmapHost 只带 status/ip/mac/os_guess，ports 为空。
+        final.md §6.1.2 _collect_discovery()。
+        """
+        args = [
+            "-sn",                          # ping 发现，不扫端口
+            "--max-rate", str(self.max_rate),
+            "-n",
+            target,
+        ]
+        import time
+        t0 = time.monotonic()
+        xml = await self.run(args)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+
+        hosts = parse_nmap_xml(xml)
+        return NmapResult(hosts=hosts, raw_xml=xml, duration_ms=duration_ms)
 # ============================================================================
 def parse_nmap_xml(xml_str: str) -> list[NmapHost]:
     """nmap XML → List[NmapHost]。

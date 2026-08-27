@@ -171,6 +171,115 @@ class ScannerCollector(BaseCollector):
             },
         )
 
+    async def collect_for_task(self, task: dict) -> CollectResult:
+        """按控制面任务跑扫描（拉模型，Phase 2）。
+
+        - mode=internal：nmap -sn 主机发现 → DataType.DISCOVERY items
+        - mode=public/ports：nmap -sV 端口扫描 → DataType.PORT items
+        目标从 task.target_summary 取（[{type,value}]），不再依赖环境变量。
+        nmap_args 由任务显式下发时追加（信任控制面，不接受扫描器侧任意拼接）。
+        """
+        import datetime
+
+        mode = (task.get("mode") or "public").lower()
+        summary = task.get("target_summary") or []
+        targets = [t["value"] for t in summary if isinstance(t, dict) and t.get("value")]
+        task_uuid = task.get("task_uuid")
+        self._scan_task_uuid = task_uuid
+
+        if not targets:
+            logger.warning("task %s 无目标，跳过", str(task_uuid)[:8])
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.PORT,
+                items=[],
+                metadata={"scan_task_uuid": task_uuid, "reason": "no targets"},
+            )
+
+        if mode == "internal":
+            return await self._collect_discovery(targets, task_uuid)
+        return await self._collect_ports_for_targets(targets, task_uuid)
+
+    async def _collect_discovery(self, targets: list[str], task_uuid) -> CollectResult:
+        """内网主机发现：每个 CIDR/IP 跑 nmap -sn，存活主机产 DISCOVERY items。"""
+        import datetime
+        all_items: list[dict] = []
+        failed: list[str] = []
+        for target in targets:
+            try:
+                result = await self.nmap.scan_discovery(target)
+            except (asyncio.TimeoutError, RuntimeError) as e:
+                logger.error("nmap discovery failed for %s: %s", target, e)
+                failed.append(target)
+                continue
+            for host in result.hosts:
+                if host.status != "up" or not host.ip:
+                    continue
+                all_items.append({
+                    "scan_task_uuid": task_uuid,
+                    "asset_ip": host.ip,
+                    "mac_address": host.mac_address,
+                    "os_guess": host.os_guess,
+                    "exposure": "internal",
+                    "discovery_source": "scanner",
+                    "open_ports": [],
+                    "raw_data": {
+                        "nmap_status": host.status,
+                        "target_cidr": target,
+                    },
+                    "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                })
+        return CollectResult(
+            source=self.source_name,
+            data_type=DataType.DISCOVERY,
+            items=all_items,
+            metadata={
+                "scan_task_uuid": task_uuid,
+                "scanned_targets": len(targets),
+                "failed_targets": failed,
+                "items_count": len(all_items),
+            },
+        )
+
+    async def _collect_ports_for_targets(self, targets: list[str], task_uuid) -> CollectResult:
+        """端口扫描：按任务目标跑（与 _collect_ports 同逻辑，但目标来自任务）。"""
+        import datetime
+        all_items: list[dict] = []
+        failed: list[str] = []
+        for target_ip in targets:
+            try:
+                result = await self.nmap.scan_ports(target_ip=target_ip, top_ports=1000, version_intensity=5)
+            except (asyncio.TimeoutError, RuntimeError) as e:
+                logger.error("nmap scan failed for %s: %s", target_ip, e)
+                failed.append(target_ip)
+                continue
+            for host in result.hosts:
+                for port in host.ports:
+                    if port.state != "open":
+                        continue
+                    all_items.append({
+                        "scan_task_uuid": task_uuid,
+                        "asset_ip": host.ip,
+                        "port": port.port,
+                        "protocol": port.protocol,
+                        "state": port.state,
+                        "service": port.service or "",
+                        "version": port.version or "",
+                        "service_banner": port.banner or "",
+                        "scan_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    })
+        return CollectResult(
+            source=self.source_name,
+            data_type=DataType.PORT,
+            items=all_items,
+            metadata={
+                "scan_task_uuid": task_uuid,
+                "scanned_targets": len(targets),
+                "failed_targets": failed,
+                "items_count": len(all_items),
+            },
+        )
+
     async def test_connection(self) -> bool:
         """检查 nmap 是否可用 + 目标是否配置。"""
         nmap_ok = await self.nmap.is_available()

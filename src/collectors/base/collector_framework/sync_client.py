@@ -61,9 +61,23 @@ class MiniSOCClient:
                 resp.raise_for_status()
 
                 # 解包中间件包装的响应: {code, msg, data}
+                # 注意：业务失败时 HTTP 仍是 200，真实状态在 body.code（CLAUDE.md 注意 #11）。
+                # 不能只看 HTTP 状态——否则业务失败会被记成“同步成功”（假绿）。
                 body = resp.json()
-                if body.get("code") == 200 and "data" in body:
+                if body.get("code") == 200 and isinstance(body.get("data"), dict):
                     result = body["data"]
+                elif body.get("code") and body.get("code") != 200:
+                    # 业务错误（envelope 包成 HTTP 200）→ 当作失败，走重试
+                    msg = body.get("msg") or body.get("detail") or str(body)[:200]
+                    logger.warning(
+                        f"同步被控制面拒绝 (attempt {attempt}/{self.max_retries}): "
+                        f"code={body.get('code')}, msg={msg[:200]}"
+                    )
+                    last_error = RuntimeError(f"业务失败 code={body.get('code')}: {msg}")
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    raise last_error
                 else:
                     result = body
 

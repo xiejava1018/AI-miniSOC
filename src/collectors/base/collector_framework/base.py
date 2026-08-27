@@ -14,6 +14,7 @@ class DataType(Enum):
     VULNERABILITY = "vulnerability"
     BASELINE = "baseline"
     PORT = "port"
+    DISCOVERY = "discovery"
 
 
 @dataclass

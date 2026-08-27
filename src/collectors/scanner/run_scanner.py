@@ -99,7 +99,8 @@ async def run_loop(
         3. for each pending: claim → run nmap → sync data → report_status
         4. sleep(poll_interval)
     """
-    caps = ["public"]  # Phase 1 仅 public；Phase 2 加 internal
+    # 扫描器能力（心跳上报 + 拉任务过滤）。env SCANNER_CAPS 可覆盖（逗号分隔）。
+    caps = [c.strip() for c in os.getenv("SCANNER_CAPS", "public,internal,ports").split(",") if c.strip()]
     logger.info(
         "=== scanner-collector --loop 启动 (scanner_id=%s hb=%ds poll=%ds caps=%s) ===",
         scanner_id, heartbeat_interval, poll_interval, caps,
@@ -147,12 +148,15 @@ async def run_loop(
                 current_running += 1
                 logger.info("认领成功 task %s，开始 nmap 扫描", task_uuid[:8])
 
-                # 3.2 跑 nmap（用 claim 返回的 nmap_args / target_summary）
-                # Phase 2: 复用 ScannerCollector.collect() 但覆盖其 target 来源
+                # 3.2 跑 nmap（按任务 mode 路由：internal=discovery，public/ports=port）
                 try:
-                    items, counts = await _run_nmap_for_task(
+                    items, counts, data_type = await _run_nmap_for_task(
                         collector, task,
                     )
+                    # discovery findings 落扫描器来源（run_loop 有 scanner_id）
+                    if data_type == "discovery":
+                        for it in items:
+                            it.setdefault("scanner_id", scanner_id)
                 except Exception as e:
                     logger.exception("nmap 扫描异常 task %s", task_uuid[:8])
                     try:
@@ -165,14 +169,22 @@ async def run_loop(
                     current_running = max(0, current_running - 1)
                     continue
 
-                # 3.3 推数据（data_type=port）
+                # 3.3 推数据（discovery → data_type=discovery 写 findings；port → asset_ports）
+                sync_source = "scanner" if data_type == "discovery" else "scanner-port"
                 try:
-                    await client.sync(
-                        source="scanner-port",
-                        data_type="port",
+                    sync_resp = await client.sync(
+                        source=sync_source,
+                        data_type=data_type,
                         items=items,
                         metadata={"scan_task_uuid": task_uuid},
                     )
+                    # sync() 已解包 envelope，返回的就是 data：{total,created,updated,...}
+                    # 用控制面返回的真实 created/updated 覆盖（避免 local 估错）
+                    if isinstance(sync_resp, dict):
+                        if sync_resp.get("created") is not None:
+                            counts["items_created"] = sync_resp.get("created", 0)
+                        if sync_resp.get("updated") is not None:
+                            counts["items_updated"] = sync_resp.get("updated", 0)
                 except Exception as e:
                     logger.error("推数据失败 task %s: %s", task_uuid[:8], e)
                     counts["items_failed"] = counts.get("items_scanned", len(items))
@@ -206,27 +218,28 @@ async def run_loop(
     return 0
 
 
-async def _run_nmap_for_task(collector: ScannerCollector, task: dict) -> tuple[list, dict]:
-    """跑一个 task 的 nmap，返回 (items, counts)。
+async def _run_nmap_for_task(collector: ScannerCollector, task: dict) -> tuple[list, dict, str]:
+    """跑一个 task 的 nmap，返回 (items, counts, data_type)。
 
-    Phase 2 简化：用 task.target_summary 覆盖 collector 内部的目标源。
+    按任务 mode 路由（不再忽略任务）：
+      - internal → collector.collect_for_task → nmap -sn 主机发现 → data_type=discovery
+      - public/ports → nmap -sV 端口扫描 → data_type=port
+    目标从 task.target_summary 取。
     """
     import time
     t0 = time.monotonic()
-    try:
-        result = await collector.collect(DataType.PORT)
-    except Exception as e:
-        raise RuntimeError(f"collect failed: {e}")
-    items = result.items
+    result = await collector.collect_for_task(task)
     duration_ms = int((time.monotonic() - t0) * 1000)
+    items = result.items
+    data_type = result.data_type.value  # DataType enum → "discovery" / "port"
     counts = {
         "items_scanned": len(items),
-        "items_created": len(items),  # Phase 1 简化：全部当 created
+        "items_created": len(items),
         "items_updated": 0,
-        "items_failed": 0,
+        "items_failed": len(result.metadata.get("failed_targets", []) or []),
         "duration_ms": duration_ms,
     }
-    return items, counts
+    return items, counts, data_type
 
 
 # ============================================================================
