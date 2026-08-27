@@ -79,8 +79,9 @@
         <ElTableColumn label="开始时间" min-width="160">
           <template #default="{ row }">{{ formatTime(row.started_at) || '—' }}</template>
         </ElTableColumn>
-        <ElTableColumn v-if="hasAuth('scan_run')" label="操作" width="90" fixed="right">
+        <ElTableColumn v-if="hasAuth('scan_run')" label="操作" width="160" fixed="right">
           <template #default="{ row }">
+            <ElButton link type="primary" size="small" @click="openDetail(row)">详情</ElButton>
             <ElPopconfirm
               v-if="['pending', 'running'].includes(row.status)"
               title="取消该扫描任务？"
@@ -106,6 +107,145 @@
         />
       </div>
     </ElCard>
+
+    <!-- 任务详情弹窗（F-S3 增强：看到「扫 X / 新 Y / 更 Z / 败 W」对应的具体端口/发现） -->
+    <ElDialog
+      v-model="detailVisible"
+      :title="detailTitle"
+      width="800px"
+      align-center
+      :close-on-click-modal="false"
+    >
+      <div v-loading="detailLoading">
+        <!-- 基本信息 -->
+        <ElDescriptions :column="2" border size="small" class="detail-desc">
+          <ElDescriptionsItem label="任务 UUID">
+            <span class="mono">{{ detail?.task_uuid }}</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="状态">
+            <ElTag :type="statusType(detail?.status)" size="small">
+              {{ statusLabel(detail?.status) }}
+            </ElTag>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="类型">
+            <ElTag size="small" effect="plain">{{ modeLabel(detail?.mode) }}</ElTag>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="范围">{{ detail?.scope || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="分配方式">{{ detail?.assign_mode || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="实际扫描器">
+            <span v-if="detail?.scanner_id" class="mono">{{ detail.scanner_id.slice(0, 8) }}…</span>
+            <span v-else class="muted">未认领</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="触发人">{{ detail?.triggered_by || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="触发原因">{{ detail?.run_reason || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="开始时间">{{ formatTime(detail?.started_at) || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="结束时间">{{ formatTime(detail?.finished_at) || '—' }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="耗时" :span="2">{{ formatDuration(detail?.duration_ms) }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="目标">
+            <span v-if="detail?.target_summary?.length">
+              <span v-for="(t, i) in detail.target_summary" :key="i" class="target-chip">
+                {{ t.value }}
+              </span>
+            </span>
+            <span v-else class="muted">—</span>
+          </ElDescriptionsItem>
+          <ElDescriptionsItem label="扫描统计">
+            扫 {{ detail?.items_scanned ?? 0 }} / 新 {{ detail?.items_created ?? 0 }} /
+            更 {{ detail?.items_updated ?? 0 }} / 败 {{ detail?.items_failed ?? 0 }}
+          </ElDescriptionsItem>
+          <ElDescriptionsItem v-if="detail?.error_message" label="错误" :span="2">
+            <span class="err-text">{{ detail.error_message }}</span>
+          </ElDescriptionsItem>
+        </ElDescriptions>
+
+        <!-- 明细 Tabs（按 mode 选不同明细） -->
+        <ElTabs v-model="detailTab" class="detail-tabs">
+          <ElTabPane
+            v-if="detail?.mode === 'ports' || detail?.mode === 'public'"
+            :label="`端口明细 (${detail?.affected_ports?.length ?? 0})`"
+            name="ports"
+          >
+            <div v-if="!detail?.affected_ports?.length" class="empty-tip">
+              本次任务未产生端口明细（可能仍在执行、推送来源非 scanner，或任务未完成）
+            </div>
+            <ElTable v-else :data="detail.affected_ports" stripe size="small" max-height="380">
+              <ElTableColumn label="动作" width="80">
+                <template #default="{ row }">
+                  <ElTag :type="row.action === 'created' ? 'success' : 'warning'" size="small" effect="plain">
+                    {{ row.action === 'created' ? '新增' : '更新' }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="IP" prop="ip" width="140" />
+              <ElTableColumn label="端口" width="80" align="center">
+                <template #default="{ row }">{{ row.port }}</template>
+              </ElTableColumn>
+              <ElTableColumn label="协议" prop="protocol" width="80" align="center" />
+              <ElTableColumn label="服务" prop="service" width="120" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.service">{{ row.service }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="版本" prop="version" min-width="200" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.version">{{ row.version }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="ID" width="120">
+                <template #default="{ row }">
+                  <span class="mono">{{ row.id.slice(0, 8) }}…</span>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </ElTabPane>
+          <ElTabPane
+            v-if="detail?.mode === 'internal' || detail?.mode === 'public'"
+            :label="`发现明细 (${detail?.affected_findings?.length ?? 0})`"
+            name="findings"
+          >
+            <div v-if="!detail?.affected_findings?.length" class="empty-tip">
+              本次任务未产生发现明细（可能仍在执行、推送来源非 scanner，或任务未完成）
+            </div>
+            <ElTable v-else :data="detail.affected_findings" stripe size="small" max-height="380">
+              <ElTableColumn label="动作" width="80">
+                <template #default="{ row }">
+                  <ElTag :type="row.action === 'created' ? 'success' : 'warning'" size="small" effect="plain">
+                    {{ row.action === 'created' ? '新增' : '更新' }}
+                  </ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="IP" prop="ip" width="140" />
+              <ElTableColumn label="MAC" prop="mac" width="160" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.mac">{{ row.mac }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="OS 推测" prop="os_guess" min-width="140" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.os_guess">{{ row.os_guess }}</span>
+                  <span v-else class="muted">—</span>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="暴露面" prop="exposure" width="90" />
+              <ElTableColumn label="发现状态" width="100">
+                <template #default="{ row }">
+                  <ElTag size="small" effect="plain">{{ row.finding_status }}</ElTag>
+                </template>
+              </ElTableColumn>
+              <ElTableColumn label="关联资产" width="280" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <span v-if="row.matched_asset_id" class="mono">{{ row.matched_asset_id.slice(0, 8) }}…</span>
+                  <span v-else class="muted">未纳管</span>
+                </template>
+              </ElTableColumn>
+            </ElTable>
+          </ElTabPane>
+        </ElTabs>
+      </div>
+    </ElDialog>
 
     <!-- 触发扫描弹窗 -->
     <ElDialog v-model="runVisible" title="触发扫描" width="560px">
@@ -181,6 +321,7 @@
     getScanTasks,
     runScan,
     cancelScanTask,
+    getScanTask,
     getScannerAgents,
     type ScanTask,
     type ScanMode
@@ -369,6 +510,32 @@
     }
   }
 
+  // ===================== 任务详情（F-S3） =====================
+  const detailVisible = ref(false)
+  const detailLoading = ref(false)
+  const detail = ref<ScanTask | null>(null)
+  const detailTab = ref('ports')
+  const detailTitle = computed(() => {
+    if (!detail.value) return '任务详情'
+    const id8 = detail.value.task_uuid.slice(0, 8)
+    return `任务详情 ${id8}…  · ${modeLabel(detail.value.mode)}  ·  ${statusLabel(detail.value.status)}`
+  })
+  const openDetail = async (row: ScanTask) => {
+    detail.value = row  // 先用列表行的粗略数据
+    detailVisible.value = true
+    detailLoading.value = true
+    // 默认 Tab：discovery / public / internal 看发现；ports 看端口
+    detailTab.value = row.mode === 'ports' ? 'ports' : 'findings'
+    try {
+      const full = await getScanTask(row.task_uuid)
+      detail.value = full
+    } catch (e: any) {
+      ElMessage.error(e?.message || '加载详情失败')
+    } finally {
+      detailLoading.value = false
+    }
+  }
+
   onMounted(loadTasks)
 </script>
 
@@ -420,6 +587,42 @@
   .warn-tag {
     margin-left: 4px;
     color: var(--el-color-warning);
+  }
+
+  /* F-S3：任务详情弹窗 */
+  .detail-desc {
+    margin-bottom: 16px;
+  }
+  .detail-desc :deep(.el-descriptions__label) {
+    width: 90px;
+    color: var(--el-text-color-secondary);
+  }
+  .detail-tabs {
+    margin-top: 4px;
+  }
+  .target-chip {
+    display: inline-block;
+    margin-right: 6px;
+    padding: 1px 6px;
+    background: var(--el-fill-color-light);
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
+  }
+  .empty-tip {
+    padding: 24px;
+    text-align: center;
+    color: var(--el-text-color-secondary);
+    font-size: 13px;
+    background: var(--el-fill-color-blank);
+    border: 1px dashed var(--el-border-color);
+    border-radius: 4px;
+  }
+  .err-text {
+    color: var(--el-color-danger);
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
   }
 
   /* P4-D: 扫描类型卡片化 */

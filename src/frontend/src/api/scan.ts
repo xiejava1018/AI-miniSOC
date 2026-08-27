@@ -40,6 +40,27 @@ export interface ScannerAgent {
   api_key_hash_prefix?: string
 }
 
+export interface AffectedPort {
+  id: string
+  ip: string
+  port: number
+  protocol: string
+  action: 'created' | 'updated'
+  service?: string | null
+  version?: string | null
+}
+
+export interface AffectedFinding {
+  id: number
+  ip: string
+  mac?: string | null
+  os_guess?: string | null
+  exposure?: string | null
+  finding_status?: string | null
+  matched_asset_id?: string | null
+  action: 'created' | 'updated'
+}
+
 export interface ScanTask {
   task_uuid: string
   mode: ScanMode
@@ -59,6 +80,10 @@ export interface ScanTask {
   items_failed?: number | null
   error_message?: string | null
   parent_task_id?: string | null
+  /** F-S3：本次扫描动了哪些端口（port 任务专用）。老任务 / 未执行完为空数组 */
+  affected_ports?: AffectedPort[]
+  /** F-S3：本次扫描动了哪些发现（discovery 任务专用）。老任务 / 未执行完为空数组 */
+  affected_findings?: AffectedFinding[]
 }
 
 export interface ScanFinding {

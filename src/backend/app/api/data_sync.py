@@ -50,8 +50,14 @@ async def sync_data(
         f"type={request.data_type}, items={len(request.items)}"
     )
 
+    # F-S3 增强：透传 metadata.scan_task_uuid 到 handler，用于回写 ScannerTask.affected_ports/findings
+    # 老采集器不传 metadata 时静默传 None，handler 也不会写——不影响现有功能
+    task_uuid = None
+    if request.metadata and isinstance(request.metadata, dict):
+        task_uuid = request.metadata.get("scan_task_uuid")
+
     try:
-        result = handler.handle(request.source, request.items, db)
+        result = handler.handle(request.source, request.items, db, task_uuid=task_uuid)
     except Exception as e:
         logger.error(f"数据同步处理失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"数据同步失败: {str(e)}")

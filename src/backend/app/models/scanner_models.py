@@ -60,6 +60,11 @@ class ScannerTask(Base):
     items_created = Column(Integer, default=0, server_default="0")
     items_updated = Column(Integer, default=0, server_default="0")
     items_failed = Column(Integer, default=0, server_default="0")
+    # F-S3 增强：本次扫描具体动了哪些端口/发现（前置：metadata.scan_task_uuid 必须由采集器传入）
+    # affected_ports:    [{"id","ip","port","protocol","action","service","version"}]
+    # affected_findings: [{"id","ip","mac","action","matched_asset_id"}]
+    affected_ports = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    affected_findings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     error_message = Column(Text)
     nmap_args = Column(Text)
 

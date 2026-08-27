@@ -295,6 +295,10 @@ async def list_tasks(
                     "items_failed": t.items_failed,
                     "error_message": t.error_message,
                     "parent_task_id": str(t.parent_task_id) if t.parent_task_id else None,
+                    # F-S3 增强：本次扫描明细（若是 port 任务含 affected_ports；
+                    # discovery 任务含 affected_findings；tasks 未执行完 / 老任务为空列表）
+                    "affected_ports": t.affected_ports or [],
+                    "affected_findings": t.affected_findings or [],
                 } for t in items
             ],
         },
@@ -342,6 +346,9 @@ async def get_task(
             "parent_task_id": str(t.parent_task_id) if t.parent_task_id else None,
             "created_at": t.created_at.isoformat(),
             "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+            # F-S3 增强：本次扫描具体动了哪些端口/发现
+            "affected_ports": t.affected_ports or [],
+            "affected_findings": t.affected_findings or [],
         },
     }
 

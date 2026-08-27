@@ -34,12 +34,15 @@ class DiscoverySyncHandler(BaseSyncHandler):
 
     data_type = "discovery"
 
-    def handle(self, source: str, items: list[dict], db: Session) -> dict:
+    def handle(self, source: str, items: list[dict], db: Session, task_uuid: str | None = None) -> dict:
         """P4 WO-2 镜像：源级 try/except + sync_task + source_health 上报。
 
         与 AssetSyncHandler.handle() / PortSyncHandler.handle() 同模式——Phase 2
         三个 handler 同款包装，未来若重构可统一抽到 BaseSyncHandler（本次保持最小改动）。
+
+        F-S3 增强：收集 affected_findings 回写 ScannerTask.affected_findings。
         """
+        self._last_affected_findings = []
         from app.services.sync_handlers.asset_sync_handler import (
             _SOURCE_HEALTH_KEYS,
             _SOURCE_HEALTH_INTERVALS,
@@ -84,6 +87,11 @@ class DiscoverySyncHandler(BaseSyncHandler):
             except Exception:
                 db.rollback()
                 logger.debug("source_health record_success failed", exc_info=True)
+
+            # F-S3：回写 affected_findings 到 ScannerTask（独立 session 防被外层 commit 竞态）
+            if task_uuid:
+                self._write_affected_findings(db, task_uuid, self._last_affected_findings)
+
             return stats
         except Exception as e:
             logger.error("DiscoverySyncHandler.handle 源级失败 source=%s err=%s", source, e)
@@ -102,6 +110,45 @@ class DiscoverySyncHandler(BaseSyncHandler):
             except Exception:
                 logger.debug("source_health record_failure failed", exc_info=True)
             raise
+
+    # 实例级缓冲：每次 handle() 调用前在 handle() 顶部清空；_handle_one 写入。
+    _last_affected_findings: list[dict] = []
+
+    def _write_affected_findings(
+        self, db: Session, task_uuid: str, affected: list[dict],
+    ) -> None:
+        """回写 affected_findings 到 ScannerTask。
+
+        用独立 session（防被外层 session 的 commit/rollback 互锁），
+        失败仅记录 debug 不抛错——本次明细是增强项，不影响主流程。
+        """
+        if not affected:
+            return
+        try:
+            import uuid as _uuid
+            from app.core import database as _db
+            from app.models.scanner_models import ScannerTask
+            write_db = _db.SessionLocal()
+            try:
+                uid = _uuid.UUID(str(task_uuid))
+                t = write_db.query(ScannerTask).filter(
+                    ScannerTask.task_uuid == uid,
+                ).one_or_none()
+                if t is not None:
+                    t.affected_findings = affected
+                    write_db.commit()
+                else:
+                    logger.debug(
+                        "ScannerTask task_uuid=%s 不存在，跳过 affected_findings 回写",
+                        task_uuid[:8],
+                    )
+            finally:
+                write_db.close()
+        except Exception:
+            logger.debug(
+                "DiscoverySyncHandler affected_findings 回写失败 task=%s",
+                str(task_uuid)[:8], exc_info=True,
+            )
 
     def _validate_one(self, item: dict) -> None:
         """校验单条 discovery item。
@@ -157,6 +204,16 @@ class DiscoverySyncHandler(BaseSyncHandler):
                 # IP 已命中台账 → finding_status 提升为 known（F1.3 据此跳过）
                 if existing.finding_status == "new":
                     existing.finding_status = "known"
+            self._last_affected_findings.append({
+                "id": existing.id,
+                "ip": existing.asset_ip,
+                "mac": existing.mac_address,
+                "os_guess": existing.os_guess,
+                "exposure": existing.exposure,
+                "finding_status": existing.finding_status,
+                "matched_asset_id": str(existing.matched_asset_id) if existing.matched_asset_id else None,
+                "action": "updated",
+            })
             return {"updated": 1}
 
         # 新建
@@ -175,4 +232,15 @@ class DiscoverySyncHandler(BaseSyncHandler):
             raw_data=item.get("raw_data"),
         )
         db.add(finding)
+        db.flush()  # 拿 id 写 affected 列表
+        self._last_affected_findings.append({
+            "id": finding.id,
+            "ip": finding.asset_ip,
+            "mac": finding.mac_address,
+            "os_guess": finding.os_guess,
+            "exposure": finding.exposure,
+            "finding_status": finding.finding_status,
+            "matched_asset_id": str(finding.matched_asset_id) if finding.matched_asset_id else None,
+            "action": "created",
+        })
         return {"created": 1}

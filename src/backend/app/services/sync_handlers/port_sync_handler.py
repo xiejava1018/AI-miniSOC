@@ -35,12 +35,19 @@ class PortSyncHandler(BaseSyncHandler):
 
     data_type = "port"
 
-    def handle(self, source: str, items: list[dict], db: Session) -> dict:
+    def handle(self, source: str, items: list[dict], db: Session, task_uuid: str | None = None) -> dict:
         """P4 WO-2 镜像：源级 try/except + sync_task + source_health 上报。
 
         与 AssetSyncHandler.handle() 同模式，未来若新增 handler 应统一抽到
         BaseSyncHandler；本次为最小改动（CLAUDE.md 教训：遵循已有范式）。
+
+        F-S3 增强：收集 affected_ports 回写 ScannerTask.affected_ports（任务详情
+        直接显示「本次具体动了哪些端口」）。透传 task_uuid 由 data_sync API 从
+        request.metadata.scan_task_uuid 提取；非 scanner 来源（历史/手工推送）
+        传 None 时静默跳过——不影响现有功能。
         """
+        # F-S3：清空实例缓冲（防止多次调用累积）
+        self._last_affected_ports = []
         from app.services.sync_handlers.asset_sync_handler import (
             _SOURCE_HEALTH_KEYS,
             _SOURCE_HEALTH_INTERVALS,
@@ -83,6 +90,11 @@ class PortSyncHandler(BaseSyncHandler):
             except Exception:
                 db.rollback()
                 logger.debug("source_health record_success failed", exc_info=True)
+
+            # F-S3：回写 affected_ports 到 ScannerTask（独立 session 防被外层 commit 竞态）
+            if task_uuid:
+                self._write_affected_ports(db, task_uuid, self._last_affected_ports)
+
             return stats
         except Exception as e:
             logger.error("PortSyncHandler.handle 源级失败 source=%s err=%s", source, e)
@@ -103,6 +115,48 @@ class PortSyncHandler(BaseSyncHandler):
             except Exception:
                 logger.debug("source_health record_failure failed", exc_info=True)
             raise
+
+    # 实例级缓冲：每次 handle() 调用前在 handle() 顶部清空；super().handle() 循环里 _handle_one 写入。
+    # 不放在 base 是为保持 base 契约干净（_handle_one 返回 Dict[str, int]）。
+    _last_affected_ports: list[dict] = []
+
+    def _write_affected_ports(
+        self, db: Session, task_uuid: str, affected: list[dict],
+    ) -> None:
+        """回写 affected_ports 到 ScannerTask。
+
+        用独立 session（防被外层 session 的 commit/rollback 互锁），
+        失败仅记录 debug 不抛错——本次明细是增强项，不影响主流程。
+        """
+        if not affected:
+            return
+        try:
+            import uuid as _uuid
+            from app.core import database as _db
+            from app.models.scanner_models import ScannerTask
+            write_db = _db.SessionLocal()
+            try:
+                uid = _uuid.UUID(str(task_uuid))
+                t = write_db.query(ScannerTask).filter(
+                    ScannerTask.task_uuid == uid,
+                ).one_or_none()
+                if t is not None:
+                    # 合并：保留 task 已有的（旧条 + 本次新条）；实际本次新任务的 affected
+                    # 为空（默认 '[]'），所以直接覆盖即可
+                    t.affected_ports = affected
+                    write_db.commit()
+                else:
+                    logger.debug(
+                        "ScannerTask task_uuid=%s 不存在，跳过 affected_ports 回写",
+                        task_uuid[:8],
+                    )
+            finally:
+                write_db.close()
+        except Exception:
+            logger.debug(
+                "PortSyncHandler affected_ports 回写失败 task=%s",
+                str(task_uuid)[:8], exc_info=True,
+            )
 
     def _validate_one(self, item: dict) -> None:
         """校验单条 port item。raise ValueError → 父类自动入死信。
@@ -140,6 +194,9 @@ class PortSyncHandler(BaseSyncHandler):
           - vulnerability 列本期由 F-S2 留空，Phase 4 NSE 填充
           - last_seen 每次都刷新（不论 created/updated）
           - 不动 asset_id（资产换 IP 时由人工编辑，避免越权修改）
+
+        F-S3 增强：把刚 upsert 的行信息写到 self._last_affected_ports，供 handle()
+        末尾回写 ScannerTask.affected_ports。Base.handle() 不感知（保持契约）。
         """
         existing = db.query(AssetPort).filter(
             AssetPort.asset_ip == item["asset_ip"],
@@ -160,6 +217,15 @@ class PortSyncHandler(BaseSyncHandler):
                 existing_vulns = list(existing.vulnerabilities or [])
                 merged = sorted(set(existing_vulns) | set(new_cves))
                 existing.vulnerabilities = merged
+            self._last_affected_ports.append({
+                "id": str(existing.id),
+                "ip": str(existing.asset_ip),
+                "port": existing.port,
+                "protocol": existing.protocol,
+                "action": "updated",
+                "service": existing.service,
+                "version": existing.version,
+            })
             return {"updated": 1}
 
         # 新建：反查 asset_id（IP 命中则挂上，纯公网 IP 允许 NULL）
@@ -178,4 +244,14 @@ class PortSyncHandler(BaseSyncHandler):
             last_seen=item.get("scan_time") or datetime.now(timezone.utc),
         )
         db.add(port)
+        db.flush()  # 拿 id 写 affected 列表
+        self._last_affected_ports.append({
+            "id": str(port.id),
+            "ip": str(port.asset_ip),
+            "port": port.port,
+            "protocol": port.protocol,
+            "action": "created",
+            "service": port.service,
+            "version": port.version,
+        })
         return {"created": 1}

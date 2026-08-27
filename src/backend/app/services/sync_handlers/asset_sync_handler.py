@@ -65,10 +65,13 @@ class AssetSyncHandler(BaseSyncHandler):
 
     data_type = "asset"
 
-    def handle(self, source: str, items: list[dict], db: Session) -> dict:
-        # P4 WO-2 补丁：handle() 整体包 try/except，源级失败时记 record_failure
-        # （之前只有 record_success，且只在成功路径——handle() 抛错时
-        #  任何 source_health 都不写，/data-health 页面假绿）
+    def handle(self, source: str, items: list[dict], db: Session, task_uuid: str | None = None) -> dict:
+        """资产同步。task_uuid 参数本 handler 不使用，仅为与 port/discovery 一致接口。
+
+        P4 WO-2 补丁：handle() 整体包 try/except，源级失败时记 record_failure
+        （之前只有 record_success，且只在成功路径——handle() 抛错时
+         任何 source_health 都不写，/data-health 页面假绿）
+        """
         try:
             # P2-T4：创建批次 sync_task（保留 sync_tasks 跟踪能力），
             # 然后逐条调 _handle_one（base 已 try/except，失败入死信）。
