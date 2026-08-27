@@ -70,6 +70,8 @@ export interface ScanTask {
   assign_mode?: string | null
   target_scanner_id?: string | null
   scanner_id?: string | null
+  /** 实际执行扫描器的名称（NULL / 未认领时为空字符串） */
+  scanner_name?: string
   run_reason?: string | null
   started_at?: string | null
   finished_at?: string | null
@@ -155,6 +157,13 @@ export const getScanTask = (taskUuid: string): Promise<ScanTask> => {
 /** 取消任务 */
 export const cancelScanTask = (taskUuid: string): Promise<{ cancelled: boolean }> => {
   return httpClient.post({ url: `${API_PREFIX}/tasks/${taskUuid}/cancel` })
+}
+
+/** 删除历史任务（仅终态；running/pending 需先 cancel） */
+export const deleteScanTask = (
+  taskUuid: string
+): Promise<{ task_uuid: string; deleted: boolean }> => {
+  return httpClient.del({ url: `${API_PREFIX}/tasks/${taskUuid}` })
 }
 
 // ===================== 发现清单 =====================

@@ -263,13 +263,27 @@ async def list_tasks(
     db: Session = Depends(get_db),
 ):
     """任务列表（分页 + 过滤）。viewer+ 可看。"""
+    from app.models.scanner_models import ScannerAgent
+
     q = db.query(ScannerTask)
     if status:
         q = q.filter(ScannerTask.status == status)
     if mode:
         q = q.filter(ScannerTask.mode == mode)
     total = q.count()
-    items = q.order_by(ScannerTask.started_at.desc()).offset(skip).limit(limit).all()
+    # 一次性 LEFT JOIN 出本页所有 scanner 的名称，避免 N+1
+    items = (
+        q.order_by(ScannerTask.started_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    scanner_ids = {t.scanner_id for t in items if t.scanner_id} | \
+                  {t.target_scanner_id for t in items if t.target_scanner_id}
+    name_by_id: dict[str, str] = {}
+    if scanner_ids:
+        for sa in db.query(ScannerAgent).filter(ScannerAgent.scanner_id.in_(scanner_ids)).all():
+            name_by_id[sa.scanner_id] = sa.name
     return {
         "code": 200,
         "msg": "success",
@@ -284,7 +298,9 @@ async def list_tasks(
                     "triggered_by": t.triggered_by,
                     "assign_mode": t.assign_mode,
                     "target_scanner_id": t.target_scanner_id,
+                    "target_scanner_name": name_by_id.get(t.target_scanner_id, ""),
                     "scanner_id": t.scanner_id,
+                    "scanner_name": name_by_id.get(t.scanner_id, ""),
                     "run_reason": t.run_reason,
                     "started_at": t.started_at.isoformat() if t.started_at else None,
                     "finished_at": t.finished_at.isoformat() if t.finished_at else None,
@@ -318,6 +334,16 @@ async def get_task(
     t = db.query(ScannerTask).filter(ScannerTask.task_uuid == uid).first()
     if not t:
         raise HTTPException(status_code=404, detail="task not found")
+
+    # 补 scanner_name（双 ID 都查）
+    from app.models.scanner_models import ScannerAgent
+    name_by_id: dict[str, str] = {}
+    for sid in [t.target_scanner_id, t.scanner_id]:
+        if sid and sid not in name_by_id:
+            sa = db.query(ScannerAgent).filter(ScannerAgent.scanner_id == sid).first()
+            if sa:
+                name_by_id[sid] = sa.name
+
     return {
         "code": 200,
         "msg": "success",
@@ -330,7 +356,9 @@ async def get_task(
             "target_summary": t.target_summary,
             "assign_mode": t.assign_mode,
             "target_scanner_id": t.target_scanner_id,
+            "target_scanner_name": name_by_id.get(t.target_scanner_id or "", ""),
             "scanner_id": t.scanner_id,
+            "scanner_name": name_by_id.get(t.scanner_id or "", ""),
             "capabilities": t.capabilities,
             "run_reason": t.run_reason,
             "nmap_args": t.nmap_args,
@@ -381,6 +409,75 @@ async def cancel_task(
     db.commit()
     logger.info("user %s 取消 task %s", current_user.username, t.task_uuid)
     return {"code": 200, "msg": "success", "data": {"task_uuid": task_uuid, "status": "cancelled"}}
+
+
+# ============================================================================
+# DELETE /scan/tasks/{uuid}  删除历史任务（终态：success/failed/cancelled）
+# ============================================================================
+@router.delete("/tasks/{task_uuid}")
+async def delete_task(
+    task_uuid: str,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: Session = Depends(get_db),
+):
+    """删除一条扫描任务（仅终态；running/pending 拒绝，需先 cancel）。
+
+    设计要点：
+      - 仅删 soc_scanner_tasks 行，不级联 findings（审计独立保留）
+      - 写 audit_log 留痕（CLAUDE.md 教训：管理动作必须可追溯）
+      - 重复删返 404（不泄露任务是否存在）
+      - 未终态返 400，防误删正在跑的任务（强一致状态机）
+    """
+    from app.models.audit_log import AuditLog
+
+    uid = _parse_uuid(task_uuid, "task_uuid")
+    t = db.query(ScannerTask).filter(ScannerTask.task_uuid == uid).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="task not found")
+    if t.status in ("pending", "running"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"task 状态为 {t.status}，请先取消后再删除",
+        )
+
+    # 留底（审计可能需要原值）
+    deleted_snapshot = {
+        "task_uuid": str(t.task_uuid),
+        "mode": t.mode,
+        "status": t.status,
+        "started_at": t.started_at.isoformat() if t.started_at else None,
+        "items_scanned": t.items_scanned,
+        "items_created": t.items_created,
+        "items_updated": t.items_updated,
+        "items_failed": t.items_failed,
+        "triggered_by": t.triggered_by,
+    }
+
+    db.delete(t)
+    db.flush()  # 让审计日志与删除在同一事务
+
+    audit = AuditLog(
+        user_id=current_user.id,
+        username=current_user.username,
+        action="scan_task_delete",
+        resource_type="scanner_task",
+        resource_id=None,  # 外键已经删了，避免 FK 报错
+        resource_name=task_uuid,
+        old_values=deleted_snapshot,
+        new_values=None,
+    )
+    db.add(audit)
+    db.commit()
+    logger.info(
+        "user %s 删除 task %s (mode=%s status=%s affected_ports=%d affected_findings=%d)",
+        current_user.username, task_uuid, deleted_snapshot["mode"], deleted_snapshot["status"],
+        0, 0,  # 不快照 affected_*/raw_data，避免日志爆仓
+    )
+    return {
+        "code": 200,
+        "msg": "success",
+        "data": {"task_uuid": task_uuid, "deleted": True},
+    }
 
 
 # ============================================================================

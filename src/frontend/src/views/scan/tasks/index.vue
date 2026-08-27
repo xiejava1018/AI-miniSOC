@@ -29,9 +29,9 @@
       </template>
 
       <ElTable v-loading="loading" :data="tasks" stripe style="width: 100%">
-        <ElTableColumn label="任务 UUID" min-width="220">
+        <ElTableColumn label="任务 UUID" min-width="280">
           <template #default="{ row }">
-            <span class="mono">{{ row.task_uuid.slice(0, 8) }}…</span>
+            <span class="mono">{{ row.task_uuid }}</span>
           </template>
         </ElTableColumn>
         <ElTableColumn label="类型" width="100">
@@ -47,9 +47,11 @@
             <ElTag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</ElTag>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="扫描器" min-width="150">
+        <ElTableColumn label="扫描器" min-width="160">
           <template #default="{ row }">
-            <span v-if="row.scanner_id" class="mono">{{ row.scanner_id.slice(0, 8) }}…</span>
+            <span v-if="row.scanner_name">{{ row.scanner_name }}</span>
+            <span v-else-if="row.scanner_id" class="mono">{{ row.scanner_id.slice(0, 8) }}…</span>
+            <span v-else-if="row.target_scanner_name">指定 {{ row.target_scanner_name }}</span>
             <span v-else-if="row.target_scanner_id" class="muted">
               指定 {{ row.target_scanner_id.slice(0, 8) }}…
             </span>
@@ -79,7 +81,7 @@
         <ElTableColumn label="开始时间" min-width="160">
           <template #default="{ row }">{{ formatTime(row.started_at) || '—' }}</template>
         </ElTableColumn>
-        <ElTableColumn v-if="hasAuth('scan_run')" label="操作" width="160" fixed="right">
+        <ElTableColumn v-if="hasAuth('scan_run')" label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <ElButton link type="primary" size="small" @click="openDetail(row)">详情</ElButton>
             <ElPopconfirm
@@ -89,6 +91,15 @@
             >
               <template #reference>
                 <ElButton link type="danger" size="small">取消</ElButton>
+              </template>
+            </ElPopconfirm>
+            <ElPopconfirm
+              v-if="['success', 'failed', 'cancelled'].includes(row.status)"
+              :title="`删除该扫描任务？${row.task_uuid.slice(0, 8)}… (仅删记录，发现数据保留)`"
+              @confirm="remove(row)"
+            >
+              <template #reference>
+                <ElButton link type="danger" size="small">删除</ElButton>
               </template>
             </ElPopconfirm>
           </template>
@@ -133,7 +144,8 @@
           <ElDescriptionsItem label="范围">{{ detail?.scope || '—' }}</ElDescriptionsItem>
           <ElDescriptionsItem label="分配方式">{{ detail?.assign_mode || '—' }}</ElDescriptionsItem>
           <ElDescriptionsItem label="实际扫描器">
-            <span v-if="detail?.scanner_id" class="mono">{{ detail.scanner_id.slice(0, 8) }}…</span>
+            <span v-if="detail?.scanner_name">{{ detail.scanner_name }}</span>
+            <span v-else-if="detail?.scanner_id" class="mono">{{ detail.scanner_id.slice(0, 8) }}…</span>
             <span v-else class="muted">未认领</span>
           </ElDescriptionsItem>
           <ElDescriptionsItem label="触发人">{{ detail?.triggered_by || '—' }}</ElDescriptionsItem>
@@ -321,6 +333,7 @@
     getScanTasks,
     runScan,
     cancelScanTask,
+    deleteScanTask,
     getScanTask,
     getScannerAgents,
     type ScanTask,
@@ -507,6 +520,16 @@
       loadTasks()
     } catch (e: any) {
       ElMessage.error(e?.message || '取消失败')
+    }
+  }
+
+  const remove = async (row: ScanTask) => {
+    try {
+      await deleteScanTask(row.task_uuid)
+      ElMessage.success('任务已删除（发现数据保留）')
+      loadTasks()
+    } catch (e: any) {
+      ElMessage.error(e?.message || '删除失败')
     }
   }
 
