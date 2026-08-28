@@ -127,3 +127,5 @@ src/backend/src/backend/
 # === 一次性事故处理快照（不入库）===
 .git-backup-pre-dump-cleanup/
 .git-state-snapshot/
+# 本次（2026-08-28）README 脱敏前的原始备份，仅本地留存
+.docs-backup-pre-redaction/
