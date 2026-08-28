@@ -440,7 +440,7 @@
     if (publicAssetOptions.value.length || publicAssetsLoading.value) return
     publicAssetsLoading.value = true
     try {
-      const res: any = await getAssetList({ page: 1, page_size: 500 })
+      const res: any = await getAssetList({ page: 1, pageSize: 500 })
       const rows = res?.data?.records || res?.data?.list || res?.data?.items || []
       publicAssetOptions.value = rows
         .filter((a: any) => a.public_ip)
