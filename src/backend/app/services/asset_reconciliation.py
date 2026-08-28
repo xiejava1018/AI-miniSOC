@@ -162,7 +162,22 @@ class AssetReconciliationService:
             # 从未成功同步过：这本身就是不新鲜，必须显式标注而非当作"正常"
             fr.sync_stale = True
 
+        # 只检查稽核实际依赖的数据源（2026-08-28 修正）：
+        # 资产稽核的输入 = Wazuh agent 列表 + soc_assets 台账 + scanner findings，
+        # 台账的写入方 = wazuh/tplink/scanner 三类采集器。
+        # loki:browsing_detection（上网行为）与 opensearch:vuln（漏洞状态）
+        # 不是稽核输入——它们过期不该降级稽核结论的可信度。
+        # 此前遍历全部 SourceHealth 行，导致 loki 检测停用时稽核页长期显示
+        # "源异常，结果可能不全"，属语义误判（用户反馈）。
+        _RECON_RELEVANT_SOURCES = {
+            "wazuh:agents",       # Wazuh API + agent 同步
+            "tplink:collector",   # 台账写入方（路由器资产）
+            "scanner:discovery",  # 台账/发现写入方（资产发现）
+            "scanner:ports",      # 台账写入方（端口扫描）
+        }
         for sh in self.db.execute(select(SourceHealth)).scalars():
+            if sh.source_key not in _RECON_RELEVANT_SOURCES:
+                continue
             interval = sh.expected_interval_seconds
             overdue = False
             if interval and sh.last_success_at:
