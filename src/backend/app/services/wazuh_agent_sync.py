@@ -61,7 +61,7 @@ class WazuhAgentSyncService:
                     SourceHealthRecorder(fail_db).record_failure(
                         "wazuh:agents",
                         source_type="wazuh",
-                        error=str(e)[:1000],
+                        error=f"{type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:
@@ -88,9 +88,16 @@ class WazuhAgentSyncService:
 
         for agent in agents:
             try:
-                agent_info = agent.get("id", {})
-                ip = agent_info.get("ip")
-                name = agent_info.get("name")
+                # Wazuh API 4.x 实际返回结构：
+                #   {"id": "024", "name": "pve-LXC-ubuntu02", "ip": "192.168.0.42",
+                #    "status": "active", "os": {...}, ...}
+                # 旧版（API <4）假设 id 是 {"name": ..., "ip": ...} 这种嵌套 dict——
+                # 在 API 4.x 下 id 是字符串，导致 agent_info.get("ip") AttributeError
+                # 进而 sync_agents() 每条都失败 → wazuh:agents record_failure 累加
+                # 修复：直接读顶级字段，id 作为字符串。
+                agent_id_str = agent.get("id")
+                ip = agent.get("ip")
+                name = agent.get("name")
                 status = agent.get("status")
 
                 if not ip:
@@ -103,8 +110,8 @@ class WazuhAgentSyncService:
 
                 # 获取 OS 信息
                 os_obj = agent.get("os", {})
-                os_name = os_obj.get("name", "Unknown")
-                os_version = os_obj.get("version", "")
+                os_name = os_obj.get("name", "Unknown") if isinstance(os_obj, dict) else "Unknown"
+                os_version = os_obj.get("version", "") if isinstance(os_obj, dict) else ""
 
                 # 确定网络区域（可以根据 IP 段判断）
                 network_zone = self._determine_network_zone(ip)
@@ -123,15 +130,15 @@ class WazuhAgentSyncService:
                     "asset_type": "server",  # Wazuh agents 通常是服务器
                     "criticality": "medium",
                     "data_source": "wazuh",
-                    "source_id": agent_info.get("id"),  # Wazuh agent ID
-                    "wazuh_agent_id": agent_info.get("id"),
+                    "source_id": agent_id_str,  # Wazuh agent ID (string)
+                    "wazuh_agent_id": agent_id_str,
                     "asset_description": f"Wazuh Agent - {os_name} {os_version}".strip()
                 }
 
                 assets.append(asset_item)
 
             except Exception as e:
-                logger.warning(f"转换 agent 数据失败: {e}, agent: {agent}")
+                logger.warning(f"转换 agent 数据失败: {type(e).__name__}: {e}, agent: {agent}")
                 continue
 
         logger.info(f"成功转换 {len(assets)} 个 agents 为资产格式")
@@ -190,7 +197,7 @@ class WazuhAgentSyncService:
                     SourceHealthRecorder(fail_db).record_failure(
                         "wazuh:agents",
                         source_type="wazuh",
-                        error=f"agent_id={agent_id}: {e}"[:1000],
+                        error=f"agent_id={agent_id} {type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:

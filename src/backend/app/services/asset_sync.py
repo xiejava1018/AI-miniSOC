@@ -81,7 +81,7 @@ class AssetSyncService:
                     SourceHealthRecorder(fail_db).record_failure(
                         "wazuh:agents",
                         source_type="wazuh",
-                        error=str(e)[:1000],
+                        error=f"{type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:
@@ -256,7 +256,7 @@ class AssetSyncService:
                     SourceHealthRecorder(fail_db).record_failure(
                         "wazuh:agents",
                         source_type="wazuh",
-                        error=f"agent_id={agent_id}: {e}"[:1000],
+                        error=f"agent_id={agent_id} {type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:
@@ -333,7 +333,7 @@ class AssetSyncService:
                     SourceHealthRecorder(fail_db).record_failure(
                         "wazuh:agents",
                         source_type="wazuh",
-                        error=f"webhook agent_id={agent_id}: {e}"[:1000],
+                        error=f"webhook agent_id={agent_id} {type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:

@@ -102,7 +102,7 @@ class DiscoverySyncHandler(BaseSyncHandler):
                 fail_db = _db.SessionLocal()
                 try:
                     SourceHealthRecorder(fail_db).record_failure(
-                        key, source_type=source, error=str(e)[:1000],
+                        key, source_type=source, error=f"{type(e).__name__}: {e}"[:1000],
                     )
                     fail_db.commit()
                 finally:
