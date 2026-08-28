@@ -46,6 +46,7 @@ async def list_assets(
     asset_status: Optional[str] = None,
     network_zone: Optional[str] = None,
     data_source: Optional[str] = None,
+    has_public_ip: Optional[bool] = Query(None, description="只返回登记了公网IP的资产（公网暴露面扫描目标选择用）"),
     db: Session = Depends(get_db)
 ):
     """获取资产列表"""
@@ -72,6 +73,8 @@ async def list_assets(
                 )
             )
         )
+    if has_public_ip:
+        query = query.filter(Asset.public_ip.isnot(None), Asset.public_ip != "")
 
     # 总数
     total = query.count()

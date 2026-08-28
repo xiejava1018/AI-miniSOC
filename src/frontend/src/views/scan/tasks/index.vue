@@ -440,7 +440,8 @@
     if (publicAssetOptions.value.length || publicAssetsLoading.value) return
     publicAssetsLoading.value = true
     try {
-      const res: any = await getAssetList({ page: 1, pageSize: 500 })
+      // 后端直接过滤有公网 IP 的资产（不用分页拉全量再前端筛）
+      const res: any = await getAssetList({ page: 1, pageSize: 1000, has_public_ip: true })
       const rows = res?.data?.records || res?.data?.list || res?.data?.items || []
       publicAssetOptions.value = rows
         .filter((a: any) => a.public_ip)
