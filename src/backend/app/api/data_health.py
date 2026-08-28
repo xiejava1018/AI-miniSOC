@@ -163,9 +163,13 @@ async def data_health(
         .order_by(SyncTask.completed_at.desc().nullslast(), SyncTask.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
+    # 只展示最近 7 天内的失败任务：陈年失败（历史 bug 已修、任务表仅存档）
+    # 不应永远占据"最近失败"位——否则页面长期显示一条早已不相关的旧错误。
+    # DB 里的历史行不删，保留审计价值；仅展示层加时间窗。
+    failure_display_window = timedelta(days=7)
     last_failed_task = db.execute(
         select(SyncTask)
-        .where(SyncTask.status == "failed")
+        .where(SyncTask.status == "failed", SyncTask.created_at > _utcnow() - failure_display_window)
         .order_by(SyncTask.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
