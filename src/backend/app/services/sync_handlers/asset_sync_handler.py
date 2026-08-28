@@ -45,8 +45,13 @@ _SOURCE_HEALTH_INTERVALS = {
     "tplink": 300,
     "tplink-router": 300,
     "wazuh": 300,
-    "scanner": 300,       # P3：scanner 发现通道（与现有采集器同频）
-    "scanner-port": 300,  # P3：scanner 端口通道
+    # P3：scanner 两个通道的预期间隔按【调度节奏】而非采集器心跳定——
+    # 心跳 30s 只证明扫描器活着；数据推送只在任务完成时发生，
+    # central_scan_scheduler 每天 03:00/04:00 建任务，实际节奏≈每天一次。
+    # 按 300s 判定会让 scanner:ports 一天里 23+ 小时显示“过期”（假 degraded）。
+    # 90000s = 25h（24h 调度 + 1h 缓冲），超过一个调度周期没跑才标 degraded。
+    "scanner": 90000,
+    "scanner-port": 90000,
 }
 
 # Asset 模型上允许 Collector 写入的字段白名单

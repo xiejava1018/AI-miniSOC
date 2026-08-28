@@ -259,7 +259,7 @@ def test_health_keys_contain_scanner_ports():
     assert "scanner-port" in _SOURCE_HEALTH_KEYS
     assert _SOURCE_HEALTH_KEYS["scanner-port"] == "scanner:ports"
     assert _SOURCE_HEALTH_KEYS["scanner"] == "scanner:discovery"   # Phase 2 用
-    assert _SOURCE_HEALTH_INTERVALS["scanner-port"] == 300
+    assert _SOURCE_HEALTH_INTERVALS["scanner-port"] == 90000  # 按调度节奏（每天 03:00/04:00）而非心跳 300s
 
 
 # =============================================================================
