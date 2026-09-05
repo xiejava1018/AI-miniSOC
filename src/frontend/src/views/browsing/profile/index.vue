@@ -802,7 +802,6 @@
     if (!risk.value) return
     const r = risk.value
     // 漏洞饼：用 .bp-tabs 内 chart-box 第 6 个
-    {
     const vulnEl = vulnRef.value
     if (vulnEl) {
       const s = r.vulns?.severity || {}
@@ -828,7 +827,6 @@
       })
     }
     // 风险评分趋势：第 7 个
-    {
     const rtEl = riskTrendRef.value
     if (rtEl) {
       makeChart(rtEl, {
