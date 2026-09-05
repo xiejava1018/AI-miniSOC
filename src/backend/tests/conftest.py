@@ -34,6 +34,7 @@ from app.models import (  # noqa: F401  (imports register all models with Base.m
     AssetChangeLog, AssetSource, SyncTask, Dict as SysDict,
     ChatSession, ChatMessage, Notification,
     BrowsingEvent, BrowsingBlacklist, BrowsingBaseline,
+    BehaviorProfile, BehaviorDomain, BehaviorProfileWatermark,
     AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
     CisaKev, SocTaskRegistry, SocTaskRun,
     AssetRiskHistory, AiFeedback,

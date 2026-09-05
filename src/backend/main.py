@@ -85,6 +85,9 @@ async def lifespan(app: FastAPI):
     logging.getLogger(__name__).info("task observability bootstrapped: %s", obs_stats)
 
     start_browsing_detector()
+    # 行为画像：每日快照 + 水位回溯补拉（§9.3，含启动即补）
+    from app.services.behavior_profile import start_behavior_profile_scheduler
+    start_behavior_profile_scheduler()
     start_alert_group_snapshot()
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
@@ -96,6 +99,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await stop_browsing_detector()
+        from app.services.behavior_profile import stop_behavior_profile_scheduler
+        stop_behavior_profile_scheduler()
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()

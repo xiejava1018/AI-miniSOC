@@ -29,6 +29,7 @@ from .asset_source import AssetSource
 from .browsing_event import BrowsingEvent
 from .browsing_blacklist import BrowsingBlacklist
 from .browsing_baseline import BrowsingBaseline
+from .behavior_profile import BehaviorProfile, BehaviorDomain, BehaviorProfileWatermark
 from .alert_digest import AlertDigest
 from .alert_group_snapshot import AlertGroupSnapshot
 from .alert_group_analysis import AlertGroupAnalysis
