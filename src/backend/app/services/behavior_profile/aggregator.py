@@ -22,18 +22,20 @@ def aggregate_day(events: Sequence[Tuple[dt.datetime, str]]) -> dict:
     by_hour = [0] * 24
     wd_hour = [[0] * 24 for _ in range(7)]
     by_block = {b: 0 for b in BLOCK_ORDER}
+    cat_by_block: dict = {b: {} for b in BLOCK_ORDER}
     domain_visits: Counter = Counter()
     cat_visit: Counter = Counter()
 
     for d, dom in events:
         h = d.hour
+        blk = block_of(h).name
         by_hour[h] += 1
         wd_hour[d.weekday()][h] += 1
-        by_block[block_of(h).name] += 1
+        by_block[blk] += 1
+        cat = classify(dom)[0]
         domain_visits[dom] += 1
-
-    for dom, n in domain_visits.items():
-        cat_visit[classify(dom)[0]] += n
+        cat_visit[cat] += 1
+        cat_by_block[blk][cat] = cat_by_block[blk].get(cat, 0) + 1
 
     layer_visit: Counter = Counter()
     for cat, v in cat_visit.items():
@@ -47,6 +49,7 @@ def aggregate_day(events: Sequence[Tuple[dt.datetime, str]]) -> dict:
         "by_block": by_block,
         "domain_visits": dict(domain_visits),
         "cat_visit": dict(cat_visit),
+        "cat_by_block": cat_by_block,
         "layer_visit": dict(layer_visit),
         "act_total": layer_visit.get("ACT", 0),
         "night_share": round(sum(by_hour[:6]) / total * 100, 1) if total else 0,
@@ -85,6 +88,7 @@ def merge_days(day_stats: Iterable[dict], days_span: int) -> dict:
     by_hour = [0] * 24
     wd_hour = [[0] * 24 for _ in range(7)]
     by_block = {b: 0 for b in BLOCK_ORDER}
+    cat_by_block: dict = {b: {} for b in BLOCK_ORDER}
     domain_visits: Counter = Counter()
     cat_visit: Counter = Counter()
     active_hours = set()
@@ -102,6 +106,9 @@ def merge_days(day_stats: Iterable[dict], days_span: int) -> dict:
                 wd_hour[i][h] += s["wd_hour"][i][h]
         for b in BLOCK_ORDER:
             by_block[b] += s["by_block"].get(b, 0)
+        for b, cats in (s.get("cat_by_block") or {}).items():
+            for c, v in cats.items():
+                cat_by_block[b][c] = cat_by_block[b].get(c, 0) + v
         domain_visits.update(s["domain_visits"])
         cat_visit.update(s["cat_visit"])
         workday += s.get("workday", 0)
@@ -135,6 +142,7 @@ def merge_days(day_stats: Iterable[dict], days_span: int) -> dict:
         ],
         "cat_visit": dict(cat_visit.most_common()),
         "cat_share": cat_share,
+        "cat_by_block": cat_by_block,
         "layer_visit": dict(layer_visit),
         "act_total": act_total,
         "active_hours": len(active_hours),

@@ -88,6 +88,9 @@ async def lifespan(app: FastAPI):
     # 行为画像：每日快照 + 水位回溯补拉（§9.3，含启动即补）
     from app.services.behavior_profile import start_behavior_profile_scheduler
     start_behavior_profile_scheduler()
+    # 身份管道（Phase 0）：每日 OpenSearch 认证抽取，解锁关系画像（§4.1）
+    from app.services.behavior_profile.identity import start_identity_scheduler
+    start_identity_scheduler()
     start_alert_group_snapshot()
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
@@ -101,6 +104,8 @@ async def lifespan(app: FastAPI):
         await stop_browsing_detector()
         from app.services.behavior_profile import stop_behavior_profile_scheduler
         stop_behavior_profile_scheduler()
+        from app.services.behavior_profile.identity import stop_identity_scheduler
+        stop_identity_scheduler()
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()

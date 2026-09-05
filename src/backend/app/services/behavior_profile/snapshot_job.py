@@ -110,6 +110,9 @@ def snapshot_one_day(db: Session, target: dict, day: dt.date,
     stmt.wd_hour = day_stat["wd_hour"]
     stmt.by_block = day_stat["by_block"]
     stmt.cat_share = rolling["cat_share"]
+    stmt.cat_by_block = day_stat["cat_by_block"]
+    stmt.workday = day_stat["workday"]
+    stmt.weekend = day_stat["weekend"]
     stmt.layer_visit = day_stat["layer_visit"]
     stmt.top_domains = rolling["top_domains"][:20]
     stmt.tags = build_tags(rolling)
@@ -212,6 +215,13 @@ def run_snapshot(db: Session, target_date: Optional[dt.date] = None) -> dict:
                 mark_gap(db, t, day)
                 stats["gaps"] += 1
 
+    # §6 留存期限：画像明细 ≥180 天自动清理（快照行保留分布聚合，同样清理）
+    cutoff = today - dt.timedelta(days=180)
+    d1 = db.query(BehaviorDomain).filter(BehaviorDomain.profile_date < cutoff).delete()
+    p1 = db.query(BehaviorProfile).filter(BehaviorProfile.profile_date < cutoff).delete()
+    if d1 or p1:
+        logger.info("画像留存清理: domains=%d profiles=%d cutoff=%s", d1, p1, cutoff)
+
     # 推进水位（全部处理完才推进，失败日下轮由 gap 逻辑兜底）
     if wm is None:
         wm = BehaviorProfileWatermark(id=1)
@@ -250,6 +260,7 @@ def _load_prev_days(db: Session, target: dict, day: dt.date) -> List[dict]:
             "by_hour": r.by_hour or [0] * 24,
             "wd_hour": r.wd_hour or [[0] * 24 for _ in range(7)],
             "by_block": r.by_block or {},
+            "cat_by_block": {},
             "domain_visits": {},
             "cat_visit": cat_visit,
             "layer_visit": layer,

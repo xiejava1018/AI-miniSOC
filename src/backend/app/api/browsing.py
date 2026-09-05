@@ -500,7 +500,12 @@ async def query_logs(
 
     client = LokiClient()
     try:
-        streams = await asyncio.to_thread(client.query_range, query, start_ns, end_ns, limit)
+        # P3-T1 后修：默认 direction=forward 会先取到最旧数据被 limit 截断，
+        # 当窗口内数据量超 limit 时（如全量 {exporter="OTLP"}），前端的 limit 实际
+        # 取到的是 1h 窗口里最早的一批，看不到最新数据。改 backward + 服务端按 ts 倒序。
+        streams = await asyncio.to_thread(
+            client.query_range, query, start_ns, end_ns, limit, "backward"
+        )
     finally:
         client.close()
 

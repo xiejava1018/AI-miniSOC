@@ -35,6 +35,7 @@ from app.models import (  # noqa: F401  (imports register all models with Base.m
     ChatSession, ChatMessage, Notification,
     BrowsingEvent, BrowsingBlacklist, BrowsingBaseline,
     BehaviorProfile, BehaviorDomain, BehaviorProfileWatermark,
+    IdentityEvent, IdentityBinding,
     AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
     CisaKev, SocTaskRegistry, SocTaskRun,
     AssetRiskHistory, AiFeedback,

@@ -192,6 +192,52 @@ _IP_DIRECT = {"layer": "ACT", "color": "#495057", "icon": "#"}
 _IP_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
 
+# 9.7.3 可配置词典缓存：soc_system_config(category='behavior_profile', key='domain_categories')
+# 值为 JSON：{"分类名": {"kw": [...], "layer": "ACT"}}, 运营可增删关键词/调优先级
+# （dict 键序即优先级）。缓存 5 分钟，读失败回落代码内置词典。
+_dict_override: dict | None = None
+_dict_loaded_at: float = 0.0
+
+
+def _load_dict_override() -> dict:
+    """返回 {cat: [kw,...]} 的运营覆盖（空 dict = 无覆盖）。"""
+    global _dict_override, _dict_loaded_at
+    import time as _time
+    now = _time.time()
+    if _dict_override is not None and now - _dict_loaded_at < 300:
+        return _dict_override
+    override: dict = {}
+    try:
+        import json as _json
+        from app.core.database import SessionLocal
+        from app.models.system_config import SystemConfig
+        db = SessionLocal()
+        try:
+            row = (db.query(SystemConfig)
+                   .filter(SystemConfig.category == "behavior_profile",
+                           SystemConfig.key == "domain_categories")
+                   .first())
+            if row and row.value:
+                data = _json.loads(row.value)
+                # 展开为 {cat: [kw...]}，保留运营给的键序
+                for cat, spec in data.items():
+                    kws = spec.get("kw", []) if isinstance(spec, dict) else spec
+                    override[cat] = [str(k).lower() for k in kws]
+        finally:
+            db.close()
+    except Exception:
+        pass  # 静默回落内置词典
+    _dict_override = override
+    _dict_loaded_at = now
+    return override
+
+
+def invalidate_dict_cache() -> None:
+    """词典更新后调用（运营改配置后生效，无需重启）。"""
+    global _dict_override
+    _dict_override = None
+
+
 def classify(domain: str) -> tuple[str, dict]:
     """把域名归入一个类别，返回 (类别名, 类别定义)。"""
     d = (domain or "").lower().strip()
@@ -199,6 +245,15 @@ def classify(domain: str) -> tuple[str, dict]:
         return "其他", _OTHER
     if _IP_RE.match(d):
         return "IP 直连", _IP_DIRECT
+    # 1) 运营覆盖词典优先（键序即优先级）
+    override = _load_dict_override()
+    if override:
+        for cat, kws in override.items():
+            for kw in kws:
+                if kw and kw in d:
+                    return cat, CATEGORIES.get(cat) or {
+                        "layer": "ACT", "color": "#7048e8", "icon": "✦"}
+    # 2) 内置词典
     for cat in _CAT_ORDER:
         for kw in CATEGORIES[cat]["kw"]:
             if kw in d:

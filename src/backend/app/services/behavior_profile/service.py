@@ -4,9 +4,10 @@
 """
 
 import datetime as dt
+import logging
 from typing import List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import case as sa_case, func
 from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
@@ -62,7 +63,9 @@ def get_profile(db: Session, ip: str, days: int = 7) -> Optional[dict]:
     by_hour = [0] * 24
     wd_hour = [[0] * 24 for _ in range(7)]
     by_block: dict = {}
+    cat_by_block: dict = {}
     layer_visit: dict = {}
+    workday = weekend = 0
     for r in ok_rows:
         for h in range(24):
             by_hour[h] += (r.by_hour or [0] * 24)[h]
@@ -73,9 +76,20 @@ def get_profile(db: Session, ip: str, days: int = 7) -> Optional[dict]:
             by_block[b] = by_block.get(b, 0) + v
         for l, v in (r.layer_visit or {}).items():
             layer_visit[l] = layer_visit.get(l, 0) + v
+        for b, cats in (getattr(r, "cat_by_block", None) or {}).items():
+            cat_by_block.setdefault(b, {})
+            for c, v in cats.items():
+                cat_by_block[b][c] = cat_by_block[b].get(c, 0) + v
+        workday += r.workday or 0
+        weekend += r.weekend or 0
     if total:
         by_block = {b: round(v / total * 100, 1) for b, v in by_block.items()}
         layer_visit = {l: round(v / total * 100, 1) for l, v in layer_visit.items()}
+    act_total = layer_visit.get("ACT", 0) or 1
+    cat_by_block_pct = {
+        b: {c: round(v / act_total * 100, 1) for c, v in sorted(cats.items(), key=lambda t: -t[1])[:6]}
+        for b, cats in cat_by_block.items() if cats
+    }
 
     tags = latest.tags if latest else []
     domains = get_domains(db, ip, days, limit=20)
@@ -97,6 +111,9 @@ def get_profile(db: Session, ip: str, days: int = 7) -> Optional[dict]:
         "by_hour": by_hour,
         "wd_hour": wd_hour,
         "by_block": by_block,
+        "workday": workday,
+        "weekend": weekend,
+        "cat_by_block": cat_by_block_pct,
         "layer_visit": layer_visit,
         "cat_share": latest.cat_share if latest else {},
         "top_domains": domains,
@@ -215,4 +232,214 @@ def compute_realtime(db: Session, ip: str) -> dict:
         "tags": build_tags(rolling),
         "loki_requests": stats[0],
         "truncated_windows": stats[1],
+    }
+
+
+# ── 风险画像（层3，对标原型 §3.0.2） ─────────────────────
+
+def get_risk(db: Session, ip: str) -> dict:
+    """风险画像：告警分级/规则榜/漏洞/暴露端口/评分趋势（复用现有权威实现）。"""
+    from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH
+    from app.models.asset_port import AssetPort
+    from app.models.asset_risk import AssetRiskHistory
+    from app.models.vulnerability import AssetVulnerability, Vulnerability
+    from app.services.alert_query import AlertQueryService
+
+    asset = db.query(Asset).filter(Asset.asset_ip == ip).first()
+    # 告警分级：服务端聚合精确计数（禁客户端分桶，§F2.1 教训）
+    try:
+        buckets = AlertQueryService(db).get_level_buckets_by_ip(ip, days=7)
+    except Exception:
+        logger.exception("告警分级聚合失败 ip=%s", ip)
+        buckets = {"critical": 0, "high": 0, "medium": 0, "low": 0,
+                   "total": 0, "exact": False}
+
+    # 告警规则榜（PG 聚合表，按 count 排序；附 AI 去噪后计数）
+    from app.models.alert_group_snapshot import AlertGroupSnapshot as AlertGroup
+    rules = (
+        db.query(
+            AlertGroup.rule_id, AlertGroup.rule_description,
+            AlertGroup.level, func.sum(AlertGroup.count).label("cnt"),
+            func.sum(func.coalesce(
+                sa_case((AlertGroup.ai_is_noise == False, AlertGroup.count),  # noqa: E712
+                        else_=0), 0)).label("real_cnt"),
+        )
+        .filter(AlertGroup.agent_ip == ip)
+        .group_by(AlertGroup.rule_id, AlertGroup.rule_description, AlertGroup.level)
+        .order_by(func.sum(AlertGroup.count).desc())
+        .limit(8)
+        .all()
+    )
+
+    # 漏洞（open 状态，含 KEV/在野利用标）
+    vuln_rows = (
+        db.query(Vulnerability, AssetVulnerability.status)
+        .join(AssetVulnerability, AssetVulnerability.vulnerability_id == Vulnerability.id)
+        .filter(AssetVulnerability.asset_id == asset.id,
+                AssetVulnerability.status != "fixed")
+        .all() if asset else []
+    )
+    sev_dist = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+    kev = []
+    for v, _status in vuln_rows:
+        sev = str(v.severity).lower()
+        if sev in sev_dist:
+            sev_dist[sev] += 1
+        if v.has_exploit and len(kev) < 10:
+            kev.append({"cve_id": v.cve_id, "title": v.title,
+                        "severity": str(v.severity)})
+
+    # 暴露端口
+    ports = (
+        db.query(AssetPort)
+        .filter(AssetPort.asset_ip == ip, AssetPort.state == "open")
+        .order_by(AssetPort.port)
+        .all()
+    )
+    danger_ports = {22, 3389, 5900, 5901, 23, 445, 135, 6379, 27017}
+    port_items = [
+        {"port": p.port, "protocol": p.protocol, "service": p.service,
+         "danger": int(p.port) in danger_ports}
+        for p in ports
+    ]
+
+    # 评分趋势（快照可能只有几天——诚实返回天数）
+    trend = []
+    if asset:
+        hist = (
+            db.query(AssetRiskHistory)
+            .filter(AssetRiskHistory.asset_id == asset.id)
+            .order_by(AssetRiskHistory.scored_at.desc())
+            .limit(30)
+            .all()
+        )
+        trend = [{"date": h.scored_at.date().isoformat(), "score": h.risk_score}
+                 for h in reversed(hist)]
+
+    has_agent_alerts = buckets.get("total", 0) > 0 or bool(rules)
+    return {
+        "ip": ip,
+        "asset_id": str(asset.id) if asset else None,
+        "criticality": asset.criticality if asset else None,
+        "alerts": buckets,
+        "top_rules": [
+            {"rule_id": r[0], "description": r[1], "level": r[2], "count": int(r[3]),
+             "real_count": int(r[4] or 0)}
+            for r in rules
+        ],
+        "vulns": {"total": sum(sev_dist.values()), "severity": sev_dist, "kev": kev},
+        "ports": {"total": len(port_items), "items": port_items},
+        "risk_trend": trend,
+        "risk_trend_days": len(trend),
+        "note": None if has_agent_alerts or ports else "该设备无主机侧告警与端口数据（未装 agent 且未扫描）",
+    }
+
+
+# ── 异常判定（层5，可计算子集；解读者须人工复核） ─────────
+
+def get_anomalies(db: Session, ip: str) -> dict:
+    """画像异常信号（只输出信号不定性）。与推送场景 8 同口径。"""
+    rows = [r for r in find_by_ip(db, ip, days=30)]
+    ok_rows = [r for r in rows if r.status == "ok"]
+    gap_days = sum(1 for r in rows if r.status == "gap")
+    signals = []
+
+    def add(sev, name, desc, evidence):
+        signals.append({"severity": sev, "name": name, "desc": desc, "evidence": evidence})
+
+    if len(ok_rows) >= 4:
+        latest, baseline = ok_rows[-1], ok_rows[:-1]
+        base_total = [r.total for r in baseline if r.total > 0]
+        if base_total and latest.total >= 500:
+            avg = sum(base_total) / len(base_total)
+            if avg > 0 and latest.total / avg >= 5:
+                add("mid", "访问量激增",
+                    "最近快照日访问量显著高于历史基线",
+                    f"{latest.total:,} 次 vs 基线均值 {avg:,.0f} 次"
+                    f"（{latest.total / avg:.1f} 倍，阈值 5 倍）")
+        if base_total:
+            night_now = _night_share(latest.by_hour)
+            base_nights = [_night_share(r.by_hour) for r in baseline if r.total > 0]
+            base_night_avg = sum(base_nights) / len(base_nights) if base_nights else 0
+            if night_now >= 40 and base_night_avg < 20:
+                add("mid", "节律突变（凌晨活跃）",
+                    "凌晨 00-06 点占比显著高于自身基线",
+                    f"最新 {night_now}% vs 基线均值 {base_night_avg:.0f}%")
+        if latest.traffic_type == "machine":
+            add("info", "机器流量为主",
+                "系统/协议心跳占比高，作息与兴趣结论不适用",
+                f"SYS 层占比 {latest.layer_visit.get('SYS', 0)}%")
+        if getattr(latest, "truncated_windows", 0) > 0:
+            add("info", "数据截断",
+                "当日部分查询窗口被截断，计数可能偏低",
+                f"truncated_windows={latest.truncated_windows}")
+    if gap_days:
+        add("info", "数据缺失",
+            "部分快照日超出 Loki 保留窗口，永久缺失",
+            f"{gap_days} 天 gap（非 0 流量，勿当作无行为）")
+    if (ok_rows[-1].confidence if ok_rows else 0) < 40 and ok_rows:
+        add("info", "低置信度",
+            "数据量不足，画像结论可信度有限",
+            f"confidence={ok_rows[-1].confidence}/100")
+
+    hit = [s for s in signals if s["severity"] in ("high", "mid")]
+    return {
+        "ip": ip,
+        "signals": signals,
+        "has_anomaly": bool(hit),
+        "banner": {
+            "severity": hit[0]["severity"],
+            "name": hit[0]["name"],
+            "desc": hit[0]["desc"],
+        } if hit else None,
+        "disclaimer": "画像仅输出信号，不定性；定性须经人工复核",
+    }
+
+
+def get_domain_daily(db: Session, ip: str, domain: str, days: int = 30) -> list:
+    """单域名逐日访问明细（域名下钻）。"""
+    since = dt.date.today() - dt.timedelta(days=days)
+    rows = (
+        db.query(BehaviorDomain)
+        .filter(BehaviorDomain.ip == ip, BehaviorDomain.domain == domain,
+                BehaviorDomain.profile_date >= since)
+        .order_by(BehaviorDomain.profile_date)
+        .all()
+    )
+    return [{"date": str(r.profile_date), "visits": r.visits,
+             "category": r.category} for r in rows]
+
+
+def compare_profiles(db: Session, ip_a: str, ip_b: str, days: int = 7) -> dict:
+    """双 IP 画像对比（余弦相似度：by_block + cat_share）。"""
+    pa, pb = get_profile(db, ip_a, days), get_profile(db, ip_b, days)
+    if not pa or not pb:
+        missing = ip_a if not pa else ip_b
+        return {"error": f"{missing} 无画像快照"}
+
+    import math
+
+    def cos(a: dict, b: dict) -> float:
+        keys = set(a) | set(b)
+        num = sum(a.get(k, 0) * b.get(k, 0) for k in keys)
+        na = math.sqrt(sum(v * v for v in a.values())) or 1
+        nb = math.sqrt(sum(v * v for v in b.values())) or 1
+        return round(num / (na * nb), 3)
+
+    block_sim = cos(pa["by_block"], pb["by_block"])
+    cat_sim = cos(pa["cat_share"], pb["cat_share"])
+    return {
+        "a": {"ip": ip_a, "total": pa["total"], "traffic_type": pa["traffic_type"],
+              "night": pa["by_block"].get("深夜", 0)},
+        "b": {"ip": ip_b, "total": pb["total"], "traffic_type": pb["traffic_type"],
+              "night": pb["by_block"].get("深夜", 0)},
+        "days": days,
+        "block_similarity": block_sim,
+        "category_similarity": cat_sim,
+        "verdict": (
+            "行为模式高度相似" if block_sim > 0.9 and cat_sim > 0.9
+            else "行为模式部分相似" if block_sim > 0.7
+            else "行为模式差异明显"
+        ),
+        "note": "相似度为粗粒度参考，判定需人工复核",
     }

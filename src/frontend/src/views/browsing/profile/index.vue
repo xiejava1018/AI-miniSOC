@@ -7,15 +7,16 @@
           <template #header>
             <div class="card-head">
               <span class="card-title">画像主体</span>
-              <ElRadioGroup v-model="trafficFilter" size="small" @change="loadList">
-                <ElRadioButton value="">全部</ElRadioButton>
-                <ElRadioButton value="human">人类</ElRadioButton>
-                <ElRadioButton value="machine">机器</ElRadioButton>
-              </ElRadioGroup>
+              <ElButton size="small" text @click="compareVisible = true">对比</ElButton>
             </div>
+            <ElRadioGroup v-model="trafficFilter" size="small" @change="loadList" class="mt8">
+              <ElRadioButton value="">全部</ElRadioButton>
+              <ElRadioButton value="human">人类</ElRadioButton>
+              <ElRadioButton value="machine">机器</ElRadioButton>
+            </ElRadioGroup>
           </template>
           <div
-            v-for="item in subjects"
+            v-for="item in sortedSubjects"
             :key="item.ip"
             class="subj"
             :class="{ on: item.ip === currentIp }"
@@ -34,7 +35,7 @@
               <span>{{ item.hostname || '未命名' }}</span>
               <span>{{ formatNumber(item.total) }} 次</span>
             </div>
-            <div class="subj-tags">
+            <div class="subj-tags" v-if="item.traffic_type !== 'machine'">
               <ElTag
                 v-for="t in item.tags || []"
                 :key="t.name"
@@ -51,9 +52,23 @@
         </ElCard>
       </ElCol>
 
-      <!-- 右栏：画像详情 -->
+      <!-- 右栏：画像详情（四 Tab，§3.0） -->
       <ElCol :span="18">
         <template v-if="profile">
+          <!-- 异常横幅（层5，有信号才显示） -->
+          <ElAlert
+            v-if="anomalies?.banner"
+            type="warning"
+            :closable="false"
+            class="bp-banner"
+            @click="activeTab = 'anomaly'"
+          >
+            <template #title>
+              ⚠ 异常信号：{{ anomalies.banner.name }} —— {{ anomalies.banner.desc }}
+              <ElLink type="primary" @click.stop="activeTab = 'anomaly'">查看全部 →</ElLink>
+            </template>
+          </ElAlert>
+
           <!-- 标识条 -->
           <ElCard shadow="never" class="bp-idbar" :body-style="{ padding: '12px 16px' }">
             <div class="idbar">
@@ -64,11 +79,16 @@
                   <span class="idbar-sub">
                     {{ profile.asset?.asset_type || '' }}
                     {{ profile.asset?.os_name || '' }}
+                    {{ profile.asset?.owner ? ` · owner: ${profile.asset.owner}` : ' · 未登记责任人' }}
                   </span>
                 </div>
               </div>
               <div class="idbar-right">
-                <ElTag effect="plain" type="info">窗口 {{ profile.days }} 天</ElTag>
+                <ElSelect v-model="days" size="small" style="width: 110px" @change="reload">
+                  <ElOption :value="7" label="近 7 天" />
+                  <ElOption :value="14" label="近 14 天" />
+                  <ElOption :value="30" label="近 30 天" />
+                </ElSelect>
                 <ElTag effect="plain">访问 {{ formatNumber(profile.total) }}</ElTag>
                 <ElTooltip content="置信度由数据量与查询截断情况计算（§9.7 偏差说明）">
                   <ElTag effect="plain" :type="profile.confidence >= 60 ? 'success' : 'warning'">
@@ -78,136 +98,347 @@
                 <ElTag v-if="profile.gap_days" effect="plain" type="danger">
                   {{ profile.gap_days }} 天数据缺失
                 </ElTag>
-                <ElButton
-                  v-if="hasAuth('refresh')"
-                  size="small"
-                  :loading="refreshing"
-                  @click="onRefresh"
-                >
+                <ElButton v-if="hasAuth('refresh')" size="small" :loading="refreshing" @click="onRefresh">
                   实时刷新
                 </ElButton>
                 <ElButton size="small" type="primary" plain :loading="aiLoading" @click="onAiSummary">
                   AI 解读
                 </ElButton>
+                <ElButton size="small" @click="onExport">导出</ElButton>
               </div>
             </div>
             <div class="idbar-watermark">本数据仅用于安全审计</div>
           </ElCard>
 
-          <!-- 画像标签 -->
-          <ElCard shadow="never" class="bp-card">
-            <template #header>
-              <span class="card-title">画像标签</span>
-              <span class="card-sub">规则判定，每项附证据；机器流量主体已自动降权</span>
-            </template>
-            <ElAlert
-              v-if="aiResult"
-              :type="aiResult.source === 'glm' ? 'success' : 'warning'"
-              :closable="false"
-              class="ai-alert"
-            >
-              <template #title>
-                AI 解读（{{ aiResult.source === 'glm' ? 'GLM 生成' : '规则模板（AI 不可用降级）' }}）
-                · 仅输出信号不定性，须人工复核 · 仅用于安全审计
-              </template>
-              <div class="ai-body">
-                <div class="ai-sec"><b>摘要</b><pre>{{ aiResult.summary }}</pre></div>
-                <div class="ai-sec"><b>异常解读</b><pre>{{ aiResult.anomaly_interpretation }}</pre></div>
-                <div class="ai-sec"><b>建议动作</b><pre>{{ aiResult.recommendations }}</pre></div>
-              </div>
-            </ElAlert>
-            <div v-if="profile.tags?.length" class="tag-grid">
-              <div v-for="t in profile.tags" :key="t.name" class="ptag" :style="{ '--tc': t.color }">
-                <div class="ptag-name">
-                  {{ t.name }}
-                  <span v-if="t.alias" class="ptag-alias">→ {{ t.alias }}</span>
-                </div>
-                <div class="ptag-desc">{{ t.desc }}</div>
-                <div class="ptag-evidence">{{ t.evidence }}</div>
-              </div>
-            </div>
-            <ElEmpty v-else description="标签规则未命中 —— 行为强度或多样性不足" :image-size="60" />
-          </ElCard>
-
-          <!-- 24h 曲线 + 时段分布 -->
-          <ElRow :gutter="12">
-            <ElCol :span="14">
-              <ElCard shadow="never" class="bp-card">
-                <template #header><span class="card-title">24 小时活跃曲线</span></template>
-                <div ref="hourRef" class="chart-box" style="height: 220px"></div>
+          <!-- Tab 切换 -->
+          <ElTabs v-model="activeTab" class="bp-tabs">
+            <!-- ═══ Tab 1: 行为画像（层2） ═══ -->
+            <ElTabPane label="行为画像" name="behavior">
+              <ElCard v-if="aiResult" shadow="never" class="bp-card">
+                <ElAlert :type="aiResult.source === 'glm' ? 'success' : 'warning'" :closable="false">
+                  <template #title>
+                    AI 解读（{{ aiResult.source === 'glm' ? 'GLM 生成' : '规则模板（AI 不可用降级）' }}）
+                    · 仅输出信号不定性，须人工复核 · 仅用于安全审计
+                  </template>
+                  <div class="ai-body">
+                    <div class="ai-sec"><b>摘要</b><pre>{{ aiResult.summary }}</pre></div>
+                    <div class="ai-sec"><b>异常解读</b><pre>{{ aiResult.anomaly_interpretation }}</pre></div>
+                    <div class="ai-sec"><b>建议动作</b><pre>{{ aiResult.recommendations }}</pre></div>
+                  </div>
+                </ElAlert>
               </ElCard>
-            </ElCol>
-            <ElCol :span="10">
-              <ElCard shadow="never" class="bp-card">
-                <template #header><span class="card-title">时段分布</span></template>
-                <div ref="blockRef" class="chart-box" style="height: 220px"></div>
-              </ElCard>
-            </ElCol>
-          </ElRow>
 
-          <!-- 星期×小时热力图 -->
-          <ElCard shadow="never" class="bp-card">
-            <template #header>
-              <span class="card-title">星期 × 小时 行为热力图</span>
-              <span class="card-sub">颜色越深访问越密集（UTC+8）—— 行为节律核心视图</span>
-            </template>
-            <div ref="heatRef" class="chart-box" style="height: 240px"></div>
-          </ElCard>
-
-          <!-- 兴趣分类 + 趋势 -->
-          <ElRow :gutter="12">
-            <ElCol :span="10">
-              <ElCard shadow="never" class="bp-card">
-                <template #header><span class="card-title">访问习惯构成</span></template>
-                <div ref="catRef" class="chart-box" style="height: 220px"></div>
-              </ElCard>
-            </ElCol>
-            <ElCol :span="14">
               <ElCard shadow="never" class="bp-card">
                 <template #header>
-                  <span class="card-title">多日趋势</span>
-                  <span class="card-sub">灰色段 = 数据缺失（Loki 窗口外，非零流量）</span>
+                  <span class="card-title">画像标签</span>
+                  <span class="card-sub">规则判定，每项附证据；人设别名见箭头</span>
                 </template>
-                <div ref="trendRef" class="chart-box" style="height: 220px"></div>
+                <div v-if="behaviorVisibleTags.length" class="tag-grid">
+                  <div v-for="t in behaviorVisibleTags" :key="t.name" class="ptag" :style="{ '--tc': t.color }">
+                    <div class="ptag-name">
+                      {{ t.name }}
+                      <span v-if="t.alias" class="ptag-alias">→ {{ t.alias }}</span>
+                    </div>
+                    <div class="ptag-desc">{{ t.desc }}</div>
+                    <div class="ptag-evidence">{{ t.evidence }}</div>
+                  </div>
+                </div>
+                <ElEmpty v-else description="标签规则未命中 —— 行为强度或多样性不足" :image-size="60" />
               </ElCard>
-            </ElCol>
-          </ElRow>
 
-          <!-- 域名 TOP -->
-          <ElCard shadow="never" class="bp-card">
-            <template #header><span class="card-title">访问域名 TOP 20</span></template>
-            <ElTable :data="profile.top_domains || []" size="small" max-height="360">
-              <ElTableColumn prop="domain" label="域名" min-width="220" show-overflow-tooltip />
-              <ElTableColumn prop="category" label="分类" width="110" />
-              <ElTableColumn prop="visits" label="访问量" width="100">
-                <template #default="{ row }">{{ formatNumber(row.visits) }}</template>
-              </ElTableColumn>
-              <ElTableColumn prop="share" label="占比" width="90">
-                <template #default="{ row }">{{ row.share }}%</template>
-              </ElTableColumn>
-            </ElTable>
-          </ElCard>
+              <ElRow :gutter="12">
+                <ElCol :span="14">
+                  <ElCard shadow="never" class="bp-card">
+                    <template #header><span class="card-title">24 小时活跃曲线</span></template>
+                    <div ref="hourRef" class="chart-box" style="height: 210px"></div>
+                  </ElCard>
+                </ElCol>
+                <ElCol :span="10">
+                  <ElCard shadow="never" class="bp-card">
+                    <template #header>
+                      <span class="card-title">时段分布</span>
+                      <span class="card-sub">工作日 {{ workdayShare }}% · 周末 {{ weekendShare }}%</span>
+                    </template>
+                    <div ref="blockRef" class="chart-box" style="height: 210px"></div>
+                  </ElCard>
+                </ElCol>
+              </ElRow>
+
+              <ElCard shadow="never" class="bp-card">
+                <template #header>
+                  <span class="card-title">星期 × 小时 行为热力图</span>
+                  <span class="card-sub">颜色越深访问越密集（UTC+8）—— 行为节律核心视图</span>
+                </template>
+                <div ref="heatRef" class="chart-box" style="height: 230px"></div>
+              </ElCard>
+
+              <ElRow :gutter="12">
+                <ElCol :span="10">
+                  <ElCard shadow="never" class="bp-card">
+                    <template #header><span class="card-title">访问习惯构成</span></template>
+                    <div ref="catRef" class="chart-box" style="height: 220px"></div>
+                  </ElCard>
+                </ElCol>
+                <ElCol :span="14">
+                  <ElCard shadow="never" class="bp-card">
+                    <template #header>
+                      <span class="card-title">各时段在干什么</span>
+                      <span class="card-sub">分类 × 时段堆叠 —— 一眼看"半夜在刷什么"</span>
+                    </template>
+                    <div ref="stackRef" class="chart-box" style="height: 220px"></div>
+                  </ElCard>
+                </ElCol>
+              </ElRow>
+
+              <ElCard shadow="never" class="bp-card">
+                <template #header><span class="card-title">多日趋势</span>
+                  <span class="card-sub">灰色段 = 数据缺失（Loki 窗口外）</span>
+                </template>
+                <div ref="trendRef" class="chart-box" style="height: 200px"></div>
+              </ElCard>
+
+              <ElCard shadow="never" class="bp-card">
+                <template #header><span class="card-title">访问域名 TOP 20</span>
+                  <span class="card-sub">点域名查看逐日明细</span>
+                </template>
+                <ElTable :data="profile.top_domains || []" size="small" max-height="360">
+                  <ElTableColumn prop="domain" label="域名" min-width="220">
+                    <template #default="{ row }">
+                      <ElLink type="primary" @click="openDomainDrill(row.domain)">{{ row.domain }}</ElLink>
+                    </template>
+                  </ElTableColumn>
+                  <ElTableColumn prop="category" label="分类" width="110" />
+                  <ElTableColumn prop="visits" label="访问量" width="100">
+                    <template #default="{ row }">{{ formatNumber(row.visits) }}</template>
+                  </ElTableColumn>
+                  <ElTableColumn prop="share" label="占比" width="90">
+                    <template #default="{ row }">{{ row.share }}%</template>
+                  </ElTableColumn>
+                </ElTable>
+              </ElCard>
+            </ElTabPane>
+
+            <!-- ═══ Tab 2: 风险画像（层3） ═══ -->
+            <ElTabPane label="风险画像" name="risk">
+              <template v-if="risk">
+                <ElAlert v-if="risk.note" type="info" :closable="false" class="bp-banner" :title="risk.note" />
+                <ElRow :gutter="12">
+                  <ElCol :span="6" v-for="k in riskKpis" :key="k.l">
+                    <ElCard shadow="never" class="bp-card kpi-card" :body-style="{ padding: '12px' }">
+                      <div class="kpi-v" :style="{ color: k.c }">{{ k.v }}</div>
+                      <div class="kpi-l">{{ k.l }}</div>
+                    </ElCard>
+                  </ElCol>
+                </ElRow>
+                <ElRow :gutter="12">
+                  <ElCol :span="14">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header>
+                        <span class="card-title">告警规则榜</span>
+                        <span class="card-sub">real = AI 去噪后计数（ai_is_noise=false）</span>
+                      </template>
+                      <ElTable :data="risk.top_rules" size="small" max-height="300">
+                        <ElTableColumn label="级别" width="70">
+                          <template #default="{ row }">
+                            <ElTag size="small" effect="plain" :type="levelType(row.level)">L{{ row.level }}</ElTag>
+                          </template>
+                        </ElTableColumn>
+                        <ElTableColumn prop="description" label="规则" min-width="200" show-overflow-tooltip />
+                        <ElTableColumn prop="count" label="总条数" width="90" />
+                        <ElTableColumn prop="real_count" label="去噪后" width="90" />
+                      </ElTable>
+                    </ElCard>
+                  </ElCol>
+                  <ElCol :span="10">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header><span class="card-title">漏洞严重度分布</span></template>
+                      <div ref="vulnRef" class="chart-box" style="height: 180px"></div>
+                      <div v-if="risk.vulns.kev?.length" class="kev">
+                        <ElTag v-for="k in risk.vulns.kev" :key="k.cve_id" size="small" type="danger" effect="plain" class="kev-tag">
+                          🔥 {{ k.cve_id }}
+                        </ElTag>
+                      </div>
+                    </ElCard>
+                  </ElCol>
+                </ElRow>
+                <ElRow :gutter="12">
+                  <ElCol :span="12">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header><span class="card-title">暴露端口</span></template>
+                      <div class="ports">
+                        <span v-for="p in risk.ports.items" :key="p.port + p.protocol"
+                              class="port" :class="{ danger: p.danger }">
+                          {{ p.port }}/{{ p.protocol }}
+                          <small v-if="p.service">{{ p.service }}</small>
+                        </span>
+                        <span v-if="!risk.ports.items?.length" class="dim">无开放端口记录</span>
+                      </div>
+                    </ElCard>
+                  </ElCol>
+                  <ElCol :span="12">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header>
+                        <span class="card-title">风险评分趋势</span>
+                        <span class="card-sub">
+                          {{ risk.risk_trend_days >= 5 ? '' : '数据不足 5 天，趋势仅供参考' }}
+                        </span>
+                      </template>
+                      <div ref="riskTrendRef" class="chart-box" style="height: 180px"></div>
+                    </ElCard>
+                  </ElCol>
+                </ElRow>
+              </template>
+              <ElCard v-else shadow="never" class="bp-card"><ElEmpty description="加载中…" /></ElCard>
+            </ElTabPane>
+
+            <!-- ═══ Tab 3: 关系画像（层4，身份管道已上线） ═══ -->
+            <ElTabPane label="关系画像" name="rel">
+              <template v-if="relations">
+                <ElAlert v-if="relations.note" type="info" :closable="false" class="bp-banner" :title="relations.note" />
+                <ElRow :gutter="12">
+                  <ElCol :span="8">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header><span class="card-title">设备共享度</span></template>
+                      <div class="rel-stat">
+                        <div class="kpi-v">{{ relations.device_shared_by }}</div>
+                        <div class="kpi-l">个账号在用本机</div>
+                      </div>
+                      <div class="rel-accounts">
+                        <ElTag v-for="a in relations.accounts_on_host" :key="a" size="small" effect="plain" class="acc-tag">
+                          {{ a }}
+                        </ElTag>
+                      </div>
+                      <div class="rel-fail" v-if="relations.inbound_fail_total">
+                        失败登录 {{ relations.inbound_fail_total }} 次
+                      </div>
+                    </ElCard>
+                    <ElCard shadow="never" class="bp-card" v-if="relations.external_attackers?.length">
+                      <template #header><span class="card-title">外部攻击源</span></template>
+                      <div class="ports">
+                        <span v-for="x in relations.external_attackers" :key="x.ip" class="port danger">
+                          {{ x.ip }} <small>{{ x.count }} 次失败</small>
+                        </span>
+                      </div>
+                    </ElCard>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header><span class="card-title">入站登录（谁登了本机）</span></template>
+                      <ElTable :data="relations.inbound" size="small" max-height="320">
+                        <ElTableColumn prop="account" label="账号" width="100" />
+                        <ElTableColumn prop="ip" label="来源 IP" width="130" />
+                        <ElTableColumn prop="count" label="次数" width="70" />
+                      </ElTable>
+                      <ElEmpty v-if="!relations.inbound?.length" description="无入站登录记录" :image-size="50" />
+                    </ElCard>
+                  </ElCol>
+                  <ElCol :span="8">
+                    <ElCard shadow="never" class="bp-card">
+                      <template #header><span class="card-title">出站登录（本机登了谁）</span></template>
+                      <ElTable :data="relations.outbound" size="small" max-height="320">
+                        <ElTableColumn prop="account" label="账号" width="100" />
+                        <ElTableColumn label="目标" width="130">
+                          <template #default="{ row }">
+                            <ElLink type="primary" @click="selectSubject(row.ip)">{{ row.ip }}</ElLink>
+                          </template>
+                        </ElTableColumn>
+                        <ElTableColumn prop="count" label="次数" width="70" />
+                      </ElTable>
+                      <ElEmpty v-if="!relations.outbound?.length" description="无出站登录记录" :image-size="50" />
+                    </ElCard>
+                  </ElCol>
+                </ElRow>
+              </template>
+              <ElCard v-else shadow="never" class="bp-card"><ElEmpty description="加载中…" /></ElCard>
+            </ElTabPane>
+
+            <!-- ═══ Tab 4: 异常判定（层5） ═══ -->
+            <ElTabPane :label="`异常判定${anomalies?.has_anomaly ? ' ⚠' : ''}`" name="anomaly">
+              <ElCard shadow="never" class="bp-card">
+                <template #header>
+                  <span class="card-title">异常信号清单</span>
+                  <span class="card-sub">{{ anomalies?.disclaimer }}</span>
+                </template>
+                <ElTable :data="anomalies?.signals || []" size="default">
+                  <ElTableColumn label="级别" width="80">
+                    <template #default="{ row }">
+                      <ElTag size="small" :type="row.severity === 'mid' ? 'warning' : 'info'">
+                        {{ row.severity === 'mid' ? '中' : '提示' }}
+                      </ElTag>
+                    </template>
+                  </ElTableColumn>
+                  <ElTableColumn prop="name" label="信号" width="160" />
+                  <ElTableColumn prop="desc" label="描述" min-width="180" />
+                  <ElTableColumn prop="evidence" label="证据" min-width="240" />
+                </ElTable>
+                <ElEmpty v-if="!anomalies?.signals?.length" description="未命中任何异常信号" :image-size="60" />
+              </ElCard>
+            </ElTabPane>
+          </ElTabs>
         </template>
         <ElCard v-else shadow="never" class="bp-card">
           <ElEmpty description="选择左侧主体查看画像，或等待快照任务生成数据" />
         </ElCard>
       </ElCol>
     </ElRow>
+
+    <!-- 域名下钻 -->
+    <ElDialog v-model="drillVisible" :title="`域名明细 — ${drillDomain}`" width="520px">
+      <ElTable :data="drillData" size="small" max-height="380" v-loading="drillLoading">
+        <ElTableColumn prop="date" label="日期" width="120" />
+        <ElTableColumn prop="visits" label="访问次数" />
+        <ElTableColumn prop="category" label="分类" width="120" />
+      </ElTable>
+      <ElEmpty v-if="!drillData.length && !drillLoading" description="窗口内无该域名记录" :image-size="50" />
+    </ElDialog>
+
+    <!-- 双 IP 对比 -->
+    <ElDialog v-model="compareVisible" title="双 IP 画像对比" width="480px">
+      <ElForm label-width="80px">
+        <ElFormItem label="IP A">
+          <ElSelect v-model="cmpA" filterable allow-create placeholder="选择或输入 IP">
+            <ElOption v-for="s in subjects" :key="s.ip" :value="s.ip" :label="s.ip" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="IP B">
+          <ElSelect v-model="cmpB" filterable allow-create placeholder="选择或输入 IP">
+            <ElOption v-for="s in subjects" :key="s.ip" :value="s.ip" :label="s.ip" />
+          </ElSelect>
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="compareVisible = false">取消</ElButton>
+        <ElButton type="primary" :loading="compareLoading" @click="onCompare">对比</ElButton>
+      </template>
+      <div v-if="compareResult" class="cmp-result">
+        <ElDescriptions :column="1" border size="small">
+          <ElDescriptionsItem label="时段相似度">{{ compareResult.block_similarity }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="分类相似度">{{ compareResult.category_similarity }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="结论">{{ compareResult.verdict }}</ElDescriptionsItem>
+          <ElDescriptionsItem label="备注">{{ compareResult.note }}</ElDescriptionsItem>
+        </ElDescriptions>
+      </div>
+    </ElDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
   import { ElMessage } from 'element-plus'
   import { echarts } from '@/plugins/echarts'
   import { useAuth } from '@/hooks/core/useAuth'
   import {
     getBehaviorProfiles,
     getBehaviorProfile,
-    getBehaviorDomains,
     getBehaviorTrend,
     refreshBehaviorProfile,
-    getBehaviorAiSummary
+    getBehaviorAiSummary,
+    getBehaviorRisk,
+    getBehaviorAnomalies,
+    getBehaviorRelations,
+    getBehaviorDomainDaily,
+    compareBehaviorProfiles,
+    exportBehaviorProfile
   } from '@/api/behaviorProfile'
 
   const { hasAuth } = useAuth()
@@ -219,8 +450,23 @@
   const trafficFilter = ref('')
   const subjects = ref<any[]>([])
   const currentIp = ref('')
+  const days = ref(7)
+  const activeTab = ref('behavior')
   const profile = ref<any>(null)
   const trend = ref<any[]>([])
+  const risk = ref<any>(null)
+  const anomalies = ref<any>(null)
+
+  const drillVisible = ref(false)
+  const drillLoading = ref(false)
+  const drillDomain = ref('')
+  const drillData = ref<any[]>([])
+
+  const compareVisible = ref(false)
+  const compareLoading = ref(false)
+  const cmpA = ref('')
+  const cmpB = ref('')
+  const compareResult = ref<any>(null)
 
   const BLOCK_ORDER = ['深夜', '早晨', '上午', '午间', '下午', '傍晚', '夜间']
   const BLOCK_COLORS: Record<string, string> = {
@@ -237,6 +483,46 @@
   let charts: echarts.ECharts[] = []
 
   const formatNumber = (n: number) => Number(n || 0).toLocaleString('en-US')
+
+  // 机器流量主体折叠标签、排到列表尾部（§9.7.1）
+  const sortedSubjects = computed(() =>
+    [...subjects.value].sort((a, b) => {
+      const ma = a.traffic_type === 'machine' ? 1 : 0
+      const mb = b.traffic_type === 'machine' ? 1 : 0
+      return ma - mb || b.total - a.total
+    })
+  )
+
+  const behaviorVisibleTags = computed(() => {
+    const p = profile.value
+    if (!p) return []
+    return p.traffic_type === 'machine' ? (p.tags || []).filter((t: any) => t.name !== '机器流量为主') : p.tags || []
+  })
+
+  const workdayShare = computed(() => {
+    const p = profile.value
+    if (!p) return 0
+    const t = (p.workday || 0) + (p.weekend || 0)
+    return t ? Math.round(((p.workday || 0) / t) * 1000) / 10 : 0
+  })
+  const weekendShare = computed(() => {
+    const p = profile.value
+    if (!p) return 0
+    const t = (p.workday || 0) + (p.weekend || 0)
+    return t ? Math.round(((p.weekend || 0) / t) * 1000) / 10 : 0
+  })
+
+  const riskKpis = computed(() => {
+    const r = risk.value
+    if (!r) return []
+    const a = r.alerts || {}
+    return [
+      { l: '7 天告警总数', v: formatNumber(a.total || 0), c: '#e8590c' },
+      { l: 'critical / high', v: `${a.critical || 0} / ${a.high || 0}`, c: '#c92a2a' },
+      { l: '未修复漏洞', v: r.vulns?.total || 0, c: '#f76707' },
+      { l: '开放端口', v: r.ports?.total || 0, c: '#1971c4' }
+    ]
+  })
 
   // ── 数据加载 ──────────────────────────────
 
@@ -258,18 +544,34 @@
   const selectSubject = async (ip: string) => {
     currentIp.value = ip
     loading.value = true
+    aiResult.value = null
+    risk.value = null
+    anomalies.value = null
     try {
-      const [p, t] = await Promise.all([
-        getBehaviorProfile(ip, { days: 7 }),
-        getBehaviorTrend(ip, { days: 30 })
+      const [p, t, an] = await Promise.all([
+        getBehaviorProfile(ip, { days: days.value }),
+        getBehaviorTrend(ip, { days: 30 }),
+        getBehaviorAnomalies(ip).catch(() => null)
       ])
       profile.value = p?.data || null
       trend.value = t?.data?.items || []
+      anomalies.value = an?.data || null
+      relations.value = null
       await nextTick()
       renderCharts()
     } finally {
       loading.value = false
     }
+  }
+
+  const reload = () => selectSubject(currentIp.value)
+
+  const loadRisk = async () => {
+    if (risk.value || !currentIp.value) return
+    const r = await getBehaviorRisk(currentIp.value).catch(() => null)
+    risk.value = r?.data || null
+    await nextTick()
+    renderRiskCharts()
   }
 
   const onRefresh = async () => {
@@ -289,13 +591,50 @@
     aiLoading.value = true
     aiResult.value = null
     try {
-      const res = await getBehaviorAiSummary(currentIp.value, { days: 7 })
+      const res = await getBehaviorAiSummary(currentIp.value, { days: days.value })
       aiResult.value = res?.data
       if (!aiResult.value) ElMessage.warning('AI 解读失败')
     } catch {
       ElMessage.error('AI 解读失败（稍后重试）')
     } finally {
       aiLoading.value = false
+    }
+  }
+
+  const onExport = async () => {
+    try {
+      await exportBehaviorProfile(currentIp.value, days.value)
+      ElMessage.success('报告已下载')
+    } catch {
+      ElMessage.error('导出失败')
+    }
+  }
+
+  const openDomainDrill = async (domain: string) => {
+    drillDomain.value = domain
+    drillVisible.value = true
+    drillLoading.value = true
+    try {
+      const res = await getBehaviorDomainDaily(currentIp.value, domain, { days: 30 })
+      drillData.value = res?.data?.items || []
+    } finally {
+      drillLoading.value = false
+    }
+  }
+
+  const onCompare = async () => {
+    if (!cmpA.value || !cmpB.value || cmpA.value === cmpB.value) {
+      ElMessage.warning('请选择两个不同的 IP')
+      return
+    }
+    compareLoading.value = true
+    try {
+      const res = await compareBehaviorProfiles({ a: cmpA.value, b: cmpB.value, days: days.value })
+      compareResult.value = res?.data
+    } catch {
+      ElMessage.error('对比失败（主体可能无快照）')
+    } finally {
+      compareLoading.value = false
     }
   }
 
@@ -306,22 +645,23 @@
     charts = []
   }
 
-  const makeChart = (ref: any, option: any) => {
-    if (!ref) return
-    const inst = echarts.init(ref)
+  const makeChart = (el: HTMLElement | undefined | null, option: any) => {
+    if (!el) return
+    const inst = echarts.init(el)
     inst.setOption(option)
     charts.push(inst)
   }
+
+  const boxAt = (i: number) =>
+    document.querySelectorAll('.bp-page .bp-tabs .chart-box')[i] as HTMLElement
 
   const renderCharts = () => {
     disposeCharts()
     if (!profile.value) return
     const p = profile.value
 
-    // 24h 曲线
-    makeChart(document.querySelector('.bp-page .chart-box') as any, null) // noop guard
-    const hourEl = document.querySelectorAll('.bp-page .chart-box')[0] as HTMLElement
-    makeChart(hourEl, {
+    // 0: 24h 曲线
+    makeChart(boxAt(0), {
       grid: { left: 40, right: 12, top: 20, bottom: 24 },
       xAxis: {
         type: 'category',
@@ -341,21 +681,19 @@
       ]
     })
 
-    // 时段分布（7 段）
-    const blockEl = document.querySelectorAll('.bp-page .chart-box')[1] as HTMLElement
+    // 1: 时段分布饼
     const blockData = BLOCK_ORDER.map((b) => ({
       name: b,
       value: p.by_block?.[b] ?? 0,
       itemStyle: { color: BLOCK_COLORS[b] }
     }))
-    makeChart(blockEl, {
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    makeChart(boxAt(1), {
+      tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
       legend: { bottom: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10 } },
       series: [{ type: 'pie', radius: ['38%', '68%'], data: blockData, label: { show: false } }]
     })
 
-    // 星期×小时热力图
-    const heatEl = document.querySelectorAll('.bp-page .chart-box')[2] as HTMLElement
+    // 2: 星期×小时热力图
     const heatData: [number, number, number][] = []
     let hMax = 1
     ;(p.wd_hour || []).forEach((row: number[], i: number) =>
@@ -364,7 +702,7 @@
         if (v > hMax) hMax = v
       })
     )
-    makeChart(heatEl, {
+    makeChart(boxAt(2), {
       grid: { left: 44, right: 12, top: 10, bottom: 40 },
       xAxis: {
         type: 'category',
@@ -373,7 +711,8 @@
       },
       yAxis: { type: 'category', data: WD, axisLabel: { fontSize: 10 } },
       tooltip: {
-        formatter: (pr: any) => `${WD[pr.value[1]]} ${String(pr.value[0]).padStart(2, '0')}:00 — ${pr.value[2]} 次`
+        formatter: (pr: any) =>
+          `${WD[pr.value[1]]} ${String(pr.value[0]).padStart(2, '0')}:00 — ${pr.value[2]} 次`
       },
       visualMap: {
         min: 0,
@@ -387,27 +726,40 @@
         inRange: { color: ['#f1f3f5', '#1971c4'] },
         textStyle: { fontSize: 9 }
       },
-      series: [
-        {
-          type: 'heatmap',
-          data: heatData,
-          label: { show: false }
-        }
-      ]
+      series: [{ type: 'heatmap', data: heatData, label: { show: false } }]
     })
 
-    // 兴趣分类
-    const catEl = document.querySelectorAll('.bp-page .chart-box')[3] as HTMLElement
+    // 3: 兴趣分类饼
     const catData = Object.entries(p.cat_share || {}).map(([k, v]) => ({ name: k, value: v }))
-    makeChart(catEl, {
+    makeChart(boxAt(3), {
       tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
       legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 10 } },
       series: [{ type: 'pie', radius: ['38%', '68%'], data: catData, label: { show: false } }]
     })
 
-    // 多日趋势（gap 日 = null → 断线）
-    const trendEl = document.querySelectorAll('.bp-page .chart-box')[4] as HTMLElement
-    makeChart(trendEl, {
+    // 4: 分类×时段堆叠（对标报告 cat_block_stack）
+    const stackCats = Array.from(
+      new Set(Object.values(p.cat_by_block || {}).flatMap((o: any) => Object.keys(o)))
+    ).slice(0, 10)
+    const catColors = ['#7048e8', '#1971c4', '#0c8599', '#e64980', '#d6336c', '#f76707', '#20c997', '#ae3ec9', '#5c7cfa', '#868e96']
+    makeChart(boxAt(4), {
+      grid: { left: 44, right: 12, top: 20, bottom: 44 },
+      xAxis: { type: 'category', data: BLOCK_ORDER, axisLabel: { fontSize: 10 } },
+      yAxis: { type: 'value' },
+      tooltip: { trigger: 'axis' },
+      legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 10 } },
+      series: stackCats.map((c, i) => ({
+        name: c,
+        type: 'bar',
+        stack: 'total',
+        barMaxWidth: 36,
+        itemStyle: { color: catColors[i % catColors.length] },
+        data: BLOCK_ORDER.map((b) => p.cat_by_block?.[b]?.[c] ?? 0)
+      }))
+    })
+
+    // 5: 多日趋势（gap 日 = null 断线）
+    makeChart(boxAt(5), {
       grid: { left: 44, right: 12, top: 20, bottom: 24 },
       xAxis: {
         type: 'category',
@@ -435,6 +787,66 @@
     })
   }
 
+  const renderRiskCharts = () => {
+    if (!risk.value) return
+    const r = risk.value
+    // 漏洞饼：用 .bp-tabs 内 chart-box 第 6 个
+    const vulnEl = document.querySelectorAll('.bp-page .bp-tabs .chart-box')[6] as HTMLElement
+    if (vulnEl) {
+      const s = r.vulns?.severity || {}
+      const colors: Record<string, string> = {
+        critical: '#c92a2a',
+        high: '#f76707',
+        medium: '#fcc419',
+        low: '#74c0fc'
+      }
+      makeChart(vulnEl, {
+        tooltip: { trigger: 'item' },
+        legend: { bottom: 0, textStyle: { fontSize: 10 } },
+        series: [
+          {
+            type: 'pie',
+            radius: ['38%', '68%'],
+            data: Object.entries(s)
+              .filter(([, v]) => (v as number) > 0)
+              .map(([k, v]) => ({ name: k, value: v, itemStyle: { color: colors[k] } })),
+            label: { show: false }
+          }
+        ]
+      })
+    }
+    // 风险评分趋势：第 7 个
+    const rtEl = document.querySelectorAll('.bp-page .bp-tabs .chart-box')[7] as HTMLElement
+    if (rtEl) {
+      makeChart(rtEl, {
+        grid: { left: 36, right: 12, top: 16, bottom: 24 },
+        xAxis: {
+          type: 'category',
+          data: (r.risk_trend || []).map((i: any) => i.date?.slice(5) || ''),
+          axisLabel: { fontSize: 9 }
+        },
+        yAxis: { type: 'value', max: 100 },
+        tooltip: { trigger: 'axis' },
+        series: [
+          {
+            type: 'line',
+            data: (r.risk_trend || []).map((i: any) => i.score),
+            smooth: true,
+            itemStyle: { color: '#e8590c' },
+            areaStyle: { opacity: 0.12 }
+          }
+        ]
+      })
+    }
+  }
+
+  const levelType = (level?: number) => {
+    if (!level) return 'info'
+    if (level >= 13) return 'danger'
+    if (level >= 10) return 'warning'
+    return 'info'
+  }
+
   const blockIndexOf = (hour: number) => {
     if (hour < 6) return 0
     if (hour < 9) return 1
@@ -444,6 +856,17 @@
     if (hour < 21) return 5
     return 6
   }
+
+  watch(activeTab, (t) => {
+    if (t === 'risk') {
+      loadRisk()
+    }
+    if (t === 'rel' && !relations.value && currentIp.value) {
+      getBehaviorRelations(currentIp.value)
+        .then((r) => (relations.value = r?.data || null))
+        .catch(() => (relations.value = { note: '加载失败' }))
+    }
+  })
 
   const onResize = () => charts.forEach((c) => c.resize())
 
@@ -476,6 +899,15 @@
       margin-bottom: 12px;
     }
 
+    .bp-banner {
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+
+    .mt8 {
+      margin-top: 8px;
+    }
+
     .card-head {
       display: flex;
       justify-content: space-between;
@@ -495,6 +927,57 @@
 
     .chart-box {
       width: 100%;
+    }
+
+    .kpi-card {
+      .kpi-v {
+        font-size: 22px;
+        font-weight: 700;
+      }
+
+      .kpi-l {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--el-text-color-secondary);
+      }
+    }
+
+    .kev {
+      margin-top: 8px;
+
+      .kev-tag {
+        margin: 2px;
+      }
+    }
+
+    .ports {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+
+      .port {
+        padding: 3px 8px;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        background: var(--el-fill-color-light);
+        border-radius: 4px;
+
+        &.danger {
+          color: #c92a2a;
+          background: #fff5f5;
+          border: 1px solid #ffa8a8;
+        }
+
+        small {
+          color: var(--el-text-color-secondary);
+          margin-left: 2px;
+        }
+      }
+
+      .dim {
+        color: var(--el-text-color-secondary);
+        font-size: 12px;
+      }
     }
 
     // 主体列表
@@ -580,25 +1063,20 @@
         right: 0;
         font-size: 10px;
         color: var(--el-text-color-placeholder);
-        transform: rotate(0deg);
       }
     }
 
-    .ai-alert {
-      margin-bottom: 12px;
+    .ai-body {
+      font-size: 12px;
 
-      .ai-body {
-        font-size: 12px;
+      .ai-sec {
+        margin: 6px 0;
 
-        .ai-sec {
-          margin: 6px 0;
-
-          pre {
-            margin: 4px 0 0;
-            font-family: inherit;
-            white-space: pre-wrap;
-            word-break: break-word;
-          }
+        pre {
+          margin: 4px 0 0;
+          font-family: inherit;
+          white-space: pre-wrap;
+          word-break: break-word;
         }
       }
     }
@@ -638,6 +1116,41 @@
         font-size: 11px;
         color: var(--el-text-color-secondary);
       }
+    }
+
+    .cmp-result {
+      margin-top: 12px;
+    }
+
+    .rel-stat {
+      text-align: center;
+
+      .kpi-v {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--el-color-primary);
+      }
+
+      .kpi-l {
+        font-size: 12px;
+        color: var(--el-text-color-secondary);
+      }
+    }
+
+    .rel-accounts {
+      margin-top: 10px;
+      text-align: center;
+
+      .acc-tag {
+        margin: 2px;
+      }
+    }
+
+    .rel-fail {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #c92a2a;
+      text-align: center;
     }
   }
 </style>
