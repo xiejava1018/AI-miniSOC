@@ -103,6 +103,23 @@ async def get_behavior_trend(
 
 
 
+@router.get("/behavior-profile/{ip}/ai-summary")
+async def get_behavior_ai_summary(
+    ip: str,
+    days: int = Query(7, ge=1, le=30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "auditor")),
+):
+    """LLM 画像摘要 + 异常解读（GLM 降级走规则模板，source 字段标明）。"""
+    profile = svc.get_profile(db, ip, days)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"该 IP 无画像快照: {ip}")
+    from app.services.behavior_profile.ai_summary import ProfileAIService
+    data = ProfileAIService().summarize(profile)
+    _audit(current_user, "QUERY", ip, f"ai-summary days={days} source={data['source']}")
+    return data
+
+
 @router.post("/behavior-profile/{ip}/refresh")
 async def refresh_behavior_profile(
     ip: str,

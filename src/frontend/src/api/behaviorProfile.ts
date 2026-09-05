@@ -50,3 +50,13 @@ export const refreshBehaviorProfile = (ip: string): Promise<any> => {
     keepFullResponse: true
   })
 }
+
+/** LLM 画像摘要 + 异常解读（降级走规则模板，source 字段标明） */
+export const getBehaviorAiSummary = (ip: string, params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/${ip}/ai-summary`,
+    params,
+    keepFullResponse: true,
+    timeout: 180000
+  })
+}

@@ -26,6 +26,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Asset
@@ -60,6 +61,10 @@ DEFAULT_PUSH_RULES: dict = {
     # 场景7 scanner_source_health（critical）：scanner:discovery/scanner:ports 通道异常
     #    — 实际复用 check_source_health()，对 scanner:* 键自动覆盖，无需另写场景。
     "scanner_offline": {"enabled": True, "offline_minutes": 90},
+    # 场景8 behavior_anomaly：画像快照异常信号（访问量激增 / 凌晨占比突增）
+    #   Phase 3（方案 §9.8），数据源 soc_behavior_profiles；解读者须人工复核
+    "behavior_anomaly": {"enabled": True, "total_jump_ratio": 5,
+                          "min_total": 500, "night_share_pct": 40},
 }
 
 _rules_cache = {"value": None, "at": 0.0}
@@ -439,6 +444,7 @@ class PushNotificationService:
             "shadow_assets": await self.check_shadow_assets(),
             "report_completion": await self.check_report_completion(),
             "scanner_offline": await self.check_scanner_offline(),
+            "behavior_anomaly": await self.check_behavior_anomaly(),
         }
 
     # ---------- P3 资产扫描：场景6 scanner 离线告（final.md §13 RV-4） ----------
@@ -485,3 +491,96 @@ class PushNotificationService:
             )
             sent_total += sent
         return sent_total
+
+
+    # ---------- Phase 3：场景8 画像异常信号（方案 §9.8） ----------
+
+    async def check_behavior_anomaly(self) -> int:
+        """行为画像异常信号推送（Phase 3）。
+
+        数据源 soc_behavior_profiles 日快照，两类规则（§层5 可落地子集）：
+          1. 访问量激增：最新一天 total > 前 N 天均值 × total_jump_ratio
+             且 total ≥ min_total（过滤小样本噪音）；
+          2. 凌晨占比突增：最新 night_share ≥ night_share_pct 且此前均值 < 一半阈值
+             （节律突变，警惕失陷设备夜间外联/爬取）。
+
+        前置：≥4 天有效快照（1 天当天 + ≥3 天基线），否则不判定（防冷启动误报）。
+        只输出信号不定性（§6）；去重走 _push 的 dedup_title（同 IP 同信号 24h 一次）。
+        """
+        from app.models.behavior_profile import BehaviorProfile
+
+        rules = self.load_rules()
+        if not (rules.get("enabled") and rules.get("behavior_anomaly", {}).get("enabled")):
+            return 0
+        cfg = rules["behavior_anomaly"]
+        jump_ratio = float(cfg.get("total_jump_ratio", 5))
+        min_total = int(cfg.get("min_total", 500))
+        night_pct = float(cfg.get("night_share_pct", 40))
+
+        sent_total = 0
+        # 每主体最近 8 天快照（1 当天 + 7 基线）
+        ips = [
+            row[0]
+            for row in self.db.query(BehaviorProfile.ip)
+            .filter(BehaviorProfile.status == "ok")
+            .group_by(BehaviorProfile.ip)
+            .having(func.count(BehaviorProfile.id) >= 4)
+            .all()
+        ]
+        for ip in ips:
+            rows = (
+                self.db.query(BehaviorProfile)
+                .filter(BehaviorProfile.ip == ip, BehaviorProfile.status == "ok")
+                .order_by(BehaviorProfile.profile_date.desc())
+                .limit(8)
+                .all()
+            )
+            if len(rows) < 4:
+                continue
+            latest, baseline = rows[0], rows[1:]
+            hostname = latest.hostname or ip
+
+            # 规则1：访问量激增
+            base_total = [r.total for r in baseline if r.total > 0]
+            if base_total and latest.total >= min_total:
+                avg = sum(base_total) / len(base_total)
+                if avg > 0 and latest.total / avg >= jump_ratio:
+                    sent = await self._push(
+                        dedup_title=f"【行为异常】{ip} 访问量激增",
+                        severity="warn",
+                        title=f"【行为异常】{ip} 访问量激增（{hostname}）",
+                        content=(
+                            f"{ip} 最近快照日访问 {latest.total:,} 次，为前 "
+                            f"{len(base_total)} 天均值（{avg:,.0f} 次）的 "
+                            f"{latest.total / avg:.1f} 倍（阈值 {jump_ratio} 倍）。"
+                            "可能为批量下载/爬取/失陷外联，请人工复核画像详情。"
+                        ),
+                        link_path="/browsing/profile",
+                    )
+                    sent_total += sent
+
+            # 规则2：凌晨占比突增
+            night_now = self._night_share(latest.by_hour)
+            base_nights = [self._night_share(r.by_hour) for r in baseline if r.total > 0]
+            if base_nights and night_now >= night_pct:
+                base_avg = sum(base_nights) / len(base_nights)
+                if base_avg < night_pct / 2:
+                    sent = await self._push(
+                        dedup_title=f"【行为异常】{ip} 凌晨活跃突增",
+                        severity="warn",
+                        title=f"【行为异常】{ip} 凌晨活跃突增（{hostname}）",
+                        content=(
+                            f"{ip} 最近快照日凌晨 00-06 点占比 {night_now}%"
+                            f"（此前均值 {base_avg:.0f}%，阈值 {night_pct}%）。"
+                            "节律突变可能为失陷设备夜间外联/数据回传，请人工复核画像详情。"
+                        ),
+                        link_path="/browsing/profile",
+                    )
+                    sent_total += sent
+        return sent_total
+
+    @staticmethod
+    def _night_share(by_hour) -> float:
+        if not by_hour or not sum(by_hour):
+            return 0.0
+        return sum(by_hour[:6]) / sum(by_hour) * 100

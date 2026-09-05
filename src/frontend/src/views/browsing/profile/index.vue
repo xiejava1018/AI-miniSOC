@@ -86,6 +86,9 @@
                 >
                   实时刷新
                 </ElButton>
+                <ElButton size="small" type="primary" plain :loading="aiLoading" @click="onAiSummary">
+                  AI 解读
+                </ElButton>
               </div>
             </div>
             <div class="idbar-watermark">本数据仅用于安全审计</div>
@@ -97,6 +100,22 @@
               <span class="card-title">画像标签</span>
               <span class="card-sub">规则判定，每项附证据；机器流量主体已自动降权</span>
             </template>
+            <ElAlert
+              v-if="aiResult"
+              :type="aiResult.source === 'glm' ? 'success' : 'warning'"
+              :closable="false"
+              class="ai-alert"
+            >
+              <template #title>
+                AI 解读（{{ aiResult.source === 'glm' ? 'GLM 生成' : '规则模板（AI 不可用降级）' }}）
+                · 仅输出信号不定性，须人工复核 · 仅用于安全审计
+              </template>
+              <div class="ai-body">
+                <div class="ai-sec"><b>摘要</b><pre>{{ aiResult.summary }}</pre></div>
+                <div class="ai-sec"><b>异常解读</b><pre>{{ aiResult.anomaly_interpretation }}</pre></div>
+                <div class="ai-sec"><b>建议动作</b><pre>{{ aiResult.recommendations }}</pre></div>
+              </div>
+            </ElAlert>
             <div v-if="profile.tags?.length" class="tag-grid">
               <div v-for="t in profile.tags" :key="t.name" class="ptag" :style="{ '--tc': t.color }">
                 <div class="ptag-name">
@@ -185,14 +204,18 @@
   import {
     getBehaviorProfiles,
     getBehaviorProfile,
+    getBehaviorDomains,
     getBehaviorTrend,
-    refreshBehaviorProfile
+    refreshBehaviorProfile,
+    getBehaviorAiSummary
   } from '@/api/behaviorProfile'
 
   const { hasAuth } = useAuth()
 
   const loading = ref(false)
   const refreshing = ref(false)
+  const aiLoading = ref(false)
+  const aiResult = ref<any>(null)
   const trafficFilter = ref('')
   const subjects = ref<any[]>([])
   const currentIp = ref('')
@@ -259,6 +282,20 @@
       ElMessage.warning('实时重算失败（可能无当日数据）')
     } finally {
       refreshing.value = false
+    }
+  }
+
+  const onAiSummary = async () => {
+    aiLoading.value = true
+    aiResult.value = null
+    try {
+      const res = await getBehaviorAiSummary(currentIp.value, { days: 7 })
+      aiResult.value = res?.data
+      if (!aiResult.value) ElMessage.warning('AI 解读失败')
+    } catch {
+      ElMessage.error('AI 解读失败（稍后重试）')
+    } finally {
+      aiLoading.value = false
     }
   }
 
@@ -544,6 +581,25 @@
         font-size: 10px;
         color: var(--el-text-color-placeholder);
         transform: rotate(0deg);
+      }
+    }
+
+    .ai-alert {
+      margin-bottom: 12px;
+
+      .ai-body {
+        font-size: 12px;
+
+        .ai-sec {
+          margin: 6px 0;
+
+          pre {
+            margin: 4px 0 0;
+            font-family: inherit;
+            white-space: pre-wrap;
+            word-break: break-word;
+          }
+        }
       }
     }
 
