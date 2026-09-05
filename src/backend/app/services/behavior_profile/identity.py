@@ -135,6 +135,7 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
         ).all()
     }
     db.autoflush = False
+    pending_bindings: dict = {}  # (account, ip) -> IdentityEvent（autoflush 关闭时防重复 add）
 
     # 资产 ip → asset_id 映射
     asset_map = {
@@ -186,9 +187,19 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
                         IdentityBinding.ip == agent_ip)
                 .first()
             )
+            key = (account, agent_ip)
+            binding = pending_bindings.get(key)
+            if binding is None:
+                binding = (
+                    db.query(IdentityBinding)
+                    .filter(IdentityBinding.account == account,
+                            IdentityBinding.ip == agent_ip)
+                    .first()
+                )
             if binding is None:
                 binding = IdentityBinding(account=account, ip=agent_ip)
                 db.add(binding)
+                pending_bindings[key] = binding
                 stats["bindings"] += 1
             binding.logins = (binding.logins or 0) + 1
             binding.asset_id = asset_map.get(agent_ip)
