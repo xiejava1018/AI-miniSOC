@@ -1,0 +1,52 @@
+/**
+ * 行为画像 API（docs/design/2026-09-05-用户IP行为画像-方案设计.md §9.4）
+ */
+import request from '@/utils/http'
+import type { HttpClient } from '@/utils/http'
+
+const httpClient = request as HttpClient
+const API_PREFIX = '/api/v1'
+
+/** 全部主体画像摘要（列表） */
+export const getBehaviorProfiles = (params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/list`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 单主体聚合画像 */
+export const getBehaviorProfile = (ip: string, params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/${ip}`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 域名 TOP N 下钻 */
+export const getBehaviorDomains = (ip: string, params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/${ip}/domains`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 多日趋势 */
+export const getBehaviorTrend = (ip: string, params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/${ip}/trend`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 当日实时重算（写操作，admin/operator） */
+export const refreshBehaviorProfile = (ip: string): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/behavior-profile/${ip}/refresh`,
+    keepFullResponse: true
+  })
+}

@@ -11,6 +11,7 @@ from app.mcp.tools import (
     dict_tools,
     incident_tools,
     loki_tools,
+    behavior_profile_tools,
     system_tools,
 )
 
@@ -25,6 +26,7 @@ def register_all(mcp) -> None:
     incident_tools.register(mcp)
     ai_tools.register(mcp)
     loki_tools.register(mcp)
+    behavior_profile_tools.register(mcp)
     dict_tools.register(mcp)  # 字典查询
 
 

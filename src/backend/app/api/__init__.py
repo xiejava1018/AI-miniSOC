@@ -3,7 +3,7 @@ API 路由汇总
 """
 
 from fastapi import APIRouter, Depends
-from app.api import (auth, users, assets, asset_ports, asset_tags, asset_incidents,
+from app.api import (auth, users, assets, behavior_profile, asset_ports, asset_tags, asset_incidents,
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
@@ -58,6 +58,7 @@ api_router.include_router(asset_lifecycle.router, prefix="/assets", tags=["资�
 # source_health / sync_dead_letter 之前只有后台任务在写表、从未有 API，这里是它们的首个出口。
 api_router.include_router(impact_analysis.router, prefix="/assets", tags=["变更影响分析"])
 api_router.include_router(data_health.router, tags=["数据健康"])
+api_router.include_router(behavior_profile.router, tags=["行为画像"])  # 路径已含完整前缀，勿再加 prefix（F2.2 双重前缀教训）
 api_router.include_router(reports.router, tags=["AI安全报告"])
 # P3 资产扫描控制面（final.md §6.4 / §7）：3 块按职责拆开
 # - scan_agents：扫描器鉴权（X-API-Key）专用端点（heartbeat/pending/claim/report）
