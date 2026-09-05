@@ -84,7 +84,7 @@ def get_profile(db: Session, ip: str, days: int = 7) -> Optional[dict]:
         "ip": ip,
         "asset": {
             "id": str(asset.id) if asset else None,
-            "name": asset.asset_name if asset else (latest.hostname if latest else None),
+            "name": asset.name if asset else (latest.hostname if latest else None),
             "asset_type": asset.asset_type if asset else None,
             "os_name": asset.os_name if asset else None,
             "owner": asset.owner if asset else None,
