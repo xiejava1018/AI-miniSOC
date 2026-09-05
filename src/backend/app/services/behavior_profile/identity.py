@@ -131,7 +131,10 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
         if a.asset_ip
     }
 
-    for hit in hits:
+    BATCH = 400
+    for i, hit in enumerate(hits):
+        if i and i % BATCH == 0:
+            db.commit()  # 分批提交：单事务参数超 32767 会炸（gkpj）
         src = hit.get("_source", {})
         rule_id = str((src.get("rule") or {}).get("id", ""))
         log = src.get("full_log") or ""
@@ -187,6 +190,7 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
             binding.last_seen = ts
 
     db.commit()
+    db.expunge_all()
     logger.info("身份管道抽取完成: %s", stats)
     return stats
 

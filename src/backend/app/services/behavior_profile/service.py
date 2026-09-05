@@ -259,13 +259,13 @@ def get_risk(db: Session, ip: str) -> dict:
     rules = (
         db.query(
             AlertGroup.rule_id, AlertGroup.rule_description,
-            AlertGroup.level, func.sum(AlertGroup.count).label("cnt"),
+            AlertGroup.level_max.label("level"), func.sum(AlertGroup.count).label("cnt"),
             func.sum(func.coalesce(
                 sa_case((AlertGroup.ai_is_noise == False, AlertGroup.count),  # noqa: E712
                         else_=0), 0)).label("real_cnt"),
         )
         .filter(AlertGroup.agent_ip == ip)
-        .group_by(AlertGroup.rule_id, AlertGroup.rule_description, AlertGroup.level)
+        .group_by(AlertGroup.rule_id, AlertGroup.rule_description, AlertGroup.level_max)
         .order_by(func.sum(AlertGroup.count).desc())
         .limit(8)
         .all()
