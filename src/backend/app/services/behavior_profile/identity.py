@@ -116,13 +116,25 @@ def _fetch_auth_hits(since: dt.datetime) -> List[dict]:
 
 
 def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
-    """抽取 since 之后的认证事件并落库（幂等）。"""
+    """抽取 since 之后的认证事件并落库（幂等）。
+
+    性能约束：psycopg2 单语句 32767 绑定参数上限（gkpj）——
+    预加载已有文档 id 集合、关闭 autoflush、每 BATCH 条显式 commit。
+    """
     from sqlalchemy import select
 
     if since is None:
         since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=LOOKBACK_DAYS)
     hits = _fetch_auth_hits(since)
     stats = {"hits": len(hits), "events": 0, "bindings": 0, "skipped": 0}
+
+    existing = {
+        (idx, doc)
+        for idx, doc in db.execute(
+            select(IdentityEvent.es_index, IdentityEvent.es_doc_id)
+        ).all()
+    }
+    db.autoflush = False
 
     # 资产 ip → asset_id 映射
     asset_map = {
@@ -131,11 +143,13 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
         if a.asset_ip
     }
 
-    BATCH = 400
+    BATCH = 250
     for i, hit in enumerate(hits):
         if i and i % BATCH == 0:
-            db.commit()  # 分批提交：单事务参数超 32767 会炸（gkpj）
+            db.commit()  # 分批提交：单语句参数超 32767 会炸（gkpj）
         src = hit.get("_source", {})
+        if (hit.get("_index", ""), hit.get("_id", "")) in existing:
+            continue
         rule_id = str((src.get("rule") or {}).get("id", ""))
         log = src.get("full_log") or ""
         agent_ip = ((src.get("agent") or {}).get("ip")) or None
@@ -150,15 +164,6 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
             stats["skipped"] += 1
             continue
         event_type, success = _rule_event_type(rule_id, log)
-
-        exists = db.execute(
-            select(IdentityEvent.id).where(
-                IdentityEvent.es_index == hit.get("_index", ""),
-                IdentityEvent.es_doc_id == hit.get("_id", ""),
-            )
-        ).first()
-        if exists:
-            continue
 
         db.add(IdentityEvent(
             es_index=hit.get("_index", "")[:64],
@@ -191,6 +196,7 @@ def run_extraction(db: Session, since: Optional[dt.datetime] = None) -> dict:
 
     db.commit()
     db.expunge_all()
+    db.autoflush = True
     logger.info("身份管道抽取完成: %s", stats)
     return stats
 
