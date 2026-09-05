@@ -457,6 +457,15 @@
   const risk = ref<any>(null)
   const anomalies = ref<any>(null)
 
+  const hourRef = ref<HTMLElement>()
+  const blockRef = ref<HTMLElement>()
+  const heatRef = ref<HTMLElement>()
+  const catRef = ref<HTMLElement>()
+  const stackRef = ref<HTMLElement>()
+  const trendRef = ref<HTMLElement>()
+  const vulnRef = ref<HTMLElement>()
+  const riskTrendRef = ref<HTMLElement>()
+
   const drillVisible = ref(false)
   const drillLoading = ref(false)
   const drillDomain = ref('')
@@ -645,15 +654,17 @@
     charts = []
   }
 
-  const makeChart = (el: HTMLElement | undefined | null, option: any) => {
+  const makeChart = (el: HTMLElement | undefined | null, option: any, retry = 5) => {
     if (!el) return
+    // 容器尚未布局（v-loading/v-if 时序）时 clientWidth 为 0，echarts 会画成空白
+    if (!el.clientWidth || !el.clientHeight) {
+      if (retry > 0) setTimeout(() => makeChart(el, option, retry - 1), 120)
+      return
+    }
     const inst = echarts.init(el)
     inst.setOption(option)
     charts.push(inst)
   }
-
-  const boxAt = (i: number) =>
-    document.querySelectorAll('.bp-page .bp-tabs .chart-box')[i] as HTMLElement
 
   const renderCharts = () => {
     disposeCharts()
@@ -661,7 +672,7 @@
     const p = profile.value
 
     // 0: 24h 曲线
-    makeChart(boxAt(0), {
+    makeChart(hourRef.value, {
       grid: { left: 40, right: 12, top: 20, bottom: 24 },
       xAxis: {
         type: 'category',
@@ -687,7 +698,7 @@
       value: p.by_block?.[b] ?? 0,
       itemStyle: { color: BLOCK_COLORS[b] }
     }))
-    makeChart(boxAt(1), {
+    makeChart(blockRef.value, {
       tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
       legend: { bottom: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10 } },
       series: [{ type: 'pie', radius: ['38%', '68%'], data: blockData, label: { show: false } }]
@@ -702,7 +713,7 @@
         if (v > hMax) hMax = v
       })
     )
-    makeChart(boxAt(2), {
+    makeChart(heatRef.value, {
       grid: { left: 44, right: 12, top: 10, bottom: 40 },
       xAxis: {
         type: 'category',
@@ -731,7 +742,7 @@
 
     // 3: 兴趣分类饼
     const catData = Object.entries(p.cat_share || {}).map(([k, v]) => ({ name: k, value: v }))
-    makeChart(boxAt(3), {
+    makeChart(catRef.value, {
       tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
       legend: { type: 'scroll', bottom: 0, textStyle: { fontSize: 10 } },
       series: [{ type: 'pie', radius: ['38%', '68%'], data: catData, label: { show: false } }]
@@ -742,7 +753,7 @@
       new Set(Object.values(p.cat_by_block || {}).flatMap((o: any) => Object.keys(o)))
     ).slice(0, 10)
     const catColors = ['#7048e8', '#1971c4', '#0c8599', '#e64980', '#d6336c', '#f76707', '#20c997', '#ae3ec9', '#5c7cfa', '#868e96']
-    makeChart(boxAt(4), {
+    makeChart(stackRef.value, {
       grid: { left: 44, right: 12, top: 20, bottom: 44 },
       xAxis: { type: 'category', data: BLOCK_ORDER, axisLabel: { fontSize: 10 } },
       yAxis: { type: 'value' },
@@ -759,7 +770,7 @@
     })
 
     // 5: 多日趋势（gap 日 = null 断线）
-    makeChart(boxAt(5), {
+    makeChart(trendRef.value, {
       grid: { left: 44, right: 12, top: 20, bottom: 24 },
       xAxis: {
         type: 'category',
@@ -791,7 +802,8 @@
     if (!risk.value) return
     const r = risk.value
     // 漏洞饼：用 .bp-tabs 内 chart-box 第 6 个
-    const vulnEl = document.querySelectorAll('.bp-page .bp-tabs .chart-box')[6] as HTMLElement
+    {
+    const vulnEl = vulnRef.value
     if (vulnEl) {
       const s = r.vulns?.severity || {}
       const colors: Record<string, string> = {
@@ -816,7 +828,8 @@
       })
     }
     // 风险评分趋势：第 7 个
-    const rtEl = document.querySelectorAll('.bp-page .bp-tabs .chart-box')[7] as HTMLElement
+    {
+    const rtEl = riskTrendRef.value
     if (rtEl) {
       makeChart(rtEl, {
         grid: { left: 36, right: 12, top: 16, bottom: 24 },
@@ -858,8 +871,12 @@
   }
 
   watch(activeTab, (t) => {
+    if (t === 'behavior' && profile.value) {
+      nextTick(() => renderCharts())
+    }
     if (t === 'risk') {
       loadRisk()
+      nextTick(() => renderRiskCharts())
     }
     if (t === 'rel' && !relations.value && currentIp.value) {
       getBehaviorRelations(currentIp.value)
