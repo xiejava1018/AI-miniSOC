@@ -60,29 +60,34 @@ class BaselineService:
         返回 upsert 的条数。
         """
         now = datetime.now(timezone.utc)
-        items = {}
+        # 按 (ip, domain) 聚合真实访问次数：total_count 口径修复（2026-09-05）
+        # 原实现同键去重后每键只 +1，累计的是"检测轮次数"而非真实访问次数
+        items: dict[tuple[str, str], list] = {}  # key -> [count, last_ts]
         for r in records:
             if not r.is_internal or not r.domain:
                 continue
-            items[(r.ip, r.domain)] = r.ts  # 同键取最后一条
+            entry = items.setdefault((r.ip, r.domain), [0, r.ts])
+            entry[0] += 1
+            if r.ts > entry[1]:
+                entry[1] = r.ts
 
         if not items:
             return 0
 
-        for (ip, domain), ts in items.items():
+        for (ip, domain), (count, ts) in items.items():
             stmt = pg_insert(BrowsingBaseline).values(
                 ip=ip,
                 domain=domain,
                 first_seen=ts,
                 last_seen=ts,
-                total_count=1,
+                total_count=count,
             )
-            # 冲突时更新 last_seen / 累加 count
+            # 冲突时更新 last_seen / 累加真实访问次数
             stmt = stmt.on_conflict_do_update(
                 constraint="uq_browsing_baseline_ip_domain",
                 set_={
                     "last_seen": stmt.excluded.last_seen,
-                    "total_count": BrowsingBaseline.total_count + 1,
+                    "total_count": BrowsingBaseline.total_count + stmt.excluded.total_count,
                 },
             )
             self.db.execute(stmt)

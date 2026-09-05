@@ -88,6 +88,8 @@ class RuleEngine:
         self.enabled = config.rules_enabled_set
         self._exact_blacklist: set[str] = set()
         self._wildcard_blacklist: list[str] = []
+        self._exact_whitelist: set[str] = set()
+        self._wildcard_whitelist: list[str] = []
         self._tunnel_re = None
         if config.tunnel_keywords:
             try:
@@ -95,6 +97,12 @@ class RuleEngine:
             except re.error:
                 logger.warning("隧道关键词正则无效: %s", config.tunnel_keywords)
         self._load_blacklist()
+        # N2 白名单支持通配符（2026-09-05 止血）：与黑名单同款 exact/wildcard 双轨
+        for d in config.whitelist_domain_set:
+            if "*" in d:
+                self._wildcard_whitelist.append(d)
+            else:
+                self._exact_whitelist.add(d)
 
     # ── 黑名单加载 ──────────────────────────────────
 
@@ -125,6 +133,18 @@ class RuleEngine:
                 return True
         return False
 
+    def _match_whitelist(self, domain: str) -> bool:
+        """白名单匹配：exact + 通配符（与 _match_blacklist 同款逻辑）"""
+        if not domain:
+            return False
+        d = domain.lower()
+        if d in self._exact_whitelist:
+            return True
+        for pattern in self._wildcard_whitelist:
+            if fnmatch.fnmatch(d, pattern):
+                return True
+        return False
+
     # ── 主入口：评估所有记录 ────────────────────────
 
     def evaluate(
@@ -146,13 +166,12 @@ class RuleEngine:
         if not internal:
             return []
 
-        # 过滤白名单
-        wl_domains = self.config.whitelist_domain_set
+        # 过滤白名单（支持通配符，如 *.miwifi.com）
         wl_ips = self.config.whitelist_ip_set
         internal = [
             r for r in internal
             if r.ip not in wl_ips
-            and not (r.domain and r.domain.lower() in wl_domains)
+            and not (r.domain and self._match_whitelist(r.domain))
         ]
         if not internal:
             return []

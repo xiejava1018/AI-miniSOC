@@ -31,9 +31,9 @@ _DEFAULTS = {
     "night_start_hour": ("2", "int"),
     "night_end_hour": ("5", "int"),
     "night_count_threshold": ("5", "int"),
-    "tunnel_keywords": ("easytier|stun|frp|fatedier|zerotier|tailscale|n2n|wireguard|tinc|nebula", "str"),
+    "tunnel_keywords": (r"easytier|frp|fatedier|zerotier|tailscale|n2n|wireguard|tinc|nebula|stun\.[a-z0-9-]+\.(xyz|top|cc|tk|buzz)", "str"),
     "blacklist_domains": ("", "str"),
-    "whitelist_domains": ("", "str"),
+    "whitelist_domains": ("*.miwifi.com,stun.chat.bilibili.com,stun.hitv.com,*.heytapmobi.com,stun.l.google.com,*.mozilla.com,musicstun.p2p.qq.com,*.easytier.cn", "str"),
     "whitelist_ips": ("", "str"),
     "suppress_minutes": ("30", "int"),
     "notify_user_ids": ("", "str"),
@@ -69,7 +69,8 @@ class DetectionConfig:
     night_count_threshold: int = 5
     tunnel_keywords: str = ""
     blacklist_domains: str = ""
-    whitelist_domains: str = ""
+    # N2 默认白名单（2026-09-05 止血）：STUN/P2P 正常流量域名，支持通配符
+    whitelist_domains: str = "*.miwifi.com,stun.chat.bilibili.com,stun.hitv.com,*.heytapmobi.com,stun.l.google.com,*.mozilla.com,musicstun.p2p.qq.com,*.easytier.cn"
     whitelist_ips: str = ""
     suppress_minutes: int = 30
     notify_user_ids: str = ""
