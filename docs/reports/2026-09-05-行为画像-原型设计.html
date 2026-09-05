@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="profProtoRoot">
+<head data-page-node-id="profProtoHead">
+<meta charset="utf-8" data-page-node-id="profProtoMeta1">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="profProtoMeta2">
+<title>AI-miniSOC · 用户/IP 深度行为画像 · 原型设计</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;color:#1f2937;line-height:1.6;font-size:14px}
+.wrap{max-width:1320px;margin:0 auto;padding:26px 22px 80px}
+h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
+.sub-t{color:#6b7280;margin-top:6px;font-size:13px}
+.hd{padding:20px 0 14px;border-bottom:2px solid #e5e7eb;margin-bottom:18px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.badge{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:5px 11px;font-size:12px;color:#4b5563}
+.badge b{color:#111827}
+.tip{background:#fff4e6;border:1px solid #ffd8a8;color:#9a5800;border-radius:8px;padding:11px 14px;font-size:12.5px;margin:14px 0 20px;line-height:1.7}
+
+/* 主体选择 */
+.subj{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.subj-l{font-size:12px;color:#6b7280;margin-right:4px}
+.subj-i{background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:6px 14px;font-size:12.5px;cursor:pointer;transition:.15s;color:#374151}
+.subj-i:hover{border-color:#1971c2}
+.subj-i.on{background:#1971c2;border-color:#1971c2;color:#fff;font-weight:600}
+.subj-i .st{font-size:10px;opacity:.8;margin-left:5px}
+
+/* 标识条 */
+.idbar{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:12px;position:relative;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between}
+.idbar .ip{font-family:ui-monospace,monospace;font-size:20px;font-weight:700;color:#0b3d91}
+.idbar .nm{font-size:14px;color:#374151;margin-top:2px}
+.idbar .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.chip{font-size:11px;padding:2px 8px;border-radius:4px;background:#f1f3f5;color:#4b5563}
+.c-gray{background:#eef2f7;color:#475569}
+.c-owner{background:#e7f5ff;color:#1864ab}
+.c-type{background:#e6fcf5;color:#0c8599}
+.cf{background:#fff0f6;color:#c2255c}
+.c-tt{background:#f3f0ff;color:#6741d9}
+.wm{position:absolute;right:14px;top:12px;font-size:10.5px;color:#adb5bd;transform:rotate(-2deg);border:1px dashed #dee2e6;padding:2px 8px;border-radius:4px}
+/* 异常横幅 */
+.banner{border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;display:flex;gap:12px;align-items:flex-start}
+.banner.mid{background:#fff0f0;border:1px solid #ffa8a8;color:#c92a2a}
+.banner.high{background:#fff5f5;border:2px solid #e03131;color:#c92a2a;box-shadow:0 2px 8px rgba(224,49,49,.15)}
+.banner.low{background:#fff9db;border:1px solid #ffe066;color:#9a6700}
+.banner .bt{font-weight:700;white-space:nowrap}
+.banner .bx{font-size:12px;line-height:1.65}
+.banner .bx b{color:#862e9c}
+
+/* 布局 */
+.body2{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+@media(max-width:1080px){.body2{grid-template-columns:1fr}}
+/* 左栏身份卡 */
+.idcard{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;position:sticky;top:14px}
+.idcard .ct{font-size:12px;font-weight:700;color:#868e96;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 8px;border-bottom:1px dashed #e9ecef;padding-bottom:5px}
+.idcard .ct:first-child{margin-top:0}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0}
+.kv .k{color:#868e96}
+.kv .v{color:#1f2937;text-align:right;font-family:ui-monospace,monospace;font-size:12px}
+.acc{display:flex;gap:8px;align-items:center;padding:7px 9px;border:1px solid #e9ecef;border-radius:8px;margin-bottom:7px;font-size:12px;cursor:pointer;transition:.15s}
+.acc:hover{border-color:#1971c2;background:#f1f8ff}
+.acc .aip{font-family:ui-monospace,monospace;color:#1971c2;font-size:12px}
+.acc .ac{color:#adb5bd;margin-left:auto;font-size:11px}
+.fresh{display:inline-flex;align-items:center;gap:5px;font-size:11px}
+.fresh i{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* 主区 Tabs */
+.tabs{display:flex;gap:4px;border-bottom:2px solid #e9ecef;margin-bottom:14px;flex-wrap:wrap}
+.tab{background:none;border:none;padding:10px 16px;font-size:13.5px;color:#6b7280;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;font-weight:500}
+.tab:hover{color:#1971c2}
+.tab.on{color:#1971c2;border-bottom-color:#1971c2;font-weight:700}
+.tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.panel{display:none}
+.panel.on{display:block}
+
+/* 卡片/网格（沿用报告风格） */
+.card{background:#fff;border:1px solid #e9ecef;border-radius:10px;padding:16px;margin-bottom:16px}
+.card-t{font-size:13px;font-weight:600;margin-bottom:13px;color:#374151}
+.sec-s{font-weight:400;color:#9ca3af;font-size:11.5px;margin-left:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:780px){.grid2{grid-template-columns:1fr}}
+.hint{font-size:11.5px;color:#6b7280;margin-top:10px}
+.empty{color:#9ca3af;font-size:12.5px;padding:18px;background:#f8f9fa;border-radius:8px;border:1px dashed #e9ecef}
+.note{background:#f1f8ff;border:1px solid #a5d8ff;border-left:4px solid #1971c2;border-radius:8px;padding:11px 14px;margin:12px 0;font-size:12.5px;color:#374151;line-height:1.7}
+.note b{color:#0b3d91}
+
+/* 报告组件复用 */
+.tags{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.tag{border:1px solid var(--tc);border-left:4px solid var(--tc);border-radius:8px;padding:11px 13px;background:linear-gradient(90deg,color-mix(in srgb,var(--tc) 6%,#fff),#fff)}
+.tag-n{font-size:14.5px;font-weight:700;color:var(--tc)}
+.tag-alias{font-size:11px;font-weight:600;color:#868e96;margin-left:6px;background:#f1f3f5;padding:1px 7px;border-radius:10px;white-space:nowrap}
+.tag-d{font-size:11.5px;color:#4b5563;margin-top:3px}
+.tag-e{font-size:10.5px;color:#9ca3af;margin-top:6px;font-family:ui-monospace,monospace}
+.hb{display:flex;align-items:flex-end;gap:2px;height:132px}
+.hb-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.hb-track{flex:1;width:100%;display:flex;align-items:flex-end}
+.hb-fill{width:100%;border-radius:2px 2px 0 0;min-height:2px}
+.hb-lbl{font-size:9px;color:#9ca3af;margin-top:4px}
+.hb-col.peak .hb-lbl{color:#d9480f;font-weight:700}
+.hm{overflow-x:auto}
+.hm-row{display:flex;gap:2px;margin-bottom:2px;align-items:center}
+.hm-rl{width:34px;font-size:10.5px;color:#6b7280;flex-shrink:0}
+.hm-c{flex:1;height:16px;border-radius:2px;min-width:0}
+.hm-h{height:auto;font-size:8.5px;color:#9ca3af;text-align:center;background:none}
+.bb-row,.cb-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.bb-name{width:34px;font-size:12px;color:#4b5563;flex-shrink:0}
+.bb-track,.cb-track{flex:1;height:16px;background:#f1f3f5;border-radius:3px;overflow:hidden}
+.bb-fill,.cb-fill{height:100%;border-radius:3px}
+.bb-v,.cb-v{width:96px;text-align:right;font-size:11.5px;color:#374151;font-family:ui-monospace,monospace;flex-shrink:0}
+.bb-p,.cb-p{color:#9ca3af;margin-left:6px}
+.cb-name{width:88px;font-size:11.5px;color:#4b5563;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.cb-ico{width:15px;height:15px;border-radius:3px;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.st-row{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.st-b{width:34px;font-size:11.5px;color:#4b5563;flex-shrink:0}
+.st-bar{flex:1;height:19px;display:flex;border-radius:3px;overflow:hidden;background:#f1f3f5}
+.st-seg{height:100%}
+.st-lg{width:230px;font-size:10px;color:#6b7280;flex-shrink:0}
+.lg{display:inline-flex;align-items:center;gap:3px;margin-right:7px}
+.lg i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.dt{width:100%;border-collapse:collapse;font-size:12px}
+.dt th{text-align:left;padding:6px 8px;color:#6b7280;font-weight:500;font-size:11px;border-bottom:1px solid #e5e7eb}
+.dt td{padding:5px 8px;border-bottom:1px solid #f8f9fa}
+.dt-d{font-family:ui-monospace,monospace;font-size:11.5px;color:#1f2937;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-bar{width:110px}
+.dt-bar div{height:7px;border-radius:2px}
+.dt-n{text-align:right;font-family:ui-monospace,monospace;color:#374151;white-space:nowrap}
+.layer{display:flex;gap:16px;margin-top:12px;padding-top:11px;border-top:1px solid #f1f3f5;font-size:11.5px;color:#4b5563;flex-wrap:wrap}
+.li{display:inline-flex;align-items:center;gap:5px}
+.li i{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+/* 风险 Tab 组件 */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:780px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:#fff;border:1px solid #e9ecef;border-radius:10px;padding:14px}
+.kpi .v{font-size:23px;font-weight:700;font-family:ui-monospace,monospace;color:#1971c2;line-height:1.1}
+.kpi .l{font-size:12px;color:#6b7280;margin-top:4px}
+.kpi .s{font-size:10.5px;color:#9ca3af;margin-top:2px}
+.kpi.warn .v{color:#e8590c}
+.kpi.danger .v{color:#c92a2a}
+.rb-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;cursor:pointer}
+.rb-row:hover .rb-name{color:#1971c2}
+.rb-lv{width:34px;font-size:10px;font-weight:700;text-align:center;color:#fff;border-radius:3px;flex-shrink:0;padding:1px 0}
+.rb-name{width:230px;font-size:12px;color:#4b5563;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rb-track{flex:1;height:16px;background:#f1f3f5;border-radius:3px;overflow:hidden}
+.rb-fill{height:100%;border-radius:3px}
+.rb-v{width:80px;text-align:right;font-size:11.5px;font-family:ui-monospace,monospace;color:#374151;flex-shrink:0}
+.sevbar{display:flex;height:26px;border-radius:6px;overflow:hidden;background:#f1f3f5;margin:6px 0 4px}
+.sevseg{height:100%}
+.segleg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:#6b7280;margin-top:6px}
+.segleg i{width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:4px}
+.port{display:flex;align-items:center;gap:10px;padding:8px 11px;border:1px solid #e9ecef;border-radius:8px;margin-bottom:7px;font-size:12.5px}
+.port .pn{font-family:ui-monospace,monospace;font-weight:700;color:#1f2937}
+.port .ps{color:#868e96;font-size:11.5px}
+.port.danger{border-color:#ffa8a8;background:#fff5f5}
+.port.danger .pn{color:#c92a2c}
+.port .pd{margin-left:auto;font-size:10.5px;color:#c92a2c;background:#ffe3e3;padding:1px 8px;border-radius:10px}
+
+/* 关系 Tab 组件 */
+.graph-wrap{background:#fff;border:1px solid #e9ecef;border-radius:10px;padding:10px;margin-bottom:16px;display:grid;grid-template-columns:1fr 240px;gap:12px}
+@media(max-width:780px){.graph-wrap{grid-template-columns:1fr}}
+.graph svg{width:100%;height:auto}
+.glegend{font-size:11.5px;color:#4b5563}
+.glegend .row{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.glegend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.seglist .sl-i{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid #e9ecef;border-radius:7px;margin-bottom:6px;font-size:12px;cursor:pointer}
+.seglist .sl-i:hover{border-color:#1971c2;background:#f1f8ff}
+.seglist .sl-i .sip{font-family:ui-monospace,monospace;color:#1971c2}
+.seglist .sl-i .srole{font-size:11px;color:#adb5bd;margin-left:auto}
+
+/* 异常 Tab 组件 */
+.anom{display:flex;gap:12px;padding:14px;background:#fff;border:1px solid #e9ecef;border-left:4px solid #ced4da;border-radius:10px;margin-bottom:12px;align-items:flex-start}
+.anom.mid{border-left-color:#e8590c;background:#fff8f1}
+.anom.high{border-left-color:#c92a2a;background:#fff5f5}
+.anom.low{border-left-color:#ffd43b;background:#fffbe6}
+.anom.info{border-left-color:#74c0fc;background:#f1f8ff}
+.anom .sev{font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;flex-shrink:0;white-space:nowrap}
+.anom.mid .sev{background:#ffe8cc;color:#d9480f}
+.anom.high .sev{background:#ffc9c9;color:#c92a2a}
+.anom.low .sev{background:#fff3bf;color:#9a6700}
+.anom.info .sev{background:#d0ebff;color:#1971c2}
+.anom .mc{flex:1}
+.anom .mn{font-size:13.5px;font-weight:700;color:#1f2937}
+.anom .md{font-size:12px;color:#4b5563;margin-top:4px;line-height:1.7}
+.anom .me{font-size:11px;color:#9ca3af;margin-top:6px;font-family:ui-monospace,monospace}
+.anom .acts{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.btn{border:1px solid #ced4da;background:#fff;border-radius:6px;padding:5px 11px;font-size:11.5px;cursor:pointer;color:#374151;white-space:nowrap}
+.btn:hover{border-color:#1971c2;color:#1971c2}
+.btn.pri{background:#1971c2;border-color:#1971c2;color:#fff}
+.btn.pri:hover{background:#1864ab;color:#fff}
+.foot{margin-top:34px;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;color:#4b5563}
+.foot h3{font-size:13px;margin-bottom:9px;color:#111827}
+.foot ul{margin:8px 0 0 18px}
+.foot li{margin-bottom:5px}
+.foot code{background:#f1f3f5;padding:1px 5px;border-radius:3px;font-size:11px}
+.demo-badge{margin:0 0 12px;padding:8px 12px;background:#fff9db;border:1px solid #ffe066;border-radius:8px;font-size:12px;color:#92690a;font-weight:600}
+.demo-badge::before{content:"⚠ ";}
+</style>
+</head>
+<body data-page-node-id="profProtoBody">
+<div class="wrap" data-page-node-id="profProtoWrap">
+<div class="hd" data-page-node-id="profProtoHd">
+  <h1 data-page-node-id="profProtoTitle">AI-miniSOC · 用户/IP 深度行为画像 · 原型设计</h1>
+  <div class="sub-t" data-page-node-id="profProtoSub">行为画像详情页（Profile）高保真原型 —— 五层维度 = 左栏身份卡 + 四个主区 Tab（行为 / 风险 / 关系 / 异常判定）</div>
+  <div class="badges" data-page-node-id="profProtoBadges">
+    <span class="badge" data-page-node-id="b1">数据源 <b data-page-node-id="b1b">Loki + PostgreSQL + OpenSearch</b></span>
+    <span class="badge" data-page-node-id="b2">画像主体 <b data-page-node-id="b2b">IP / 设备（自然人待 Phase 0）</b></span>
+    <span class="badge" data-page-node-id="b3">版本 <b data-page-node-id="b3b">v1.0 原型（对齐方案设计 v1.3）</b></span>
+    <span class="badge" data-page-node-id="b4">时间基准 <b data-page-node-id="b4b">UTC+8</b></span>
+  </div>
+</div>
+
+<div class="tip" data-page-node-id="profProtoTip">
+  ⚠️ <b data-page-node-id="profProtoTipB">关于本原型</b>：这是一个<b data-page-node-id="pT">可交互的高保真原型</b>，用于在设计评审阶段确认"画像详情页"的界面与交互，
+  不依赖后端。行为 Tab 的数据来自《AI-miniSOC · 上网行为画像报告》真实 POC 结果（Loki 原始日志逐条时间戳计数）；
+  风险 / 关系 / 异常判定三个 Tab 的数据来自本次 POC 的告警与认证抽取实查结果（如 .102：866 告警组 / 76,055 条 / 被登录 610 次），
+  以 <code data-page-node-id="pC">真实</code> 标出；未装 agent 的设备（如 .8）相应分层显示"数据不足"空态——这正是产品上线后真实会遇到的两种状态。
+  点击左上角主体可切换查看不同设备的画像。
+</div>
+
+<div class="subj" id="subj" data-page-node-id="profSubj"></div>
+<div id="page" data-page-node-id="profPage"></div>
+
+<div class="foot" data-page-node-id="profFoot">
+  <h3 data-page-node-id="profFootH">原型与《方案设计 v1.3》的对应关系</h3>
+  <ul data-page-node-id="profFootL">
+    <li data-page-node-id="f1"><b data-page-node-id="f1b">左栏身份档案卡</b> = 方案 §3 层1；固定不随 Tab 切换，含关联账号双向钻取。</li>
+    <li data-page-node-id="f2"><b data-page-node-id="f2b">行为画像 Tab</b> = 方案 §3 层2；严格沿用报告布局：画像标签置顶 → 24h 曲线 + 时段分布 → 星期×小时热力图 → 访问习惯构成 + 各时段在干什么 → 域名 TOP N。</li>
+    <li data-page-node-id="f3"><b data-page-node-id="f3b">风险画像 Tab</b> = 方案 §3 层3；指标卡 + 告警规则榜(risk_bars) + 漏洞严重度 + 暴露端口 + 趋势折线(数据足够时)。</li>
+    <li data-page-node-id="f4"><b data-page-node-id="f4b">关系画像 Tab</b> = 方案 §3 层4；rel_graph 关系网络(出边绿/入边蓝/外联红) + 同网段设备列表，点击节点钻取对方画像。</li>
+    <li data-page-node-id="f5"><b data-page-node-id="f5b">异常判定 Tab</b> = 方案 §3 层5；异常信号清单(可审计证据) + 「生成安全事件/加白名单」处置按钮，并接回 §P1 事件闭环。</li>
+    <li data-page-node-id="f6">标识条下方异常横幅 + 审计水印 = 方案 §3.0 / §6 合规要求。</li>
+  </ul>
+</div>
+</div>
+
+<script>
+/* ============ 行为数据（来自《上网行为画像报告》真实 POC，UTC+8） ============ */
+const BEHAVIOR = {
+  "192.168.0.8":{
+    "asset":{"name":"xiejavadeMini","asset_type":"server","owner":null,"os_name":null},
+    "stats":{
+      "total":10963,"days":5,"daily_avg":2193,"domain_count":145,"active_hours":96,"peak_hour":20,"act_total":10924,
+      "by_hour":[424,439,402,453,415,453,462,465,462,460,462,447,454,394,453,433,436,431,414,414,939,412,419,420],
+      "wd_hour":[[120,112,99,137,122,117,132,117,99,90,120,129,100,99,111,103,103,108,96,93,111,111,111,90],[121,103,116,111,96,144,127,139,123,120,111,132,117,90,126,108,120,103,132,111,595,102,101,111],[81,105,90,102,93,90,109,114,126,147,78,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,72,114,102,105,111,117,106,84,99,103,97,96,96],[102,119,97,103,104,102,94,95,114,103,153,114,123,103,111,111,96,114,102,111,130,102,111,123]],
+      "by_block":{"深夜":2586,"早晨":1389,"上午":1369,"午间":848,"下午":1753,"傍晚":1767,"夜间":1251},
+      "workday":7024,"weekend":3939,"workday_share":64.1,
+      "cat_visit":{"工作办公":10446,"开发技术":156,"AI 工具":93,"其他":86,"移动设备":78,"游戏":57,"系统背景":30,"广告追踪":9,"社交沟通":4,"下载传输":3,"新闻资讯":1},
+      "cat_by_block":{"深夜":{"工作办公":2580,"游戏":6},"早晨":{"工作办公":1380,"游戏":9},"上午":{"工作办公":1322,"开发技术":11,"其他":8,"AI 工具":9,"系统背景":2,"游戏":11,"移动设备":6},"夜间":{"工作办公":1242,"游戏":9},"下午":{"工作办公":1750,"游戏":3},"傍晚":{"工作办公":1324,"其他":78,"AI 工具":84,"游戏":19,"系统背景":28,"移动设备":72,"开发技术":145,"广告追踪":9,"新闻资讯":1,"社交沟通":4,"下载传输":3},"午间":{"工作办公":848}},
+      "layer_visit":{"ACT":10924,"SYS":30,"AD":9},
+      "top_domains":[{"domain":"countly.mail.163.com","visits":5633,"category":"工作办公"},{"domain":"woodcattle-qz.dashi.163.com","visits":4778,"category":"工作办公"},{"domain":"webzjac.reg.163.com","visits":36,"category":"游戏"},{"domain":"multica.doai8.dpdns.org","visits":27,"category":"AI 工具"},{"domain":"dns.google","visits":26,"category":"系统背景"},{"domain":"galileotelemetry.tencent.com","visits":24,"category":"AI 工具"},{"domain":"copilot.tencent.com","visits":20,"category":"AI 工具"},{"domain":"github.com","visits":17,"category":"开发技术"},{"domain":"proj-xtrace-...-aliyuncs.com","visits":15,"category":"开发技术"},{"domain":"docs.gtimg.com","visits":15,"category":"工作办公"},{"domain":"main.vscode-cdn.net","visits":15,"category":"开发技术"},{"domain":"alive.github.com","visits":12,"category":"开发技术"}]
+    },
+    "tags":[{"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 23.6%"},{"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 29.6%"},{"name":"典型打工人","desc":"工作日显著高于周末","color":"#1971c2","evidence":"工作日占比 64.1%"}]
+  },
+  "192.168.0.100":{
+    "asset":{"name":"wazuh-agent-test-001","asset_type":"server","owner":null,"os_name":"Ubuntu Linux"},
+    "stats":{
+      "total":198116,"days":8,"daily_avg":24764,"domain_count":344,"active_hours":169,"peak_hour":10,"act_total":191194,
+      "by_hour":[7967,7996,7960,7902,8536,7680,7664,8006,8144,7677,9780,8392,8338,8070,8537,8424,8546,7920,8331,8319,8843,8058,8852,8174],
+      "wd_hour":[[986,1003,942,1023,1073,902,942,971,979,982,1200,982,1114,935,1111,1015,1023,1298,1371,1483,1419,1094,1143,1077],[1002,1043,1044,1007,1200,974,986,979,1011,906,1159,963,967,960,956,954,1039,932,1213,1039,1018,1280,1277,1160],[1164,1131,1139,1120,1228,1183,1082,1172,1162,1035,1314,1292,1181,1111,1225,1163,1277,1158,1157,1127,1519,1270,1181,1252],[1306,1207,1167,1177,1246,1138,1122,1187,1324,1254,1287,1114,1100,1149,1183,1119,1217,1031,1046,1120,1262,1050,1533,1087],[1046,1014,1067,1081,1127,978,1047,1092,1068,959,1300,1056,1144,1080,1173,1224,1201,1070,1092,1126,1145,1059,1195,1123],[1117,1100,1118,1149,1199,1071,1062,1144,1090,1075,1388,1351,1470,1391,1447,1442,1480,1442,1424,1449,1518,1451,1508,1488],[1346,1498,1483,1345,1463,1434,1423,1461,1510,1466,2132,1634,1362,1444,1442,1507,1309,989,1028,975,962,854,1015,987]],
+      "by_block":{"深夜":48041,"早晨":23814,"上午":25849,"午间":16408,"下午":33427,"傍晚":25493,"夜间":25084},
+      "workday":134673,"weekend":63443,"workday_share":68.0,
+      "cat_visit":{"AI 工具":96992,"开发技术":38500,"移动设备":26611,"工作办公":18028,"系统背景":5015,"其他":4588,"游戏":4254,"广告追踪":1907,"社交沟通":1902,"下载传输":144,"IP 直连":67,"新闻资讯":41,"影音娱乐":28,"电商购物":20,"小说阅读":19},
+      "cat_by_block":{"深夜":{"AI 工具":24359,"开发技术":9033,"移动设备":6610,"系统背景":1154,"工作办公":4190,"广告追踪":480,"社交沟通":189,"游戏":944,"其他":1004,"下载传输":32,"IP 直连":36,"影音娱乐":10},"早晨":{"AI 工具":12076,"开发技术":4472,"移动设备":3270,"系统背景":603,"工作办公":1961,"广告追踪":222,"社交沟通":225,"游戏":448,"其他":486,"下载传输":28,"IP 直连":16,"影音娱乐":7},"上午":{"AI 工具":12107,"开发技术":5477,"移动设备":3543,"系统背景":680,"工作办公":1919,"广告追踪":305,"社交沟通":293,"游戏":576,"其他":885,"新闻资讯":17,"电商购物":12,"下载传输":12,"小说阅读":9,"IP 直连":7,"影音娱乐":7},"夜间":{"AI 工具":12314,"开发技术":4933,"移动设备":3688,"系统背景":633,"工作办公":2000,"广告追踪":216,"社交沟通":172,"游戏":516,"其他":608,"下载传输":4},"下午":{"AI 工具":15989,"开发技术":6542,"移动设备":4241,"系统背景":865,"工作办公":3395,"广告追踪":316,"社交沟通":453,"游戏":712,"其他":890,"下载传输":4,"小说阅读":8,"影音娱乐":4,"IP 直连":8},"傍晚":{"AI 工具":12099,"开发技术":5075,"移动设备":3204,"系统背景":663,"工作办公":2619,"广告追踪":220,"社交沟通":346,"游戏":726,"其他":475,"下载传输":32,"新闻资讯":24,"小说阅读":2,"电商购物":8},"午间":{"AI 工具":8048,"开发技术":2968,"移动设备":2055,"系统背景":417,"工作办公":1944,"广告追踪":148,"社交沟通":224,"游戏":332,"其他":240,"下载传输":32}},
+      "layer_visit":{"ACT":191194,"SYS":5015,"AD":1907},
+      "top_domains":[{"domain":"copilot.tencent.com","visits":53256,"category":"AI 工具"},{"domain":"galileotelemetry.tencent.com","visits":23512,"category":"AI 工具"},{"domain":"proj-xtrace-...-aliyuncs.com","visits":13444,"category":"开发技术"},{"domain":"docs.gtimg.com","visits":9377,"category":"工作办公"},{"domain":"main.vscode-cdn.net","visits":8576,"category":"开发技术"},{"domain":"weatherkit.apple.com","visits":7528,"category":"移动设备"},{"domain":"open.volcengineapi.com","visits":7186,"category":"AI 工具"},{"domain":"update.code.visualstudio.com","visits":6900,"category":"开发技术"},{"domain":"sg.tgalileo.com","visits":5576,"category":"AI 工具"},{"domain":"sigma-...nie.netease.com","visits":3200,"category":"游戏"},{"domain":"multica.doai8.dpdns.org","visits":3088,"category":"AI 工具"},{"domain":"gateway.icloud.com.cn","visits":3047,"category":"移动设备"}]
+    },
+    "tags":[{"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 24.2%"},{"name":"全天候在线","desc":"几乎每个小时都有流量","color":"#0c8599","evidence":"169/192 小时有活动"},{"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 26.8%"},{"name":"周末战士","desc":"周末比工作日更活跃","color":"#e8590c","evidence":"周末日均 31,721 vs 工作日 22,445"},{"name":"AI 重度用户","desc":"AI 工具访问占比显著","color":"#7048e8","evidence":"AI 类占主动行为 50.7%"},{"name":"码农","desc":"开发工具/云平台访问密集","color":"#1971c2","evidence":"开发类占 20.1%"}]
+  },
+  "192.168.0.17":{
+    "asset":{"name":"xiejava-fnNAS","asset_type":"server","owner":null,"os_name":"Debian GNU/Linux"},
+    "stats":{
+      "total":100413,"days":8,"daily_avg":12552,"domain_count":56,"active_hours":169,"peak_hour":20,"act_total":46466,
+      "by_hour":[4238,4072,4092,4066,4140,4104,4132,4108,4220,4112,4224,4100,4126,4076,4106,4226,4319,4287,4241,4262,4379,4252,4347,4184],
+      "wd_hour":[[607,582,581,584,587,572,574,581,621,581,590,585,584,583,576,590,611,601,609,587,636,610,610,586],[595,574,579,580,604,579,581,589,601,606,599,588,576,578,573,606,622,600,595,612,614,601,635,597],[607,580,572,575,581,614,591,578,603,588,616,587,613,582,600,616,623,612,608,621,640,618,625,604],[618,596,612,591,601,581,591,580,603,593,609,593,599,590,592,610,622,644,615,608,632,600,638,608],[619,587,596,582,602,590,606,627,591,592,613,593,594,581,597,608,612,593,608,609,619,626,612,588],[594,578,564,572,583,579,586,579,607,581,600,579,581,578,582,597,611,628,605,593,613,603,612,603],[598,575,588,582,582,589,603,574,594,571,597,575,579,584,586,599,618,609,601,632,625,594,615,598]],
+      "by_block":{"深夜":24712,"早晨":12460,"上午":12436,"午间":8202,"下午":16938,"傍晚":12882,"夜间":12783},
+      "workday":71937,"weekend":28476,"workday_share":71.6,
+      "cat_visit":{"系统背景":53947,"下载传输":22636,"开发技术":8402,"其他":5793,"移动设备":4018,"小说阅读":3359,"影音娱乐":2006,"AI 工具":168,"社交沟通":84},
+      "cat_by_block":{"上午":{"其他":774,"下载传输":2866,"系统背景":6736,"开发技术":865,"影音娱乐":252,"小说阅读":420,"移动设备":502,"AI 工具":14,"社交沟通":7},"夜间":{"其他":743,"下载传输":2822,"系统背景":6720,"开发技术":1308,"影音娱乐":250,"小说阅读":421,"移动设备":498,"AI 工具":14,"社交沟通":7},"午间":{"其他":448,"下载传输":1885,"系统背景":4480,"开发技术":584,"影音娱乐":168,"小说阅读":280,"移动设备":336,"AI 工具":14,"社交沟通":7},"早晨":{"其他":709,"下载传输":2824,"系统背景":6799,"开发技术":912,"影音娱乐":250,"小说阅读":420,"移动设备":504,"AI 工具":28,"社交沟通":14},"傍晚":{"其他":711,"下载传输":2821,"系统背景":6828,"开发技术":1306,"影音娱乐":252,"小说阅读":420,"移动设备":502,"AI 工具":28,"社交沟通":14},"下午":{"其他":966,"下载传输":3793,"系统背景":8988,"开发技术":1587,"影音娱乐":332,"小说阅读":560,"移动设备":670,"AI 工具":28,"社交沟通":14},"深夜":{"下载传输":5625,"系统背景":13396,"其他":1442,"开发技术":1840,"影音娱乐":502,"小说阅读":838,"移动设备":1006,"AI 工具":42,"社交沟通":21}},
+      "layer_visit":{"ACT":46466,"SYS":53947},
+      "top_domains":[{"domain":"stun.225284.xyz","visits":22123,"category":"系统背景"},{"domain":"stun-heyuan-v6.easytier.cn","visits":20113,"category":"系统背景"},{"domain":"api-pan.xunlei.com","visits":4722,"category":"下载传输"},{"domain":"time.apple.com","visits":4018,"category":"移动设备"},{"domain":"ipv4.fnnas.com","visits":3358,"category":"下载传输"},{"domain":"ipv6.fnnas.com","visits":3358,"category":"下载传输"},{"domain":"6.ipw.cn","visits":3358,"category":"系统背景"},{"domain":"api.cloudflare.com","visits":3358,"category":"开发技术"},{"domain":"alidns.cn-hangzhou.aliyuncs.com","visits":3358,"category":"开发技术"},{"domain":"stun-v6.easytier.cn","visits":2449,"category":"系统背景"},{"domain":"optimizationguide-pa.googleapis.com","visits":2341,"category":"其他"},{"domain":"account.fnnas.com","visits":2018,"category":"下载传输"}]
+    },
+    "tags":[{"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 24.6%"},{"name":"全天候在线","desc":"几乎每个小时都有流量","color":"#0c8599","evidence":"169/192 小时有活动"},{"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 25.7%"},{"name":"码农","desc":"开发工具/云平台访问密集","color":"#1971c2","evidence":"开发类占 18.1%"},{"name":"下载机","desc":"P2P/网盘下载流量显著","color":"#5c7cfa","evidence":"下载类占 48.7%"},{"name":"行为极单一","desc":"只访问极少数域名","color":"#495057","evidence":"56 个域名 / 100,413 次访问"}]
+  },
+  "192.168.0.25":{
+    "asset":{"name":"3113378795deRedmi-14R-5G","asset_type":"client","owner":null,"os_name":null},
+    "stats":{
+      "total":36591,"days":6,"daily_avg":6098,"domain_count":2199,"active_hours":49,"peak_hour":10,"act_total":35964,
+      "by_hour":[482,321,250,21,628,2200,1375,3506,2879,621,5568,2789,0,0,0,53,57,72,45,78,3596,5012,5233,1805],
+      "wd_hour":[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2384,367,390,210],[0,0,18,15,12,1115,405,1242,2532,0,0,0,0,0,0,0,0,0,0,0,0,51,90],[168,62,6,0,593,1065,706,420,312,0,0,0,0,0,0,0,0,0,0,0,0,62,4156,4447,1041],[31,8,226,6,23,20,264,1844,35,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,49,72,45,78,1150,489,345,464],[283,251,0,0,0,0,0,0,0,621,5568,2789,0,0,0,53,8,0,0,0,0,0,0,0]],
+      "by_block":{"深夜":3902,"早晨":7760,"上午":8978,"午间":0,"下午":182,"傍晚":3719,"夜间":12050},
+      "workday":24326,"weekend":12265,"workday_share":66.5,
+      "cat_visit":{"影音娱乐":23305,"小说阅读":3625,"其他":2734,"开发技术":2183,"IP 直连":1966,"移动设备":1207,"社交沟通":579,"广告追踪":433,"系统背景":194,"下载传输":136,"电商购物":136,"新闻资讯":65,"游戏":12,"AI 工具":11,"工作办公":5},
+      "cat_by_block":{"深夜":{"移动设备":280,"游戏":8,"开发技术":430,"其他":446,"下载传输":40,"社交沟通":103,"广告追踪":77,"IP 直连":175,"小说阅读":516,"电商购物":11,"影音娱乐":1782,"新闻资讯":14,"系统背景":19,"AI 工具":1},"早晨":{"移动设备":263,"开发技术":447,"其他":816,"下载传输":46,"游戏":1,"社交沟通":121,"IP 直连":1697,"广告追踪":115,"新闻资讯":42,"AI 工具":7,"小说阅读":884,"电商购物":54,"工作办公":2,"影音娱乐":3207,"系统背景":58},"夜间":{"移动设备":304,"开发技术":786,"其他":1179,"下载传输":19,"游戏":1,"社交沟通":175,"IP 直连":55,"电商购物":47,"广告追踪":183,"影音娱乐":7779,"小说阅读":1432,"新闻资讯":9,"系统背景":80,"工作办公":1},"傍晚":{"移动设备":130,"开发技术":216,"其他":123,"下载传输":20,"社交沟通":62,"IP 直连":27,"电商购物":17,"广告追踪":20,"影音娱乐":2784,"小说阅读":300,"工作办公":2,"AI 工具":3,"系统背景":14,"游戏":1},"下午":{"移动设备":77,"开发技术":39,"其他":41,"下载传输":7,"社交沟通":6,"电商购物":2,"IP 直连":10},"上午":{"移动设备":153,"开发技术":265,"其他":129,"下载传输":4,"游戏":1,"社交沟通":112,"IP 直连":2,"电商购物":5,"小说阅读":493,"系统背景":23,"广告追踪":38,"影音娱乐":7753}},
+      "layer_visit":{"ACT":35964,"AD":433,"SYS":194},
+      "top_domains":[{"domain":"connect.rom.miui.com","visits":499,"category":"移动设备"},{"domain":"lf3-reading.fqnovelpic.com","visits":376,"category":"小说阅读"},{"domain":"p9-novel-sign.byteimg.com","visits":369,"category":"小说阅读"},{"domain":"p3-novel-sign.byteimg.com","visits":356,"category":"小说阅读"},{"domain":"p3-novel.byteimg.com","visits":352,"category":"小说阅读"},{"domain":"p6-novel-sign.byteimg.com","visits":325,"category":"小说阅读"},{"domain":"ads3-normal-hl.zijieapi.com","visits":252,"category":"开发技术"},{"domain":"p3-ad-sign.byteimg.com","visits":250,"category":"影音娱乐"},{"domain":"tracking.miui.com","visits":231,"category":"移动设备"},{"domain":"n98-v-readingvideo.qznovelvod.com","visits":185,"category":"小说阅读"},{"domain":"p3-webcast.douyinpic.com","visits":184,"category":"影音娱乐"},{"domain":"whoami.akamai.net","visits":165,"category":"系统背景"},{"domain":"www.baidu.com","visits":148,"category":"其他"},{"domain":"p3-sign.douyinpic.com","visits":141,"category":"影音娱乐"},{"domain":"webcast5-open-hl.douyin.com","visits":135,"category":"影音娱乐"}]
+    },
+    "tags":[{"name":"轻度熬夜","desc":"深夜有一定活动","color":"#748ffc","evidence":"深夜占比 10.7%"},{"name":"夜间活跃型","desc":"晚 19–24 点是主活跃期","color":"#845ef7","evidence":"夜间占比 43.0%"},{"name":"间歇上线型","desc":"只在部分时段出现","color":"#868e96","evidence":"仅 49 个小时有活动"},{"name":"作息极规律","desc":"活动高度集中在少数几小时","color":"#2f9e44","evidence":"Top6 小时占 70.5%"},{"name":"典型打工人","desc":"工作日显著高于周末","color":"#1971c2","evidence":"工作日日均 4,054 vs 周末 0"},{"name":"追剧党","desc":"短视频/长视频重度消费","color":"#e64980","evidence":"影音类占 64.8%"},{"name":"兴趣广泛","desc":"域名覆盖面很广","color":"#2f9e44","evidence":"覆盖 2199 个域名"}]
+  }
+};
+
+/* ============ 风险/关系/异常 分层数据（来自 POC 实查，标注 real） ============ */
+const LAYERS = {
+  "192.168.0.8":{
+    identity:{mac:"1c:f6:4c:4e:f2:8d", type_label:"开发机（被误标 server）", confidence:"中", conf_color:"#f59f00", traffic:"human", fresh:"2 天前同步", fresh_color:"#ffd43b", note:"未装 Wazuh agent → 无主机侧告警/认证数据"},
+    risk:{alert_groups:0, alerts:0, ai_real:0, vulns:0, ports:[{port:5000,svc:"rtsp",danger:false},{port:7000,svc:"rtsp",danger:false},{port:8000,svc:"Uvicorn (AI-miniSOC 后端)",danger:false},{port:8080,svc:"http-alt",danger:false},{port:8100,svc:"Uvicorn (MCP 服务)",danger:false},{port:20002,svc:"未知",danger:false}], vuln_sev:{critical:0,high:0,medium:0,low:0}, trend:false, agent:false},
+    rel:{outbound:[{ip:"192.168.0.30",count:56,role:"运维/基础设施"},{ip:"192.168.0.102",count:18,role:"被管主机"},{ip:"192.168.0.45",count:18,role:"未知"},{ip:"192.168.0.17",count:2,role:"NAS"},{ip:"192.168.0.28",count:2,role:"未知"}], inbound:[], external:[], sameSegment:["192.168.0.30","192.168.0.100","192.168.0.102","192.168.0.17","192.168.0.25","192.168.0.45","192.168.0.128","192.168.0.60","192.168.0.40"], agent:false},
+    anomaly:[{sev:"info",name:"数据质量提示：邮箱心跳噪声",desc:"主动行为中「工作办公」占 95.6%，实为网易邮箱客户端心跳（countly + woodcattle），并非真实办公。画像解读须扣除该噪声，真实信号为 AI 开发（copilot/vscode/github）。",evidence:"countly.mail.163.com 5633 + woodcattle 4778 = 10411 / 主动行为 10924",acts:[]},{sev:"info",name:"作息特征：夜猫子",desc:"深夜 00–06 点占比 23.6%，属本人长期作息特征，非安全异常，仅作画像标注。",evidence:"深夜占比 23.6%",acts:[]}]
+  },
+  "192.168.0.102":{
+    identity:{mac:"ec:d6:8a:f9:44:0e", type_label:"Ubuntu 服务器（被管主机）", confidence:"高", conf_color:"#2f9e44", traffic:"human", fresh:"实时（装 agent）", fresh_color:"#2f9e44", note:"装 Wazuh agent → 主机侧数据完整"},
+    risk:{alert_groups:866, alerts:76055, ai_real:63060, vulns:0, ports:[{port:22,svc:"ssh",danger:true},{port:53,svc:"dns",danger:false},{port:5901,svc:"vnc",danger:true},{port:6001,svc:"X11",danger:false}], vuln_sev:{critical:0,high:0,medium:0,low:0}, trend:false, agent:true,
+      rules:[{rule:"5502 PAM: Login session closed",count:15579,lv:3},{rule:"5501 PAM: Login session opened",count:15579,lv:3},{rule:"5715 sshd: authentication success",count:12517,lv:5},{rule:"5402 sudo to ROOT",count:9075,lv:8},{rule:"23502 CVE-2025-71285 detected",count:8608,lv:9},{rule:"23508 CVE-2026-72152 detected",count:3984,lv:9},{rule:"23505 CVE-2026-68370 (lv10)",count:2516,lv:10},{rule:"554 File added to the system",count:1836,lv:5}],
+      ai:{p1:31278,p2_noise:12995,p3:15468,p3_noise:1251,null:15029}},
+    rel:{outbound:[], inbound:[{ip:"192.168.0.8",count:202,account:"xiejava",role:"操作端/开发机"},{ip:"192.168.0.128",count:2,account:"未知",role:"未知"},{ip:"192.168.0.60",count:2,account:"未知",role:"未知"},{ip:"192.168.0.40",count:2,account:"未知",role:"未知"},{ip:"192.168.0.45",count:2,account:"未知",role:"未知"}], external:[], sameSegment:["192.168.0.8","192.168.0.30","192.168.0.100","192.168.0.17","192.168.0.25","192.168.0.45","192.168.0.128","192.168.0.60","192.168.0.40"], agent:true, login_total:610, accounts:[{acc:"xiejava",n:556},{acc:"root",n:50}]},
+    anomaly:[
+      {sev:"mid",name:"风险叠加：高活跃 + 暴露面 + 提权",desc:"该主机告警总量 76,055 条、活跃度极高；同时开放 VNC(5901) 与 SSH(22) 公网可达端口，且 sudo to ROOT 达 9,075 次。三项叠加，建议确认暴露必要性并评估是否应缩小暴露面。",evidence:"告警 76,055 · 暴露端口 22/5901 · sudo→root 9,075 次",acts:["生成安全事件","加白名单"]},
+      {sev:"low",name:"高频 sudo 提权",desc:"sudo to ROOT 9,075 次，需确认是否为运维常态；若非预期，可能存在脚本滥用或凭据共享。",evidence:"5402 规则 9,075 次 / 全量告警",acts:["生成安全事件"]},
+      {sev:"info",name:"被登录频次高",desc:"被 5 个源 IP 登录共 610 次，主账号 xiejava(556)。属正常运维通道，仅作关系画像基线。",evidence:"入站 610 次 · xiejava 556 / root 50",acts:[]}
+    ]
+  },
+  "192.168.0.100":{
+    demo:true,
+    identity:{mac:"—", type_label:"Ubuntu 服务器（AI 工作站）", confidence:"高", conf_color:"#2f9e44", traffic:"human", fresh:"实时（装 agent）", fresh_color:"#2f9e44", note:"装 Wazuh agent → 主机侧数据完整（示例推算值，非 POC 实查）"},
+    risk:{alert_groups:1280, alerts:45120, ai_real:38200, vulns:0, ports:[{port:22,svc:"ssh",danger:true},{port:53,svc:"dns",danger:false},{port:5901,svc:"vnc",danger:true},{port:8000,svc:"http-alt",danger:false}], vuln_sev:{critical:0,high:0,medium:0,low:0}, trend:false, agent:true,
+      rules:[{rule:"5402 sudo to ROOT",count:12100,lv:8},{rule:"5715 sshd: authentication success",count:9800,lv:5},{rule:"5501 PAM: Login session opened",count:9600,lv:3},{rule:"5502 PAM: Login session closed",count:9600,lv:3},{rule:"23505 CVE-2026-68370 (lv10)",count:3100,lv:10},{rule:"23502 CVE-2025-71285 detected",count:2200,lv:9},{rule:"554 File added to the system",count:1500,lv:5}],
+      ai:{p2_noise:6900,p1:21000}},
+    rel:{outbound:[{ip:"192.168.0.8",count:40,role:"操作端/开发机"},{ip:"192.168.0.30",count:30,role:"运维/基础设施"},{ip:"192.168.0.102",count:12,role:"被管主机"}], inbound:[{ip:"192.168.0.8",count:60,account:"xiejava",role:"操作端/开发机"}], external:[], sameSegment:["192.168.0.8","192.168.0.30","192.168.0.100","192.168.0.17","192.168.0.25","192.168.0.45","192.168.0.128","192.168.0.60","192.168.0.40"], agent:true, login_total:160, accounts:[{acc:"xiejava",n:150},{acc:"root",n:10}]},
+    anomaly:[
+      {sev:"mid",name:"高频 sudo 提权",desc:"sudo to ROOT 12,100 次，需确认 AI 自动化任务是否依赖 root；若为脚本常态化，建议评估最小权限。",evidence:"5402 规则 12,100 次 / 全量告警",acts:["生成安全事件"]},
+      {sev:"info",name:"AI 工具重度外联",desc:"主动行为中 AI 工具占 50.7%，外联 copilot/volcengine/gpt 类域名，属正常研发通道，仅作画像标注。",evidence:"AI 类占主动行为 50.7%",acts:[]},
+      {sev:"info",name:"暴露面：VNC/SSH 开放",desc:"开放 VNC(5901) 与 SSH(22)，建议确认是否需公网可达。",evidence:"端口 22/5901",acts:[]}
+    ]
+  },
+  "192.168.0.17":{
+    demo:true,
+    identity:{mac:"—", type_label:"Debian NAS 下载机", confidence:"中", conf_color:"#f59f00", traffic:"machine", fresh:"2 天前同步", fresh_color:"#ffd43b", note:"未装 Wazuh agent；机器流量（traffic=machine）→ 行为画像降权"},
+    risk:{alert_groups:0, alerts:0, ai_real:0, vulns:0, ports:[{port:5000,svc:"rtsp",danger:false},{port:7000,svc:"rtsp",danger:false},{port:8000,svc:"http-alt",danger:false},{port:8080,svc:"http-alt",danger:false},{port:1900,svc:"upnp",danger:false},{port:445,svc:"smb",danger:true}], vuln_sev:{critical:0,high:0,medium:0,low:0}, trend:false, agent:false},
+    rel:{outbound:[{ip:"stun.225284.xyz",count:22123,role:"easytier 打洞"},{ip:"api-pan.xunlei.com",count:4722,role:"迅雷网盘"},{ip:"ipv4.fnnas.com",count:3358,role:"NAS 回源"},{ip:"ipv6.fnnas.com",count:3358,role:"NAS 回源"}], inbound:[], external:[], sameSegment:["192.168.0.8","192.168.0.30","192.168.0.100","192.168.0.102","192.168.0.25","192.168.0.45","192.168.0.128","192.168.0.60","192.168.0.40"], agent:false},
+    anomaly:[
+      {sev:"info",name:"机器流量特征：行为极单一",desc:"曲线近乎平直、域名仅 56 个、系统背景占 53.7%，判定为非人类行为（traffic=machine），行为画像应降权/折叠。",evidence:"56 域名 / 100,413 次 · 系统背景 53.7%",acts:[]},
+      {sev:"info",name:"P2P/打洞外联",desc:"stun.* 与 easytier 打洞域名高频，属 NAS 组网下行为，仅作画像标注。",evidence:"stun 类 4.2 万次",acts:[]},
+      {sev:"low",name:"暴露 SMB(445)",desc:"开放 SMB(445)，建议确认内网共享必要性，避免被横向移动利用。",evidence:"端口 445",acts:["生成安全事件"]}
+    ]
+  },
+  "192.168.0.25":{
+    demo:true,
+    identity:{mac:"—", type_label:"Redmi 手机（客户端）", confidence:"中", conf_color:"#f59f00", traffic:"human", fresh:"2 天前同步", fresh_color:"#ffd43b", note:"未装 Wazuh agent；移动客户端"},
+    risk:{alert_groups:0, alerts:0, ai_real:0, vulns:0, ports:[{port:80,svc:"http",danger:false},{port:443,svc:"https",danger:false}], vuln_sev:{critical:0,high:0,medium:0,low:0}, trend:false, agent:false},
+    rel:{outbound:[{ip:"connect.rom.miui.com",count:499,role:"MIUI 系统"},{ip:"lf3-reading.fqnovelpic.com",count:376,role:"小说阅读"},{ip:"webcast5-open-hl.douyin.com",count:135,role:"抖音"},{ip:"www.baidu.com",count:148,role:"搜索"}], inbound:[], external:[], sameSegment:["192.168.0.8","192.168.0.30","192.168.0.100","192.168.0.102","192.168.0.17","192.168.0.45","192.168.0.128","192.168.0.60","192.168.0.40"], agent:false},
+    anomaly:[
+      {sev:"info",name:"追剧作息：夜间活跃型",desc:"夜间 19–24 点占 43.0%，影音类占 64.8%，属个人娱乐特征，非安全异常，仅作画像标注。",evidence:"影音类 64.8% · 夜间 43.0%",acts:[]},
+      {sev:"info",name:"兴趣广泛：域名覆盖广",desc:"覆盖 2199 个域名，行为多样性高，画像标注「杂食党」。",evidence:"2199 域名",acts:[]}
+    ]
+  }
+};
+
+const SUBJECTS = [
+  {ip:"192.168.0.8", label:"xiejavadeMini", st:"行为全 · 风险/关系空态", demo:true},
+  {ip:"192.168.0.102", label:"xiejava-8g-host", st:"风险/关系全 · 行为薄", demo:true},
+  {ip:"192.168.0.100", label:"AI 工作站", st:"行为全 · 风险/关系空态", demo:false},
+  {ip:"192.168.0.17", label:"NAS 下载机", st:"行为全(机器) · 风险/关系空态", demo:false},
+  {ip:"192.168.0.25", label:"追剧手机", st:"行为全 · 风险/关系空态", demo:false}
+];
+
+const TIME_BLOCKS=[
+  {"name":"深夜","label":"00-06","color":"#4c6ef5"},{"name":"早晨","label":"06-09","color":"#22b8cf"},{"name":"上午","label":"09-12","color":"#51cf66"},{"name":"午间","label":"12-14","color":"#fcc419"},{"name":"下午","label":"14-18","color":"#ff922b"},{"name":"傍晚","label":"18-21","color":"#ff6b6b"},{"name":"夜间","label":"21-24","color":"#845ef7"}
+];
+const CATEGORIES={"AI 工具":{layer:"ACT",color:"#7048e8",icon:"✦"},"开发技术":{layer:"ACT",color:"#1971c2",icon:"⌘"},"工作办公":{layer:"ACT",color:"#0c8599",icon:"▤"},"影音娱乐":{layer:"ACT",color:"#e64980",icon:"▶"},"小说阅读":{layer:"ACT",color:"#d6336c",icon:"❏"},"电商购物":{layer:"ACT",color:"#f76707",icon:"🛒"},"社交沟通":{layer:"ACT",color:"#20c997",icon:"◍"},"游戏":{layer:"ACT",color:"#ae3ec9",icon:"◈"},"新闻资讯":{layer:"ACT",color:"#868e96",icon:"▦"},"下载传输":{layer:"ACT",color:"#5c7cfa",icon:"⇩"},"移动设备":{layer:"ACT",color:"#4c6ef5",icon:"▢"},"系统背景":{layer:"SYS",color:"#adb5bd",icon:"⚙"},"广告追踪":{layer:"AD",color:"#ced4da",icon:"◌"},"其他":{layer:"ACT",color:"#868e96",icon:"·"},"IP 直连":{layer:"ACT",color:"#495057",icon:"⤴"}};
+const WD=["周一","周二","周三","周四","周五","周六","周日"];
+const BLOCK_ORDER=["深夜","早晨","上午","午间","下午","傍晚","夜间"];
+const PERSONA={"夜猫子":"野猫子","周末战士":"工作狂","追剧党":"追剧狂","典型打工人":"上班族","下载机":"下载狂","作息极规律":"规律党","兴趣广泛":"杂食党"};
+const LVCOLOR={3:"#74c0fc",5:"#4dabf7",8:"#ffa94d",9:"#ff6b6b",10:"#c92a2a"};
+const fmt=n=>{try{return Number(n).toLocaleString('en-US');}catch(e){return '0';}};
+const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CATS=CATEGORIES, BLOCKS=TIME_BLOCKS;
+const blockOf=h=>{if(h<6)return'深夜';if(h<9)return'早晨';if(h<12)return'上午';if(h<14)return'午间';if(h<18)return'下午';if(h<21)return'傍晚';return'夜间';};
+
+/* —— 行为组件（沿用报告）—— */
+function hourBars(bh){const mx=Math.max.apply(null,bh)||1;let c='';for(let h=0;h<24;h++){const v=bh[h],pct=v/mx*100,b=BLOCKS.find(b=>b.name===blockOf(h)),color=b?b.color:'#adb5bd',peak=v===mx?'peak':'';c+='<div class="hb-col '+peak+'"><div class="hb-track"><div class="hb-fill" style="height:'+pct.toFixed(1)+'%;background:'+color+'"></div></div><div class="hb-lbl">'+('0'+h).slice(-2)+'</div></div>';}return '<div class="hb">'+c+'</div>';}
+function heatmap(wh){const flat=wh.flat();const mx=Math.max.apply(null,flat)||1;let head='';for(let h=0;h<24;h++)head+='<div class="hm-c hm-h">'+('0'+h).slice(-2)+'</div>';let rows='<div class="hm-row"><div class="hm-rl"></div>'+head+'</div>';for(let i=0;i<7;i++){let cells='';for(let v of wh[i]){const bg=v===0?'#f1f3f5':'rgba(25,113,194,'+(0.12+v/mx*0.88).toFixed(3)+')';cells+='<div class="hm-c" style="background:'+bg+'" title="'+WD[i]+' '+fmt(v)+'"></div>';}rows+='<div class="hm-row"><div class="hm-rl">'+WD[i]+'</div>'+cells+'</div>';}return '<div class="hm">'+rows+'</div>';}
+function blockBars(bb,total){let o='';for(const n of BLOCK_ORDER){const v=bb[n]||0,pct=total?v/total*100:0,c=(BLOCKS.find(b=>b.name===n)||{}).color||'#adb5bd';o+='<div class="bb-row"><div class="bb-name">'+esc(n)+'</div><div class="bb-track"><div class="bb-fill" style="width:'+Math.max(pct,0.6).toFixed(1)+'%;background:'+c+'"></div></div><div class="bb-v">'+fmt(v)+'<span class="bb-p">'+pct.toFixed(1)+'%</span></div></div>';}return '<div class="bb">'+o+'</div>';}
+function catBars(cv,total){let o='';const e=Object.entries(cv).sort((a,b)=>b[1]-a[1]);for(const [c,v] of e){const m=CATS[c]||{color:'#adb5bd',icon:'·'},pct=total?v/total*100:0;o+='<div class="cb-row"><div class="cb-name"><span class="cb-ico" style="background:'+m.color+'">'+esc(m.icon)+'</span>'+esc(c)+'</div><div class="cb-track"><div class="cb-fill" style="width:'+Math.max(pct,0.5).toFixed(1)+'%;background:'+m.color+'"></div></div><div class="cb-v">'+fmt(v)+'<span class="cb-p">'+pct.toFixed(1)+'%</span></div></div>';}return '<div class="cb">'+o+'</div>';}
+function catBlockStack(cbb){let rows='';for(const b of BLOCK_ORDER){const cnt=cbb[b]||{},tot=Object.values(cnt).reduce((a,x)=>a+x,0)||1;let segs='',legend='';const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,7);for(const [c,v] of sorted){const m=CATS[c]||{color:'#adb5bd'},pct=v/tot*100;segs+='<div class="st-seg" style="width:'+pct.toFixed(2)+'%;background:'+m.color+'" title="'+esc(c)+' '+fmt(v)+' ('+pct.toFixed(1)+'%)"></div>';}legend=sorted.slice(0,3).map(([c,v])=>'<span class="lg"><i style="background:'+(CATS[c]||{}).color+'"></i>'+esc(c)+' '+(v/tot*100).toFixed(0)+'%</span>').join('');rows+='<div class="st-row"><div class="st-b">'+esc(b)+'</div><div class="st-bar">'+segs+'</div><div class="st-lg">'+legend+'</div></div>';}return '<div class="st">'+rows+'</div>';}
+function domainTable(td,total){const mx=td.length?td[0].visits:1;let rows='';for(const r of td.slice(0,15)){const m=CATS[r.category]||{color:'#adb5bd',icon:'·'},pct=r.visits/(total||1)*100,bar=r.visits/mx*100;rows+='<tr><td class="dt-d">'+esc(r.domain)+'</td><td><span class="chip" style="background:'+m.color+'1a;color:'+m.color+'">'+esc(m.icon)+' '+esc(r.category)+'</span></td><td class="dt-bar"><div style="width:'+bar.toFixed(1)+'%;background:'+m.color+'"></div></td><td class="dt-n">'+fmt(r.visits)+'</td><td class="dt-n">'+pct.toFixed(2)+'%</td></tr>';}return '<table class="dt"><thead><tr><th>域名</th><th>分类</th><th></th><th>访问量</th><th>占比</th></tr></thead><tbody>'+rows+'</tbody></table>';}
+function tagCards(tags){if(!tags.length)return '<div class="empty">标签规则未命中 —— 行为强度或多样性不足</div>';return '<div class="tags">'+tags.map(t=>{const al=PERSONA[t.name];const nm=al?esc(t.name)+'<span class="tag-alias">→ '+esc(al)+'</span>':esc(t.name);return '<div class="tag" style="--tc:'+t.color+'"><div class="tag-n">'+nm+'</div><div class="tag-d">'+esc(t.desc)+'</div><div class="tag-e">'+esc(t.evidence)+'</div></div>';}).join('')+'</div>';}
+function layerNote(lv,total){const a=lv.ACT||0,s=lv.SYS||0,ad=lv.AD||0,t=Math.max(total,1);return '<div class="layer"><span class="li"><i style="background:#1971c2"></i>主动行为 '+(a/t*100).toFixed(1)+'%</span><span class="li"><i style="background:#adb5bd"></i>系统背景 '+(s/t*100).toFixed(1)+'%</span><span class="li"><i style="background:#ced4da"></i>广告追踪 '+(ad/t*100).toFixed(1)+'%</span></div>';}
+
+/* —— 风险组件 —— */
+function riskPanel(L){
+  if(!L){return emptyState('风险画像','该设备主机侧数据未纳入本次 POC（.100/.17/.25）。完整样例见 .8（空态）与 .102（数据全）。');}
+  const r=L.risk;
+  let kpis='<div class="kpis">'
+    +kpi(r.alert_groups,'告警组','≈'+fmt(r.alerts)+' 条原始告警', r.alerts>5000?'danger':'')
+    +kpi(r.vulns,'已知漏洞','severity 分布见下','')
+    +kpi(r.ports.filter(p=>p.danger).length,'危险暴露端口','22/5901 等', r.ports.filter(p=>p.danger).length?'warn':'')
+    +kpi(L.rel? (L.rel.login_total||0):0,'关联登录','入站/出站', '')
+    +'</div>';
+  let rules='';
+  if(r.agent&&r.rules){const mx=r.rules[0].count;rules='<div class="card"><div class="card-t">告警规则榜 <span class="sec-s">按条数降序 · 点开看原始告警（设计中）</span></div>';for(const x of r.rules){const c=LVCOLOR[x.lv]||'#74c0fc';rules+='<div class="rb-row"><div class="rb-lv" style="background:'+c+'">L'+x.lv+'</div><div class="rb-name">'+esc(x.rule)+'</div><div class="rb-track"><div class="rb-fill" style="width:'+(x.count/mx*100).toFixed(1)+'%;background:'+c+'"></div></div><div class="rb-v">'+fmt(x.count)+'</div></div>';}rules+='<div class="hint">AI 去噪后真实风险 ≈ '+fmt(r.ai_real)+' 条（已剔除 noise=true '+fmt(r.ai.p2_noise)+' 条）。</div></div>';}
+  else{rules='<div class="card"><div class="card-t">告警规则榜</div><div class="empty">该设备未装 Wazuh agent，无主机侧告警。装 agent 后可解锁本区块（对照 .102 样例）。</div></div>';}
+  let sev=r.vuln_sev,tot=(sev.critical+sev.high+sev.medium+sev.low)||1;
+  let sevbar='<div class="card"><div class="card-t">漏洞严重度分布 <span class="sec-s">来自 soc_asset_vulnerabilities</span></div><div class="sevbar">'
+    +'<div class="sevseg" style="width:'+(sev.critical/tot*100)+'%;background:#c92a2a" title="critical '+sev.critical+'"></div>'
+    +'<div class="sevseg" style="width:'+(sev.high/tot*100)+'%;background:#e8590c" title="high '+sev.high+'"></div>'
+    +'<div class="sevseg" style="width:'+(sev.medium/tot*100)+'%;background:#f59f00" title="medium '+sev.medium+'"></div>'
+    +'<div class="sevseg" style="width:'+(sev.low/tot*100)+'%;background:#74c0fc" title="low '+sev.low+'"></div></div>'
+    +'<div class="segleg"><span><i style="background:#c92a2a"></i>critical '+sev.critical+'</span><span><i style="background:#e8590c"></i>high '+sev.high+'</span><span><i style="background:#f59f00"></i>medium '+sev.medium+'</span><span><i style="background:#74c0fc"></i>low '+sev.low+'</span></div>'
+    +'<div class="hint">已被野外利用（KEV 对齐）将标红「🔥 在野利用」—— 当前 CVE 对齐未建（方案 §3 层3 已知缺口）。</div></div>';
+  let ports='<div class="card"><div class="card-t">暴露端口清单 <span class="sec-s">来自 soc_asset_ports</span></div>';
+  for(const p of r.ports){ports+='<div class="port'+(p.danger?' danger':'')+'"><span class="pn">'+p.port+'</span><span class="ps">'+esc(p.svc)+'</span>'+(p.danger?'<span class="pd">暴露风险</span>':'')+'</div>';}
+  ports+='<div class="hint">危险端口（22/3389/5901 等）自动高亮，提示缩小暴露面。</div></div>';
+  let trend=r.trend?'<div class="card"><div class="card-t">风险评分趋势</div><div class="empty">趋势图（soc_asset_risk_history 序列，需 ≥30 天）</div></div>':'<div class="card"><div class="card-t">风险评分趋势</div><div class="empty">趋势暂不可用：risk_history 仅 1.3 天快照（方案 §2.2 缺口3）。</div></div>';
+  const DEMO=(L&&L.demo)?'<div class="demo-badge">示例数据（原型演示，非 POC 实查）</div>':'';
+  return DEMO+kpis+rules+sevbar+ports+trend;
+}
+function kpi(v,l,s,cls){return '<div class="kpi '+(cls||'')+'"><div class="v">'+v+'</div><div class="l">'+esc(l)+'</div><div class="s">'+esc(s)+'</div></div>';}
+
+/* —— 关系组件（rel_graph SVG）—— */
+function relPanel(L){
+  if(!L){return emptyState('关系画像','该设备关系数据未纳入本次 POC（.100/.17/.25）。完整样例见 .8（仅出站）与 .102（入站为主）。');}
+  const r=L.rel;const me=L.identity? (''):'';
+  let svg='<svg viewBox="0 0 720 320">';
+  const cx=360,cy=150;
+  // 中心线
+  svg+='<line x1="40" y1="150" x2="680" y2="150" stroke="#e9ecef" stroke-dasharray="4 4"/>';
+  svg+='<circle cx="'+cx+'" cy="'+cy+'" r="34" fill="#1971c2"/><text x="'+cx+'" y="'+(cy+5)+'" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">本机</text>';
+  // 出站（右，绿）
+  const ob=r.outbound||[];ob.forEach((n,i)=>{const y=40+i*52;svg+='<line x1="'+cx+'" y1="'+cy+'" x2="660" y2="'+y+'" stroke="#2f9e44" stroke-width="1.5"/><circle cx="660" cy="'+y+'" r="13" fill="#ebfbee" stroke="#2f9e44"/><text x="660" y="'+(y+4)+'" text-anchor="middle" font-size="9" fill="#2f9e44">'+esc(n.ip.split('.').slice(3).join('.'))+'</text>';});
+  // 入站（左，蓝）
+  const ib=r.inbound||[];ib.forEach((n,i)=>{const y=40+i*52;svg+='<line x1="'+cx+'" y1="'+cy+'" x2="60" y2="'+y+'" stroke="#1971c2" stroke-width="1.5"/><circle cx="60" cy="'+y+'" r="13" fill="#e7f5ff" stroke="#1971c2"/><text x="60" y="'+(y+4)+'" text-anchor="middle" font-size="9" fill="#1971c2">'+esc(n.ip.split('.').slice(3).join('.'))+'</text>';});
+  // 外联（下，红）
+  const ex=r.external||[];ex.forEach((n,i)=>{const x=200+i*120;svg+='<line x1="'+cx+'" y1="'+cy+'" x2="'+x+'" y2="290" stroke="#e03131" stroke-width="1.5"/><circle cx="'+x+'" cy="290" r="12" fill="#fff5f5" stroke="#e03131"/>';});
+  svg+='</svg>';
+  let legend='<div class="glegend"><div class="row"><i style="background:#2f9e44"></i>出站：本机主动登录了谁（'+ob.length+'）</div><div class="row"><i style="background:#1971c2"></i>入站：谁登录了本机（'+ib.length+'）</div><div class="row"><i style="background:#e03131"></i>外部攻击源（'+ex.length+'）</div><div class="hint">点击任一节点 → 跳转对方画像（设计）。本机中心节点固定。</div></div>';
+  let seg='<div class="seglist">';
+  if(ob.length)seg+='<div style="font-size:11px;color:#868e96;margin-bottom:4px">出站</div>'+ob.map(n=>'<div class="sl-i" onclick="selectIP(\''+n.ip+'\')"><span class="sip">'+esc(n.ip)+'</span><span class="srole">'+esc(n.role)+' · '+n.count+' 次</span></div>').join('');
+  if(ib.length)seg+='<div style="font-size:11px;color:#868e96;margin:8px 0 4px">入站</div>'+ib.map(n=>'<div class="sl-i" onclick="selectIP(\''+n.ip+'\')"><span class="sip">'+esc(n.ip)+'</span><span class="srole">'+(n.account||'?')+' · '+n.count+' 次</span></div>').join('');
+  if(!ob.length&&!ib.length)seg+='<div class="empty">无登录关系（未装 agent 或纯客户端）</div>';
+  seg+='</div>';
+  let sameSeg='<div class="card"><div class="card-t">同网段设备 <span class="sec-s">soc_assets.network_segment</span></div><div class="seglist">'+r.sameSegment.map(ip=>'<div class="sl-i" onclick="selectIP(\''+ip+'\')"><span class="sip">'+esc(ip)+'</span><span class="srole">同段</span></div>').join('')+'</div></div>';
+  if(!r.agent){seg='<div class="note" style="grid-column:1/3">⚠️ 该设备<b>未装 Wazuh agent</b>，无主机侧认证日志。当前仅能呈现「出站登录」（来自 OpenSearch 抽到的源 IP）。装 agent 后入站、外部攻击源、账号归一化将自动点亮（对照 .102 样例）。</div>'+seg;}
+  let accInfo='';
+  if(r.accounts)accInfo='<div class="note">本机被 <b>'+(r.login_total||0)+'</b> 次登录，账号：'+r.accounts.map(a=>esc(a.acc)+' '+a.n).join(' / ')+'。这是「设备共享度」指标的数据来源。</div>';
+  const DEMO=(L&&L.demo)?'<div class="demo-badge">示例数据（原型演示，非 POC 实查）</div>':'';
+  return DEMO+'<div class="graph-wrap"><div class="graph">'+svg+'</div><div>'+legend+'</div></div>'+accInfo+'<div class="grid2"><div class="card" style="margin-bottom:0"><div class="card-t">登录关系明细</div>'+seg+'</div>'+sameSeg+'</div>';
+}
+
+/* —— 异常组件 —— */
+function anomPanel(L){
+  if(!L){return emptyState('异常判定','该设备异常数据未纳入本次 POC（.100/.17/.25）。完整样例见 .8（仅数据质量提示）与 .102（风险叠加信号）。');}
+  if(!L.anomaly.length)return '<div class="card"><div class="card-t">异常判定</div><div class="empty">未命中任何异常信号 ✅</div></div>';
+  const DEMO=(L&&L.demo)?'<div class="demo-badge">示例数据（原型演示，非 POC 实查）</div>':'';
+  let out='';
+  for(const a of L.anomaly){
+    const acts=(a.acts||[]).map((x,i)=>'<button class="btn'+(i===0?' pri':'')+'">'+esc(x)+'</button>').join('');
+    out+='<div class="anom '+a.sev+'"><div class="sev">'+({high:'高',mid:'中',low:'低',info:'提示'}[a.sev]||a.sev)+'</div><div class="mc"><div class="mn">'+esc(a.name)+'</div><div class="md">'+esc(a.desc)+'</div><div class="me">证据：'+esc(a.evidence)+'</div></div><div class="acts">'+acts+'</div></div>';
+  }
+  out+='<div class="note">异常信号均<b>可审计</b>：每条附证据与判定逻辑，定性须人工复核（呼应 §6 合规）。「生成安全事件」直接接回 §P1 事件闭环，避免画像变成「看了就忘」的看板。</div>';
+  return DEMO+out;
+}
+function emptyState(tab,msg){return '<div class="card"><div class="card-t">'+esc(tab)+'</div><div class="empty">'+esc(msg)+'</div></div>';}
+
+/* —— 行为 Tab —— */
+function behaviorPanel(ip){
+  const b=BEHAVIOR[ip];
+  if(!b){return '<div class="card"><div class="card-t">行为画像</div><div class="empty">该主机为服务器，几乎不上网（基线域名仅 79，访问 3,112 次）——行为画像意义有限，重点看风险/关系层。</div></div>';}
+  const s=b.stats,total=Math.max(s.total,1),act=Math.max(s.act_total,1);
+  return '<div class="card"><div class="card-t">画像标签 <span class="sec-s">基于主动行为 + 时段节律的规则判定，每项附证据（人设命名见别名）</span></div>'+tagCards(b.tags)+'</div>'
+    +'<div class="grid2"><div class="card"><div class="card-t">24 小时活跃曲线 <span class="sec-s">原始日志逐条时间戳计数</span></div>'+hourBars(s.by_hour)+layerNote(s.layer_visit,total)+'</div>'
+    +'<div class="card"><div class="card-t">时段分布 <span class="sec-s">7 时段占比</span></div>'+blockBars(s.by_block,total)+'<div class="hint">工作日占 '+s.workday_share+'%（'+fmt(s.workday)+' 次）· 周末 '+fmt(s.weekend)+' 次</div></div></div>'
+    +'<div class="card"><div class="card-t">星期 × 小时 行为热力图 <span class="sec-s">颜色越深访问越密集（UTC+8）</span></div>'+heatmap(s.wd_hour)+'<div class="hint">一眼看「哪天哪点最活跃」——行为节律的核心视图。</div></div>'
+    +'<div class="grid2"><div class="card"><div class="card-t">访问习惯构成 <span class="sec-s">仅统计主动行为</span></div>'+catBars(s.cat_visit,act)+'</div>'
+    +'<div class="card"><div class="card-t">各时段在干什么 <span class="sec-s">分类 × 时段堆叠</span></div>'+catBlockStack(s.cat_by_block)+'</div></div>'
+    +'<div class="card"><div class="card-t">访问域名 TOP 15</div>'+domainTable(s.top_domains,total)+'<div class="hint">分类着色；点域名可下钻到 soc_behavior_domains（设计中）。</div></div>';
+}
+
+/* —— 身份卡 —— */
+function identityCard(ip){
+  const b=BEHAVIOR[ip];const L=LAYERS[ip];const id=L?L.identity:null;
+  const a=b?b.asset:{};
+  const name=a.name||'(无资产记录)';const type=id? id.type_label : (a.asset_type||'未知类型');
+  const owner=a.owner?'<span class="chip c-owner">owner: '+esc(a.owner)+'</span>':'';
+  const os=a.os_name?'<span class="chip c-gray">'+esc(a.os_name)+'</span>':'';
+  const tt=id?'<span class="chip c-tt">'+esc(id.traffic)+'</span>':'';
+  const conf=id?'<span class="chip" style="background:'+id.conf_color+'1a;color:'+id.conf_color+'">置信度 '+esc(id.confidence)+'</span>':'';
+  let accHtml='<div class="ct">关联账号（谁在用）</div>';
+  if(L&&L.rel&&L.rel.inbound.length){accHtml+=L.rel.inbound.map(n=>'<div class="acc"><span class="aip">'+esc(n.ip)+'</span><span style="font-size:11px;color:#4b5563">'+esc(n.account||'?')+'</span><span class="ac">'+n.count+' 次</span></div>').join('');}
+  else if(L&&L.rel&&L.rel.outbound.length){accHtml+='<div style="font-size:11px;color:#868e96;margin-bottom:4px">本机主动登录（出站）</div>'+L.rel.outbound.slice(0,4).map(n=>'<div class="acc"><span class="aip">'+esc(n.ip)+'</span><span class="ac">'+n.count+' 次</span></div>').join('');}
+  else{accHtml+='<div class="empty" style="padding:10px">无关联账号数据</div>';}
+  accHtml+='<div class="hint">点击账号/IP 可双向钻取（设计）。</div>';
+  let src='<div class="ct">数据来源与同步</div>';
+  if(id){src+='<div class="kv"><span class="k">MAC</span><span class="v">'+esc(id.mac)+'</span></div>'
+    +'<div class="kv"><span class="k">同步</span><span class="v"><span class="fresh"><i style="background:'+id.fresh_color+'"></i>'+esc(id.fresh)+'</span></span></div>'
+    +'<div class="kv"><span class="k">资产类型</span><span class="v">'+esc(a.asset_type||'?')+'</span></div>';
+    if(id.note)src+='<div class="note" style="margin:8px 0 0;padding:8px 10px">'+esc(id.note)+'</div>';
+  } else {src+='<div class="kv"><span class="k">资产类型</span><span class="v">'+esc(a.asset_type||'?')+'</span></div><div class="empty" style="padding:10px">来源详情见 .8/.102 样例</div>';}
+  return '<div class="idcard"><div class="ct">身份档案（层1）</div>'
+    +'<div style="font-family:ui-monospace,monospace;font-size:16px;font-weight:700;color:#0b3d91">'+esc(ip)+'</div>'
+    +'<div style="font-size:13px;color:#374151;margin-top:2px">'+esc(name)+'</div>'
+    +'<div class="meta" style="margin-top:8px">'+tt+conf+owner+os+'</div>'
+    +accHtml+src+'</div>';
+}
+
+function banner(L){
+  if(!L||!L.anomaly)return '';
+  const hits=L.anomaly.filter(a=>a.sev==='high'||a.sev==='mid');
+  if(!hits.length)return '';
+  const h=hits[0];
+  return '<div class="banner '+ (h.sev==='high'?'high':'mid') +'"><span class="bt">⚠ 异常信号</span><div class="bx"><b>'+esc(h.name)+'</b> —— '+esc(h.desc)+' <a href="#" style="color:#c92a2a;margin-left:8px" onclick="switchTab(\'anomaly\');return false">查看全部 →</a></div></div>';
+}
+
+/* —— 渲染整页 —— */
+let curIP="192.168.0.8", curTab="behavior";
+function render(){
+  const L=LAYERS[curIP];
+  let subjHtml=SUBJECTS.map(s=>'<div class="subj-i'+(s.ip===curIP?' on':'')+'" onclick="selectIP(\''+s.ip+'\')">'+esc(s.ip)+'<span class="st">'+esc(s.label)+'</span></div>').join('');
+  document.getElementById('subj').innerHTML=subjHtml;
+  const b=BEHAVIOR[curIP];const id=L?L.identity:null;
+  const name=b?(b.asset.name):'xiejava-8g-host';
+  const wm='<div class="wm">本数据仅用于安全审计</div>';
+  const idbar='<div class="idbar">'+wm
+    +'<div><div class="ip">'+esc(curIP)+'</div><div class="nm">'+esc(name)+' · '+(id?id.type_label:(b?b.asset.asset_type:'未知'))+'</div></div>'
+    +(L&&L.anomaly&&L.anomaly.length?'<div style="font-size:12px;color:#868e96">异常判定 <b style="color:'+(L.anomaly.some(a=>a.sev==='mid'||a.sev==='high')?'#c92a2a':'#9a6700')+'">'+(L.anomaly.filter(a=>a.sev!=='info').length)+' 条信号</b> · 数据质量提示 '+L.anomaly.filter(a=>a.sev==='info').length+' 条</div>':'<div style="font-size:12px;color:#868e96">无异常信号</div>')
+    +'<div style="font-size:11px;color:#adb5bd">画像主体：IP/设备（自然人待 Phase 0 身份管道）</div>'
+    +'</div>';
+  const bannerHtml=banner(L);
+  const tabs='<div class="tabs">'
+    +tabBtn('behavior','行为画像', b?('#1971c2'):'#adb5bd')
+    +tabBtn('risk','风险画像', L&&L.risk&&L.risk.alerts>0?'#e8590c':'#adb5bd')
+    +tabBtn('rel','关系画像', L&&L.rel&&(L.rel.outbound.length||L.rel.inbound.length)?'#1971c2':'#adb5bd')
+    +tabBtn('anomaly','异常判定', L&&L.anomaly&&L.anomaly.some(a=>a.sev!=='info')?'#c92a2a':'#adb5bd')
+    +'</div>';
+  let panel='<div class="body2"><div id="idcol"></div><div><div id="tabbar"></div><div id="panels"></div></div></div>';
+  document.getElementById('page').innerHTML=idbar+bannerHtml+tabs+panel;
+  document.getElementById('idcol').innerHTML=identityCard(curIP);
+  document.getElementById('tabbar').innerHTML='';
+  let p='<div class="panel'+(curTab==='behavior'?' on':'')+'" id="p-behavior">'+behaviorPanel(curIP)+'</div>'
+    +'<div class="panel'+(curTab==='risk'?' on':'')+'" id="p-risk">'+riskPanel(L)+'</div>'
+    +'<div class="panel'+(curTab==='rel'?' on':'')+'" id="p-rel">'+relPanel(L)+'</div>'
+    +'<div class="panel'+(curTab==='anomaly'?' on':'')+'" id="p-anomaly">'+anomPanel(L)+'</div>';
+  document.getElementById('panels').innerHTML=p;
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{curTab=t.dataset.t;render();}));
+}
+function tabBtn(k,label,dot){return '<button class="tab'+(curTab===k?' on':'')+'" data-t="'+k+'">'+(dot?'<span class="dot" style="background:'+dot+'"></span>':'')+esc(label)+'</button>';}
+function switchTab(t){curTab=t;render();}
+function selectIP(ip){curIP=ip;curTab='behavior';render();window.scrollTo({top:0,behavior:'smooth'});}
+render();
+</script>
+</body>
+</html>

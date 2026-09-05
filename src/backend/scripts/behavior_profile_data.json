@@ -1,0 +1,4672 @@
+{
+ "generated_at": "2026-09-05T11:19:43.194693+08:00",
+ "loki": "http://192.168.0.30:3100",
+ "days": 7,
+ "time_blocks": [
+  {
+   "name": "深夜",
+   "label": "00-06",
+   "color": "#4c6ef5"
+  },
+  {
+   "name": "早晨",
+   "label": "06-09",
+   "color": "#22b8cf"
+  },
+  {
+   "name": "上午",
+   "label": "09-12",
+   "color": "#51cf66"
+  },
+  {
+   "name": "午间",
+   "label": "12-14",
+   "color": "#fcc419"
+  },
+  {
+   "name": "下午",
+   "label": "14-18",
+   "color": "#ff922b"
+  },
+  {
+   "name": "傍晚",
+   "label": "18-21",
+   "color": "#ff6b6b"
+  },
+  {
+   "name": "夜间",
+   "label": "21-24",
+   "color": "#845ef7"
+  }
+ ],
+ "categories": {
+  "AI 工具": {
+   "layer": "ACT",
+   "color": "#7048e8",
+   "icon": "✦"
+  },
+  "开发技术": {
+   "layer": "ACT",
+   "color": "#1971c2",
+   "icon": "⌘"
+  },
+  "工作办公": {
+   "layer": "ACT",
+   "color": "#0c8599",
+   "icon": "▤"
+  },
+  "影音娱乐": {
+   "layer": "ACT",
+   "color": "#e64980",
+   "icon": "▶"
+  },
+  "小说阅读": {
+   "layer": "ACT",
+   "color": "#d6336c",
+   "icon": "❏"
+  },
+  "电商购物": {
+   "layer": "ACT",
+   "color": "#f76707",
+   "icon": "🛒"
+  },
+  "社交沟通": {
+   "layer": "ACT",
+   "color": "#20c997",
+   "icon": "◍"
+  },
+  "游戏": {
+   "layer": "ACT",
+   "color": "#ae3ec9",
+   "icon": "◈"
+  },
+  "新闻资讯": {
+   "layer": "ACT",
+   "color": "#868e96",
+   "icon": "▦"
+  },
+  "下载传输": {
+   "layer": "ACT",
+   "color": "#5c7cfa",
+   "icon": "⇩"
+  },
+  "移动设备": {
+   "layer": "ACT",
+   "color": "#4c6ef5",
+   "icon": "▢"
+  },
+  "系统背景": {
+   "layer": "SYS",
+   "color": "#adb5bd",
+   "icon": "⚙"
+  },
+  "广告追踪": {
+   "layer": "AD",
+   "color": "#ced4da",
+   "icon": "◌"
+  }
+ },
+ "targets": [
+  {
+   "ip": "192.168.0.8",
+   "asset": {
+    "ip": "192.168.0.8",
+    "name": "xiejavadeMini",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": null,
+    "mac_address": "1c:f6:4c:4e:f2:8d",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 10963,
+    "days": 5,
+    "daily_avg": 2193,
+    "by_hour": [
+     424,
+     439,
+     402,
+     453,
+     415,
+     453,
+     462,
+     465,
+     462,
+     460,
+     462,
+     447,
+     454,
+     394,
+     453,
+     433,
+     436,
+     431,
+     414,
+     414,
+     939,
+     412,
+     419,
+     420
+    ],
+    "wd_hour": [
+     [
+      120,
+      112,
+      99,
+      137,
+      122,
+      117,
+      132,
+      117,
+      99,
+      90,
+      120,
+      129,
+      100,
+      99,
+      111,
+      103,
+      103,
+      108,
+      96,
+      93,
+      111,
+      111,
+      111,
+      90
+     ],
+     [
+      121,
+      103,
+      116,
+      111,
+      96,
+      144,
+      127,
+      139,
+      123,
+      120,
+      111,
+      132,
+      117,
+      90,
+      126,
+      108,
+      120,
+      103,
+      132,
+      111,
+      595,
+      102,
+      101,
+      111
+     ],
+     [
+      81,
+      105,
+      90,
+      102,
+      93,
+      90,
+      109,
+      114,
+      126,
+      147,
+      78,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      72,
+      114,
+      102,
+      105,
+      111,
+      117,
+      106,
+      84,
+      99,
+      103,
+      97,
+      96,
+      96
+     ],
+     [
+      102,
+      119,
+      97,
+      103,
+      104,
+      102,
+      94,
+      95,
+      114,
+      103,
+      153,
+      114,
+      123,
+      103,
+      111,
+      111,
+      96,
+      114,
+      102,
+      111,
+      130,
+      102,
+      111,
+      123
+     ]
+    ],
+    "by_block": {
+     "深夜": 2586,
+     "早晨": 1389,
+     "上午": 1369,
+     "午间": 848,
+     "下午": 1753,
+     "傍晚": 1767,
+     "夜间": 1251
+    },
+    "by_day": {
+     "08-29": 1302,
+     "08-30": 2637,
+     "08-31": 2630,
+     "09-01": 3259,
+     "09-02": 1135
+    },
+    "workday": 7024,
+    "weekend": 3939,
+    "workday_share": 64.1,
+    "domain_count": 145,
+    "top_domains": [
+     {
+      "domain": "countly.mail.163.com",
+      "visits": 5633,
+      "category": "工作办公",
+      "share": 51.38
+     },
+     {
+      "domain": "woodcattle-qz.dashi.163.com",
+      "visits": 4778,
+      "category": "工作办公",
+      "share": 43.58
+     },
+     {
+      "domain": "webzjac.reg.163.com",
+      "visits": 36,
+      "category": "游戏",
+      "share": 0.33
+     },
+     {
+      "domain": "multica.doai8.dpdns.org",
+      "visits": 27,
+      "category": "AI 工具",
+      "share": 0.25
+     },
+     {
+      "domain": "dns.google",
+      "visits": 26,
+      "category": "系统背景",
+      "share": 0.24
+     },
+     {
+      "domain": "galileotelemetry.tencent.com",
+      "visits": 24,
+      "category": "AI 工具",
+      "share": 0.22
+     },
+     {
+      "domain": "copilot.tencent.com",
+      "visits": 20,
+      "category": "AI 工具",
+      "share": 0.18
+     },
+     {
+      "domain": "github.com",
+      "visits": 17,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "proj-xtrace-7e235817c9b9381c22d8b743908d469f-cn-beijing.cn-beijing.log.aliyuncs.com",
+      "visits": 15,
+      "category": "开发技术",
+      "share": 0.14
+     },
+     {
+      "domain": "docs.gtimg.com",
+      "visits": 15,
+      "category": "工作办公",
+      "share": 0.14
+     },
+     {
+      "domain": "main.vscode-cdn.net",
+      "visits": 15,
+      "category": "开发技术",
+      "share": 0.14
+     },
+     {
+      "domain": "alive.github.com",
+      "visits": 12,
+      "category": "开发技术",
+      "share": 0.11
+     },
+     {
+      "domain": "clients4.google.com",
+      "visits": 12,
+      "category": "其他",
+      "share": 0.11
+     },
+     {
+      "domain": "api.nrd.nie.163.com",
+      "visits": 10,
+      "category": "开发技术",
+      "share": 0.09
+     },
+     {
+      "domain": "update.code.visualstudio.com",
+      "visits": 10,
+      "category": "开发技术",
+      "share": 0.09
+     },
+     {
+      "domain": "api.minimaxi.com",
+      "visits": 9,
+      "category": "AI 工具",
+      "share": 0.08
+     },
+     {
+      "domain": "weatherkit.apple.com.akadns.net",
+      "visits": 8,
+      "category": "移动设备",
+      "share": 0.07
+     },
+     {
+      "domain": "k128-inapp.gslb.ksyuncdn.com",
+      "visits": 8,
+      "category": "其他",
+      "share": 0.07
+     },
+     {
+      "domain": "note.youdao.com",
+      "visits": 7,
+      "category": "其他",
+      "share": 0.06
+     },
+     {
+      "domain": "www.workbuddy.cn",
+      "visits": 7,
+      "category": "开发技术",
+      "share": 0.06
+     },
+     {
+      "domain": "api.apple-cloudkit.fe2.apple-dns.net",
+      "visits": 7,
+      "category": "开发技术",
+      "share": 0.06
+     },
+     {
+      "domain": "ins-z7ozi0by.ias.tencent-cloud.net",
+      "visits": 6,
+      "category": "开发技术",
+      "share": 0.05
+     },
+     {
+      "domain": "gateway.fe.apple-dns.cn",
+      "visits": 6,
+      "category": "其他",
+      "share": 0.05
+     },
+     {
+      "domain": "raw.githubusercontent.com",
+      "visits": 5,
+      "category": "开发技术",
+      "share": 0.05
+     },
+     {
+      "domain": "ai.immersivetranslate.com",
+      "visits": 5,
+      "category": "其他",
+      "share": 0.05
+     },
+     {
+      "domain": "ocsp2.apple.com",
+      "visits": 5,
+      "category": "移动设备",
+      "share": 0.05
+     },
+     {
+      "domain": "ocsp2.g.aaplimg.com",
+      "visits": 5,
+      "category": "移动设备",
+      "share": 0.05
+     },
+     {
+      "domain": "static.workbuddy.cn",
+      "visits": 5,
+      "category": "开发技术",
+      "share": 0.05
+     },
+     {
+      "domain": "open.feishu.cn",
+      "visits": 5,
+      "category": "工作办公",
+      "share": 0.05
+     },
+     {
+      "domain": "relay-mg-3207-d.nrd.nie.163.com",
+      "visits": 4,
+      "category": "游戏",
+      "share": 0.04
+     }
+    ],
+    "cat_visit": {
+     "工作办公": 10446,
+     "开发技术": 156,
+     "AI 工具": 93,
+     "其他": 86,
+     "移动设备": 78,
+     "游戏": 57,
+     "系统背景": 30,
+     "广告追踪": 9,
+     "社交沟通": 4,
+     "下载传输": 3,
+     "新闻资讯": 1
+    },
+    "cat_domain": {
+     "移动设备": 37,
+     "开发技术": 34,
+     "其他": 31,
+     "工作办公": 12,
+     "游戏": 12,
+     "AI 工具": 8,
+     "广告追踪": 4,
+     "系统背景": 2,
+     "社交沟通": 2,
+     "下载传输": 2,
+     "新闻资讯": 1
+    },
+    "cat_share": {
+     "工作办公": 95.6,
+     "开发技术": 1.4,
+     "AI 工具": 0.9,
+     "其他": 0.8,
+     "移动设备": 0.7,
+     "游戏": 0.5,
+     "社交沟通": 0.0,
+     "下载传输": 0.0,
+     "新闻资讯": 0.0
+    },
+    "cat_by_block": {
+     "深夜": {
+      "工作办公": 2580,
+      "游戏": 6
+     },
+     "早晨": {
+      "工作办公": 1380,
+      "游戏": 9
+     },
+     "上午": {
+      "工作办公": 1322,
+      "开发技术": 11,
+      "其他": 8,
+      "AI 工具": 9,
+      "系统背景": 2,
+      "游戏": 11,
+      "移动设备": 6
+     },
+     "夜间": {
+      "工作办公": 1242,
+      "游戏": 9
+     },
+     "下午": {
+      "工作办公": 1750,
+      "游戏": 3
+     },
+     "傍晚": {
+      "工作办公": 1324,
+      "其他": 78,
+      "AI 工具": 84,
+      "游戏": 19,
+      "系统背景": 28,
+      "移动设备": 72,
+      "开发技术": 145,
+      "广告追踪": 9,
+      "新闻资讯": 1,
+      "社交沟通": 4,
+      "下载传输": 3
+     },
+     "午间": {
+      "工作办公": 848
+     }
+    },
+    "layer_visit": {
+     "ACT": 10924,
+     "SYS": 30,
+     "AD": 9
+    },
+    "act_total": 10924,
+    "active_hours": 96,
+    "peak_hour": 20,
+    "top6_share": 29.6,
+    "night_share": 23.6,
+    "morning_share": 12.7,
+    "workhours_share": 40.0,
+    "evening_share": 23.8,
+    "truncated_windows": 0,
+    "loki_requests": 28
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 23.6%"
+    },
+    {
+     "name": "作息发散",
+     "desc": "活动均匀铺开，无固定节律",
+     "color": "#f59f00",
+     "evidence": "Top6 小时仅占 29.6%"
+    },
+    {
+     "name": "典型打工人",
+     "desc": "工作日显著高于周末",
+     "color": "#1971c2",
+     "evidence": "工作日日均 1,404 vs 周末 0"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.100",
+   "asset": {
+    "ip": "192.168.0.100",
+    "name": "wazuh-agent-test-001",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": "Ubuntu Linux",
+    "mac_address": "7e:b5:b6:41:49:c6",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 198116,
+    "days": 8,
+    "daily_avg": 24764,
+    "by_hour": [
+     7967,
+     7996,
+     7960,
+     7902,
+     8536,
+     7680,
+     7664,
+     8006,
+     8144,
+     7677,
+     9780,
+     8392,
+     8338,
+     8070,
+     8537,
+     8424,
+     8546,
+     7920,
+     8331,
+     8319,
+     8843,
+     8058,
+     8852,
+     8174
+    ],
+    "wd_hour": [
+     [
+      986,
+      1003,
+      942,
+      1023,
+      1073,
+      902,
+      942,
+      971,
+      979,
+      982,
+      1200,
+      982,
+      1114,
+      935,
+      1111,
+      1015,
+      1023,
+      1298,
+      1371,
+      1483,
+      1419,
+      1094,
+      1143,
+      1077
+     ],
+     [
+      1002,
+      1043,
+      1044,
+      1007,
+      1200,
+      974,
+      986,
+      979,
+      1011,
+      906,
+      1159,
+      963,
+      967,
+      960,
+      956,
+      954,
+      1039,
+      932,
+      1213,
+      1039,
+      1018,
+      1280,
+      1277,
+      1160
+     ],
+     [
+      1164,
+      1131,
+      1139,
+      1120,
+      1228,
+      1183,
+      1082,
+      1172,
+      1162,
+      1035,
+      1314,
+      1292,
+      1181,
+      1111,
+      1225,
+      1163,
+      1277,
+      1158,
+      1157,
+      1127,
+      1519,
+      1270,
+      1181,
+      1252
+     ],
+     [
+      1306,
+      1207,
+      1167,
+      1177,
+      1246,
+      1138,
+      1122,
+      1187,
+      1324,
+      1254,
+      1287,
+      1114,
+      1100,
+      1149,
+      1183,
+      1119,
+      1217,
+      1031,
+      1046,
+      1120,
+      1262,
+      1050,
+      1533,
+      1087
+     ],
+     [
+      1046,
+      1014,
+      1067,
+      1081,
+      1127,
+      978,
+      1047,
+      1092,
+      1068,
+      959,
+      1300,
+      1056,
+      1144,
+      1080,
+      1173,
+      1224,
+      1201,
+      1070,
+      1092,
+      1126,
+      1145,
+      1059,
+      1195,
+      1123
+     ],
+     [
+      1117,
+      1100,
+      1118,
+      1149,
+      1199,
+      1071,
+      1062,
+      1144,
+      1090,
+      1075,
+      1388,
+      1351,
+      1470,
+      1391,
+      1447,
+      1442,
+      1480,
+      1442,
+      1424,
+      1449,
+      1518,
+      1451,
+      1508,
+      1488
+     ],
+     [
+      1346,
+      1498,
+      1483,
+      1345,
+      1463,
+      1434,
+      1423,
+      1461,
+      1510,
+      1466,
+      2132,
+      1634,
+      1362,
+      1444,
+      1442,
+      1507,
+      1309,
+      989,
+      1028,
+      975,
+      962,
+      854,
+      1015,
+      987
+     ]
+    ],
+    "by_block": {
+     "深夜": 48041,
+     "早晨": 23814,
+     "上午": 25849,
+     "午间": 16408,
+     "下午": 33427,
+     "傍晚": 25493,
+     "夜间": 25084
+    },
+    "by_day": {
+     "08-29": 18504,
+     "08-30": 32069,
+     "08-31": 26068,
+     "09-01": 25069,
+     "09-02": 28643,
+     "09-03": 28426,
+     "09-04": 26467,
+     "09-05": 12870
+    },
+    "workday": 134673,
+    "weekend": 63443,
+    "workday_share": 68.0,
+    "domain_count": 344,
+    "top_domains": [
+     {
+      "domain": "copilot.tencent.com",
+      "visits": 53256,
+      "category": "AI 工具",
+      "share": 26.88
+     },
+     {
+      "domain": "galileotelemetry.tencent.com",
+      "visits": 23512,
+      "category": "AI 工具",
+      "share": 11.87
+     },
+     {
+      "domain": "proj-xtrace-7e235817c9b9381c22d8b743908d469f-cn-beijing.cn-beijing.log.aliyuncs.com",
+      "visits": 13444,
+      "category": "开发技术",
+      "share": 6.79
+     },
+     {
+      "domain": "docs.gtimg.com",
+      "visits": 9377,
+      "category": "工作办公",
+      "share": 4.73
+     },
+     {
+      "domain": "main.vscode-cdn.net",
+      "visits": 8576,
+      "category": "开发技术",
+      "share": 4.33
+     },
+     {
+      "domain": "weatherkit.apple.com",
+      "visits": 7528,
+      "category": "移动设备",
+      "share": 3.8
+     },
+     {
+      "domain": "open.volcengineapi.com",
+      "visits": 7186,
+      "category": "AI 工具",
+      "share": 3.63
+     },
+     {
+      "domain": "update.code.visualstudio.com",
+      "visits": 6900,
+      "category": "开发技术",
+      "share": 3.48
+     },
+     {
+      "domain": "sg.tgalileo.com",
+      "visits": 5576,
+      "category": "AI 工具",
+      "share": 2.81
+     },
+     {
+      "domain": "sigma-a56xxfctlog-a56xxfct.proxima.nie.netease.com",
+      "visits": 3200,
+      "category": "游戏",
+      "share": 1.62
+     },
+     {
+      "domain": "multica.doai8.dpdns.org",
+      "visits": 3088,
+      "category": "AI 工具",
+      "share": 1.56
+     },
+     {
+      "domain": "gateway.icloud.com.cn",
+      "visits": 3047,
+      "category": "移动设备",
+      "share": 1.54
+     },
+     {
+      "domain": "dns.google",
+      "visits": 2811,
+      "category": "系统背景",
+      "share": 1.42
+     },
+     {
+      "domain": "time.apple.com",
+      "visits": 2784,
+      "category": "移动设备",
+      "share": 1.41
+     },
+     {
+      "domain": "vas.wps.cn",
+      "visits": 2712,
+      "category": "工作办公",
+      "share": 1.37
+     },
+     {
+      "domain": "static.workbuddy.cn",
+      "visits": 2091,
+      "category": "开发技术",
+      "share": 1.06
+     },
+     {
+      "domain": "api.multica.ai",
+      "visits": 1867,
+      "category": "AI 工具",
+      "share": 0.94
+     },
+     {
+      "domain": "honeycomb.wpscdn.cn",
+      "visits": 1796,
+      "category": "工作办公",
+      "share": 0.91
+     },
+     {
+      "domain": "shuc-other.ksord.com",
+      "visits": 1760,
+      "category": "广告追踪",
+      "share": 0.89
+     },
+     {
+      "domain": "ocsp2.apple.com",
+      "visits": 1746,
+      "category": "移动设备",
+      "share": 0.88
+     },
+     {
+      "domain": "zcode.z.ai",
+      "visits": 1524,
+      "category": "AI 工具",
+      "share": 0.77
+     },
+     {
+      "domain": "acc-1258344699.cos.ap-guangzhou.myqcloud.com",
+      "visits": 1388,
+      "category": "开发技术",
+      "share": 0.7
+     },
+     {
+      "domain": "gdmf.apple.com",
+      "visits": 1168,
+      "category": "移动设备",
+      "share": 0.59
+     },
+     {
+      "domain": "api.nrd.nie.163.com",
+      "visits": 1158,
+      "category": "开发技术",
+      "share": 0.58
+     },
+     {
+      "domain": "configuration.ls.apple.com",
+      "visits": 952,
+      "category": "移动设备",
+      "share": 0.48
+     },
+     {
+      "domain": "honeycomb-plugins.wpscdn.cn",
+      "visits": 920,
+      "category": "工作办公",
+      "share": 0.46
+     },
+     {
+      "domain": "registry.npmjs.org",
+      "visits": 812,
+      "category": "开发技术",
+      "share": 0.41
+     },
+     {
+      "domain": "relay-mg-3207-d.nrd.nie.163.com",
+      "visits": 796,
+      "category": "游戏",
+      "share": 0.4
+     },
+     {
+      "domain": "bag.itunes.apple.com",
+      "visits": 780,
+      "category": "移动设备",
+      "share": 0.39
+     },
+     {
+      "domain": "mobile.events.data.microsoft.com",
+      "visits": 772,
+      "category": "其他",
+      "share": 0.39
+     }
+    ],
+    "cat_visit": {
+     "AI 工具": 96992,
+     "开发技术": 38500,
+     "移动设备": 26611,
+     "工作办公": 18028,
+     "系统背景": 5015,
+     "其他": 4588,
+     "游戏": 4254,
+     "广告追踪": 1907,
+     "社交沟通": 1902,
+     "下载传输": 144,
+     "IP 直连": 67,
+     "新闻资讯": 41,
+     "影音娱乐": 28,
+     "电商购物": 20,
+     "小说阅读": 19
+    },
+    "cat_domain": {
+     "移动设备": 99,
+     "其他": 85,
+     "开发技术": 64,
+     "工作办公": 22,
+     "AI 工具": 15,
+     "社交沟通": 12,
+     "系统背景": 11,
+     "游戏": 10,
+     "广告追踪": 8,
+     "IP 直连": 6,
+     "下载传输": 3,
+     "新闻资讯": 3,
+     "影音娱乐": 3,
+     "小说阅读": 2,
+     "电商购物": 1
+    },
+    "cat_share": {
+     "AI 工具": 50.7,
+     "开发技术": 20.1,
+     "移动设备": 13.9,
+     "工作办公": 9.4,
+     "其他": 2.4,
+     "游戏": 2.2,
+     "社交沟通": 1.0,
+     "下载传输": 0.1,
+     "IP 直连": 0.0,
+     "新闻资讯": 0.0,
+     "影音娱乐": 0.0,
+     "电商购物": 0.0,
+     "小说阅读": 0.0
+    },
+    "cat_by_block": {
+     "深夜": {
+      "AI 工具": 24359,
+      "开发技术": 9033,
+      "移动设备": 6610,
+      "系统背景": 1154,
+      "工作办公": 4190,
+      "广告追踪": 480,
+      "社交沟通": 189,
+      "游戏": 944,
+      "其他": 1004,
+      "下载传输": 32,
+      "IP 直连": 36,
+      "影音娱乐": 10
+     },
+     "早晨": {
+      "AI 工具": 12076,
+      "开发技术": 4472,
+      "移动设备": 3270,
+      "系统背景": 603,
+      "工作办公": 1961,
+      "广告追踪": 222,
+      "社交沟通": 225,
+      "游戏": 448,
+      "其他": 486,
+      "下载传输": 28,
+      "IP 直连": 16,
+      "影音娱乐": 7
+     },
+     "上午": {
+      "AI 工具": 12107,
+      "开发技术": 5477,
+      "移动设备": 3543,
+      "系统背景": 680,
+      "工作办公": 1919,
+      "广告追踪": 305,
+      "社交沟通": 293,
+      "游戏": 576,
+      "其他": 885,
+      "新闻资讯": 17,
+      "电商购物": 12,
+      "下载传输": 12,
+      "小说阅读": 9,
+      "IP 直连": 7,
+      "影音娱乐": 7
+     },
+     "夜间": {
+      "AI 工具": 12314,
+      "开发技术": 4933,
+      "移动设备": 3688,
+      "系统背景": 633,
+      "工作办公": 2000,
+      "广告追踪": 216,
+      "社交沟通": 172,
+      "游戏": 516,
+      "其他": 608,
+      "下载传输": 4
+     },
+     "下午": {
+      "AI 工具": 15989,
+      "开发技术": 6542,
+      "移动设备": 4241,
+      "系统背景": 865,
+      "工作办公": 3395,
+      "广告追踪": 316,
+      "社交沟通": 453,
+      "游戏": 712,
+      "其他": 890,
+      "下载传输": 4,
+      "小说阅读": 8,
+      "影音娱乐": 4,
+      "IP 直连": 8
+     },
+     "傍晚": {
+      "AI 工具": 12099,
+      "开发技术": 5075,
+      "移动设备": 3204,
+      "系统背景": 663,
+      "工作办公": 2619,
+      "广告追踪": 220,
+      "社交沟通": 346,
+      "游戏": 726,
+      "其他": 475,
+      "下载传输": 32,
+      "新闻资讯": 24,
+      "小说阅读": 2,
+      "电商购物": 8
+     },
+     "午间": {
+      "AI 工具": 8048,
+      "开发技术": 2968,
+      "移动设备": 2055,
+      "系统背景": 417,
+      "工作办公": 1944,
+      "广告追踪": 148,
+      "社交沟通": 224,
+      "游戏": 332,
+      "其他": 240,
+      "下载传输": 32
+     }
+    },
+    "layer_visit": {
+     "ACT": 191194,
+     "SYS": 5015,
+     "AD": 1907
+    },
+    "act_total": 191194,
+    "active_hours": 169,
+    "peak_hour": 10,
+    "top6_share": 26.8,
+    "night_share": 24.2,
+    "morning_share": 12.0,
+    "workhours_share": 42.4,
+    "evening_share": 21.3,
+    "truncated_windows": 0,
+    "loki_requests": 78
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 24.2%"
+    },
+    {
+     "name": "全天候在线",
+     "desc": "几乎每个小时都有流量",
+     "color": "#0c8599",
+     "evidence": "169/192 小时有活动"
+    },
+    {
+     "name": "作息发散",
+     "desc": "活动均匀铺开，无固定节律",
+     "color": "#f59f00",
+     "evidence": "Top6 小时仅占 26.8%"
+    },
+    {
+     "name": "周末战士",
+     "desc": "周末比工作日更活跃",
+     "color": "#e8590c",
+     "evidence": "周末日均 31,721 vs 工作日 22,445"
+    },
+    {
+     "name": "AI 重度用户",
+     "desc": "AI 工具访问占比显著",
+     "color": "#7048e8",
+     "evidence": "AI 类占主动行为 50.7%"
+    },
+    {
+     "name": "码农",
+     "desc": "开发工具/云平台访问密集",
+     "color": "#1971c2",
+     "evidence": "开发类占 20.1%"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.17",
+   "asset": {
+    "ip": "192.168.0.17",
+    "name": "xiejava-fnNAS",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": "Debian GNU/Linux",
+    "mac_address": "e8:ff:1e:dd:cb:3d",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 100413,
+    "days": 8,
+    "daily_avg": 12552,
+    "by_hour": [
+     4238,
+     4072,
+     4092,
+     4066,
+     4140,
+     4104,
+     4132,
+     4108,
+     4220,
+     4112,
+     4224,
+     4100,
+     4126,
+     4076,
+     4106,
+     4226,
+     4319,
+     4287,
+     4241,
+     4262,
+     4379,
+     4252,
+     4347,
+     4184
+    ],
+    "wd_hour": [
+     [
+      607,
+      582,
+      581,
+      584,
+      587,
+      572,
+      574,
+      581,
+      621,
+      581,
+      590,
+      585,
+      584,
+      583,
+      576,
+      590,
+      611,
+      601,
+      609,
+      587,
+      636,
+      610,
+      610,
+      586
+     ],
+     [
+      595,
+      574,
+      579,
+      580,
+      604,
+      579,
+      581,
+      589,
+      601,
+      606,
+      599,
+      588,
+      576,
+      578,
+      573,
+      606,
+      622,
+      600,
+      595,
+      612,
+      614,
+      601,
+      635,
+      597
+     ],
+     [
+      607,
+      580,
+      572,
+      575,
+      581,
+      614,
+      591,
+      578,
+      603,
+      588,
+      616,
+      587,
+      613,
+      582,
+      600,
+      616,
+      623,
+      612,
+      608,
+      621,
+      640,
+      618,
+      625,
+      604
+     ],
+     [
+      618,
+      596,
+      612,
+      591,
+      601,
+      581,
+      591,
+      580,
+      603,
+      593,
+      609,
+      593,
+      599,
+      590,
+      592,
+      610,
+      622,
+      644,
+      615,
+      608,
+      632,
+      600,
+      638,
+      608
+     ],
+     [
+      619,
+      587,
+      596,
+      582,
+      602,
+      590,
+      606,
+      627,
+      591,
+      592,
+      613,
+      593,
+      594,
+      581,
+      597,
+      608,
+      612,
+      593,
+      608,
+      609,
+      619,
+      626,
+      612,
+      588
+     ],
+     [
+      594,
+      578,
+      564,
+      572,
+      583,
+      579,
+      586,
+      579,
+      607,
+      581,
+      600,
+      579,
+      581,
+      578,
+      582,
+      597,
+      611,
+      628,
+      605,
+      593,
+      613,
+      603,
+      612,
+      603
+     ],
+     [
+      598,
+      575,
+      588,
+      582,
+      582,
+      589,
+      603,
+      574,
+      594,
+      571,
+      597,
+      575,
+      579,
+      584,
+      586,
+      599,
+      618,
+      609,
+      601,
+      632,
+      625,
+      594,
+      615,
+      598
+     ]
+    ],
+    "by_block": {
+     "深夜": 24712,
+     "早晨": 12460,
+     "上午": 12436,
+     "午间": 8202,
+     "下午": 16938,
+     "傍晚": 12882,
+     "夜间": 12783
+    },
+    "by_day": {
+     "08-29": 7608,
+     "08-30": 14268,
+     "08-31": 14228,
+     "09-01": 14284,
+     "09-02": 14454,
+     "09-03": 14526,
+     "09-04": 14445,
+     "09-05": 6600
+    },
+    "workday": 71937,
+    "weekend": 28476,
+    "workday_share": 71.6,
+    "domain_count": 56,
+    "top_domains": [
+     {
+      "domain": "stun.225284.xyz",
+      "visits": 22123,
+      "category": "系统背景",
+      "share": 22.03
+     },
+     {
+      "domain": "stun-heyuan-v6.easytier.cn",
+      "visits": 20113,
+      "category": "系统背景",
+      "share": 20.03
+     },
+     {
+      "domain": "api-pan.xunlei.com",
+      "visits": 4722,
+      "category": "下载传输",
+      "share": 4.7
+     },
+     {
+      "domain": "time.apple.com",
+      "visits": 4018,
+      "category": "移动设备",
+      "share": 4.0
+     },
+     {
+      "domain": "ipv4.fnnas.com",
+      "visits": 3358,
+      "category": "下载传输",
+      "share": 3.34
+     },
+     {
+      "domain": "ipv6.fnnas.com",
+      "visits": 3358,
+      "category": "下载传输",
+      "share": 3.34
+     },
+     {
+      "domain": "6.ipw.cn",
+      "visits": 3358,
+      "category": "系统背景",
+      "share": 3.34
+     },
+     {
+      "domain": "api.cloudflare.com",
+      "visits": 3358,
+      "category": "开发技术",
+      "share": 3.34
+     },
+     {
+      "domain": "alidns.cn-hangzhou.aliyuncs.com",
+      "visits": 3358,
+      "category": "开发技术",
+      "share": 3.34
+     },
+     {
+      "domain": "stun-v6.easytier.cn",
+      "visits": 2449,
+      "category": "系统背景",
+      "share": 2.44
+     },
+     {
+      "domain": "optimizationguide-pa.googleapis.com",
+      "visits": 2341,
+      "category": "其他",
+      "share": 2.33
+     },
+     {
+      "domain": "account.fnnas.com",
+      "visits": 2018,
+      "category": "下载传输",
+      "share": 2.01
+     },
+     {
+      "domain": "dlandroid.rcv.sandai.net",
+      "visits": 2016,
+      "category": "下载传输",
+      "share": 2.01
+     },
+     {
+      "domain": "stun.miwifi.com",
+      "visits": 2006,
+      "category": "系统背景",
+      "share": 2.0
+     },
+     {
+      "domain": "stun.easytier.cn",
+      "visits": 1932,
+      "category": "系统背景",
+      "share": 1.92
+     },
+     {
+      "domain": "conf-m-ssl.xunlei.com",
+      "visits": 1884,
+      "category": "下载传输",
+      "share": 1.88
+     },
+     {
+      "domain": "hub5pn.v6.sandai.net",
+      "visits": 1706,
+      "category": "下载传输",
+      "share": 1.7
+     },
+     {
+      "domain": "fnos.xiejava.dpdns.org",
+      "visits": 1682,
+      "category": "下载传输",
+      "share": 1.68
+     },
+     {
+      "domain": "xiejava.dpdns.org",
+      "visits": 1681,
+      "category": "其他",
+      "share": 1.67
+     },
+     {
+      "domain": "ishareread.com",
+      "visits": 1680,
+      "category": "小说阅读",
+      "share": 1.67
+     },
+     {
+      "domain": "fnos.ishareread.com",
+      "visits": 1679,
+      "category": "小说阅读",
+      "share": 1.67
+     },
+     {
+      "domain": "pool.ntp.org",
+      "visits": 1650,
+      "category": "系统背景",
+      "share": 1.64
+     },
+     {
+      "domain": "gitlab.com",
+      "visits": 1396,
+      "category": "开发技术",
+      "share": 1.39
+     },
+     {
+      "domain": "tracker.dler.org",
+      "visits": 1044,
+      "category": "其他",
+      "share": 1.04
+     },
+     {
+      "domain": "stun.hitv.com",
+      "visits": 1022,
+      "category": "影音娱乐",
+      "share": 1.02
+     },
+     {
+      "domain": "hub5u.v6.phub.sandai.net",
+      "visits": 1004,
+      "category": "下载传输",
+      "share": 1.0
+     },
+     {
+      "domain": "stun.chat.bilibili.com",
+      "visits": 984,
+      "category": "影音娱乐",
+      "share": 0.98
+     },
+     {
+      "domain": "analysis-acc-ssl.xunlei.com",
+      "visits": 812,
+      "category": "下载传输",
+      "share": 0.81
+     },
+     {
+      "domain": "cf.trackerslist.com",
+      "visits": 452,
+      "category": "其他",
+      "share": 0.45
+     },
+     {
+      "domain": "api.siliconflow.cn",
+      "visits": 168,
+      "category": "AI 工具",
+      "share": 0.17
+     }
+    ],
+    "cat_visit": {
+     "系统背景": 53947,
+     "下载传输": 22636,
+     "开发技术": 8402,
+     "其他": 5793,
+     "移动设备": 4018,
+     "小说阅读": 3359,
+     "影音娱乐": 2006,
+     "AI 工具": 168,
+     "社交沟通": 84
+    },
+    "cat_domain": {
+     "下载传输": 16,
+     "系统背景": 16,
+     "其他": 12,
+     "开发技术": 5,
+     "影音娱乐": 2,
+     "小说阅读": 2,
+     "移动设备": 1,
+     "AI 工具": 1,
+     "社交沟通": 1
+    },
+    "cat_share": {
+     "下载传输": 48.7,
+     "开发技术": 18.1,
+     "其他": 12.5,
+     "移动设备": 8.6,
+     "小说阅读": 7.2,
+     "影音娱乐": 4.3,
+     "AI 工具": 0.4,
+     "社交沟通": 0.2
+    },
+    "cat_by_block": {
+     "上午": {
+      "其他": 774,
+      "下载传输": 2866,
+      "系统背景": 6736,
+      "开发技术": 865,
+      "影音娱乐": 252,
+      "小说阅读": 420,
+      "移动设备": 502,
+      "AI 工具": 14,
+      "社交沟通": 7
+     },
+     "夜间": {
+      "其他": 743,
+      "下载传输": 2822,
+      "系统背景": 6720,
+      "开发技术": 1308,
+      "影音娱乐": 250,
+      "小说阅读": 421,
+      "移动设备": 498,
+      "AI 工具": 14,
+      "社交沟通": 7
+     },
+     "午间": {
+      "其他": 448,
+      "下载传输": 1885,
+      "系统背景": 4480,
+      "开发技术": 584,
+      "影音娱乐": 168,
+      "小说阅读": 280,
+      "移动设备": 336,
+      "AI 工具": 14,
+      "社交沟通": 7
+     },
+     "早晨": {
+      "其他": 709,
+      "下载传输": 2824,
+      "系统背景": 6799,
+      "开发技术": 912,
+      "影音娱乐": 250,
+      "小说阅读": 420,
+      "移动设备": 504,
+      "AI 工具": 28,
+      "社交沟通": 14
+     },
+     "傍晚": {
+      "其他": 711,
+      "下载传输": 2821,
+      "系统背景": 6828,
+      "开发技术": 1306,
+      "影音娱乐": 252,
+      "小说阅读": 420,
+      "移动设备": 502,
+      "AI 工具": 28,
+      "社交沟通": 14
+     },
+     "下午": {
+      "其他": 966,
+      "下载传输": 3793,
+      "系统背景": 8988,
+      "开发技术": 1587,
+      "影音娱乐": 332,
+      "小说阅读": 560,
+      "移动设备": 670,
+      "AI 工具": 28,
+      "社交沟通": 14
+     },
+     "深夜": {
+      "下载传输": 5625,
+      "系统背景": 13396,
+      "其他": 1442,
+      "开发技术": 1840,
+      "影音娱乐": 502,
+      "小说阅读": 838,
+      "移动设备": 1006,
+      "AI 工具": 42,
+      "社交沟通": 21
+     }
+    },
+    "layer_visit": {
+     "ACT": 46466,
+     "SYS": 53947
+    },
+    "act_total": 46466,
+    "active_hours": 169,
+    "peak_hour": 20,
+    "top6_share": 25.7,
+    "night_share": 24.6,
+    "morning_share": 12.4,
+    "workhours_share": 41.6,
+    "evening_share": 21.3,
+    "truncated_windows": 0,
+    "loki_requests": 28
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 24.6%"
+    },
+    {
+     "name": "全天候在线",
+     "desc": "几乎每个小时都有流量",
+     "color": "#0c8599",
+     "evidence": "169/192 小时有活动"
+    },
+    {
+     "name": "作息发散",
+     "desc": "活动均匀铺开，无固定节律",
+     "color": "#f59f00",
+     "evidence": "Top6 小时仅占 25.7%"
+    },
+    {
+     "name": "码农",
+     "desc": "开发工具/云平台访问密集",
+     "color": "#1971c2",
+     "evidence": "开发类占 18.1%"
+    },
+    {
+     "name": "下载机",
+     "desc": "P2P/网盘下载流量显著",
+     "color": "#5c7cfa",
+     "evidence": "下载类占 48.7%"
+    },
+    {
+     "name": "行为极单一",
+     "desc": "只访问极少数域名",
+     "color": "#495057",
+     "evidence": "56 个域名 / 100,413 次访问"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.25",
+   "asset": {
+    "ip": "192.168.0.25",
+    "name": "3113378795deRedmi-14R-5G",
+    "asset_type": "client",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": null,
+    "mac_address": "06:20:68:d7:b1:52",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 36591,
+    "days": 6,
+    "daily_avg": 6098,
+    "by_hour": [
+     482,
+     321,
+     250,
+     21,
+     628,
+     2200,
+     1375,
+     3506,
+     2879,
+     621,
+     5568,
+     2789,
+     0,
+     0,
+     0,
+     53,
+     57,
+     72,
+     45,
+     78,
+     3596,
+     5012,
+     5233,
+     1805
+    ],
+    "wd_hour": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2384,
+      367,
+      390,
+      210
+     ],
+     [
+      0,
+      0,
+      18,
+      15,
+      12,
+      1115,
+      405,
+      1242,
+      2532,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      51,
+      90
+     ],
+     [
+      168,
+      62,
+      6,
+      0,
+      593,
+      1065,
+      706,
+      420,
+      312,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      62,
+      4156,
+      4447,
+      1041
+     ],
+     [
+      31,
+      8,
+      226,
+      6,
+      23,
+      20,
+      264,
+      1844,
+      35,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      49,
+      72,
+      45,
+      78,
+      1150,
+      489,
+      345,
+      464
+     ],
+     [
+      283,
+      251,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      621,
+      5568,
+      2789,
+      0,
+      0,
+      0,
+      53,
+      8,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    ],
+    "by_block": {
+     "深夜": 3902,
+     "早晨": 7760,
+     "上午": 8978,
+     "午间": 0,
+     "下午": 182,
+     "傍晚": 3719,
+     "夜间": 12050
+    },
+    "by_day": {
+     "08-29": 2692,
+     "08-30": 9573,
+     "09-01": 3351,
+     "09-02": 5480,
+     "09-03": 13038,
+     "09-04": 2457
+    },
+    "workday": 24326,
+    "weekend": 12265,
+    "workday_share": 66.5,
+    "domain_count": 2199,
+    "top_domains": [
+     {
+      "domain": "connect.rom.miui.com",
+      "visits": 499,
+      "category": "移动设备",
+      "share": 1.36
+     },
+     {
+      "domain": "lf3-reading.fqnovelpic.com",
+      "visits": 376,
+      "category": "小说阅读",
+      "share": 1.03
+     },
+     {
+      "domain": "p9-novel-sign.byteimg.com",
+      "visits": 369,
+      "category": "小说阅读",
+      "share": 1.01
+     },
+     {
+      "domain": "p3-novel-sign.byteimg.com",
+      "visits": 356,
+      "category": "小说阅读",
+      "share": 0.97
+     },
+     {
+      "domain": "p3-novel.byteimg.com",
+      "visits": 352,
+      "category": "小说阅读",
+      "share": 0.96
+     },
+     {
+      "domain": "p6-novel-sign.byteimg.com",
+      "visits": 325,
+      "category": "小说阅读",
+      "share": 0.89
+     },
+     {
+      "domain": "ads3-normal-hl.zijieapi.com",
+      "visits": 252,
+      "category": "开发技术",
+      "share": 0.69
+     },
+     {
+      "domain": "p3-ad-sign.byteimg.com",
+      "visits": 250,
+      "category": "影音娱乐",
+      "share": 0.68
+     },
+     {
+      "domain": "tracking.miui.com",
+      "visits": 231,
+      "category": "移动设备",
+      "share": 0.63
+     },
+     {
+      "domain": "n98-v-readingvideo.qznovelvod.com",
+      "visits": 185,
+      "category": "小说阅读",
+      "share": 0.51
+     },
+     {
+      "domain": "p3-webcast.douyinpic.com",
+      "visits": 184,
+      "category": "影音娱乐",
+      "share": 0.5
+     },
+     {
+      "domain": "whoami.akamai.net",
+      "visits": 165,
+      "category": "系统背景",
+      "share": 0.45
+     },
+     {
+      "domain": "www.baidu.com",
+      "visits": 148,
+      "category": "其他",
+      "share": 0.4
+     },
+     {
+      "domain": "p3-sign.douyinpic.com",
+      "visits": 141,
+      "category": "影音娱乐",
+      "share": 0.39
+     },
+     {
+      "domain": "webcast5-open-hl.douyin.com",
+      "visits": 135,
+      "category": "影音娱乐",
+      "share": 0.37
+     },
+     {
+      "domain": "cf-gl.comfylink.com",
+      "visits": 129,
+      "category": "广告追踪",
+      "share": 0.35
+     },
+     {
+      "domain": "e2882b36-9.sjxydc.com",
+      "visits": 129,
+      "category": "其他",
+      "share": 0.35
+     },
+     {
+      "domain": "p26-sign.douyinpic.com",
+      "visits": 127,
+      "category": "影音娱乐",
+      "share": 0.35
+     },
+     {
+      "domain": "p11.douyinpic.com",
+      "visits": 126,
+      "category": "影音娱乐",
+      "share": 0.34
+     },
+     {
+      "domain": "p6-novel.byteimg.com",
+      "visits": 123,
+      "category": "小说阅读",
+      "share": 0.34
+     },
+     {
+      "domain": "isaas5-normal-hl.ecombdapi.com",
+      "visits": 121,
+      "category": "开发技术",
+      "share": 0.33
+     },
+     {
+      "domain": "ecom5-normal-hl.ecombdapi.com",
+      "visits": 118,
+      "category": "开发技术",
+      "share": 0.32
+     },
+     {
+      "domain": "ec5-core-hl.ecombdapi.com",
+      "visits": 116,
+      "category": "开发技术",
+      "share": 0.32
+     },
+     {
+      "domain": "sdktt.data.comfylink.com",
+      "visits": 106,
+      "category": "开发技术",
+      "share": 0.29
+     },
+     {
+      "domain": "v5-gzb2-gddgtc-reading-video.qznovelvod.com",
+      "visits": 100,
+      "category": "小说阅读",
+      "share": 0.27
+     },
+     {
+      "domain": "183.232.147.145",
+      "visits": 98,
+      "category": "IP 直连",
+      "share": 0.27
+     },
+     {
+      "domain": "apd-pcdnwxlogin.teg.tencent-cloud.net",
+      "visits": 97,
+      "category": "开发技术",
+      "share": 0.27
+     },
+     {
+      "domain": "apd-pcdnwxnat.teg.tencent-cloud.net",
+      "visits": 95,
+      "category": "开发技术",
+      "share": 0.26
+     },
+     {
+      "domain": "apd-pcdnwxstat.teg.tencent-cloud.net",
+      "visits": 93,
+      "category": "开发技术",
+      "share": 0.25
+     },
+     {
+      "domain": "dns.weixin.qq.com.cn",
+      "visits": 93,
+      "category": "社交沟通",
+      "share": 0.25
+     }
+    ],
+    "cat_visit": {
+     "影音娱乐": 23305,
+     "小说阅读": 3625,
+     "其他": 2734,
+     "开发技术": 2183,
+     "IP 直连": 1966,
+     "移动设备": 1207,
+     "社交沟通": 579,
+     "广告追踪": 433,
+     "系统背景": 194,
+     "下载传输": 136,
+     "电商购物": 136,
+     "新闻资讯": 65,
+     "游戏": 12,
+     "AI 工具": 11,
+     "工作办公": 5
+    },
+    "cat_domain": {
+     "其他": 918,
+     "影音娱乐": 469,
+     "IP 直连": 254,
+     "开发技术": 109,
+     "小说阅读": 105,
+     "电商购物": 80,
+     "移动设备": 72,
+     "广告追踪": 68,
+     "社交沟通": 62,
+     "下载传输": 21,
+     "新闻资讯": 16,
+     "系统背景": 11,
+     "AI 工具": 6,
+     "工作办公": 5,
+     "游戏": 3
+    },
+    "cat_share": {
+     "影音娱乐": 64.8,
+     "小说阅读": 10.1,
+     "其他": 7.6,
+     "开发技术": 6.1,
+     "IP 直连": 5.5,
+     "移动设备": 3.4,
+     "社交沟通": 1.6,
+     "下载传输": 0.4,
+     "电商购物": 0.4,
+     "新闻资讯": 0.2,
+     "游戏": 0.0,
+     "AI 工具": 0.0,
+     "工作办公": 0.0
+    },
+    "cat_by_block": {
+     "深夜": {
+      "移动设备": 280,
+      "游戏": 8,
+      "开发技术": 430,
+      "其他": 446,
+      "下载传输": 40,
+      "社交沟通": 103,
+      "广告追踪": 77,
+      "IP 直连": 175,
+      "小说阅读": 516,
+      "电商购物": 11,
+      "影音娱乐": 1782,
+      "新闻资讯": 14,
+      "系统背景": 19,
+      "AI 工具": 1
+     },
+     "早晨": {
+      "移动设备": 263,
+      "开发技术": 447,
+      "其他": 816,
+      "下载传输": 46,
+      "游戏": 1,
+      "社交沟通": 121,
+      "IP 直连": 1697,
+      "广告追踪": 115,
+      "新闻资讯": 42,
+      "AI 工具": 7,
+      "小说阅读": 884,
+      "电商购物": 54,
+      "工作办公": 2,
+      "影音娱乐": 3207,
+      "系统背景": 58
+     },
+     "夜间": {
+      "移动设备": 304,
+      "开发技术": 786,
+      "其他": 1179,
+      "下载传输": 19,
+      "游戏": 1,
+      "社交沟通": 175,
+      "IP 直连": 55,
+      "电商购物": 47,
+      "广告追踪": 183,
+      "影音娱乐": 7779,
+      "小说阅读": 1432,
+      "新闻资讯": 9,
+      "系统背景": 80,
+      "工作办公": 1
+     },
+     "傍晚": {
+      "移动设备": 130,
+      "开发技术": 216,
+      "其他": 123,
+      "下载传输": 20,
+      "社交沟通": 62,
+      "IP 直连": 27,
+      "电商购物": 17,
+      "广告追踪": 20,
+      "影音娱乐": 2784,
+      "小说阅读": 300,
+      "工作办公": 2,
+      "AI 工具": 3,
+      "系统背景": 14,
+      "游戏": 1
+     },
+     "下午": {
+      "移动设备": 77,
+      "开发技术": 39,
+      "其他": 41,
+      "下载传输": 7,
+      "社交沟通": 6,
+      "电商购物": 2,
+      "IP 直连": 10
+     },
+     "上午": {
+      "移动设备": 153,
+      "开发技术": 265,
+      "其他": 129,
+      "下载传输": 4,
+      "游戏": 1,
+      "社交沟通": 112,
+      "IP 直连": 2,
+      "电商购物": 5,
+      "小说阅读": 493,
+      "系统背景": 23,
+      "广告追踪": 38,
+      "影音娱乐": 7753
+     }
+    },
+    "layer_visit": {
+     "ACT": 35964,
+     "AD": 433,
+     "SYS": 194
+    },
+    "act_total": 35964,
+    "active_hours": 49,
+    "peak_hour": 10,
+    "top6_share": 70.5,
+    "night_share": 10.7,
+    "morning_share": 21.2,
+    "workhours_share": 25.2,
+    "evening_share": 43.0,
+    "truncated_windows": 0,
+    "loki_requests": 32
+   },
+   "tags": [
+    {
+     "name": "轻度熬夜",
+     "desc": "深夜有一定活动",
+     "color": "#748ffc",
+     "evidence": "深夜占比 10.7%"
+    },
+    {
+     "name": "夜间活跃型",
+     "desc": "晚 19–24 点是主活跃期",
+     "color": "#845ef7",
+     "evidence": "夜间占比 43.0%"
+    },
+    {
+     "name": "间歇上线型",
+     "desc": "只在部分时段出现",
+     "color": "#868e96",
+     "evidence": "仅 49 个小时有活动"
+    },
+    {
+     "name": "作息极规律",
+     "desc": "活动高度集中在少数几小时",
+     "color": "#2f9e44",
+     "evidence": "Top6 小时占 70.5%"
+    },
+    {
+     "name": "典型打工人",
+     "desc": "工作日显著高于周末",
+     "color": "#1971c2",
+     "evidence": "工作日日均 4,054 vs 周末 0"
+    },
+    {
+     "name": "追剧党",
+     "desc": "短视频/长视频重度消费",
+     "color": "#e64980",
+     "evidence": "影音类占 64.8%"
+    },
+    {
+     "name": "兴趣广泛",
+     "desc": "域名覆盖面很广",
+     "color": "#2f9e44",
+     "evidence": "覆盖 2199 个域名"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.27",
+   "asset": {
+    "ip": "192.168.0.27",
+    "name": "Redmi-Note-11-5G",
+    "asset_type": "client",
+    "criticality": "normal",
+    "owner": "佳佳",
+    "os_name": null,
+    "mac_address": "be:de:ff:af:a8:e1",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 18405,
+    "days": 2,
+    "daily_avg": 9202,
+    "by_hour": [
+     2363,
+     831,
+     771,
+     34,
+     0,
+     0,
+     0,
+     61,
+     1779,
+     1013,
+     1295,
+     1119,
+     97,
+     1525,
+     841,
+     2420,
+     1378,
+     0,
+     0,
+     0,
+     0,
+     0,
+     1359,
+     1519
+    ],
+    "wd_hour": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1359,
+      1519
+     ],
+     [
+      2363,
+      831,
+      771,
+      34,
+      0,
+      0,
+      0,
+      61,
+      1779,
+      1013,
+      1295,
+      1119,
+      97,
+      1525,
+      841,
+      2420,
+      1378,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    ],
+    "by_block": {
+     "深夜": 3999,
+     "早晨": 1840,
+     "上午": 3427,
+     "午间": 1622,
+     "下午": 4639,
+     "傍晚": 0,
+     "夜间": 2878
+    },
+    "by_day": {
+     "08-29": 2878,
+     "08-30": 15527
+    },
+    "workday": 0,
+    "weekend": 18405,
+    "workday_share": 0.0,
+    "domain_count": 2013,
+    "top_domains": [
+     {
+      "domain": "upos-sz-mirrorcos.bilivideo.com",
+      "visits": 584,
+      "category": "影音娱乐",
+      "share": 3.17
+     },
+     {
+      "domain": "upos-sz-mirrorhw.bilivideo.com",
+      "visits": 302,
+      "category": "影音娱乐",
+      "share": 1.64
+     },
+     {
+      "domain": "zz12.yirujs.com",
+      "visits": 299,
+      "category": "其他",
+      "share": 1.62
+     },
+     {
+      "domain": "upos-sz-estgoss.bilivideo.com",
+      "visits": 276,
+      "category": "影音娱乐",
+      "share": 1.5
+     },
+     {
+      "domain": "upos-sz-mirror08c.bilivideo.com",
+      "visits": 247,
+      "category": "影音娱乐",
+      "share": 1.34
+     },
+     {
+      "domain": "203.119.206.8",
+      "visits": 230,
+      "category": "IP 直连",
+      "share": 1.25
+     },
+     {
+      "domain": "httpdns.bilivideo.com",
+      "visits": 172,
+      "category": "影音娱乐",
+      "share": 0.93
+     },
+     {
+      "domain": "203.119.238.240",
+      "visits": 150,
+      "category": "IP 直连",
+      "share": 0.81
+     },
+     {
+      "domain": "www.samsung.com",
+      "visits": 149,
+      "category": "移动设备",
+      "share": 0.81
+     },
+     {
+      "domain": "101.91.140.224",
+      "visits": 148,
+      "category": "IP 直连",
+      "share": 0.8
+     },
+     {
+      "domain": "upos-sz-estgcos.bilivideo.com",
+      "visits": 147,
+      "category": "影音娱乐",
+      "share": 0.8
+     },
+     {
+      "domain": "203.119.204.80",
+      "visits": 147,
+      "category": "IP 直连",
+      "share": 0.8
+     },
+     {
+      "domain": "101.91.140.124",
+      "visits": 137,
+      "category": "IP 直连",
+      "share": 0.74
+     },
+     {
+      "domain": "122.9.13.79",
+      "visits": 132,
+      "category": "IP 直连",
+      "share": 0.72
+     },
+     {
+      "domain": "upos-sz-mirrorbd.bilivideo.com",
+      "visits": 130,
+      "category": "影音娱乐",
+      "share": 0.71
+     },
+     {
+      "domain": "tracking.miui.com",
+      "visits": 121,
+      "category": "移动设备",
+      "share": 0.66
+     },
+     {
+      "domain": "upos-sz-mirror14b.bilivideo.com",
+      "visits": 121,
+      "category": "影音娱乐",
+      "share": 0.66
+     },
+     {
+      "domain": "203.119.238.194",
+      "visits": 121,
+      "category": "IP 直连",
+      "share": 0.66
+     },
+     {
+      "domain": "122.9.15.129",
+      "visits": 118,
+      "category": "IP 直连",
+      "share": 0.64
+     },
+     {
+      "domain": "upos-sz-estghw.bilivideo.com",
+      "visits": 117,
+      "category": "影音娱乐",
+      "share": 0.64
+     },
+     {
+      "domain": "upos-sz-mirrorhwb.bilivideo.com",
+      "visits": 113,
+      "category": "影音娱乐",
+      "share": 0.61
+     },
+     {
+      "domain": "douyinve.starrydyn.com",
+      "visits": 109,
+      "category": "影音娱乐",
+      "share": 0.59
+     },
+     {
+      "domain": "zz10.yirujs.com",
+      "visits": 108,
+      "category": "其他",
+      "share": 0.59
+     },
+     {
+      "domain": "douyin.starrydyn.com",
+      "visits": 98,
+      "category": "影音娱乐",
+      "share": 0.53
+     },
+     {
+      "domain": "upos-sz-mirrorcoso1.bilivideo.com",
+      "visits": 94,
+      "category": "影音娱乐",
+      "share": 0.51
+     },
+     {
+      "domain": "api.bilibili.com",
+      "visits": 92,
+      "category": "开发技术",
+      "share": 0.5
+     },
+     {
+      "domain": "cm.bilibili.com",
+      "visits": 88,
+      "category": "影音娱乐",
+      "share": 0.48
+     },
+     {
+      "domain": "i2.hdslb.com",
+      "visits": 87,
+      "category": "影音娱乐",
+      "share": 0.47
+     },
+     {
+      "domain": "codev.gcloudcdn.qq.com",
+      "visits": 85,
+      "category": "社交沟通",
+      "share": 0.46
+     },
+     {
+      "domain": "upos-sz-mirrorzos.bilivideo.com",
+      "visits": 84,
+      "category": "影音娱乐",
+      "share": 0.46
+     }
+    ],
+    "cat_visit": {
+     "影音娱乐": 10575,
+     "IP 直连": 2384,
+     "其他": 2217,
+     "开发技术": 895,
+     "电商购物": 527,
+     "移动设备": 516,
+     "广告追踪": 505,
+     "社交沟通": 505,
+     "系统背景": 172,
+     "游戏": 63,
+     "下载传输": 38,
+     "新闻资讯": 8
+    },
+    "cat_domain": {
+     "影音娱乐": 653,
+     "其他": 511,
+     "IP 直连": 376,
+     "开发技术": 119,
+     "电商购物": 114,
+     "社交沟通": 78,
+     "移动设备": 58,
+     "广告追踪": 49,
+     "系统背景": 23,
+     "游戏": 16,
+     "下载传输": 12,
+     "新闻资讯": 4
+    },
+    "cat_share": {
+     "影音娱乐": 59.7,
+     "IP 直连": 13.4,
+     "其他": 12.5,
+     "开发技术": 5.0,
+     "电商购物": 3.0,
+     "移动设备": 2.9,
+     "社交沟通": 2.8,
+     "游戏": 0.4,
+     "下载传输": 0.2,
+     "新闻资讯": 0.0
+    },
+    "cat_by_block": {
+     "上午": {
+      "其他": 439,
+      "广告追踪": 145,
+      "IP 直连": 191,
+      "开发技术": 160,
+      "影音娱乐": 2154,
+      "电商购物": 72,
+      "系统背景": 52,
+      "社交沟通": 76,
+      "移动设备": 100,
+      "游戏": 19,
+      "新闻资讯": 1,
+      "下载传输": 18
+     },
+     "午间": {
+      "其他": 185,
+      "广告追踪": 75,
+      "开发技术": 77,
+      "IP 直连": 54,
+      "电商购物": 3,
+      "系统背景": 22,
+      "影音娱乐": 1098,
+      "社交沟通": 35,
+      "移动设备": 56,
+      "下载传输": 16,
+      "游戏": 1
+     },
+     "下午": {
+      "其他": 418,
+      "广告追踪": 182,
+      "开发技术": 145,
+      "电商购物": 7,
+      "系统背景": 49,
+      "影音娱乐": 3576,
+      "社交沟通": 103,
+      "移动设备": 59,
+      "游戏": 15,
+      "新闻资讯": 1,
+      "IP 直连": 82,
+      "下载传输": 2
+     },
+     "早晨": {
+      "广告追踪": 42,
+      "开发技术": 90,
+      "电商购物": 9,
+      "系统背景": 3,
+      "影音娱乐": 1088,
+      "其他": 199,
+      "社交沟通": 49,
+      "移动设备": 42,
+      "IP 直连": 318
+     },
+     "夜间": {
+      "开发技术": 236,
+      "电商购物": 394,
+      "系统背景": 44,
+      "广告追踪": 36,
+      "其他": 414,
+      "影音娱乐": 994,
+      "社交沟通": 54,
+      "移动设备": 51,
+      "游戏": 25,
+      "新闻资讯": 6,
+      "IP 直连": 624
+     },
+     "深夜": {
+      "电商购物": 42,
+      "社交沟通": 188,
+      "移动设备": 208,
+      "其他": 562,
+      "开发技术": 187,
+      "广告追踪": 25,
+      "游戏": 3,
+      "下载传输": 2,
+      "系统背景": 2,
+      "影音娱乐": 1665,
+      "IP 直连": 1115
+     }
+    },
+    "layer_visit": {
+     "ACT": 17728,
+     "AD": 505,
+     "SYS": 172
+    },
+    "act_total": 17728,
+    "active_hours": 16,
+    "peak_hour": 15,
+    "top6_share": 59.7,
+    "night_share": 21.7,
+    "morning_share": 10.0,
+    "workhours_share": 52.6,
+    "evening_share": 15.6,
+    "truncated_windows": 0,
+    "loki_requests": 30
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 21.7%"
+    },
+    {
+     "name": "追剧党",
+     "desc": "短视频/长视频重度消费",
+     "color": "#e64980",
+     "evidence": "影音类占 59.7%"
+    },
+    {
+     "name": "兴趣广泛",
+     "desc": "域名覆盖面很广",
+     "color": "#2f9e44",
+     "evidence": "覆盖 2013 个域名"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.30",
+   "asset": {
+    "ip": "192.168.0.30",
+    "name": "xiejavahost",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": "Ubuntu",
+    "mac_address": "c0:94:44:c9:ce:38",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 24988,
+    "days": 8,
+    "daily_avg": 3124,
+    "by_hour": [
+     1046,
+     1037,
+     1040,
+     1081,
+     1015,
+     1042,
+     1069,
+     1030,
+     1060,
+     1035,
+     1123,
+     1044,
+     1015,
+     1100,
+     1019,
+     1010,
+     1020,
+     1032,
+     1036,
+     1021,
+     1012,
+     1042,
+     1054,
+     1005
+    ],
+    "wd_hour": [
+     [
+      158,
+      140,
+      137,
+      141,
+      140,
+      138,
+      141,
+      137,
+      139,
+      144,
+      150,
+      138,
+      141,
+      144,
+      141,
+      133,
+      144,
+      138,
+      147,
+      139,
+      140,
+      145,
+      140,
+      134
+     ],
+     [
+      142,
+      143,
+      140,
+      145,
+      141,
+      142,
+      141,
+      143,
+      143,
+      139,
+      184,
+      153,
+      134,
+      142,
+      142,
+      138,
+      139,
+      136,
+      138,
+      135,
+      134,
+      141,
+      138,
+      139
+     ],
+     [
+      139,
+      141,
+      143,
+      164,
+      134,
+      145,
+      171,
+      149,
+      148,
+      153,
+      162,
+      162,
+      159,
+      163,
+      156,
+      159,
+      150,
+      160,
+      164,
+      151,
+      154,
+      159,
+      167,
+      153
+     ],
+     [
+      161,
+      163,
+      157,
+      181,
+      154,
+      157,
+      156,
+      152,
+      154,
+      155,
+      159,
+      159,
+      156,
+      159,
+      160,
+      151,
+      156,
+      167,
+      155,
+      161,
+      153,
+      158,
+      168,
+      160
+     ],
+     [
+      156,
+      157,
+      163,
+      158,
+      152,
+      160,
+      160,
+      149,
+      158,
+      151,
+      155,
+      151,
+      158,
+      181,
+      156,
+      153,
+      149,
+      153,
+      153,
+      154,
+      153,
+      155,
+      154,
+      143
+     ],
+     [
+      154,
+      154,
+      156,
+      152,
+      157,
+      155,
+      158,
+      158,
+      160,
+      156,
+      171,
+      143,
+      134,
+      169,
+      135,
+      137,
+      141,
+      140,
+      139,
+      141,
+      140,
+      142,
+      144,
+      137
+     ],
+     [
+      136,
+      139,
+      144,
+      140,
+      137,
+      145,
+      142,
+      142,
+      158,
+      137,
+      142,
+      138,
+      133,
+      142,
+      129,
+      139,
+      141,
+      138,
+      140,
+      140,
+      138,
+      142,
+      143,
+      139
+     ]
+    ],
+    "by_block": {
+     "深夜": 6261,
+     "早晨": 3159,
+     "上午": 3202,
+     "午间": 2115,
+     "下午": 4081,
+     "傍晚": 3069,
+     "夜间": 3101
+    },
+    "by_day": {
+     "08-29": 1797,
+     "08-30": 3364,
+     "08-31": 3389,
+     "09-01": 3412,
+     "09-02": 3706,
+     "09-03": 3812,
+     "09-04": 3732,
+     "09-05": 1776
+    },
+    "workday": 18051,
+    "weekend": 6937,
+    "workday_share": 72.2,
+    "domain_count": 25,
+    "top_domains": [
+     {
+      "domain": "stun-heyuan-v6.easytier.cn",
+      "visits": 11054,
+      "category": "系统背景",
+      "share": 44.24
+     },
+     {
+      "domain": "stun.225284.xyz",
+      "visits": 2688,
+      "category": "系统背景",
+      "share": 10.76
+     },
+     {
+      "domain": "stun-v6.easytier.cn",
+      "visits": 2425,
+      "category": "系统背景",
+      "share": 9.7
+     },
+     {
+      "domain": "stun.miwifi.com",
+      "visits": 2006,
+      "category": "系统背景",
+      "share": 8.03
+     },
+     {
+      "domain": "stun.easytier.cn",
+      "visits": 1816,
+      "category": "系统背景",
+      "share": 7.27
+     },
+     {
+      "domain": "grafana.com",
+      "visits": 1483,
+      "category": "开发技术",
+      "share": 5.93
+     },
+     {
+      "domain": "stun.hitv.com",
+      "visits": 1018,
+      "category": "影音娱乐",
+      "share": 4.07
+     },
+     {
+      "domain": "stun.chat.bilibili.com",
+      "visits": 988,
+      "category": "影音娱乐",
+      "share": 3.95
+     },
+     {
+      "domain": "gtm-cn-6ja22i7nm0h.gtm-a4b8.com",
+      "visits": 496,
+      "category": "其他",
+      "share": 1.98
+     },
+     {
+      "domain": "region1.v2.argotunnel.com",
+      "visits": 359,
+      "category": "其他",
+      "share": 1.44
+     },
+     {
+      "domain": "stats.grafana.org",
+      "visits": 176,
+      "category": "开发技术",
+      "share": 0.7
+     },
+     {
+      "domain": "cfd-features.argotunnel.com",
+      "visits": 168,
+      "category": "其他",
+      "share": 0.67
+     },
+     {
+      "domain": "api.snapcraft.io",
+      "visits": 66,
+      "category": "开发技术",
+      "share": 0.26
+     },
+     {
+      "domain": "motd.ubuntu.com",
+      "visits": 36,
+      "category": "系统背景",
+      "share": 0.14
+     },
+     {
+      "domain": "cn.archive.ubuntu.com",
+      "visits": 36,
+      "category": "系统背景",
+      "share": 0.14
+     },
+     {
+      "domain": "mirrors.tuna.tsinghua.edu.cn",
+      "visits": 30,
+      "category": "其他",
+      "share": 0.12
+     },
+     {
+      "domain": "security.ubuntu.com",
+      "visits": 23,
+      "category": "系统背景",
+      "share": 0.09
+     },
+     {
+      "domain": "openresty.org",
+      "visits": 23,
+      "category": "其他",
+      "share": 0.09
+     },
+     {
+      "domain": "pkg.cloudflare.com",
+      "visits": 21,
+      "category": "开发技术",
+      "share": 0.08
+     },
+     {
+      "domain": "ppa.launchpadcontent.net",
+      "visits": 16,
+      "category": "系统背景",
+      "share": 0.06
+     },
+     {
+      "domain": "update.argotunnel.com",
+      "visits": 15,
+      "category": "系统背景",
+      "share": 0.06
+     },
+     {
+      "domain": "esm.ubuntu.com",
+      "visits": 14,
+      "category": "系统背景",
+      "share": 0.06
+     },
+     {
+      "domain": "usage.influxdata.com",
+      "visits": 12,
+      "category": "其他",
+      "share": 0.05
+     },
+     {
+      "domain": "d3nj60yw3f0wsq.cloudfront.net",
+      "visits": 11,
+      "category": "其他",
+      "share": 0.04
+     },
+     {
+      "domain": "120.25.191.240",
+      "visits": 8,
+      "category": "IP 直连",
+      "share": 0.03
+     }
+    ],
+    "cat_visit": {
+     "系统背景": 20129,
+     "影音娱乐": 2006,
+     "开发技术": 1746,
+     "其他": 1099,
+     "IP 直连": 8
+    },
+    "cat_domain": {
+     "系统背景": 11,
+     "其他": 7,
+     "开发技术": 4,
+     "影音娱乐": 2,
+     "IP 直连": 1
+    },
+    "cat_share": {
+     "影音娱乐": 41.3,
+     "开发技术": 35.9,
+     "其他": 22.6,
+     "IP 直连": 0.2
+    },
+    "cat_by_block": {
+     "深夜": {
+      "系统背景": 5039,
+      "开发技术": 437,
+      "影音娱乐": 504,
+      "其他": 278,
+      "IP 直连": 3
+     },
+     "早晨": {
+      "系统背景": 2546,
+      "开发技术": 226,
+      "影音娱乐": 250,
+      "其他": 135,
+      "IP 直连": 2
+     },
+     "上午": {
+      "系统背景": 2565,
+      "开发技术": 236,
+      "影音娱乐": 252,
+      "其他": 147,
+      "IP 直连": 2
+     },
+     "夜间": {
+      "系统背景": 2482,
+      "开发技术": 226,
+      "影音娱乐": 248,
+      "其他": 144,
+      "IP 直连": 1
+     },
+     "下午": {
+      "系统背景": 3304,
+      "开发技术": 278,
+      "影音娱乐": 332,
+      "其他": 167
+     },
+     "傍晚": {
+      "系统背景": 2495,
+      "开发技术": 202,
+      "影音娱乐": 252,
+      "其他": 120
+     },
+     "午间": {
+      "系统背景": 1698,
+      "开发技术": 141,
+      "影音娱乐": 168,
+      "其他": 108
+     }
+    },
+    "layer_visit": {
+     "SYS": 20129,
+     "ACT": 4859
+    },
+    "act_total": 4859,
+    "active_hours": 169,
+    "peak_hour": 10,
+    "top6_share": 26.0,
+    "night_share": 25.1,
+    "morning_share": 12.6,
+    "workhours_share": 41.8,
+    "evening_share": 20.5,
+    "truncated_windows": 0,
+    "loki_requests": 28
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 25.1%"
+    },
+    {
+     "name": "全天候在线",
+     "desc": "几乎每个小时都有流量",
+     "color": "#0c8599",
+     "evidence": "169/192 小时有活动"
+    },
+    {
+     "name": "作息发散",
+     "desc": "活动均匀铺开，无固定节律",
+     "color": "#f59f00",
+     "evidence": "Top6 小时仅占 26.0%"
+    },
+    {
+     "name": "码农",
+     "desc": "开发工具/云平台访问密集",
+     "color": "#1971c2",
+     "evidence": "开发类占 35.9%"
+    },
+    {
+     "name": "追剧党",
+     "desc": "短视频/长视频重度消费",
+     "color": "#e64980",
+     "evidence": "影音类占 41.3%"
+    },
+    {
+     "name": "机器流量为主",
+     "desc": "绝大部分是系统/协议心跳",
+     "color": "#868e96",
+     "evidence": "系统背景占 81%"
+    },
+    {
+     "name": "行为极单一",
+     "desc": "只访问极少数域名",
+     "color": "#495057",
+     "evidence": "25 个域名 / 24,988 次访问"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.42",
+   "asset": {
+    "ip": "192.168.0.42",
+    "name": "pve-LXC-ubuntu02",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": "Ubuntu",
+    "mac_address": "bc:24:11:55:5e:4a",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 26524,
+    "days": 8,
+    "daily_avg": 3316,
+    "by_hour": [
+     1094,
+     1118,
+     1094,
+     1095,
+     1114,
+     1115,
+     1108,
+     1118,
+     1155,
+     1105,
+     1114,
+     1107,
+     1078,
+     1100,
+     1103,
+     1079,
+     1066,
+     1102,
+     1076,
+     1097,
+     1142,
+     1119,
+     1111,
+     1114
+    ],
+    "wd_hour": [
+     [
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      166,
+      160,
+      158,
+      160,
+      160,
+      155,
+      160,
+      137,
+      160,
+      156,
+      160,
+      160,
+      160,
+      160,
+      160,
+      156
+     ],
+     [
+      151,
+      160,
+      160,
+      151,
+      158,
+      160,
+      159,
+      160,
+      166,
+      147,
+      159,
+      160,
+      160,
+      159,
+      160,
+      157,
+      131,
+      160,
+      157,
+      157,
+      162,
+      160,
+      157,
+      160
+     ],
+     [
+      153,
+      160,
+      160,
+      160,
+      160,
+      160,
+      151,
+      160,
+      161,
+      160,
+      160,
+      160,
+      160,
+      158,
+      160,
+      160,
+      160,
+      154,
+      160,
+      160,
+      166,
+      160,
+      159,
+      160
+     ],
+     [
+      160,
+      160,
+      160,
+      160,
+      160,
+      157,
+      160,
+      160,
+      166,
+      160,
+      159,
+      160,
+      120,
+      154,
+      145,
+      147,
+      157,
+      156,
+      160,
+      142,
+      166,
+      160,
+      160,
+      160
+     ],
+     [
+      157,
+      160,
+      160,
+      147,
+      158,
+      160,
+      160,
+      160,
+      166,
+      160,
+      160,
+      160,
+      160,
+      156,
+      160,
+      160,
+      160,
+      160,
+      140,
+      160,
+      166,
+      160,
+      160,
+      160
+     ],
+     [
+      155,
+      160,
+      160,
+      159,
+      160,
+      160,
+      160,
+      160,
+      166,
+      160,
+      160,
+      148,
+      158,
+      158,
+      158,
+      158,
+      158,
+      158,
+      158,
+      158,
+      164,
+      159,
+      158,
+      158
+     ],
+     [
+      158,
+      158,
+      134,
+      158,
+      158,
+      158,
+      158,
+      158,
+      164,
+      158,
+      158,
+      159,
+      160,
+      160,
+      160,
+      160,
+      140,
+      158,
+      141,
+      160,
+      158,
+      160,
+      157,
+      160
+     ]
+    ],
+    "by_block": {
+     "深夜": 6630,
+     "早晨": 3381,
+     "上午": 3326,
+     "午间": 2178,
+     "下午": 4350,
+     "傍晚": 3315,
+     "夜间": 3344
+    },
+    "by_day": {
+     "08-29": 1903,
+     "08-30": 3753,
+     "08-31": 3808,
+     "09-01": 3771,
+     "09-02": 3822,
+     "09-03": 3749,
+     "09-04": 3810,
+     "09-05": 1908
+    },
+    "workday": 18960,
+    "weekend": 7564,
+    "workday_share": 71.5,
+    "domain_count": 83,
+    "top_domains": [
+     {
+      "domain": "version.goauthentik.io",
+      "visits": 338,
+      "category": "其他",
+      "share": 1.27
+     },
+     {
+      "domain": "1.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "2.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "3.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "4.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "5.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "6.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "7.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "8.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "9.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "10.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "11.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "12.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "13.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "14.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "15.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "16.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "17.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "18.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "19.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "20.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "22.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "23.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "24.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "27.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "45.0.168.192.in-addr.arpa",
+      "visits": 336,
+      "category": "系统背景",
+      "share": 1.27
+     },
+     {
+      "domain": "21.0.168.192.in-addr.arpa",
+      "visits": 335,
+      "category": "系统背景",
+      "share": 1.26
+     },
+     {
+      "domain": "26.0.168.192.in-addr.arpa",
+      "visits": 335,
+      "category": "系统背景",
+      "share": 1.26
+     },
+     {
+      "domain": "29.0.168.192.in-addr.arpa",
+      "visits": 335,
+      "category": "系统背景",
+      "share": 1.26
+     },
+     {
+      "domain": "30.0.168.192.in-addr.arpa",
+      "visits": 335,
+      "category": "系统背景",
+      "share": 1.26
+     }
+    ],
+    "cat_visit": {
+     "系统背景": 26186,
+     "其他": 338
+    },
+    "cat_domain": {
+     "系统背景": 82,
+     "其他": 1
+    },
+    "cat_share": {
+     "其他": 100.0
+    },
+    "cat_by_block": {
+     "早晨": {
+      "系统背景": 3339,
+      "其他": 42
+     },
+     "上午": {
+      "系统背景": 3284,
+      "其他": 42
+     },
+     "深夜": {
+      "系统背景": 6546,
+      "其他": 84
+     },
+     "傍晚": {
+      "系统背景": 3271,
+      "其他": 44
+     },
+     "夜间": {
+      "系统背景": 3302,
+      "其他": 42
+     },
+     "午间": {
+      "系统背景": 2150,
+      "其他": 28
+     },
+     "下午": {
+      "系统背景": 4294,
+      "其他": 56
+     }
+    },
+    "layer_visit": {
+     "SYS": 26186,
+     "ACT": 338
+    },
+    "act_total": 338,
+    "active_hours": 168,
+    "peak_hour": 8,
+    "top6_share": 25.5,
+    "night_share": 25.0,
+    "morning_share": 12.7,
+    "workhours_share": 41.2,
+    "evening_share": 21.0,
+    "truncated_windows": 0,
+    "loki_requests": 28
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 25.0%"
+    },
+    {
+     "name": "全天候在线",
+     "desc": "几乎每个小时都有流量",
+     "color": "#0c8599",
+     "evidence": "168/192 小时有活动"
+    },
+    {
+     "name": "作息发散",
+     "desc": "活动均匀铺开，无固定节律",
+     "color": "#f59f00",
+     "evidence": "Top6 小时仅占 25.5%"
+    },
+    {
+     "name": "机器流量为主",
+     "desc": "绝大部分是系统/协议心跳",
+     "color": "#868e96",
+     "evidence": "系统背景占 99%"
+    }
+   ]
+  },
+  {
+   "ip": "192.168.0.102",
+   "asset": {
+    "ip": "192.168.0.102",
+    "name": "xiejava-8g-host",
+    "asset_type": "server",
+    "criticality": "normal",
+    "owner": null,
+    "os_name": "Ubuntu",
+    "mac_address": "ec:d6:8a:f9:44:0e",
+    "business_unit": null
+   },
+   "stats": {
+    "total": 1273,
+    "days": 8,
+    "daily_avg": 159,
+    "by_hour": [
+     41,
+     54,
+     51,
+     38,
+     45,
+     38,
+     38,
+     41,
+     51,
+     51,
+     106,
+     50,
+     75,
+     35,
+     88,
+     42,
+     61,
+     56,
+     49,
+     37,
+     72,
+     49,
+     67,
+     38
+    ],
+    "wd_hour": [
+     [
+      9,
+      1,
+      5,
+      8,
+      8,
+      3,
+      5,
+      5,
+      6,
+      15,
+      54,
+      12,
+      7,
+      7,
+      5,
+      6,
+      5,
+      5,
+      3,
+      3,
+      24,
+      3,
+      3,
+      3
+     ],
+     [
+      3,
+      7,
+      7,
+      6,
+      7,
+      3,
+      3,
+      6,
+      5,
+      5,
+      3,
+      10,
+      10,
+      6,
+      6,
+      3,
+      6,
+      7,
+      25,
+      5,
+      9,
+      5,
+      9,
+      6
+     ],
+     [
+      10,
+      7,
+      5,
+      3,
+      11,
+      3,
+      8,
+      3,
+      5,
+      4,
+      3,
+      3,
+      5,
+      3,
+      14,
+      8,
+      5,
+      22,
+      3,
+      7,
+      9,
+      3,
+      6,
+      3
+     ],
+     [
+      3,
+      5,
+      3,
+      3,
+      5,
+      6,
+      8,
+      5,
+      13,
+      8,
+      5,
+      8,
+      5,
+      7,
+      42,
+      11,
+      21,
+      5,
+      5,
+      5,
+      8,
+      23,
+      24,
+      12
+     ],
+     [
+      5,
+      13,
+      9,
+      5,
+      6,
+      5,
+      6,
+      7,
+      6,
+      3,
+      12,
+      3,
+      24,
+      3,
+      9,
+      6,
+      15,
+      9,
+      4,
+      6,
+      6,
+      3,
+      17,
+      3
+     ],
+     [
+      6,
+      12,
+      12,
+      2,
+      3,
+      11,
+      3,
+      7,
+      9,
+      5,
+      24,
+      5,
+      3,
+      3,
+      7,
+      3,
+      6,
+      3,
+      3,
+      3,
+      7,
+      7,
+      3,
+      3
+     ],
+     [
+      5,
+      9,
+      10,
+      11,
+      5,
+      7,
+      5,
+      8,
+      7,
+      11,
+      5,
+      9,
+      21,
+      6,
+      5,
+      5,
+      3,
+      5,
+      6,
+      8,
+      9,
+      5,
+      5,
+      8
+     ]
+    ],
+    "by_block": {
+     "深夜": 267,
+     "早晨": 130,
+     "上午": 207,
+     "午间": 110,
+     "下午": 247,
+     "傍晚": 158,
+     "夜间": 154
+    },
+    "by_day": {
+     "08-29": 54,
+     "08-30": 178,
+     "08-31": 205,
+     "09-01": 162,
+     "09-02": 153,
+     "09-03": 240,
+     "09-04": 185,
+     "09-05": 96
+    },
+    "workday": 945,
+    "weekend": 328,
+    "workday_share": 74.2,
+    "domain_count": 31,
+    "top_domains": [
+     {
+      "domain": "tokenghub.actions.githubusercontent.com",
+      "visits": 369,
+      "category": "开发技术",
+      "share": 28.99
+     },
+     {
+      "domain": "tokenghubeus21.actions.githubusercontent.com",
+      "visits": 223,
+      "category": "开发技术",
+      "share": 17.52
+     },
+     {
+      "domain": "glb-c0e95bd587389a.github.com",
+      "visits": 119,
+      "category": "开发技术",
+      "share": 9.35
+     },
+     {
+      "domain": "broker.actions.githubusercontent.com",
+      "visits": 102,
+      "category": "开发技术",
+      "share": 8.01
+     },
+     {
+      "domain": "api.snapcraft.io",
+      "visits": 88,
+      "category": "开发技术",
+      "share": 6.91
+     },
+     {
+      "domain": "cdn.fwupd.org",
+      "visits": 72,
+      "category": "其他",
+      "share": 5.66
+     },
+     {
+      "domain": "motd.ubuntu.com",
+      "visits": 36,
+      "category": "系统背景",
+      "share": 2.83
+     },
+     {
+      "domain": "cn.archive.ubuntu.com",
+      "visits": 35,
+      "category": "系统背景",
+      "share": 2.75
+     },
+     {
+      "domain": "mirrors.tuna.tsinghua.edu.cn",
+      "visits": 32,
+      "category": "其他",
+      "share": 2.51
+     },
+     {
+      "domain": "pipelinesghubeus11.actions.githubusercontent.com",
+      "visits": 29,
+      "category": "开发技术",
+      "share": 2.28
+     },
+     {
+      "domain": "security.ubuntu.com",
+      "visits": 23,
+      "category": "系统背景",
+      "share": 1.81
+     },
+     {
+      "domain": "github.com",
+      "visits": 23,
+      "category": "开发技术",
+      "share": 1.81
+     },
+     {
+      "domain": "open.bigmodel.cn",
+      "visits": 22,
+      "category": "AI 工具",
+      "share": 1.73
+     },
+     {
+      "domain": "www.cisa.gov",
+      "visits": 18,
+      "category": "新闻资讯",
+      "share": 1.41
+     },
+     {
+      "domain": "deb.nodesource.com",
+      "visits": 14,
+      "category": "其他",
+      "share": 1.1
+     },
+     {
+      "domain": "esm.ubuntu.com",
+      "visits": 14,
+      "category": "系统背景",
+      "share": 1.1
+     },
+     {
+      "domain": "glb-db52c2cf8be544.github.com",
+      "visits": 12,
+      "category": "开发技术",
+      "share": 0.94
+     },
+     {
+      "domain": "release-assets.githubusercontent.com",
+      "visits": 11,
+      "category": "开发技术",
+      "share": 0.86
+     },
+     {
+      "domain": "ntp.ubuntu.com",
+      "visits": 6,
+      "category": "系统背景",
+      "share": 0.47
+     },
+     {
+      "domain": "api.github.com",
+      "visits": 3,
+      "category": "开发技术",
+      "share": 0.24
+     },
+     {
+      "domain": "changelogs.ubuntu.com",
+      "visits": 2,
+      "category": "系统背景",
+      "share": 0.16
+     },
+     {
+      "domain": "hub.docker.com",
+      "visits": 2,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "run-actions-1-azure-eastus.actions.githubusercontent.com",
+      "visits": 2,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "results-receiver.actions.githubusercontent.com",
+      "visits": 2,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "token.actions.githubusercontent.com",
+      "visits": 2,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "run.actions.githubusercontent.com",
+      "visits": 2,
+      "category": "开发技术",
+      "share": 0.16
+     },
+     {
+      "domain": "productionresultssa8.blob.core.windows.net",
+      "visits": 2,
+      "category": "其他",
+      "share": 0.16
+     },
+     {
+      "domain": "blob.bnz49prdstrz09a.trafficmanager.net",
+      "visits": 2,
+      "category": "其他",
+      "share": 0.16
+     },
+     {
+      "domain": "registry.npmmirror.com",
+      "visits": 2,
+      "category": "其他",
+      "share": 0.16
+     },
+     {
+      "domain": "productionresultssa1.blob.core.windows.net",
+      "visits": 2,
+      "category": "其他",
+      "share": 0.16
+     }
+    ],
+    "cat_visit": {
+     "开发技术": 989,
+     "其他": 128,
+     "系统背景": 116,
+     "AI 工具": 22,
+     "新闻资讯": 18
+    },
+    "cat_domain": {
+     "开发技术": 15,
+     "其他": 8,
+     "系统背景": 6,
+     "AI 工具": 1,
+     "新闻资讯": 1
+    },
+    "cat_share": {
+     "开发技术": 85.5,
+     "其他": 11.1,
+     "AI 工具": 1.9,
+     "新闻资讯": 1.6
+    },
+    "cat_by_block": {
+     "深夜": {
+      "系统背景": 12,
+      "开发技术": 237,
+      "其他": 18
+     },
+     "早晨": {
+      "系统背景": 2,
+      "开发技术": 102,
+      "AI 工具": 14,
+      "其他": 12
+     },
+     "下午": {
+      "系统背景": 23,
+      "开发技术": 197,
+      "其他": 17,
+      "新闻资讯": 10
+     },
+     "夜间": {
+      "系统背景": 14,
+      "开发技术": 128,
+      "其他": 12
+     },
+     "上午": {
+      "系统背景": 16,
+      "开发技术": 152,
+      "AI 工具": 6,
+      "其他": 29,
+      "新闻资讯": 4
+     },
+     "傍晚": {
+      "系统背景": 25,
+      "开发技术": 110,
+      "其他": 19,
+      "新闻资讯": 4
+     },
+     "午间": {
+      "系统背景": 24,
+      "开发技术": 63,
+      "AI 工具": 2,
+      "其他": 21
+     }
+    },
+    "layer_visit": {
+     "SYS": 116,
+     "ACT": 1157
+    },
+    "act_total": 1157,
+    "active_hours": 169,
+    "peak_hour": 10,
+    "top6_share": 36.8,
+    "night_share": 21.0,
+    "morning_share": 10.2,
+    "workhours_share": 48.2,
+    "evening_share": 20.7,
+    "truncated_windows": 0,
+    "loki_requests": 28
+   },
+   "tags": [
+    {
+     "name": "夜猫子",
+     "desc": "深夜 00–06 点仍高度活跃",
+     "color": "#4c6ef5",
+     "evidence": "深夜占比 21.0%"
+    },
+    {
+     "name": "全天候在线",
+     "desc": "几乎每个小时都有流量",
+     "color": "#0c8599",
+     "evidence": "169/192 小时有活动"
+    },
+    {
+     "name": "码农",
+     "desc": "开发工具/云平台访问密集",
+     "color": "#1971c2",
+     "evidence": "开发类占 85.5%"
+    }
+   ]
+  }
+ ]
+}

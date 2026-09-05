@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="AKDWctO4ICvFWpd0zReAaE"><head data-page-node-id="qgAb6FZOBht4pgnN4n1haW"><meta charset="utf-8" data-page-node-id="g4TCkJpZxma8H9ziWU1JK4">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="PQjWPa8Ttdu2zs3ldTHcvF">
+<title>AI-miniSOC 实体行为画像 POC 报告</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f7f7f5;color:#2C2C2A;
+ font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+header{border-bottom:1px solid #D3D1C7;padding-bottom:20px;margin-bottom:28px}
+h1{font-size:22px;font-weight:500;margin:0 0 6px}
+.sub{color:#5F5E5A;font-size:13px}
+.lead{background:#fff;border:1px solid #D3D1C7;border-radius:12px;
+ padding:16px 20px;margin:20px 0 28px;font-size:13px;line-height:1.75}
+.lead b{font-weight:500}
+.entity{background:#fff;border:1px solid #D3D1C7;border-radius:14px;
+ padding:22px;margin-bottom:26px}
+.e-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+ padding-bottom:14px;border-bottom:1px solid #E8E6DF;margin-bottom:18px}
+.e-ip{font:500 20px/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+.e-name{font-size:16px;font-weight:500}
+.e-role{margin-left:auto;background:#E6F1FB;color:#185FA5;
+ border-radius:20px;padding:3px 14px;font-size:12px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+ gap:12px;margin-bottom:20px}
+.metric{background:#F1EFE8;border-radius:8px;padding:12px 14px}
+.mv{font:500 22px/1.2 ui-monospace,Menlo,monospace}
+.ml{font-size:12px;color:#5F5E5A;margin-top:3px}
+.ms{font-size:11px;color:#888780;margin-top:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.card{background:#FAFAF8;border:1px solid #E8E6DF;border-radius:10px;
+ padding:16px 18px;margin-bottom:16px}
+.card h3{font-size:14px;font-weight:500;margin:0 0 12px;
+ padding-bottom:8px;border-bottom:1px solid #E8E6DF}
+table.kv{border-collapse:collapse;font-size:13px}
+table.kv th{text-align:left;font-weight:400;color:#5F5E5A;
+ padding:5px 14px 5px 0;white-space:nowrap;width:88px;vertical-align:top}
+table.kv td{padding:5px 0;font-family:ui-monospace,Menlo,monospace;font-size:12px;
+ word-break:break-all}
+.warn-inline{margin-top:10px;background:#FAEEDA;border-radius:6px;
+ padding:8px 10px;font-size:12px;color:#633806;line-height:1.6}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:12px}
+.bar-lbl{width:290px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ color:#444441;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.bar-track{flex:1;height:15px;background:#EFEDE6;border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:#7F77DD;border-radius:3px}
+.bar-val{width:88px;text-align:right;color:#5F5E5A;
+ font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#F1EFE8;border-radius:5px;padding:3px 9px;font-size:12px;
+ font-family:ui-monospace,Menlo,monospace}
+.chip.u{background:#E1F5EE;color:#0F6E56}
+.chip.r{background:#FAEEDA;color:#633806}
+.chip b{font-weight:500}
+.rel-t{font-size:12px;color:#5F5E5A;margin:10px 0 5px}
+.rel-t:first-child{margin-top:0}
+.rel{font-size:12px}
+.os-note{margin-top:10px;font-size:11px;color:#888780;line-height:1.6}
+.empty{color:#B4B2A9;font-size:12px;font-style:italic}
+.net{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.net-src{display:flex;flex-direction:column;gap:8px}
+.nb{background:#EEEDFE;border:1px solid #AFA9EC;border-radius:8px;
+ padding:9px 14px;font-size:13px;text-align:center}
+.nb-u{background:#E1F5EE;border-color:#5DCAA5}
+.nb-s{font-size:11px;color:#5F5E5A}
+.net-arrows{color:#888780;font-size:12px}
+.net-dst{flex:1;min-width:280px}
+.lnk{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
+.lnk-ip{width:110px;font-family:ui-monospace,Menlo,monospace}
+.lnk-bar{flex:1;height:14px;background:#EFEDE6;border-radius:3px;overflow:hidden}
+.lnk-fill{height:100%;background:#1D9E75;border-radius:3px}
+.lnk-n{width:52px;text-align:right;color:#5F5E5A;font-size:11px}
+table.gap{width:100%;border-collapse:collapse;font-size:12.5px}
+table.gap th{text-align:left;background:#F1EFE8;padding:8px 10px;
+ font-weight:500;border-bottom:1px solid #D3D1C7}
+table.gap td{padding:8px 10px;border-bottom:1px solid #EFEDE6;vertical-align:top}
+table.gap td:first-child{font-weight:500;white-space:nowrap}
+code{background:#F1EFE8;padding:1px 5px;border-radius:3px;
+ font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.tag{border-radius:4px;padding:1px 7px;font-size:11px;margin-right:5px}
+.tag.low{background:#EAF3DE;color:#3B6D11}
+.tag.mid{background:#FAEEDA;color:#633806}
+.tag.high{background:#FCEBEB;color:#791F1F}
+.concl{background:#fff}
+.concl-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.concl-grid{grid-template-columns:1fr}}
+.cg-h{font-size:13px;font-weight:500;padding:6px 12px;border-radius:6px;margin-bottom:10px}
+.cg-h.ok{background:#EAF3DE;color:#3B6D11}
+.cg-h.warn{background:#FAEEDA;color:#633806}
+.cg ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.8}
+.cg li{margin-bottom:7px}
+.next{margin-top:18px;padding-top:14px;border-top:1px solid #E8E6DF}
+.next-h{font-size:13px;font-weight:500;margin-bottom:8px}
+.next ol{margin:0;padding-left:20px;font-size:12.5px;line-height:1.8}
+.next li{margin-bottom:6px}
+footer{margin-top:32px;padding-top:16px;border-top:1px solid #D3D1C7;
+ font-size:12px;color:#888780;line-height:1.7}
+</style></head><body data-page-node-id="TSz0iKSLxGpKDjAhDvDulm"><div class="wrap" data-page-node-id="EF0IRUOU4cOVHLSGMym9do">
+<header data-page-node-id="wHlhMwy4it6BAHk2mMDHAz">
+  <h1 data-page-node-id="aYqHdhg0SzyizIc75ij9V3">AI-miniSOC 实体行为画像 POC 报告</h1>
+  <div class="sub" data-page-node-id="nTseFc3B9hm5xsJ3Hb48U7">双视角验证 · 生成于 2026-09-05 02:54:13 ·
+    数据源：PostgreSQL 52 张 soc_ 表 + OpenSearch wazuh-alerts（128.4 万条）</div>
+</header>
+
+<div class="lead" data-page-node-id="0U2ux6DBmM5ar3zTa1N1cg">
+本报告验证一件事：<b data-page-node-id="N506xy969rsV3tfWEpGhHz">能否用「设备画像」的数据管道，顺带产出「用户画像」所需的身份映射</b>。
+<br data-page-node-id="42WLp4Bcb8qOAK7Z2NzgVr">
+选了两个互补样本 —— <b data-page-node-id="TYsc9542aOSrfbgnjwLsrX">192.168.0.102</b>（xiejava-8g-host，装了 Wazuh agent 的 Ubuntu 服务器）
+与 <b data-page-node-id="Ha1kepV3HcpbWnW5soW1qc">192.168.0.8</b>（xiejavadeMini，没装 agent 的日常开发机）。
+前者代表「数据在库表里」的富样本，后者代表「数据只在 OpenSearch 里」的贫样本 ——
+如果连后者都能画出像样的画像，就说明这条路径成立。
+</div>
+
+
+<div class="entity" data-page-node-id="9NVnyQ271CPP4hPn2BKBTk">
+  <div class="e-head" data-page-node-id="tOKuIfyivVqElBk6K048Cs">
+    <div class="e-ip" data-page-node-id="NXxFbpf7TGvudkGuHzH7Vf">192.168.0.102</div>
+    <div class="e-name" data-page-node-id="xs1RfXMYZr4hjybGcgCVIM">xiejava-8g-host</div>
+    <div class="e-role" data-page-node-id="OXSFparKg7pC2TkmRFNdn1">被管理的主机</div>
+  </div>
+
+  <div class="metrics" data-page-node-id="OxjaBd20TOnjNLuE38dWYY">
+    <div class="metric" data-page-node-id="B5y5D5bQoYVcfCF2yQZBYx"><div class="mv" data-page-node-id="h0gNuExzXI80LtDsow7x10">866</div>
+    <div class="ml" data-page-node-id="9hksXRD8gcqjjG3cnT08ud">告警组数</div><div class="ms" data-page-node-id="72bAFBoJVllfqSAW9JLB3f">原始 76,055 条</div></div>
+    <div class="metric" data-page-node-id="530l7sBLXgaF9ClMJwa1i9"><div class="mv" data-page-node-id="odU9G7GOHNOWJYSZ2iEkXC">79</div>
+    <div class="ml" data-page-node-id="QNJrdgdxzAByOxqoHwLZhn">访问域名数</div><div class="ms" data-page-node-id="G27ZP9IlNtkOQjgukJx6UZ">累计 3,112 次</div></div>
+    <div class="metric" data-page-node-id="dGuOUBQk8nMaUU31BslC2G"><div class="mv" data-page-node-id="raaH4fWQkhinPGOyxETkiF">3</div>
+    <div class="ml" data-page-node-id="Kn6oJJ4Y2YT2UqC5KNQM7e">行为异常事件</div></div>
+    <div class="metric" data-page-node-id="BFDDmkojB2ohbWPbHPtEjz"><div class="mv" data-page-node-id="9Kn8PnQXHLxOrUEfCdE3H9">610</div>
+    <div class="ml" data-page-node-id="7rBXzs33rDJYILL5FaIGTo">被登录次数</div></div>
+    <div class="metric" data-page-node-id="FOEDkkQuffED9wuYgy4Waa"><div class="mv" data-page-node-id="vtYVdnF94oXMJLvGdMdEsw">2</div>
+    <div class="ml" data-page-node-id="yM5o8DgyteG7vOcLFcErWo">主动登录次数</div></div>
+  </div>
+
+  <div class="grid2" data-page-node-id="irobxyQAaM9vuzoUWPRY7U">
+    <div class="card" data-page-node-id="SISzek5ihgnXiwE9i3dzsU">
+      <h3 data-page-node-id="krNCAtmzqhUbU2u1ZR9BhN">身份档案</h3>
+      <table class="kv" style="width:100%" data-page-node-id="e0GPlY6Po3NbV5vfxGwI35"><tr data-page-node-id="38LCMjgVDYJJRWRlR5eSrH"><th data-page-node-id="m2LA1CSYAbYtqJLjjOuLcv">资产名称</th><td data-page-node-id="NehBP71FuoZXD7LqdtLh1A">xiejava-8g-host</td></tr><tr data-page-node-id="wAS0q2RIIWFXScMDhDAIiP"><th data-page-node-id="RM507aNQiaY8HrqdLRWs9O">资产类型</th><td data-page-node-id="b6UKw6ElI7V447OU9JLpfh">server</td></tr><tr data-page-node-id="ANILrz6bODTADYWXK0VoYD"><th data-page-node-id="8m0MkVr0VzseTialcAuGzE">操作系统</th><td data-page-node-id="wDrARrMvR4VBvMawkbR2rZ">Ubuntu</td></tr><tr data-page-node-id="zaJZyVqYvJR2nCOGksNgu6"><th data-page-node-id="3CJWFgjClMrbT3Ym7aOPBh">MAC 地址</th><td data-page-node-id="s6osKDgroP6lrxqoPDtnXO">ec:d6:8a:f9:44:0e</td></tr><tr data-page-node-id="oUnBLZACDjI6Yfxrn4MxrT"><th data-page-node-id="AnxgUZ69HHMNpwffKjRIrJ">业务重要度</th><td data-page-node-id="PMPaIXpdHO0fB1gQNX5FvX">normal</td></tr><tr data-page-node-id="KWMxDI4IoDnC7J5SWbrVCx"><th data-page-node-id="9V5UXHNlcFUNTY9jsMW4yo">责任人</th><td data-page-node-id="7UPMo9ARX29W3PesLBdXNL">—</td></tr><tr data-page-node-id="7tCevo5prMzi8oqGzR2ayE"><th data-page-node-id="cOPwzHu7P4LpQc6vdF4VYx">数据来源</th><td data-page-node-id="HmlQtjzi3jevTsmqdm008K">wazuh</td></tr><tr data-page-node-id="MDXdHmCDiPoqCn2vYie7LB"><th data-page-node-id="nHgTtcKrW0RHpzSxrlIAZE">最后同步</th><td data-page-node-id="Ib6UGC1TC9Y5UHADsCJOhk">2026-08-28T18:35:06</td></tr></table>
+      <div class="warn-inline" data-page-node-id="xwaMzTf5ueRoYg4RDRz42k">责任人字段为空 —— 这是画像到「人」的直接断裂点，
+      下方身份关系来自 OpenSearch 抽取，可回填此字段</div>
+    </div>
+    <div class="card" data-page-node-id="xRtrJCAr7OlkyoZZZfImNF">
+      <h3 data-page-node-id="AzEwsEkoCGFBhdbI6rEVgM">身份关系（OpenSearch 抽取）</h3>
+      <div class='rel' data-page-node-id="1Ugz9DpBR2ibNa7T3hYq26"><div class='rel-t' data-page-node-id="FlVmcaO10AkVPTSfqns8Tv">登录本机的账号</div><span class='chip u' data-page-node-id="EzjoXYibpmPPYWOFDwDuXv">xiejava <b data-page-node-id="rCbD9oXv74AyAwzEHq9XCY">381</b></span> <span class='chip u' data-page-node-id="89w75ZG35xbSSVlBeUkdcr">xiejava(uid=1000) <b data-page-node-id="bR7LmgEDTy76tq570CNFpK">175</b></span> <span class='chip u' data-page-node-id="XgpZpwsgKlFutFWU7ezbml">root(uid=0) <b data-page-node-id="OuiKdOILlFidYXNzvEoUx7">25</b></span> <span class='chip u' data-page-node-id="vDYgg9eIljOZlSueSdYGgY">root <b data-page-node-id="fsFZzduAcj8LFjp7qU4tCM">25</b></span><div class='rel-t' data-page-node-id="nSgnnksfxvbOqogEmFKq22">连接来源</div><span class='chip' data-page-node-id="LO8PCh7dWnGxpMs5na873r">192.168.0.8 <b data-page-node-id="oTDSIA8aPHvOd1ZWeAQxEK">202</b></span> <span class='chip' data-page-node-id="sg3ZI2cbgeESB4Wmjzld5Y">192.168.0.128 <b data-page-node-id="FAU5FTpkpIOK84rks0JdMz">2</b></span> <span class='chip' data-page-node-id="CLHkH5hRC4d46sbbdtnjvG">192.168.0.60 <b data-page-node-id="ijWj3lXavm1aFykCjXc3l5">2</b></span> <span class='chip' data-page-node-id="SAuZIpO7GZR952bHnN76S9">192.168.0.40 <b data-page-node-id="Ui3yiDW0uPZOMe6C0RnZI7">2</b></span> <span class='chip' data-page-node-id="1sifYClyHAv7vtBQQ7phLX">192.168.0.45 <b data-page-node-id="BcuvC7px1DABK03O6s6T8C">2</b></span><div class='rel-t' data-page-node-id="5omlyS9Fe6oTWUR2sNdMYT">本机使用的账号</div><span class='chip u' data-page-node-id="5NiM2jvYcHa50Xr4ORqixh">xiejava <b data-page-node-id="Ld2BTUSrOOepIKst2lm5A7">2</b></span><div class='rel-t' data-page-node-id="U8BSjdLTwhI8hKZjMslZN6">登录目标主机</div><span class='chip' data-page-node-id="iFHpecgIqUjk08jdqFxNby">192.168.0.45 <b data-page-node-id="c6ftH7Q9BiCzzQyEPBxDZY">2</b></span></div>
+      <div class="os-note" data-page-node-id="S1oz3G5x1elO23R0xpW0Bb">OpenSearch 原始告警：作为被监控端
+        10,000 条 ／ 作为操作源
+        26 条</div>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="72qurhhRGxn250g9g8fg1g">
+    <h3 data-page-node-id="6miDSWMYOZs3epEWw7QywU">告警构成 Top 10</h3>
+    <div class="bar-row" data-page-node-id="SJfYhGe4K3gz1jzKvwgtql"><div class="bar-lbl" title="PAM: Login session closed." data-page-node-id="SUwtEGg49yx3U30VmSWwoP">PAM: Login session closed.</div>
+        <div class="bar-track" data-page-node-id="vgkWnZGNoPW6IfZNMmc8OJ"><div class="bar-fill" style="width:100%" data-page-node-id="IrjgdkyAiSvxdwARnFFSQA"></div></div>
+        <div class="bar-val" data-page-node-id="KBZCpRx88LXRQqcV4vyHxH">15,579条</div></div>
+<div class="bar-row" data-page-node-id="4KPCUvdd8Dbzj1OXTSFvxQ"><div class="bar-lbl" title="PAM: Login session opened." data-page-node-id="7UL22gAFMGTq0pX3t8ORAs">PAM: Login session opened.</div>
+        <div class="bar-track" data-page-node-id="fuD6ZGJ5TFmPA2kI7XI6UK"><div class="bar-fill" style="width:100%" data-page-node-id="I9TymUj0vFuSgDGNDFKZ1T"></div></div>
+        <div class="bar-val" data-page-node-id="GLdVAYnXtlCPqN5CE2HTZp">15,579条</div></div>
+<div class="bar-row" data-page-node-id="rmhwMwestdSGXKiZrFkRuh"><div class="bar-lbl" title="sshd: authentication success." data-page-node-id="0EX2DHvHlyYuZV3TXVrUvQ">sshd: authentication success.</div>
+        <div class="bar-track" data-page-node-id="H5FUG2bm5qEAsRavp8tvws"><div class="bar-fill" style="width:80%" data-page-node-id="hM1SzNGDlezMCDxrpdNzA6"></div></div>
+        <div class="bar-val" data-page-node-id="w7WqXukKbgbafUjtPzbGFC">12,517条</div></div>
+<div class="bar-row" data-page-node-id="MUO1mGfHdiogdNrRLJtUXV"><div class="bar-lbl" title="Successful sudo to ROOT executed." data-page-node-id="vOV5KaqbFyjl0zwyyuMlq3">Successful sudo to ROOT executed.</div>
+        <div class="bar-track" data-page-node-id="D3IeyNV7jLcIChcSouEy1e"><div class="bar-fill" style="width:58%" data-page-node-id="Ff9C3Kuv32L7TI51P1JJlw"></div></div>
+        <div class="bar-val" data-page-node-id="KsOl9NrmPZnDD0HTk0F0Op">9,075条</div></div>
+<div class="bar-row" data-page-node-id="0HVU8om12avPpm5m7D0CWy"><div class="bar-lbl" title="The CVE-2025-71285 that affected linux-image-6.8.0-137-generic was sol" data-page-node-id="Sy8uD6VXfUYoE3rZDKm7dI">The CVE-2025-71285 that affected linux-image-6.8.0-137-generic was sol</div>
+        <div class="bar-track" data-page-node-id="NKXmWt3mzND4xgxrIKxIGd"><div class="bar-fill" style="width:55%" data-page-node-id="cg94tWkA1QOEJ7C5OA84LD"></div></div>
+        <div class="bar-val" data-page-node-id="INL793xQv8JkneFm4c7vFl">8,608条</div></div>
+<div class="bar-row" data-page-node-id="ZZRyhLHgcEkIEgMQdgQmQw"><div class="bar-lbl" title="CVE-2026-72152 affects linux-image-6.8.0-138-generic (Missing informat" data-page-node-id="pwQEArBdLtX3TCeFbWmtAM">CVE-2026-72152 affects linux-image-6.8.0-138-generic (Missing informat</div>
+        <div class="bar-track" data-page-node-id="8Ch5Hxe3gxJlZrqQ90OH5z"><div class="bar-fill" style="width:25%" data-page-node-id="M0HV0c6HANoFjGSGKDDdtn"></div></div>
+        <div class="bar-val" data-page-node-id="TYJB0NHNYLbp3o0kwMJ4Wf">3,984条</div></div>
+<div class="bar-row" data-page-node-id="00HKdNHaXBuyA7g2UIrM1B"><div class="bar-lbl" title="CVE-2026-68370 affects linux-image-6.8.0-138-generic" data-page-node-id="vfjdOvXalzMsEidkcRNqSM">CVE-2026-68370 affects linux-image-6.8.0-138-generic</div>
+        <div class="bar-track" data-page-node-id="BLIIm2ZKckJMMeGCUQlKZV"><div class="bar-fill" style="width:16%" data-page-node-id="F0srsHdjhL11OZZBhQOWdR"></div></div>
+        <div class="bar-val" data-page-node-id="FOqeFU2bkMwLQWRGfkENpL">2,516条</div></div>
+<div class="bar-row" data-page-node-id="P4tXpIhkQHPeBbIKcHvy3B"><div class="bar-lbl" title="File added to the system." data-page-node-id="yawiykMS2d9khDAtQWQpFH">File added to the system.</div>
+        <div class="bar-track" data-page-node-id="sJEU6jFcnbRl6qvIgqla8b"><div class="bar-fill" style="width:11%" data-page-node-id="IJelB04nA2dc4IBhyuyt9Y"></div></div>
+        <div class="bar-val" data-page-node-id="vQuPB03HSyFaympMrknvSU">1,836条</div></div>
+<div class="bar-row" data-page-node-id="uvSFSnDzl3HslATSpefqcO"><div class="bar-lbl" title="CVE-2024-46748 affects linux-image-6.8.0-138-generic" data-page-node-id="Dvk4I4XcalpLxPBoxf7K1G">CVE-2024-46748 affects linux-image-6.8.0-138-generic</div>
+        <div class="bar-track" data-page-node-id="K54WElazq8o5OaKH9t996K"><div class="bar-fill" style="width:10%" data-page-node-id="an9cxubOjWZZP2UV7aCNPX"></div></div>
+        <div class="bar-val" data-page-node-id="ySHRnQqSbHjWWUbixOyleE">1,696条</div></div>
+<div class="bar-row" data-page-node-id="On7MZdGb2kjpgqtb3wjmru"><div class="bar-lbl" title="Integrity checksum changed." data-page-node-id="rrNyHI0PzgZjB0SthEwDzI">Integrity checksum changed.</div>
+        <div class="bar-track" data-page-node-id="0XGbF0al9YaM0m06vRD2d3"><div class="bar-fill" style="width:10%" data-page-node-id="Y7010WqBBEtVFRX8e5IMBN"></div></div>
+        <div class="bar-val" data-page-node-id="Gi7N8x3hZAnUl8ZcF7nEfA">1,585条</div></div>
+  </div>
+
+  <div class="grid2" data-page-node-id="XD8nsC9RIPgBqEBegZcfPb">
+    <div class="card" data-page-node-id="5zFSyKHRpGg2Rs4bz6tHKd">
+      <h3 data-page-node-id="tHNzXEj7YoRNKfAFLyGk1X">AI 去噪判决分布</h3>
+      <div class="bar-row" data-page-node-id="YTQCFSZVIbrmSt6VjS7amt"><div class="bar-lbl" title="P1" data-page-node-id="7oUXiHAHa84CTzKS0yMm1j">P1</div>
+        <div class="bar-track" data-page-node-id="Ks9Sc4XBLD01iTaB4Y4mNO"><div class="bar-fill" style="width:100%" data-page-node-id="FBaxHWShixPuDjKfktOiR4"></div></div>
+        <div class="bar-val" data-page-node-id="Oug4IXL1WzYUdqsW3r3TwQ">31,278条</div></div>
+<div class="bar-row" data-page-node-id="cCJRpPq990fe26sfngpj0B"><div class="bar-lbl" title="P3" data-page-node-id="5dS9TF7d6gH9PFoT36j2QH">P3</div>
+        <div class="bar-track" data-page-node-id="vl6GVxY6yGRneMhazI5QDV"><div class="bar-fill" style="width:49%" data-page-node-id="lpyDSTGcL6tAywyXThcZ8v"></div></div>
+        <div class="bar-val" data-page-node-id="jHp0FvG6Ecm5hNnFWlmQUl">15,468条</div></div>
+<div class="bar-row" data-page-node-id="YMNktVp1swixhddiflSVHW"><div class="bar-lbl" title="(null)" data-page-node-id="f1vNDj2BJc0H5pKwTjm7oB">(null)</div>
+        <div class="bar-track" data-page-node-id="gNhy2oM5KA0otIapN9qNsI"><div class="bar-fill" style="width:48%" data-page-node-id="ynvTWkWk8H5aeMgwZ3TQ7i"></div></div>
+        <div class="bar-val" data-page-node-id="DH7k7UVd0B0U6JBBhh8sOt">15,029条</div></div>
+<div class="bar-row" data-page-node-id="JEhQcjfrvmCn4bSIQchCoA"><div class="bar-lbl" title="P2" data-page-node-id="YFn7ZprxWSl9lGjHIPDPdg">P2</div>
+        <div class="bar-track" data-page-node-id="zA51SGKjU2oSzOIMIkCFzB"><div class="bar-fill" style="width:41%" data-page-node-id="4si1PiXev7ceSDWuA8Br37"></div></div>
+        <div class="bar-val" data-page-node-id="pnHS3lLMIF1hC8FU1vq1Gi">12,995条</div></div>
+<div class="bar-row" data-page-node-id="hhFGbGYG4IlRH4o77j9RWA"><div class="bar-lbl" title="P3" data-page-node-id="fQ6XG8rlAfHnwVqvKRWWeK">P3</div>
+        <div class="bar-track" data-page-node-id="50tt40M6rMvk5rP4TGD2nI"><div class="bar-fill" style="width:3%" data-page-node-id="QpcoTscMVH7CYhFJGLhZup"></div></div>
+        <div class="bar-val" data-page-node-id="FBhTYL6DDCl6fS1XGGdJK1">1,251条</div></div>
+<div class="bar-row" data-page-node-id="MUJ2LhMa6Y57FLRSjiBoiw"><div class="bar-lbl" title="P2" data-page-node-id="iNVjoI9Pp62wHMu3wZe0yq">P2</div>
+        <div class="bar-track" data-page-node-id="P08MtK5AQE3307691PZj1s"><div class="bar-fill" style="width:0%" data-page-node-id="AVFHnpf84UDnGdezAHbdbt"></div></div>
+        <div class="bar-val" data-page-node-id="06AGzJfEjkKlqYwmEyKQ9N">34条</div></div>
+      <div class="os-note" data-page-node-id="8n7iDqz6V1BeZpsltz3FLv">noise=true 表示 AI 判定为噪音，可用于过滤误报</div>
+    </div>
+    <div class="card" data-page-node-id="A9uTocciTGHzflb5BUATI0">
+      <h3 data-page-node-id="lsF8SQeUPwvqjZdzbAHne0">暴露面</h3>
+      <div class="rel-t" data-page-node-id="VnZi6GlroFWD4zjGCmTVbb">开放端口 4 个</div>
+      <div class="chips" data-page-node-id="iPd4QLWHGPr1wvmSmqCKHl"><span class='chip' data-page-node-id="EQmsj0rQD9p9EnBViFBvlH">22/tcp — —</span><span class='chip' data-page-node-id="2ENCNmCtwrBCIDPwc5dtbQ">53/tcp — —</span><span class='chip' data-page-node-id="TyS9gWXaRrEhIpOtKqe2UM">5901/tcp — —</span><span class='chip' data-page-node-id="PNMHcimGDaU35b4NFvlyUq">6001/tcp — —</span></div>
+      <div class="rel-t" style="margin-top:12px" data-page-node-id="NHzsxEBrAnYgYpYrvWJinw">关联漏洞</div>
+      <div class="empty" data-page-node-id="ZX9v64Xjito5YiXYoayzUy">无漏洞记录</div>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="VMPEOA1KNETa1MrW0BrXks">
+    <h3 data-page-node-id="19KqEJA6jX3xn8lTfKhvyd">上网行为 Top 12 域名</h3>
+    <div class="bar-row" data-page-node-id="NlLKPGhnhCUdSxmnuTxKXR"><div class="bar-lbl" title="tokenghubeus21.actions.githubusercontent.com" data-page-node-id="igaFiKJ1jkfaivG05uK41a">tokenghubeus21.actions.githubusercontent.com</div>
+        <div class="bar-track" data-page-node-id="lMZIrE3KAOQEdTzClh2Euh"><div class="bar-fill" style="width:100%" data-page-node-id="0uUdMMTY2ojvnNvZbC6qgP"></div></div>
+        <div class="bar-val" data-page-node-id="UCHwbJGmHiDaER2Ug6Dbis">468 次</div></div>
+<div class="bar-row" data-page-node-id="kswPJunR5ULnpqg2sPUl3e"><div class="bar-lbl" title="glb-c0e95bd587389a.github.com" data-page-node-id="BALoQ37cnVLEUbdt5htQ68">glb-c0e95bd587389a.github.com</div>
+        <div class="bar-track" data-page-node-id="m4gtouB0QSrtwefo2jGAvf"><div class="bar-fill" style="width:70%" data-page-node-id="CRI0xHEhEqKn7BR0wEPxJK"></div></div>
+        <div class="bar-val" data-page-node-id="WGA4AnplUHHU9mAEiXzpZx">329 次</div></div>
+<div class="bar-row" data-page-node-id="BqoXGzZBzwLIQA6ikyECdd"><div class="bar-lbl" title="tokenghub.actions.githubusercontent.com" data-page-node-id="k7m0ITD9T0PBCVXCe5fwsm">tokenghub.actions.githubusercontent.com</div>
+        <div class="bar-track" data-page-node-id="jpVk0CuIfmiHAFwBPdqqhy"><div class="bar-fill" style="width:68%" data-page-node-id="pSxGbG2CMKiosczKMsv8Cv"></div></div>
+        <div class="bar-val" data-page-node-id="E6KPWGH0YY2dBnuGOweECB">321 次</div></div>
+<div class="bar-row" data-page-node-id="NHeVxpIip9b8KksyO9EwfT"><div class="bar-lbl" title="api.snapcraft.io" data-page-node-id="tkyZjH07HyxBvP3jDu0OsA">api.snapcraft.io</div>
+        <div class="bar-track" data-page-node-id="vzL7fjC1ItZecvbmhKGPiZ"><div class="bar-fill" style="width:39%" data-page-node-id="W9JbShoAGyeJHTsAGZCv1f"></div></div>
+        <div class="bar-val" data-page-node-id="HBPUQtbmnYABLT9bkCDe72">184 次</div></div>
+<div class="bar-row" data-page-node-id="tAUY0wrEHKDhlT2mB2WdFV"><div class="bar-lbl" title="glb-db52c2cf8be544.github.com" data-page-node-id="PhLAJb2xxHzmVKwOCYms3p">glb-db52c2cf8be544.github.com</div>
+        <div class="bar-track" data-page-node-id="RZruTeA8UVsEJGKP7O6yPh"><div class="bar-fill" style="width:34%" data-page-node-id="4zrqo0pqpyW6jVlYIxeg7R"></div></div>
+        <div class="bar-val" data-page-node-id="Ud1DpHjObDtynwzE29sAW7">160 次</div></div>
+<div class="bar-row" data-page-node-id="xdcJBUasWfA5EGpivc3UaX"><div class="bar-lbl" title="github.com" data-page-node-id="C7VscFMJ5TrrHvXbxL1A5a">github.com</div>
+        <div class="bar-track" data-page-node-id="JOVvCsHXVqqhsa4O8TXM80"><div class="bar-fill" style="width:31%" data-page-node-id="tuQGLTt6gYTlfoXsDme0Id"></div></div>
+        <div class="bar-val" data-page-node-id="CQTapOR3fnDHleft2fiCpD">147 次</div></div>
+<div class="bar-row" data-page-node-id="PaB4F7eXOyHqECjCSV4wma"><div class="bar-lbl" title="api.github.com" data-page-node-id="CLQ2DpgjUbdt4cEThyHSQd">api.github.com</div>
+        <div class="bar-track" data-page-node-id="G2UjaYl8DIBS0FhBpMG5NY"><div class="bar-fill" style="width:24%" data-page-node-id="5nHOHXWsYvzX7rKAvpIqAc"></div></div>
+        <div class="bar-val" data-page-node-id="yAhl1TYjng7xUbog2eRBma">115 次</div></div>
+<div class="bar-row" data-page-node-id="qqRlpzM4UtV2WiEETtB1Sc"><div class="bar-lbl" title="broker.actions.githubusercontent.com" data-page-node-id="SRjEMiHa5K7wzETIX4FEzx">broker.actions.githubusercontent.com</div>
+        <div class="bar-track" data-page-node-id="eTkybosjhXblVMsT9Csf1L"><div class="bar-fill" style="width:23%" data-page-node-id="b8emxjhwWHklxqTPa4UK18"></div></div>
+        <div class="bar-val" data-page-node-id="1ienmmJt7rUEcA1rE4w5c9">108 次</div></div>
+<div class="bar-row" data-page-node-id="8RIhKtDNbwJkFjXZzJ5wqa"><div class="bar-lbl" title="www.cisa.gov" data-page-node-id="ctZhFLsWfDd7IKcgp5n0IJ">www.cisa.gov</div>
+        <div class="bar-track" data-page-node-id="nckBPWv31oomrmXLIEMm6U"><div class="bar-fill" style="width:21%" data-page-node-id="xslPLEBefFBEGLemoW4iVc"></div></div>
+        <div class="bar-val" data-page-node-id="WkkJNHyLAZTT9Ys7hUpMeF">101 次</div></div>
+<div class="bar-row" data-page-node-id="97vHawy9b6QuD77pAdOwRB"><div class="bar-lbl" title="cdn.fwupd.org" data-page-node-id="gIPNr1B05yNtW72CMI4ECh">cdn.fwupd.org</div>
+        <div class="bar-track" data-page-node-id="ktgfzUZNBx48rhD4DAII4F"><div class="bar-fill" style="width:20%" data-page-node-id="2HSPqUgFLKt2IHctI4CKUx"></div></div>
+        <div class="bar-val" data-page-node-id="ThGaAGBbLaqOSuWEzQyBDr">97 次</div></div>
+<div class="bar-row" data-page-node-id="6mFfZQjTEZ9Axz4z0okfYr"><div class="bar-lbl" title="blob.blz25prdstrz09a.trafficmanager.net" data-page-node-id="dJvh9s67IlBdJltlHzVKuE">blob.blz25prdstrz09a.trafficmanager.net</div>
+        <div class="bar-track" data-page-node-id="uSlQCYW0GSq8k907LHpWq6"><div class="bar-fill" style="width:18%" data-page-node-id="IShJapGBf5WdlGSb5mGU44"></div></div>
+        <div class="bar-val" data-page-node-id="OCLtXCXqYnwMrhCXBvq11w">86 次</div></div>
+<div class="bar-row" data-page-node-id="P2ciFMB38V2gNdyqKlQYa9"><div class="bar-lbl" title="registry.npmmirror.com" data-page-node-id="wAw1GFb61R8QjW6djEhAso">registry.npmmirror.com</div>
+        <div class="bar-track" data-page-node-id="0AUXaDy0vfHSfBogMCAjdQ"><div class="bar-fill" style="width:17%" data-page-node-id="s1IZEwhQuspKyzQloIQIUw"></div></div>
+        <div class="bar-val" data-page-node-id="vV5EWRfh5oMwI7LMfgVyjW">80 次</div></div>
+    <div class="rel-t" style="margin-top:12px" data-page-node-id="nsFJNWxGX2LwAI6vp7LNh2">命中行为规则</div>
+    <div class="chips" data-page-node-id="Bo3vlL2uZ7XOLU7il9zF2K"><span class='chip r' data-page-node-id="GXWKvQBJ68DMq4241htjGm">R2 <b data-page-node-id="RfPWDYGR6bfRT194y9oAOK">3</b></span> <span class='chip r' data-page-node-id="YEF57G4ZCMynmD3E9BYMHl">R3 <b data-page-node-id="pYwvMngpfUzsD1jwFNHBCT">3</b></span></div>
+  </div>
+</div>
+
+
+<div class="entity" data-page-node-id="4UfsnGHDkDwLGdzeYC93Td">
+  <div class="e-head" data-page-node-id="JtgnUVVV5cKKcV3cGSxcYe">
+    <div class="e-ip" data-page-node-id="bwN6g7BaifiF8H4XBEYGWa">192.168.0.8</div>
+    <div class="e-name" data-page-node-id="a9hOkgzUSxUQdSQMZIEiA2">xiejavadeMini</div>
+    <div class="e-role" data-page-node-id="uPXc7L2pByW93MpnF2id40">操作发起端</div>
+  </div>
+
+  <div class="metrics" data-page-node-id="QixnWBHU4HFZKX5MHgSy0G">
+    <div class="metric" data-page-node-id="oE3a7rBzTpFadkh7KvsWMx"><div class="mv" data-page-node-id="wtcRkdB2UwtdrafSJGV7lI">0</div>
+    <div class="ml" data-page-node-id="iiRZjFlVflgwEaFqaxu9x1">告警组数</div><div class="ms" data-page-node-id="NqmqU1fdRxUgULT8MVYBOi">原始 0 条</div></div>
+    <div class="metric" data-page-node-id="WYJgxEdT57NBMBznEXYG8y"><div class="mv" data-page-node-id="X9J4Y4K7AIF0RFhJirShKA">977</div>
+    <div class="ml" data-page-node-id="2XzY4B8mUcCALzhFyPqLj0">访问域名数</div><div class="ms" data-page-node-id="hjgHEjlumVkGX3Z8ADHgaL">累计 89,799 次</div></div>
+    <div class="metric" data-page-node-id="EiRX6VvW28euAdP6LX2eZI"><div class="mv" data-page-node-id="LpBIRUaquCJO96Gc2S1CZH">4</div>
+    <div class="ml" data-page-node-id="wDhC9A7rlER80Qaamj1loX">行为异常事件</div></div>
+    <div class="metric" data-page-node-id="XoM9w3G17JA3vr1dNpHkoy"><div class="mv" data-page-node-id="xGbATvB4jEjLx0M3l2rgXb">0</div>
+    <div class="ml" data-page-node-id="MJ7gv8SxfEHn6aQlIMbs9p">被登录次数</div></div>
+    <div class="metric" data-page-node-id="dEFmXbBPkzNlXTnnCq9Ea6"><div class="mv" data-page-node-id="tW5DW6coJq8J5eKR8niiwx">214</div>
+    <div class="ml" data-page-node-id="pENUqp4aLoRMYYYE0qxBny">主动登录次数</div></div>
+  </div>
+
+  <div class="grid2" data-page-node-id="HH3A6Ij0Uj4oUnGMoHCxXg">
+    <div class="card" data-page-node-id="K8UUx4X3YT3VXqu5sUhwPI">
+      <h3 data-page-node-id="Bj9JbyQpjB3CnozguSQAqD">身份档案</h3>
+      <table class="kv" style="width:100%" data-page-node-id="YQvxu9yptS8HXLuMRePn9B"><tr data-page-node-id="crBE1E71C0WxjkPeFgmoqA"><th data-page-node-id="zibuKl76y2D5rPrRWNz8tI">资产名称</th><td data-page-node-id="aipbP3YGfP3OIUz3LWnCu5">xiejavadeMini</td></tr><tr data-page-node-id="IlYEg6qjITIs7NhTUCLfdE"><th data-page-node-id="lMuGM9rozGUpgBrL8psRHh">资产类型</th><td data-page-node-id="6DeABxjxLHtIj3X7GyM3aE">server</td></tr><tr data-page-node-id="Q8qkP6zMzCLS0PcQ2s9wqy"><th data-page-node-id="Dd2j5RD1W2PKeJZFCa445P">操作系统</th><td data-page-node-id="smIElx5YGeztXUTE6D3pzF">—</td></tr><tr data-page-node-id="BN4JlFtNtAns7X2zzJ0ytA"><th data-page-node-id="Rj6OYOR6ed5NYr1mdCjZIL">MAC 地址</th><td data-page-node-id="uClTyib8pBbgYefyqCdhex">1c:f6:4c:4e:f2:8d</td></tr><tr data-page-node-id="I5aiNlx1tB3L5VNpGJ2CFl"><th data-page-node-id="BZQ6AFSW6WwXMCgEkhhBfK">业务重要度</th><td data-page-node-id="Iv98kVJxgBfRb0Hw15m7xR">normal</td></tr><tr data-page-node-id="o1bWbAl0IeiH0UnNtPlo2E"><th data-page-node-id="aVbmMtC8aCfRfWfoUi2SWN">责任人</th><td data-page-node-id="3HEGyjpxsX1peySQDpENYh">—</td></tr><tr data-page-node-id="kLx81fHtKH076bTsr6xOXQ"><th data-page-node-id="3AFra9Brr16klOdBpdEHo3">数据来源</th><td data-page-node-id="lfL70XW5mq2wZLBoLDHE0R">tplink-router</td></tr><tr data-page-node-id="kFqUQxmPa0nsu0XQhmurIH"><th data-page-node-id="WtAl35PN6QVh88Xm1YCTnM">最后同步</th><td data-page-node-id="zSUrbn8uTVu7RHpITTxPsn">2026-08-18T20:00:02</td></tr></table>
+      <div class="warn-inline" data-page-node-id="BXOYdopd28Eh28AhZruvH5">责任人字段为空 —— 这是画像到「人」的直接断裂点，
+      下方身份关系来自 OpenSearch 抽取，可回填此字段</div>
+    </div>
+    <div class="card" data-page-node-id="ylMadZz9mpJGA93KCtUoqA">
+      <h3 data-page-node-id="40VxmounZ765FoecIh2uHH">身份关系（OpenSearch 抽取）</h3>
+      <div class='rel' data-page-node-id="Ak5eC1gQpJU3Epzy3ElXWQ"><div class='rel-t' data-page-node-id="at5B6OPWD7DemVSYHUCtVl">本机使用的账号</div><span class='chip u' data-page-node-id="tNmMaxVbTY6lxpTJ1ntOBy">xiejava <b data-page-node-id="HkDqTC5OysVqb5RIDEeuOY">207</b></span><div class='rel-t' data-page-node-id="HM64XJWBTPEqnCzixe5jlO">登录目标主机</div><span class='chip' data-page-node-id="bTN3YIXTNwvOoi6Z9oPNJ9">192.168.0.30 <b data-page-node-id="iA6dZVjhfWVgy9yI5lkHf5">56</b></span> <span class='chip' data-page-node-id="FRVg9MSud9d91fHsu0mDkj">192.168.0.102 <b data-page-node-id="N78rzbMr6EGCcy4wGUCtFa">18</b></span> <span class='chip' data-page-node-id="wPQ5qpLf6oSQJsyqYz6TqG">192.168.0.45 <b data-page-node-id="RMBaFoFxSEdLSbVKj6KWvf">18</b></span> <span class='chip' data-page-node-id="4AHT8Fon5tpxLxs8pXj2pr">192.168.0.17 <b data-page-node-id="2wYh7usE1I2GDRDnseH7Gd">2</b></span> <span class='chip' data-page-node-id="L0VH7feB3vnrzSjbG2GMhP">192.168.0.28 <b data-page-node-id="LNeBnRKQSJv2b8v2BByqSa">2</b></span></div>
+      <div class="os-note" data-page-node-id="9jICZFbV4tkw9QOSs4PFD1">OpenSearch 原始告警：作为被监控端
+        0 条 ／ 作为操作源
+        2,014 条</div>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="fTVHx4eGueCu4Hi0K5qnf7">
+    <h3 data-page-node-id="VRBFSH1EB1zSGLkzNPAB1o">告警构成 Top 10</h3>
+    <div class="empty" data-page-node-id="q9FYs5CGvF5QvGOHvfH1zo">无数据</div>
+  </div>
+
+  <div class="grid2" data-page-node-id="SoIJvIITbbnBQEctKtyjjX">
+    <div class="card" data-page-node-id="vQkAPCKZCeeA9q9pnlz6J0">
+      <h3 data-page-node-id="RsUavOP6dPH1v4kX5tTvk3">AI 去噪判决分布</h3>
+      <div class="empty" data-page-node-id="uHy0SiM0tAxxR9AADShRsw">无数据</div>
+      <div class="os-note" data-page-node-id="MQHcmeFo4ffHLxRVEtpdcV">noise=true 表示 AI 判定为噪音，可用于过滤误报</div>
+    </div>
+    <div class="card" data-page-node-id="KCulCw2pViPSgjqGLhiQuF">
+      <h3 data-page-node-id="y0E9LqBx0QMd4AjATSx8wB">暴露面</h3>
+      <div class="rel-t" data-page-node-id="7KM7MQHSbaO6MYtAUHPpPI">开放端口 6 个</div>
+      <div class="chips" data-page-node-id="ELMaGRHRsWGqCJaV3Fqcsj"><span class='chip' data-page-node-id="DKQJZNzVU0HO1WFfJ5BKNx">5000/tcp rtsp —</span><span class='chip' data-page-node-id="6mCECgad024aq31zuEXOQi">7000/tcp rtsp —</span><span class='chip' data-page-node-id="drfvRYZMUPnUzUzndPz5Gx">8000/tcp http Uvicorn</span><span class='chip' data-page-node-id="3cA4Fu0WBlsF4CCWj6M9hG">8080/tcp — —</span><span class='chip' data-page-node-id="3xHV9TBoVLALZ3VCDVJosc">8100/tcp http Uvicorn</span><span class='chip' data-page-node-id="7QtgqIFu2i9moaDDpZ1Dsf">20002/tcp — —</span></div>
+      <div class="rel-t" style="margin-top:12px" data-page-node-id="IO0lnnXOeMYjCzuab5PHjM">关联漏洞</div>
+      <div class="empty" data-page-node-id="ejfDwpACMhn1aATgwHB9d5">无漏洞记录</div>
+    </div>
+  </div>
+
+  <div class="card" data-page-node-id="CC7pZ5GTf5XkaWWuLPjA5p">
+    <h3 data-page-node-id="7xiKzymARbEW7MyLrwF27x">上网行为 Top 12 域名</h3>
+    <div class="bar-row" data-page-node-id="REj6ToNKMIjANrdhelBdIP"><div class="bar-lbl" title="copilot.tencent.com" data-page-node-id="QHoxSrJDEhIqH6U3vuHhQQ">copilot.tencent.com</div>
+        <div class="bar-track" data-page-node-id="yt2zVDCkx9uiCiVd3Masrt"><div class="bar-fill" style="width:100%" data-page-node-id="nLAvcUzCdwfg1uaXnwCjZ8"></div></div>
+        <div class="bar-val" data-page-node-id="CtYxHvTN4w0R3Hq1lIGiRg">4,831 次</div></div>
+<div class="bar-row" data-page-node-id="9F5FR70rbCctjxnAr4QYpu"><div class="bar-lbl" title="sg.tgalileo.com" data-page-node-id="uPQZUODyrJQkVBOWFh7z94">sg.tgalileo.com</div>
+        <div class="bar-track" data-page-node-id="SjSD4TNb5ELHgTXL8gEAmI"><div class="bar-fill" style="width:99%" data-page-node-id="IHr1B5qOXDEV5zavtcbcrm"></div></div>
+        <div class="bar-val" data-page-node-id="9BTDiysK6EinaX3AKMK7lD">4,828 次</div></div>
+<div class="bar-row" data-page-node-id="wm7BBV7iTWHCvgcsUsmqOq"><div class="bar-lbl" title="main.vscode-cdn.net" data-page-node-id="iduf2m6PEIhFoYU8ZaNfut">main.vscode-cdn.net</div>
+        <div class="bar-track" data-page-node-id="HG56PXCOC9G7fCNd6dKJWk"><div class="bar-fill" style="width:99%" data-page-node-id="JcdxZ9SPEqmZH1KscmfSlF"></div></div>
+        <div class="bar-val" data-page-node-id="EUx8C7c4IEsF5OVnrhRLXJ">4,806 次</div></div>
+<div class="bar-row" data-page-node-id="FuwxTg8STdL9K0LFWB423B"><div class="bar-lbl" title="galileotelemetry.tencent.com" data-page-node-id="qLAwaqzztlnBKgRllr1BYV">galileotelemetry.tencent.com</div>
+        <div class="bar-track" data-page-node-id="u1UjGp4XsjVxC5WHOsUE7H"><div class="bar-fill" style="width:99%" data-page-node-id="6pPuARcLlmspRC4YXgbO45"></div></div>
+        <div class="bar-val" data-page-node-id="q1NN9iYn3Lngd3jwTZBWaW">4,802 次</div></div>
+<div class="bar-row" data-page-node-id="ytxB0aPTaVhXhUakWiDXgH"><div class="bar-lbl" title="docs.gtimg.com" data-page-node-id="8ETnmkEIghzXV8FuFEwebQ">docs.gtimg.com</div>
+        <div class="bar-track" data-page-node-id="dwneiyIgSoRcpICpZhgpDU"><div class="bar-fill" style="width:65%" data-page-node-id="Gl7YHDGl5BBegvRVjF02W2"></div></div>
+        <div class="bar-val" data-page-node-id="VGEGEoh9BlSTrwn65cDdJG">3,165 次</div></div>
+<div class="bar-row" data-page-node-id="M8kLTI1g8VGOTIS0GJFAIl"><div class="bar-lbl" title="update.code.visualstudio.com" data-page-node-id="v6dHg8P9kvzbxwKGM5G4F5">update.code.visualstudio.com</div>
+        <div class="bar-track" data-page-node-id="TFALhlVqXFcYmae5rdTyRY"><div class="bar-fill" style="width:60%" data-page-node-id="yGFEKmFFhfQBDE8fHRvpdT"></div></div>
+        <div class="bar-val" data-page-node-id="06UbAFDUrwWCk7Bia57TU3">2,915 次</div></div>
+<div class="bar-row" data-page-node-id="pB2OGPlcwhWw2zGUlLXEZ3"><div class="bar-lbl" title="vas.wps.cn" data-page-node-id="8fFnkZuwFolRgnUX1oWMPR">vas.wps.cn</div>
+        <div class="bar-track" data-page-node-id="w1WCT44Dp9RJJ9uSFZFrwo"><div class="bar-fill" style="width:56%" data-page-node-id="FJfBmIehfrpvDnfJp46iNK"></div></div>
+        <div class="bar-val" data-page-node-id="UBWdE2sk97ENioUMeMayra">2,747 次</div></div>
+<div class="bar-row" data-page-node-id="sAJi42EO5UpdwovfcWBLqF"><div class="bar-lbl" title="multica.doai8.dpdns.org" data-page-node-id="7y1BAjv08uWHba2kT2L0ya">multica.doai8.dpdns.org</div>
+        <div class="bar-track" data-page-node-id="EzXoVko7DHZeBCQFjx6RWx"><div class="bar-fill" style="width:52%" data-page-node-id="PFzt2WXVMt9riFDJFIPMrf"></div></div>
+        <div class="bar-val" data-page-node-id="vkI8Nh8P5sY4mNtTmn75cc">2,522 次</div></div>
+<div class="bar-row" data-page-node-id="U1yziA4uA3epKetwrICreZ"><div class="bar-lbl" title="acc-1258344699.cos.ap-guangzhou.myqcloud.com" data-page-node-id="5K1JrM3hTN7MrsW1rlCBp4">acc-1258344699.cos.ap-guangzhou.myqcloud.com</div>
+        <div class="bar-track" data-page-node-id="OEbkJysXmh9YaBF6zUHKlq"><div class="bar-fill" style="width:49%" data-page-node-id="o6lHsEJlHtIIKniIgR7KFm"></div></div>
+        <div class="bar-val" data-page-node-id="svrDD54bEVATCLgNcMMm0x">2,412 次</div></div>
+<div class="bar-row" data-page-node-id="ALdQq6rKHzGLRhW7o7QOqr"><div class="bar-lbl" title="open.volcengineapi.com" data-page-node-id="Mv2ym84sYXdlNhQpOAHAVI">open.volcengineapi.com</div>
+        <div class="bar-track" data-page-node-id="3nMXqVSIue7jVAGcr9EtnT"><div class="bar-fill" style="width:46%" data-page-node-id="YFepzr9xPLdouXAU7hzmcj"></div></div>
+        <div class="bar-val" data-page-node-id="FlpQFWJE1Djfh9GSokuCIE">2,233 次</div></div>
+<div class="bar-row" data-page-node-id="f1eYEnA5hHcn97t95Sg7RM"><div class="bar-lbl" title="countly.mail.163.com" data-page-node-id="ARL73PtgjHjCHd42V1vjJ0">countly.mail.163.com</div>
+        <div class="bar-track" data-page-node-id="AwHHlAcbZJNIbMgbIP8jG3"><div class="bar-fill" style="width:44%" data-page-node-id="QXvSUDqUF3PHjcSENUjEOA"></div></div>
+        <div class="bar-val" data-page-node-id="v5haPbDAoF9UiuwGlBGrz6">2,158 次</div></div>
+<div class="bar-row" data-page-node-id="OEpDIdqcaHcHDEKdJdVbpp"><div class="bar-lbl" title="woodcattle-qz.dashi.163.com" data-page-node-id="ydlRfpaeKOAMWXIPOzLl0f">woodcattle-qz.dashi.163.com</div>
+        <div class="bar-track" data-page-node-id="0gBP6nDHHGEcgI6jt4sn2i"><div class="bar-fill" style="width:43%" data-page-node-id="0R3CJNiNiNSthwrafrpxJD"></div></div>
+        <div class="bar-val" data-page-node-id="ZkDBRTTPLxd2c6GDLzBOFp">2,121 次</div></div>
+    <div class="rel-t" style="margin-top:12px" data-page-node-id="TrFfazp9lG300YxDmxR1Tq">命中行为规则</div>
+    <div class="chips" data-page-node-id="E7JGjwcu22MLDi4pKdgB6P"><span class='chip r' data-page-node-id="2eEB472yuXMOLoFPDr3Y49">R3 <b data-page-node-id="evyO1Zgf2NT7BgYgM4I589">4</b></span> <span class='chip r' data-page-node-id="f9bdtemXTLgZ1GwMImTaHd">R4 <b data-page-node-id="FRfIX8gJVnZ2EOPiDBO1RQ">4</b></span></div>
+  </div>
+</div>
+
+
+
+<div class="card" data-page-node-id="iTm76cdkcVFUHJxVrEFXYK">
+  <h3 data-page-node-id="6bgncZGs8SVyHAqXMLYBDq">身份关系网络 · 账号 xiejava 的活动轨迹</h3>
+  <div class="net-hint" data-page-node-id="zhRai0GTww5gyz7AWv7kDR">基于 OpenSearch 认证日志（rule 5715/5501 等）抽取，共
+    214 条出站记录</div>
+  <div class="net" data-page-node-id="ca0XMAKvG8TK85tqDYWeXU">
+    <div class="net-src" data-page-node-id="AWhGyhlwACswCHAClk5GXw">
+      <div class="nb nb-u" data-page-node-id="jBpFelNG41Fu1dnZ7G44qH">账号 xiejava</div>
+      <div class="nb nb-d" data-page-node-id="eZWBELFWFoE8fjqmeCJiI2">设备 192.168.0.8<Br data-page-node-id="OilSq0W1P2SIYr0F8EbMbB"><span class="nb-s" data-page-node-id="koDhyBaSHsDnQb32vUO6DW">xiejavadeMini</span></div>
+    </div>
+    <div class="net-arrows" data-page-node-id="TUNvVDKLF3LCSQlC8Pknfd">SSH / 登录</div>
+    <div class="net-dst" data-page-node-id="uMtle88nOzPDR9BCmp96J0"><div class="lnk" data-page-node-id="wGtyzqWwM8p04TGmeBg5Zw"><span class="lnk-ip" data-page-node-id="PgUa8OWE2vxXHi88eThojT">192.168.0.30</span>
+        <div class="lnk-bar" data-page-node-id="7r7ZyxmbxyQLTNcdQ4Rxsw"><div class="lnk-fill" style="width:100%" data-page-node-id="ONQBRmfbzhGVNlhiA6JTsH"></div></div>
+        <span class="lnk-n" data-page-node-id="PpoO7u3CZDkDGOkHdZHHp9">56 次</span></div><div class="lnk" data-page-node-id="gnmIuVTQ92c9EFxFEHrXAW"><span class="lnk-ip" data-page-node-id="pnaof6lfoZdjNuM7HaI3sD">192.168.0.102</span>
+        <div class="lnk-bar" data-page-node-id="wRXYZIqdnFartNZBdutgSl"><div class="lnk-fill" style="width:32%" data-page-node-id="EtND3WjnPth5jH5jr8vGom"></div></div>
+        <span class="lnk-n" data-page-node-id="yFSI1xzBWJ97Q03glVL7Vg">18 次</span></div><div class="lnk" data-page-node-id="LDZEAlcNv3y7nYBHD9N9Ka"><span class="lnk-ip" data-page-node-id="xPJkjvbb6VDSu4I3pjtCsC">192.168.0.45</span>
+        <div class="lnk-bar" data-page-node-id="DwmYu3ghk0eAG23QypOeu2"><div class="lnk-fill" style="width:32%" data-page-node-id="7g8cc7QPtmR182pawcFcex"></div></div>
+        <span class="lnk-n" data-page-node-id="Bzago0UVqhPSrPAtApRsG5">18 次</span></div><div class="lnk" data-page-node-id="Ai9PSOadmWfQiGkp8aBwlQ"><span class="lnk-ip" data-page-node-id="MKAGb9LqtwFUCw6DdUEBnV">192.168.0.17</span>
+        <div class="lnk-bar" data-page-node-id="E5lK5Ep9EL677j8OKY6tOr"><div class="lnk-fill" style="width:3%" data-page-node-id="md4aJt3J4WAav9eV9OO9c6"></div></div>
+        <span class="lnk-n" data-page-node-id="3HUm9crTyErixAdZtr9yoF">2 次</span></div><div class="lnk" data-page-node-id="5betyBZd1nJGGxQe1PHVlC"><span class="lnk-ip" data-page-node-id="qjNsX01UDrMLFuBcAYuadX">192.168.0.28</span>
+        <div class="lnk-bar" data-page-node-id="vW5o19KMyG5tE4nzL7F3sN"><div class="lnk-fill" style="width:3%" data-page-node-id="ixLNvakmvWtDd8xeCLOYJe"></div></div>
+        <span class="lnk-n" data-page-node-id="d27oDpCHYVf1LvhvoJxG4g">2 次</span></div></div>
+  </div>
+  <div class="os-note" data-page-node-id="6HPJMxnuCkYwM3PoQe6ehC">反向验证：192.168.0.102 的入站记录中，来自 192.168.0.8 的连接
+    202 条
+    —— 与出站数据互为印证，证明同一份数据可同时支撑设备画像与用户画像</div>
+</div>
+
+
+
+<div class="card" data-page-node-id="bjm3vDor43gxWT4kEC9wZh">
+  <h3 data-page-node-id="C0z8SfPr00kd4UCggBchv3">本 POC 暴露的数据缺口</h3>
+  <table class="gap" data-page-node-id="T04YhfY3L7YNLo1q0rUymD">
+    <tr data-page-node-id="gIBAyFefcrfOgRZ7Y8mtfg"><th data-page-node-id="sEzElNZB8R9ZO6BGDxC0c2">缺口</th><th data-page-node-id="W7evaokdgUIQB8J46Osa9B">实测情况</th><th data-page-node-id="MVtLxxsRk4DYlm2G3L54ih">对画像的影响</th><th data-page-node-id="nFjMTi5FHPsVcbGLamPM3M">修复成本</th></tr>
+    <tr data-page-node-id="qYsUv8cGLGoW2H0Re1JtIV">
+      <td data-page-node-id="mcAPuglUHDGsN0FGitJT85">责任人字段为空</td>
+      <td data-page-node-id="04qjOLXRWdaWUSF2TRuDDl">76 个资产中 72 个 owner 为 NULL（94.7%）</td>
+      <td data-page-node-id="BpPP4d9yNRYgW88dN8UVMI">库表层无法直接回答「这是谁的」</td>
+      <td data-page-node-id="GqgFCriqsQFFnFFi5Xw66r"><span class="tag low" data-page-node-id="yNyKtErYHfflYsZkmCrxMk">低</span> 用 OpenSearch 抽取结果回填即可</td>
+    </tr>
+    <tr data-page-node-id="AnEeJ5DExtp4vfsL8Uxecf">
+      <td data-page-node-id="B5aVM4ub6AuYh2BlEpelh9">用户名未归一化</td>
+      <td data-page-node-id="O0WlID4ZlaAhPpv4VmEnjC"><code data-page-node-id="e5OSOxcVOZmKnt9NOHMEtL">xiejava</code> 与 <code data-page-node-id="DYuV2unEBkB1pn1dgqIQtj">xiejava(uid=1000)</code> 被计为两个账号</td>
+      <td data-page-node-id="eCFGt7aWMfMzdkc5i7rWnI">账号统计失真（本例 381 + 175 应为 556 一次计）</td>
+      <td data-page-node-id="QDhmiA7Tlz5iz651Z2IUgD"><span class="tag low" data-page-node-id="yrWqFvkaRVeBi0FB2osMZW">低</span> 加归一化规则剥离 (uid=N) 后缀</td>
+    </tr>
+    <tr data-page-node-id="EmuqzDVcLSXDjIibjWJxwI">
+      <td data-page-node-id="wZ4Lh45jCUl339XDgpK0Nf">告警聚合表丢源 IP</td>
+      <td data-page-node-id="MWGcDOnVLmppCgfN6XJYkQ"><code data-page-node-id="MzIcvWkUIFcOOxXIKcTJf6">soc_alert_groups.top_srcips</code> 全为 NULL</td>
+      <td data-page-node-id="OY7Hmyhg8HqjDbYBrmdEFS">库表无法回答「谁发起的」，必须回 OpenSearch</td>
+      <td data-page-node-id="BwqAR53M2kKXEO368Xdcnq"><span class="tag mid" data-page-node-id="OqJOnuCigRSt8D2AQbbhmB">中</span> 需建身份管道后回填</td>
+    </tr>
+    <tr data-page-node-id="zog3Ne0Fqs3EPxnsJEKSrj">
+      <td data-page-node-id="OSMzy36J9BtvV1OF4BAwNu">风险历史非连续</td>
+      <td data-page-node-id="RCJH1EOMdvdqWR12sHR8Nt">828 行但时间跨度仅 8/21–8/22（1.3 天）</td>
+      <td data-page-node-id="tBoHrpbMYaY6jclxtOj7zK">「风险趋势」维度当前无数据支撑</td>
+      <td data-page-node-id="5AZPVSdv3EcgH8W1S8FxBL"><span class="tag mid" data-page-node-id="93YgpUrJtEzyn8qdhYauRU">中</span> 需建立每日评分落库</td>
+    </tr>
+    <tr data-page-node-id="WObNYEPdCD4EHce7rWSZAU">
+      <td data-page-node-id="oJqbQXyegglhXTWs6gi8XC">资产类型判定不准</td>
+      <td data-page-node-id="2bGQcga8mDelzEuWpQDEOw">192.168.0.8（Mac Mini）被 tplink-router 标为 <code data-page-node-id="DNh2K0FsuydVAdJm7XfFjV">server</code></td>
+      <td data-page-node-id="Uo8Saktqg4B8yaK5yspUri">画像的「设备角色」判断会出错</td>
+      <td data-page-node-id="E5qchdVfsj3gGKijHBy1uw"><span class="tag mid" data-page-node-id="4LyWqZdDcyQMNNaumeJvei">中</span> 需多源融合判定或人工校正</td>
+    </tr>
+    <tr data-page-node-id="QPJfYZJ1R5WBSJ8mhchLtx">
+      <td data-page-node-id="NRG3KcEoCuAGVy5ak56ZRW">Loki 仅保留 7 天</td>
+      <td data-page-node-id="tvAhDJFPVNePTlZEIPBSq2">上网行为原始数据 7 天后不可回溯</td>
+      <td data-page-node-id="DwLGtupdPhdptZXNPtIkZm">行为画像最长只能看 7 天原始记录（基线表可看更久）</td>
+      <td data-page-node-id="XLooNEO0bl4bpdNM4NMH2j"><span class="tag high" data-page-node-id="pyXOVbOT7AHDlXPFcXOIEW">高</span> 需调整保留策略或落库汇总</td>
+    </tr>
+    <tr data-page-node-id="rzEDV89g17VAH9EUgIBTJ5">
+      <td data-page-node-id="aSgJeY5D0S6y2z9ICQWiWP">历史数据混入</td>
+      <td data-page-node-id="n3iVq8ruJMgYMhYFuQIpQ7">抽取到 2026-03-14 的 kali 主机登录记录</td>
+      <td data-page-node-id="8W8aU3miAQckjnS4FzYnQS">时间范围需显式过滤，否则画像含陈旧数据</td>
+      <td data-page-node-id="RVJs8KvASU3Fc46uzOz7DN"><span class="tag low" data-page-node-id="bz08lXtwSSvv17HZQNQB4D">低</span> 查询加时间下界</td>
+    </tr>
+  </table>
+</div>
+
+
+
+<div class="card concl" data-page-node-id="rWJ9UKAxrf7LaAYSgEaKNw">
+  <h3 data-page-node-id="mxFqANtT8snpmz00lt3XKc">POC 结论：A → B 通道已验证可行</h3>
+  <div class="concl-grid" data-page-node-id="lRxs9Q6gRixA45jf2BT1nQ">
+    <div class="cg" data-page-node-id="URU7v8meOFFA91TaGHS8AH">
+      <div class="cg-h ok" data-page-node-id="4vBj0Mswmu7voYgCXWuHab">已验证成立</div>
+      <ul data-page-node-id="ROigUpAg6vnfeDaAFURuUt">
+        <li data-page-node-id="pimUuwRhju3regYqDjWmgJ"><b data-page-node-id="BUG0LsKJ4iXPbHexmbezPA">设备画像（A）数据现成</b>：192.168.0.102 直接从库表拿到
+          866 组告警、
+          4 个端口、79 个基线域名，无需任何新管道</li>
+        <li data-page-node-id="tcqV7XD99bCLhKxHwxRDs2"><b data-page-node-id="M6Xnj1CympnA1l3STie0Y8">身份抽取（B 的地基）可行</b>：从 OpenSearch 成功抽取到
+          610 条入站 +
+          214 条出站认证记录，
+          用户名与源 IP 均可从 <code data-page-node-id="SCMnAfZh1Mw8B0C46QMuf0">full_log</code> 正则提取</li>
+        <li data-page-node-id="GaBsLD1s9tG77L6Jnt2HYY"><b data-page-node-id="e6yPX7FUNc1NpFIVrBMDh1">一份数据两个视角</b>：192.168.0.102 的「入站」= 192.168.0.8 的「出站」，
+          同一份抽取结果同时支撑设备画像与用户画像</li>
+        <li data-page-node-id="XVYpA7pQYHP1wPLOmi718n"><b data-page-node-id="rbnqQFRLVqDcwglD4YKcvT">用户画像（B）价值已现</b>：账号 xiejava 的画像已可成形 ——
+          主用设备 192.168.0.8，32 天访问
+          977 个域名
+          （89,799 次），
+          SSH 管理 5 台主机</li>
+      </ul>
+    </div>
+    <div class="cg" data-page-node-id="pH53JOHTZgbztXKAGWJvQl">
+      <div class="cg-h warn" data-page-node-id="T8CiZojtXyI4AC3BnqSn2G">需要注意</div>
+      <ul data-page-node-id="l8xjY9uzOuHlCUEyPo2peJ">
+        <li data-page-node-id="FbUFaG6uT6voCLblxfs1yb"><b data-page-node-id="wDMwqHpN4g67HBjPJ3hDP9">两个 IP 的数据分布极度不均</b>：192.168.0.102 有
+          76,055 条告警而 192.168.0.8 为 0
+          （后者没装 Wazuh agent）。<b data-page-node-id="kygvvHubZwF0TUzX1STOLk">画像的丰富度直接取决于该设备装没装 agent</b></li>
+        <li data-page-node-id="NRDViuHzaHJZctPP1Q3CtA"><b data-page-node-id="mQ2abkpqqT9Ry1XbS1Q7sB">用户画像强依赖 OpenSearch</b>：抽掉它，192.168.0.8 只剩
+          「977 个域名 + 6 个端口」，几乎画不出「人」</li>
+        <li data-page-node-id="GByBaKjOiUOktJKg6AmEvP"><b data-page-node-id="VVBQy9Gu3yR6eBDKdIQ8ir">行为异常维度会继承 P2 误报</b>：本次 192.168.0.8 的 4 条异常事件中
+          4 条命中 R3、4 条命中 R4，而 R4 已知存在 STUN 误伤问题</li>
+        <li data-page-node-id="6aVUASf5AVchYTZmmwGM9r"><b data-page-node-id="LwJu5ji1G3eSlS9gJJSOL1">POC 数据为单次快照</b>：身份映射未落库，每次查询需重新抽取
+          （本次耗时约 20 秒），产品化必须建
+          <code data-page-node-id="ROsVJpfBbgM2qoU1GzB9Zn">soc_identity_events</code> 持久化</li>
+      </ul>
+    </div>
+  </div>
+  <div class="next" data-page-node-id="IDGlmCJk5WR6AdZCSEtsOX">
+    <div class="next-h" data-page-node-id="LLYYzf9P0LlSzm1e0csuih">建议下一步</div>
+    <ol data-page-node-id="WKbNhL3zvTuHwPHLjtHYGk">
+      <li data-page-node-id="a1uXLfsLGesNQx5qvztwbf"><b data-page-node-id="0zQSRPhHUXOdDaUe19fgb8">先做 P2 止血</b>（3 个配置项，1 小时内）—— 消除 83% 的 STUN 误报，
+        否则画像的「行为异常」维度不可信</li>
+      <li data-page-node-id="A0WG6nFNya3OHtZeacHMtF"><b data-page-node-id="ld2LlqDU6qQrQKkwh2RQEB">Phase 0 身份管道落地</b>（3–5 天）—— 建
+        <code data-page-node-id="CSkiuU7PO8mryXB8ofahvu">soc_identity_events</code> + <code data-page-node-id="LkqoqJYKHdaIR7zAVpFz56">soc_identity_bindings</code>，
+        定时从 OpenSearch 抽取并归一化用户名，回填 <code data-page-node-id="JHSqIqqCUUOe8gLZImhLH6">soc_assets.owner</code></li>
+      <li data-page-node-id="d0UaF7cFS9kyjbgJauOypc"><b data-page-node-id="ZjAbuM9FdiKDmCLD0mNrIF">Phase 2 产品化</b>（2–3 周）—— 后端画像服务 + 前端页面 + MCP 工具，
+        从资产/告警/事件列表一键下钻到画像页</li>
+    </ol>
+  </div>
+</div>
+
+
+<footer data-page-node-id="BzGJjMW2okSgJsnmEAT9qk">
+数据获取方式：PostgreSQL 直连查询 52 张 <code data-page-node-id="ts7h4vw4KzjTUaWKOteuEf">soc_</code> 表；
+OpenSearch <code data-page-node-id="7H09UkapoEBTKsUXmEC2DS">wazuh-alerts-4.x-*</code> 索引（30 个，1,284,210 条），
+按认证类规则（5715/5501/5502/5503/5710/5760/5763/5551/99904）检索，
+用正则从 <code data-page-node-id="AOVGl7sEon7gLZZqAYEDuS">full_log</code> 提取用户名与源 IP。
+<br data-page-node-id="iJpIxlexixWQepS6EdfKd5">
+采集脚本：<code data-page-node-id="BXMpBDAXvYastH8Rqbqwc6">src/backend/scripts/profile_poc_collect.py</code>　
+报告生成：<code data-page-node-id="NM4LQ60IyeNUDf1rAyAYMM">src/backend/scripts/profile_poc_report.py</code>
+<br data-page-node-id="Ddc2HUZNHw3CFQgD10kctO">
+<b data-page-node-id="c2dEYw3ap5FpCgBJnHAMyH">合规提示</b>：本报告涉及可识别到个人的行为数据，仅限安全审计用途，
+查看行为本身应记入 <code data-page-node-id="u4BpaXX5j8GAb94zkYnsjV">soc_audit_logs</code>。
+</footer>
+</div></body></html>

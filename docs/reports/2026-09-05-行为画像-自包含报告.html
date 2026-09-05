@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="0lcaCLDHnj75KoFDg7DsdC">
+<head data-page-node-id="UJyCO2TecsCWckbi5zH7OO">
+<meta charset="utf-8" data-page-node-id="gZMgl8CsPYSrQS4ifzl48Q">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="snpcrZpyrTBav2wGfKSZo3">
+<title>AI-miniSOC · 上网行为画像报告（自包含）</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;color:#1f2937;line-height:1.6;font-size:14px}
+.wrap{max-width:1280px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:25px;font-weight:700;letter-spacing:-.4px}
+.sub-t{color:#6b7280;margin-top:6px;font-size:13px}
+.hd{padding:24px 0 16px;border-bottom:2px solid #e5e7eb;margin-bottom:20px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.badge{background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:5px 11px;font-size:12px;color:#4b5563}
+.badge b{color:#111827}
+.tip{background:#fff4e6;border:1px solid #ffd8a8;color:#9a5800;border-radius:8px;padding:11px 14px;font-size:12.5px;margin:14px 0 22px;line-height:1.7}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+.nav-i{display:flex;flex-direction:column;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 13px;text-decoration:none;transition:.15s}
+.nav-i:hover{border-color:#1971c2;transform:translateY(-1px)}
+.nav-i b{font-size:12.5px;color:#111827;font-family:ui-monospace,monospace}
+.nav-i span{font-size:11px;color:#6b7280;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ent{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:22px;margin-bottom:26px}
+.ent-hd{display:flex;gap:22px;flex-wrap:wrap;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid #f1f3f5;margin-bottom:6px}
+.ent-ip{font-family:ui-monospace,monospace;font-size:19px;font-weight:700;color:#0b3d91}
+.ent-nm{font-size:15px;color:#374151;margin-top:2px}
+.ent-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.chip{font-size:11px;padding:2px 8px;border-radius:4px;background:#f1f3f5;color:#4b5563}
+.c-gray{background:#eef2f7;color:#475569}
+.c-owner{background:#e7f5ff;color:#1864ab}
+.ent-kpi{display:flex;gap:20px;flex-wrap:wrap}
+.metric{text-align:right;min-width:78px}
+.mv{font-size:21px;font-weight:700;line-height:1.15;font-family:ui-monospace,monospace}
+.ml{font-size:11.5px;color:#6b7280}
+.sub{font-size:10.5px;color:#9ca3af}
+.sec-t{font-size:14px;font-weight:600;margin:20px 0 11px;color:#111827}
+.sec-s{font-weight:400;color:#9ca3af;font-size:11.5px;margin-left:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:980px){.grid2{grid-template-columns:1fr}}
+.card{background:#fff;border:1px solid #e9ecef;border-radius:10px;padding:16px;margin-bottom:16px}
+.card-t{font-size:13px;font-weight:600;margin-bottom:13px;color:#374151}
+.hint{font-size:11.5px;color:#6b7280;margin-top:10px}
+.empty{color:#9ca3af;font-size:12.5px;padding:14px;background:#f8f9fa;border-radius:8px}
+.tags{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.tag{border:1px solid var(--tc);border-left:4px solid var(--tc);border-radius:8px;padding:11px 13px;background:linear-gradient(90deg,color-mix(in srgb,var(--tc) 6%,#fff),#fff)}
+.tag-n{font-size:14.5px;font-weight:700;color:var(--tc)}
+.tag-alias{font-size:11px;font-weight:600;color:#868e96;margin-left:6px;background:#f1f3f5;padding:1px 7px;border-radius:10px;white-space:nowrap}
+.tag-d{font-size:11.5px;color:#4b5563;margin-top:3px}
+.tag-e{font-size:10.5px;color:#9ca3af;margin-top:6px;font-family:ui-monospace,monospace}
+.hb{display:flex;align-items:flex-end;gap:2px;height:132px}
+.hb-col{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.hb-track{flex:1;width:100%;display:flex;align-items:flex-end}
+.hb-fill{width:100%;border-radius:2px 2px 0 0;min-height:2px}
+.hb-lbl{font-size:9px;color:#9ca3af;margin-top:4px}
+.hb-col.peak .hb-lbl{color:#d9480f;font-weight:700}
+.hm{overflow-x:auto}
+.hm-row{display:flex;gap:2px;margin-bottom:2px;align-items:center}
+.hm-rl{width:34px;font-size:10.5px;color:#6b7280;flex-shrink:0}
+.hm-c{flex:1;height:16px;border-radius:2px;min-width:0}
+.hm-h{height:auto;font-size:8.5px;color:#9ca3af;text-align:center;background:none}
+.bb-row,.cb-row{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.bb-name{width:34px;font-size:12px;color:#4b5563;flex-shrink:0}
+.bb-track,.cb-track{flex:1;height:16px;background:#f1f3f5;border-radius:3px;overflow:hidden}
+.bb-fill,.cb-fill{height:100%;border-radius:3px}
+.bb-v,.cb-v{width:96px;text-align:right;font-size:11.5px;color:#374151;font-family:ui-monospace,monospace;flex-shrink:0}
+.bb-p,.cb-p{color:#9ca3af;margin-left:6px}
+.cb-name{width:88px;font-size:11.5px;color:#4b5563;display:flex;align-items:center;gap:5px;flex-shrink:0}
+.cb-ico{width:15px;height:15px;border-radius:3px;color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.st-row{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.st-b{width:34px;font-size:11.5px;color:#4b5563;flex-shrink:0}
+.st-bar{flex:1;height:19px;display:flex;border-radius:3px;overflow:hidden;background:#f1f3f5}
+.st-seg{height:100%}
+.st-lg{width:230px;font-size:10px;color:#6b7280;flex-shrink:0}
+.lg{display:inline-flex;align-items:center;gap:3px;margin-right:7px}
+.lg i{width:7px;height:7px;border-radius:2px;display:inline-block}
+.dt{width:100%;border-collapse:collapse;font-size:12px}
+.dt th{text-align:left;padding:6px 8px;color:#6b7280;font-weight:500;font-size:11px;border-bottom:1px solid #e5e7eb}
+.dt td{padding:5px 8px;border-bottom:1px solid #f8f9fa}
+.dt-d{font-family:ui-monospace,monospace;font-size:11.5px;color:#1f2937;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dt-bar{width:110px}
+.dt-bar div{height:7px;border-radius:2px}
+.dt-n{text-align:right;font-family:ui-monospace,monospace;color:#374151;white-space:nowrap}
+.layer{display:flex;gap:16px;margin-top:12px;padding-top:11px;border-top:1px solid #f1f3f5;font-size:11.5px;color:#4b5563;flex-wrap:wrap}
+.li{display:inline-flex;align-items:center;gap:5px}
+.li i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.foot{margin-top:34px;padding:20px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;font-size:12px;color:#4b5563}
+.foot h3{font-size:13px;margin-bottom:9px;color:#111827}
+.foot ul{margin:8px 0 0 18px}
+.foot li{margin-bottom:5px}
+.foot code{background:#f1f3f5;padding:1px 5px;border-radius:3px;font-size:11px}
+.note{background:#fff;border:1px solid #e5e7eb;border-left:4px solid #1971c2;border-radius:8px;padding:12px 14px;margin:14px 0;font-size:12.5px;color:#374151;line-height:1.7}
+.note b{color:#0b3d91}
+</style>
+</head>
+<body data-page-node-id="3VGgTnwF2YKUjl4NRKZA52">
+<div class="wrap" data-page-node-id="zo9Q1f6DQLzGqyWWg8OFTf">
+<div class="hd" data-page-node-id="p11OJgHoBRglHA5tcCkzhg">
+  <h1 data-page-node-id="OwVW1mH3iHM0FsNqirTKy4">AI-miniSOC · 上网行为画像报告</h1>
+  <div class="sub-t" data-page-node-id="sAPRAi0qUGZ0UlJA2Q0Lp7">基于路由器上网行为日志（Loki 原始日志逐条时间戳）的实体行为节律与兴趣构成分析</div>
+  <div class="badges" data-page-node-id="x8IFlJUkVb82MSV2g5vMno">
+    <span class="badge" data-page-node-id="THTgHKwx2hyAwRQkajN8Nm">数据源 <b data-page-node-id="FeF3QpnXAn2AfoerMTij9j">Loki 192.168.0.30:3100</b></span>
+    <span class="badge" data-page-node-id="NT0uFYtWWt8HhONwCoB1q9">窗口 <b data-page-node-id="5LyG2Lzdk7q3BFbF1EEXPe">最近 7 天</b></span>
+    <span class="badge" data-page-node-id="NXUd1u9FTeSS2BWqW2XY9d">详述主体 <b data-page-node-id="ei5yphUbcwPvVXl3Opu1iB">4 个</b>（引擎共画像 8 个）</span>
+    <span class="badge" data-page-node-id="EtT7jh7zHxiIEoLjqXBGDm">时间基准 <b data-page-node-id="ewsxX1M9yC8kU8JVrjmDAG">UTC+8</b></span>
+  </div>
+</div>
+
+<div class="tip" data-page-node-id="ZCXnI3jPhTl0eCNZmHoJ17">
+  ⚠️ <b data-page-node-id="gGH8EZWgDrFUxNhRfuflks">关于本报告的生成方式</b>：Bash 执行环境在本会话临时不可用，无法运行 Python 报告生成器。
+  本报告由采集引擎已算出的结果（<code data-page-node-id="qNRcPtDTDrHvvSJNYjC6DK">behavior_profile_data.json</code>）内联、浏览器端 JS 直接渲染而成，
+  数据与后端采集完全一致。引擎共对 8 个 IP 完成画像，此处呈现 4 个数据最完整、特征最鲜明的主体
+  （.8 你的开发机 / .100 AI 工作站 / .17 NAS 下载机 / .25 追剧手机）；
+  其余 4 个为服务器/扁平机器流量（含 owner=佳佳 的 Redmi-Note-11 手机），画像偏薄，未详述。
+</div>
+
+<div class="nav" id="nav" data-page-node-id="udwugLMg7PZc2c6PAwNATy"></div>
+<div id="secs" data-page-node-id="0BSrIMwBT2OhW73KvFHO1z"></div>
+
+<div class="foot" data-page-node-id="M0CV7uT8UQoaHr0GKLnEg8">
+  <h3 data-page-node-id="dNPqMMrQkIr7jG2BGsc1Sk">数据说明与已知偏差（PM 视角）</h3>
+  <ul data-page-node-id="GUTEGi5Cpls25ccgn1RtEk">
+    <li data-page-node-id="E7ACzCfi7itm0kTXFW3Us8"><b data-page-node-id="cDTfsVlB5CKF3JVucVGpMm">采集方式</b>：时段统计以 Loki 原始日志时间戳逐条计数，未用 <code data-page-node-id="0amc4vQ2mH6XGER4YRhtKq">count_over_time</code> 聚合（实测该聚合 step=1h 下存在窗口标签错位与边界重复计数，会使时段画像失真）。</li>
+    <li data-page-node-id="23uaqmex3jJc9A1rgNGyts"><b data-page-node-id="dWaC3mo3FZMzFM8lVjE3Gy">时间窗</b>：Loki 仅保留 7 天，本画像为最近 7 天，无法反映月度/季度长期节律。</li>
+    <li data-page-node-id="IZlQquPC82Fj4IfOlMzk3V"><b data-page-node-id="RWi7X5AUo75CVcuuUDOpiN">行为分层</b>：访问分「主动行为 / 系统背景 / 广告追踪」三层。NTP 校时、DNS、系统更新、遥测上报、广告 SDK 回传属机器行为，已隔离；<b data-page-node-id="n1Vrw7wci3oIJDcuNqw2Bh">画像标签与兴趣分类只基于主动行为</b>。</li>
+    <li data-page-node-id="XOt1qan8V1kJdxkA0nmHVW"><b data-page-node-id="Qoq1AC1Q3DxDjd6ql0zX4n">分类方法</b>：域名分类为关键词规则匹配，存在误判（如 <code data-page-node-id="UEiTPx5odlDOJkORN4d10F">apple.com</code> 同时承载系统与个人服务；<code data-page-node-id="trbtBkFMqehD6BdMCeUlKz">countly.mail.163.com</code> / <code data-page-node-id="QPJtEizepW6GNKu0zSQMsS">woodcattle-qz.dashi.163.com</code> 实为网易邮箱客户端心跳/遥测，被归为「工作办公」）。</li>
+    <li data-page-node-id="eWydLyfykl0s79mJCSQNtv"><b data-page-node-id="mK87v0bxAmgLWpGQYbWbji">两个关键噪声</b>：① <b data-page-node-id="dUaVCWYzFPU7b8ifADBUNx">.8 的「工作办公 95.6%」主要是网易邮箱心跳</b>（countly + woodcattle 合计占 95%），并非真实办公行为，解读时须扣除；② <b data-page-node-id="GgKH4k7OnKWsFZHRcfYO3C">.17 的小时曲线几乎完全平直（~4100/小时）</b>，属 NAS 的 STUN/隧道/P2P 机器轮询，不是人的作息——这类「扁平曲线」设备不适合做人类行为画像。</li>
+    <li data-page-node-id="3GCWCglX23wJsOwvYoEpix"><b data-page-node-id="w6HmpEVkOJMJkuTbXHbRKy">IP ≠ 人</b>：主体是 IP/设备，同一 IP 背后可能多人共用（如家庭/共享设备），需结合认证日志建立身份管道才能落到自然人。</li>
+    <li data-page-node-id="iDuejuEefJM9k1r14FEYEA"><b data-page-node-id="rrl8rQTUrvxXtpKPZ5EF2b">覆盖偏差</b>：画像丰富度取决于设备是否持续在线；离线设备画像偏薄，不能据此推断使用者「行为简单」。</li>
+  </ul>
+</div>
+</div>
+
+<script>
+const DATA = {
+  "time_blocks": [
+    {"name":"深夜","label":"00-06","color":"#4c6ef5"},
+    {"name":"早晨","label":"06-09","color":"#22b8cf"},
+    {"name":"上午","label":"09-12","color":"#51cf66"},
+    {"name":"午间","label":"12-14","color":"#fcc419"},
+    {"name":"下午","label":"14-18","color":"#ff922b"},
+    {"name":"傍晚","label":"18-21","color":"#ff6b6b"},
+    {"name":"夜间","label":"21-24","color":"#845ef7"}
+  ],
+  "categories": {
+    "AI 工具":{"layer":"ACT","color":"#7048e8","icon":"✦"},
+    "开发技术":{"layer":"ACT","color":"#1971c2","icon":"⌘"},
+    "工作办公":{"layer":"ACT","color":"#0c8599","icon":"▤"},
+    "影音娱乐":{"layer":"ACT","color":"#e64980","icon":"▶"},
+    "小说阅读":{"layer":"ACT","color":"#d6336c","icon":"❏"},
+    "电商购物":{"layer":"ACT","color":"#f76707","icon":"🛒"},
+    "社交沟通":{"layer":"ACT","color":"#20c997","icon":"◍"},
+    "游戏":{"layer":"ACT","color":"#ae3ec9","icon":"◈"},
+    "新闻资讯":{"layer":"ACT","color":"#868e96","icon":"▦"},
+    "下载传输":{"layer":"ACT","color":"#5c7cfa","icon":"⇩"},
+    "移动设备":{"layer":"ACT","color":"#4c6ef5","icon":"▢"},
+    "系统背景":{"layer":"SYS","color":"#adb5bd","icon":"⚙"},
+    "广告追踪":{"layer":"AD","color":"#ced4da","icon":"◌"},
+    "其他":{"layer":"ACT","color":"#868e96","icon":"·"}
+  },
+  "targets": [
+    {
+      "ip":"192.168.0.8",
+      "asset":{"name":"xiejavadeMini","asset_type":"server","owner":null,"os_name":null},
+      "stats":{
+        "total":10963,"days":5,"daily_avg":2193,"domain_count":145,"active_hours":96,"peak_hour":20,
+        "act_total":10924,
+        "by_hour":[424,439,402,453,415,453,462,465,462,460,462,447,454,394,453,433,436,431,414,414,939,412,419,420],
+        "wd_hour":[
+          [120,112,99,137,122,117,132,117,99,90,120,129,100,99,111,103,103,108,96,93,111,111,111,90],
+          [121,103,116,111,96,144,127,139,123,120,111,132,117,90,126,108,120,103,132,111,595,102,101,111],
+          [81,105,90,102,93,90,109,114,126,147,78,0,0,0,0,0,0,0,0,0,0,0,0,0],
+          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+          [0,0,0,0,0,0,0,0,0,0,0,72,114,102,105,111,117,106,84,99,103,97,96,96],
+          [102,119,97,103,104,102,94,95,114,103,153,114,123,103,111,111,96,114,102,111,130,102,111,123]
+        ],
+        "by_block":{"深夜":2586,"早晨":1389,"上午":1369,"午间":848,"下午":1753,"傍晚":1767,"夜间":1251},
+        "workday":7024,"weekend":3939,"workday_share":64.1,
+        "cat_visit":{"工作办公":10446,"开发技术":156,"AI 工具":93,"其他":86,"移动设备":78,"游戏":57,"系统背景":30,"广告追踪":9,"社交沟通":4,"下载传输":3,"新闻资讯":1},
+        "cat_by_block":{
+          "深夜":{"工作办公":2580,"游戏":6},
+          "早晨":{"工作办公":1380,"游戏":9},
+          "上午":{"工作办公":1322,"开发技术":11,"其他":8,"AI 工具":9,"系统背景":2,"游戏":11,"移动设备":6},
+          "夜间":{"工作办公":1242,"游戏":9},
+          "下午":{"工作办公":1750,"游戏":3},
+          "傍晚":{"工作办公":1324,"其他":78,"AI 工具":84,"游戏":19,"系统背景":28,"移动设备":72,"开发技术":145,"广告追踪":9,"新闻资讯":1,"社交沟通":4,"下载传输":3},
+          "午间":{"工作办公":848}
+        },
+        "layer_visit":{"ACT":10924,"SYS":30,"AD":9},
+        "top_domains":[
+          {"domain":"countly.mail.163.com","visits":5633,"category":"工作办公"},
+          {"domain":"woodcattle-qz.dashi.163.com","visits":4778,"category":"工作办公"},
+          {"domain":"webzjac.reg.163.com","visits":36,"category":"游戏"},
+          {"domain":"multica.doai8.dpdns.org","visits":27,"category":"AI 工具"},
+          {"domain":"dns.google","visits":26,"category":"系统背景"},
+          {"domain":"galileotelemetry.tencent.com","visits":24,"category":"AI 工具"},
+          {"domain":"copilot.tencent.com","visits":20,"category":"AI 工具"},
+          {"domain":"github.com","visits":17,"category":"开发技术"},
+          {"domain":"proj-xtrace-...-aliyuncs.com","visits":15,"category":"开发技术"},
+          {"domain":"docs.gtimg.com","visits":15,"category":"工作办公"},
+          {"domain":"main.vscode-cdn.net","visits":15,"category":"开发技术"},
+          {"domain":"alive.github.com","visits":12,"category":"开发技术"}
+        ]
+      },
+      "tags":[
+        {"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 23.6%"},
+        {"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 29.6%"},
+        {"name":"典型打工人","desc":"工作日显著高于周末","color":"#1971c2","evidence":"工作日占比 64.1%"}
+      ]
+    },
+    {
+      "ip":"192.168.0.100",
+      "asset":{"name":"wazuh-agent-test-001","asset_type":"server","owner":null,"os_name":"Ubuntu Linux"},
+      "stats":{
+        "total":198116,"days":8,"daily_avg":24764,"domain_count":344,"active_hours":169,"peak_hour":10,
+        "act_total":191194,
+        "by_hour":[7967,7996,7960,7902,8536,7680,7664,8006,8144,7677,9780,8392,8338,8070,8537,8424,8546,7920,8331,8319,8843,8058,8852,8174],
+        "wd_hour":[
+          [986,1003,942,1023,1073,902,942,971,979,982,1200,982,1114,935,1111,1015,1023,1298,1371,1483,1419,1094,1143,1077],
+          [1002,1043,1044,1007,1200,974,986,979,1011,906,1159,963,967,960,956,954,1039,932,1213,1039,1018,1280,1277,1160],
+          [1164,1131,1139,1120,1228,1183,1082,1172,1162,1035,1314,1292,1181,1111,1225,1163,1277,1158,1157,1127,1519,1270,1181,1252],
+          [1306,1207,1167,1177,1246,1138,1122,1187,1324,1254,1287,1114,1100,1149,1183,1119,1217,1031,1046,1120,1262,1050,1533,1087],
+          [1046,1014,1067,1081,1127,978,1047,1092,1068,959,1300,1056,1144,1080,1173,1224,1201,1070,1092,1126,1145,1059,1195,1123],
+          [1117,1100,1118,1149,1199,1071,1062,1144,1090,1075,1388,1351,1470,1391,1447,1442,1480,1442,1424,1449,1518,1451,1508,1488],
+          [1346,1498,1483,1345,1463,1434,1423,1461,1510,1466,2132,1634,1362,1444,1442,1507,1309,989,1028,975,962,854,1015,987]
+        ],
+        "by_block":{"深夜":48041,"早晨":23814,"上午":25849,"午间":16408,"下午":33427,"傍晚":25493,"夜间":25084},
+        "workday":134673,"weekend":63443,"workday_share":68.0,
+        "cat_visit":{"AI 工具":96992,"开发技术":38500,"移动设备":26611,"工作办公":18028,"系统背景":5015,"其他":4588,"游戏":4254,"广告追踪":1907,"社交沟通":1902,"下载传输":144,"IP 直连":67,"新闻资讯":41,"影音娱乐":28,"电商购物":20,"小说阅读":19},
+        "cat_by_block":{
+          "深夜":{"AI 工具":24359,"开发技术":9033,"移动设备":6610,"系统背景":1154,"工作办公":4190,"广告追踪":480,"社交沟通":189,"游戏":944,"其他":1004,"下载传输":32,"IP 直连":36,"影音娱乐":10},
+          "早晨":{"AI 工具":12076,"开发技术":4472,"移动设备":3270,"系统背景":603,"工作办公":1961,"广告追踪":222,"社交沟通":225,"游戏":448,"其他":486,"下载传输":28,"IP 直连":16,"影音娱乐":7},
+          "上午":{"AI 工具":12107,"开发技术":5477,"移动设备":3543,"系统背景":680,"工作办公":1919,"广告追踪":305,"社交沟通":293,"游戏":576,"其他":885,"新闻资讯":17,"电商购物":12,"下载传输":12,"小说阅读":9,"IP 直连":7,"影音娱乐":7},
+          "夜间":{"AI 工具":12314,"开发技术":4933,"移动设备":3688,"系统背景":633,"工作办公":2000,"广告追踪":216,"社交沟通":172,"游戏":516,"其他":608,"下载传输":4},
+          "下午":{"AI 工具":15989,"开发技术":6542,"移动设备":4241,"系统背景":865,"工作办公":3395,"广告追踪":316,"社交沟通":453,"游戏":712,"其他":890,"下载传输":4,"小说阅读":8,"影音娱乐":4,"IP 直连":8},
+          "傍晚":{"AI 工具":12099,"开发技术":5075,"移动设备":3204,"系统背景":663,"工作办公":2619,"广告追踪":220,"社交沟通":346,"游戏":726,"其他":475,"下载传输":32,"新闻资讯":24,"小说阅读":2,"电商购物":8},
+          "午间":{"AI 工具":8048,"开发技术":2968,"移动设备":2055,"系统背景":417,"工作办公":1944,"广告追踪":148,"社交沟通":224,"游戏":332,"其他":240,"下载传输":32}
+        },
+        "layer_visit":{"ACT":191194,"SYS":5015,"AD":1907},
+        "top_domains":[
+          {"domain":"copilot.tencent.com","visits":53256,"category":"AI 工具"},
+          {"domain":"galileotelemetry.tencent.com","visits":23512,"category":"AI 工具"},
+          {"domain":"proj-xtrace-...-aliyuncs.com","visits":13444,"category":"开发技术"},
+          {"domain":"docs.gtimg.com","visits":9377,"category":"工作办公"},
+          {"domain":"main.vscode-cdn.net","visits":8576,"category":"开发技术"},
+          {"domain":"weatherkit.apple.com","visits":7528,"category":"移动设备"},
+          {"domain":"open.volcengineapi.com","visits":7186,"category":"AI 工具"},
+          {"domain":"update.code.visualstudio.com","visits":6900,"category":"开发技术"},
+          {"domain":"sg.tgalileo.com","visits":5576,"category":"AI 工具"},
+          {"domain":"sigma-...nie.netease.com","visits":3200,"category":"游戏"},
+          {"domain":"multica.doai8.dpdns.org","visits":3088,"category":"AI 工具"},
+          {"domain":"gateway.icloud.com.cn","visits":3047,"category":"移动设备"}
+        ]
+      },
+      "tags":[
+        {"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 24.2%"},
+        {"name":"全天候在线","desc":"几乎每个小时都有流量","color":"#0c8599","evidence":"169/192 小时有活动"},
+        {"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 26.8%"},
+        {"name":"周末战士","desc":"周末比工作日更活跃","color":"#e8590c","evidence":"周末日均 31,721 vs 工作日 22,445"},
+        {"name":"AI 重度用户","desc":"AI 工具访问占比显著","color":"#7048e8","evidence":"AI 类占主动行为 50.7%"},
+        {"name":"码农","desc":"开发工具/云平台访问密集","color":"#1971c2","evidence":"开发类占 20.1%"}
+      ]
+    },
+    {
+      "ip":"192.168.0.17",
+      "asset":{"name":"xiejava-fnNAS","asset_type":"server","owner":null,"os_name":"Debian GNU/Linux"},
+      "stats":{
+        "total":100413,"days":8,"daily_avg":12552,"domain_count":56,"active_hours":169,"peak_hour":20,
+        "act_total":46466,
+        "by_hour":[4238,4072,4092,4066,4140,4104,4132,4108,4220,4112,4224,4100,4126,4076,4106,4226,4319,4287,4241,4262,4379,4252,4347,4184],
+        "wd_hour":[
+          [607,582,581,584,587,572,574,581,621,581,590,585,584,583,576,590,611,601,609,587,636,610,610,586],
+          [595,574,579,580,604,579,581,589,601,606,599,588,576,578,573,606,622,600,595,612,614,601,635,597],
+          [607,580,572,575,581,614,591,578,603,588,616,587,613,582,600,616,623,612,608,621,640,618,625,604],
+          [618,596,612,591,601,581,591,580,603,593,609,593,599,590,592,610,622,644,615,608,632,600,638,608],
+          [619,587,596,582,602,590,606,627,591,592,613,593,594,581,597,608,612,593,608,609,619,626,612,588],
+          [594,578,564,572,583,579,586,579,607,581,600,579,581,578,582,597,611,628,605,593,613,603,612,603],
+          [598,575,588,582,582,589,603,574,594,571,597,575,579,584,586,599,618,609,601,632,625,594,615,598]
+        ],
+        "by_block":{"深夜":24712,"早晨":12460,"上午":12436,"午间":8202,"下午":16938,"傍晚":12882,"夜间":12783},
+        "workday":71937,"weekend":28476,"workday_share":71.6,
+        "cat_visit":{"系统背景":53947,"下载传输":22636,"开发技术":8402,"其他":5793,"移动设备":4018,"小说阅读":3359,"影音娱乐":2006,"AI 工具":168,"社交沟通":84},
+        "cat_by_block":{
+          "上午":{"其他":774,"下载传输":2866,"系统背景":6736,"开发技术":865,"影音娱乐":252,"小说阅读":420,"移动设备":502,"AI 工具":14,"社交沟通":7},
+          "夜间":{"其他":743,"下载传输":2822,"系统背景":6720,"开发技术":1308,"影音娱乐":250,"小说阅读":421,"移动设备":498,"AI 工具":14,"社交沟通":7},
+          "午间":{"其他":448,"下载传输":1885,"系统背景":4480,"开发技术":584,"影音娱乐":168,"小说阅读":280,"移动设备":336,"AI 工具":14,"社交沟通":7},
+          "早晨":{"其他":709,"下载传输":2824,"系统背景":6799,"开发技术":912,"影音娱乐":250,"小说阅读":420,"移动设备":504,"AI 工具":28,"社交沟通":14},
+          "傍晚":{"其他":711,"下载传输":2821,"系统背景":6828,"开发技术":1306,"影音娱乐":252,"小说阅读":420,"移动设备":502,"AI 工具":28,"社交沟通":14},
+          "下午":{"其他":966,"下载传输":3793,"系统背景":8988,"开发技术":1587,"影音娱乐":332,"小说阅读":560,"移动设备":670,"AI 工具":28,"社交沟通":14},
+          "深夜":{"下载传输":5625,"系统背景":13396,"其他":1442,"开发技术":1840,"影音娱乐":502,"小说阅读":838,"移动设备":1006,"AI 工具":42,"社交沟通":21}
+        },
+        "layer_visit":{"ACT":46466,"SYS":53947},
+        "top_domains":[
+          {"domain":"stun.225284.xyz","visits":22123,"category":"系统背景"},
+          {"domain":"stun-heyuan-v6.easytier.cn","visits":20113,"category":"系统背景"},
+          {"domain":"api-pan.xunlei.com","visits":4722,"category":"下载传输"},
+          {"domain":"time.apple.com","visits":4018,"category":"移动设备"},
+          {"domain":"ipv4.fnnas.com","visits":3358,"category":"下载传输"},
+          {"domain":"ipv6.fnnas.com","visits":3358,"category":"下载传输"},
+          {"domain":"6.ipw.cn","visits":3358,"category":"系统背景"},
+          {"domain":"api.cloudflare.com","visits":3358,"category":"开发技术"},
+          {"domain":"alidns.cn-hangzhou.aliyuncs.com","visits":3358,"category":"开发技术"},
+          {"domain":"stun-v6.easytier.cn","visits":2449,"category":"系统背景"},
+          {"domain":"optimizationguide-pa.googleapis.com","visits":2341,"category":"其他"},
+          {"domain":"account.fnnas.com","visits":2018,"category":"下载传输"}
+        ]
+      },
+      "tags":[
+        {"name":"夜猫子","desc":"深夜 00–06 点仍高度活跃","color":"#4c6ef5","evidence":"深夜占比 24.6%"},
+        {"name":"全天候在线","desc":"几乎每个小时都有流量","color":"#0c8599","evidence":"169/192 小时有活动"},
+        {"name":"作息发散","desc":"活动均匀铺开，无固定节律","color":"#f59f00","evidence":"Top6 小时仅占 25.7%"},
+        {"name":"码农","desc":"开发工具/云平台访问密集","color":"#1971c2","evidence":"开发类占 18.1%"},
+        {"name":"下载机","desc":"P2P/网盘下载流量显著","color":"#5c7cfa","evidence":"下载类占 48.7%"},
+        {"name":"行为极单一","desc":"只访问极少数域名","color":"#495057","evidence":"56 个域名 / 100,413 次访问"}
+      ]
+    },
+    {
+      "ip":"192.168.0.25",
+      "asset":{"name":"3113378795deRedmi-14R-5G","asset_type":"client","owner":null,"os_name":null},
+      "stats":{
+        "total":36591,"days":6,"daily_avg":6098,"domain_count":2199,"active_hours":49,"peak_hour":10,
+        "act_total":35964,
+        "by_hour":[482,321,250,21,628,2200,1375,3506,2879,621,5568,2789,0,0,0,53,57,72,45,78,3596,5012,5233,1805],
+        "wd_hour":[
+          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2384,367,390,210],
+          [0,0,18,15,12,1115,405,1242,2532,0,0,0,0,0,0,0,0,0,0,0,0,51,90],
+          [168,62,6,0,593,1065,706,420,312,0,0,0,0,0,0,0,0,0,0,0,0,62,4156,4447,1041],
+          [31,8,226,6,23,20,264,1844,35,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+          [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,49,72,45,78,1150,489,345,464],
+          [283,251,0,0,0,0,0,0,0,621,5568,2789,0,0,0,53,8,0,0,0,0,0,0,0]
+        ],
+        "by_block":{"深夜":3902,"早晨":7760,"上午":8978,"午间":0,"下午":182,"傍晚":3719,"夜间":12050},
+        "workday":24326,"weekend":12265,"workday_share":66.5,
+        "cat_visit":{"影音娱乐":23305,"小说阅读":3625,"其他":2734,"开发技术":2183,"IP 直连":1966,"移动设备":1207,"社交沟通":579,"广告追踪":433,"系统背景":194,"下载传输":136,"电商购物":136,"新闻资讯":65,"游戏":12,"AI 工具":11,"工作办公":5},
+        "cat_by_block":{
+          "深夜":{"移动设备":280,"游戏":8,"开发技术":430,"其他":446,"下载传输":40,"社交沟通":103,"广告追踪":77,"IP 直连":175,"小说阅读":516,"电商购物":11,"影音娱乐":1782,"新闻资讯":14,"系统背景":19,"AI 工具":1},
+          "早晨":{"移动设备":263,"开发技术":447,"其他":816,"下载传输":46,"游戏":1,"社交沟通":121,"IP 直连":1697,"广告追踪":115,"新闻资讯":42,"AI 工具":7,"小说阅读":884,"电商购物":54,"工作办公":2,"影音娱乐":3207,"系统背景":58},
+          "夜间":{"移动设备":304,"开发技术":786,"其他":1179,"下载传输":19,"游戏":1,"社交沟通":175,"IP 直连":55,"电商购物":47,"广告追踪":183,"影音娱乐":7779,"小说阅读":1432,"新闻资讯":9,"系统背景":80,"工作办公":1},
+          "傍晚":{"移动设备":130,"开发技术":216,"其他":123,"下载传输":20,"社交沟通":62,"IP 直连":27,"电商购物":17,"广告追踪":20,"影音娱乐":2784,"小说阅读":300,"工作办公":2,"AI 工具":3,"系统背景":14,"游戏":1},
+          "下午":{"移动设备":77,"开发技术":39,"其他":41,"下载传输":7,"社交沟通":6,"电商购物":2,"IP 直连":10},
+          "上午":{"移动设备":153,"开发技术":265,"其他":129,"下载传输":4,"游戏":1,"社交沟通":112,"IP 直连":2,"电商购物":5,"小说阅读":493,"系统背景":23,"广告追踪":38,"影音娱乐":7753}
+        },
+        "layer_visit":{"ACT":35964,"AD":433,"SYS":194},
+        "top_domains":[
+          {"domain":"connect.rom.miui.com","visits":499,"category":"移动设备"},
+          {"domain":"lf3-reading.fqnovelpic.com","visits":376,"category":"小说阅读"},
+          {"domain":"p9-novel-sign.byteimg.com","visits":369,"category":"小说阅读"},
+          {"domain":"p3-novel-sign.byteimg.com","visits":356,"category":"小说阅读"},
+          {"domain":"p3-novel.byteimg.com","visits":352,"category":"小说阅读"},
+          {"domain":"p6-novel-sign.byteimg.com","visits":325,"category":"小说阅读"},
+          {"domain":"ads3-normal-hl.zijieapi.com","visits":252,"category":"开发技术"},
+          {"domain":"p3-ad-sign.byteimg.com","visits":250,"category":"影音娱乐"},
+          {"domain":"tracking.miui.com","visits":231,"category":"移动设备"},
+          {"domain":"n98-v-readingvideo.qznovelvod.com","visits":185,"category":"小说阅读"},
+          {"domain":"p3-webcast.douyinpic.com","visits":184,"category":"影音娱乐"},
+          {"domain":"whoami.akamai.net","visits":165,"category":"系统背景"},
+          {"domain":"www.baidu.com","visits":148,"category":"其他"},
+          {"domain":"p3-sign.douyinpic.com","visits":141,"category":"影音娱乐"},
+          {"domain":"webcast5-open-hl.douyin.com","visits":135,"category":"影音娱乐"}
+        ]
+      },
+      "tags":[
+        {"name":"轻度熬夜","desc":"深夜有一定活动","color":"#748ffc","evidence":"深夜占比 10.7%"},
+        {"name":"夜间活跃型","desc":"晚 19–24 点是主活跃期","color":"#845ef7","evidence":"夜间占比 43.0%"},
+        {"name":"间歇上线型","desc":"只在部分时段出现","color":"#868e96","evidence":"仅 49 个小时有活动"},
+        {"name":"作息极规律","desc":"活动高度集中在少数几小时","color":"#2f9e44","evidence":"Top6 小时占 70.5%"},
+        {"name":"典型打工人","desc":"工作日显著高于周末","color":"#1971c2","evidence":"工作日日均 4,054 vs 周末 0"},
+        {"name":"追剧党","desc":"短视频/长视频重度消费","color":"#e64980","evidence":"影音类占 64.8%"},
+        {"name":"兴趣广泛","desc":"域名覆盖面很广","color":"#2f9e44","evidence":"覆盖 2199 个域名"}
+      ]
+    }
+  ]
+};
+
+const WD=["周一","周二","周三","周四","周五","周六","周日"];
+const BLOCK_ORDER=["深夜","早晨","上午","午间","下午","傍晚","夜间"];
+const fmt=n=>{try{return Number(n).toLocaleString('en-US');}catch(e){return '0';}};
+const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CATS=DATA.categories, BLOCKS=DATA.time_blocks;
+const PERSONA={"夜猫子":"野猫子","周末战士":"工作狂","追剧党":"追剧狂","典型打工人":"上班族","下载机":"下载狂","作息极规律":"规律党","兴趣广泛":"杂食党"};
+const blockOf=h=>{if(h<6)return'深夜';if(h<9)return'早晨';if(h<12)return'上午';if(h<14)return'午间';if(h<18)return'下午';if(h<21)return'傍晚';return'夜间';};
+
+function metric(v,label,sub,color){sub=sub?'<div class="sub">'+esc(sub)+'</div>':'';return '<div class="metric"><div class="mv" style="color:'+(color||'#1971c2')+'">'+v+'</div><div class="ml">'+esc(label)+'</div>'+sub+'</div>';}
+
+function hourBars(bh){
+  const mx=Math.max.apply(null,bh)||1;
+  let cells='';
+  for(let h=0;h<24;h++){
+    const v=bh[h],pct=v/mx*100;
+    const b=BLOCKS.find(b=>b.name===blockOf(h));
+    const color=b?b.color:'#adb5bd';
+    const peak=v===mx?'peak':'';
+    cells+='<div class="hb-col '+peak+'"><div class="hb-track"><div class="hb-fill" style="height:'+pct.toFixed(1)+'%;background:'+color+'"></div></div><div class="hb-lbl">'+('0'+h).slice(-2)+'</div></div>';
+  }
+  return '<div class="hb">'+cells+'</div>';
+}
+function heatmap(wh){
+  const flat=wh.flat();const mx=Math.max.apply(null,flat)||1;
+  let head='';for(let h=0;h<24;h++)head+='<div class="hm-c hm-h">'+('0'+h).slice(-2)+'</div>';
+  let rows='<div class="hm-row"><div class="hm-rl"></div>'+head+'</div>';
+  for(let i=0;i<7;i++){
+    let cells='';
+    for(let v of wh[i]){
+      const bg=v===0?'#f1f3f5':'rgba(25,113,194,'+(0.12+v/mx*0.88).toFixed(3)+')';
+      cells+='<div class="hm-c" style="background:'+bg+'" title="'+WD[i]+' '+fmt(v)+'"></div>';
+    }
+    rows+='<div class="hm-row"><div class="hm-rl">'+WD[i]+'</div>'+cells+'</div>';
+  }
+  return '<div class="hm">'+rows+'</div>';
+}
+function blockBars(bb,total){
+  let out='';
+  for(const name of BLOCK_ORDER){
+    const v=bb[name]||0,pct=total? v/total*100:0;
+    const c=(BLOCKS.find(b=>b.name===name)||{}).color||'#adb5bd';
+    out+='<div class="bb-row"><div class="bb-name">'+esc(name)+'</div><div class="bb-track"><div class="bb-fill" style="width:'+Math.max(pct,0.6).toFixed(1)+'%;background:'+c+'"></div></div><div class="bb-v">'+fmt(v)+'<span class="bb-p">'+pct.toFixed(1)+'%</span></div></div>';
+  }
+  return '<div class="bb">'+out+'</div>';
+}
+function catBars(cv,total){
+  let out='';
+  const entries=Object.entries(cv).sort((a,b)=>b[1]-a[1]);
+  for(const [c,v] of entries){
+    const m=CATS[c]||{color:'#adb5bd',icon:'·'};
+    const pct=total? v/total*100:0;
+    out+='<div class="cb-row"><div class="cb-name"><span class="cb-ico" style="background:'+m.color+'">'+esc(m.icon)+'</span>'+esc(c)+'</div><div class="cb-track"><div class="cb-fill" style="width:'+Math.max(pct,0.5).toFixed(1)+'%;background:'+m.color+'"></div></div><div class="cb-v">'+fmt(v)+'<span class="cb-p">'+pct.toFixed(1)+'%</span></div></div>';
+  }
+  return '<div class="cb">'+out+'</div>';
+}
+function catBlockStack(cbb){
+  let rows='';
+  for(const b of BLOCK_ORDER){
+    const cnt=cbb[b]||{};const tot=Object.values(cnt).reduce((a,x)=>a+x,0)||1;
+    let segs='',legend='';
+    const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,7);
+    for(const [c,v] of sorted){
+      const m=CATS[c]||{color:'#adb5bd'};const pct=v/tot*100;
+      segs+='<div class="st-seg" style="width:'+pct.toFixed(2)+'%;background:'+m.color+'" title="'+esc(c)+' '+fmt(v)+' ('+pct.toFixed(1)+'%)"></div>';
+    }
+    legend=sorted.slice(0,3).map(([c,v])=>'<span class="lg"><i style="background:'+(CATS[c]||{}).color+'"></i>'+esc(c)+' '+(v/tot*100).toFixed(0)+'%</span>').join('');
+    rows+='<div class="st-row"><div class="st-b">'+esc(b)+'</div><div class="st-bar">'+segs+'</div><div class="st-lg">'+legend+'</div></div>';
+  }
+  return '<div class="st">'+rows+'</div>';
+}
+function domainTable(td,total){
+  const mx=td.length?td[0].visits:1;
+  let rows='';
+  for(const r of td.slice(0,15)){
+    const m=CATS[r.category]||{color:'#adb5bd',icon:'·'};
+    const pct=r.visits/(total||1)*100, bar=r.visits/mx*100;
+    rows+='<tr><td class="dt-d">'+esc(r.domain)+'</td><td><span class="chip" style="background:'+m.color+'1a;color:'+m.color+'">'+esc(m.icon)+' '+esc(r.category)+'</span></td><td class="dt-bar"><div style="width:'+bar.toFixed(1)+'%;background:'+m.color+'"></div></td><td class="dt-n">'+fmt(r.visits)+'</td><td class="dt-n">'+pct.toFixed(2)+'%</td></tr>';
+  }
+  return '<table class="dt"><thead><tr><th>域名</th><th>分类</th><th></th><th>访问量</th><th>占比</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+function tagCards(tags){
+  if(!tags.length)return '<div class="empty">标签规则未命中 —— 行为强度或多样性不足</div>';
+  return '<div class="tags">'+tags.map(t=>{
+    const al=PERSONA[t.name];
+    const nm=al? esc(t.name)+'<span class="tag-alias">→ '+esc(al)+'</span>' : esc(t.name);
+    return '<div class="tag" style="--tc:'+t.color+'"><div class="tag-n">'+nm+'</div><div class="tag-d">'+esc(t.desc)+'</div><div class="tag-e">'+esc(t.evidence)+'</div></div>';
+  }).join('')+'</div>';
+}
+function layerNote(lv,total){
+  const a=lv.ACT||0,s=lv.SYS||0,ad=lv.AD||0,t=Math.max(total,1);
+  return '<div class="layer"><span class="li"><i style="background:#1971c2"></i>主动行为 '+(a/t*100).toFixed(1)+'%</span><span class="li"><i style="background:#adb5bd"></i>系统背景 '+(s/t*100).toFixed(1)+'%</span><span class="li"><i style="background:#ced4da"></i>广告追踪 '+(ad/t*100).toFixed(1)+'%</span></div>';
+}
+
+function renderTarget(t){
+  const s=t.stats,a=t.asset||{},total=Math.max(s.total,1),act=Math.max(s.act_total,1);
+  const name=a.name||'(无资产记录)',type=a.asset_type||'未知类型';
+  const owner=a.owner?'<span class="chip c-owner">owner: '+esc(a.owner)+'</span>':'';
+  const os=a.os_name?'<span class="chip c-gray">'+esc(a.os_name)+'</span>':'';
+  return '<section class="ent" id="ip-'+t.ip.replace(/\./g,'-')+'">'
+    +'<div class="ent-hd"><div class="ent-id"><div class="ent-ip">'+esc(t.ip)+'</div><div class="ent-nm">'+esc(name)+'</div><div class="ent-meta"><span class="chip c-gray">'+esc(type)+'</span>'+os+owner+'</div></div>'
+    +'<div class="ent-kpi">'+metric(fmt(s.total),'总访问次数',s.days+' 天')+metric(fmt(s.daily_avg),'日均访问')+metric(fmt(s.domain_count),'覆盖域名')+metric(('0'+s.peak_hour).slice(-2)+':00','活跃峰值时段')+metric(s.active_hours,'活跃小时数','/ '+(s.days*24))+'</div></div>'
+    +'<div class="sec-t">画像标签 <span class="sec-s">基于主动行为 + 时段节律的规则判定，每项附证据</span></div>'+tagCards(t.tags)
+    +'<div class="grid2"><div class="card"><div class="card-t">24 小时活跃曲线</div>'+hourBars(s.by_hour)+layerNote(s.layer_visit,total)+'</div>'
+    +'<div class="card"><div class="card-t">时段分布</div>'+blockBars(s.by_block,total)+'<div class="hint">工作日占 '+s.workday_share+'%（'+fmt(s.workday)+' 次）· 周末 '+fmt(s.weekend)+' 次</div></div></div>'
+    +'<div class="card"><div class="card-t">星期 × 小时 行为热力图 <span class="sec-s">颜色越深访问越密集（UTC+8）</span></div>'+heatmap(s.wd_hour)+'</div>'
+    +'<div class="grid2"><div class="card"><div class="card-t">访问习惯构成 <span class="sec-s">仅统计主动行为</span></div>'+catBars(s.cat_visit,act)+'</div>'
+    +'<div class="card"><div class="card-t">各时段在干什么 <span class="sec-s">分类 × 时段堆叠</span></div>'+catBlockStack(s.cat_by_block)+'</div></div>'
+    +'<div class="card"><div class="card-t">访问域名 TOP 15</div>'+domainTable(s.top_domains,total)+'</div>'
+    +'</section>';
+}
+
+const targets=DATA.targets.slice().sort((a,b)=>b.stats.total-a.stats.total);
+document.getElementById('nav').innerHTML=targets.map(t=>'<a href="#ip-'+t.ip.replace(/\./g,'-')+'" class="nav-i"><b>'+esc(t.ip)+'</b><span>'+esc((t.asset||{}).name||'未知设备')+'</span></a>').join('');
+document.getElementById('secs').innerHTML=targets.map(renderTarget).join('');
+</script>
+</body>
+</html>
