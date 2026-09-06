@@ -1,8 +1,5 @@
 <template>
   <div class="bp-ov-page art-full-height" v-loading="loading">
-    <!-- 水印（群体数据同为审计用途，§4 v1.1） -->
-    <div class="ov-watermark">本数据仅用于安全审计</div>
-
     <!-- 群体 KPI（§4.1 #1） -->
     <ElRow :gutter="12" class="ov-kpis">
       <ElCol :span="6">
@@ -45,6 +42,46 @@
           </div>
           <div class="kpi-l">低置信度主体</div>
           <div class="kpi-s">数据量不足，画像结论仅作存在性证据</div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
+
+    <!-- 人设分布 + 兴趣构成 + 时段占比（§4.1 #2 #3 #4） -->
+    <ElRow :gutter="12">
+      <ElCol :span="8">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">人设群体分布</span>
+            <span class="card-sub">全网画像标签命中数（每主体取最近快照）</span>
+          </template>
+          <div v-if="tagRows.length" class="tag-bars">
+            <div v-for="t in tagRows" :key="t.name" class="tb-row" @click="filterByTag(t.name)">
+              <span class="tb-name">{{ t.name }}</span>
+              <div class="tb-track">
+                <div
+                  class="tb-fill"
+                  :style="{ width: tagPct(t.count), background: tagColor(t.name) }"
+                />
+              </div>
+              <span class="tb-v">{{ t.count }} 个</span>
+            </div>
+          </div>
+          <ElEmpty v-else description="暂无标签命中（等待快照积累）" :image-size="60" />
+        </ElCard>
+      </ElCol>
+      <ElCol :span="8">
+        <ElCard shadow="never" class="ov-card">
+          <template #header><span class="card-title">全网兴趣构成</span></template>
+          <div ref="catRef" class="chart-box" style="height: 224px"></div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="8">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">时段占比</span>
+            <span class="card-sub">7 时段</span>
+          </template>
+          <div ref="blockRef" class="chart-box" style="height: 224px"></div>
         </ElCard>
       </ElCol>
     </ElRow>
@@ -185,72 +222,7 @@
           size="small"
         />
       </div>
-      <div class="entry-note">
-        💡 三个快捷入口也可直达详情：资产列表点 IP · 告警详情点 agent_ip · 行为基线点 IP
-      </div>
     </ElCard>
-
-    <!-- 人设分布 + 全网节律（§4.1 #2 #3） -->
-    <ElRow :gutter="12">
-      <ElCol :span="10">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">人设群体分布</span>
-            <span class="card-sub">全网画像标签命中数（每主体取最近快照）</span>
-          </template>
-          <div v-if="tagRows.length" class="tag-bars">
-            <div v-for="t in tagRows" :key="t.name" class="tb-row" @click="filterByTag(t.name)">
-              <span class="tb-name">{{ t.name }}</span>
-              <div class="tb-track">
-                <div
-                  class="tb-fill"
-                  :style="{ width: tagPct(t.count), background: tagColor(t.name) }"
-                />
-              </div>
-              <span class="tb-v">{{ t.count }} 个</span>
-            </div>
-          </div>
-          <ElEmpty v-else description="暂无标签命中（等待快照积累）" :image-size="60" />
-        </ElCard>
-      </ElCol>
-      <ElCol :span="14">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">全网活跃节律</span>
-            <span class="card-sub">窗口内全部主体 24 小时访问聚合</span>
-          </template>
-          <div ref="hourRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-    </ElRow>
-
-    <!-- 兴趣构成 + 风险分层 + 时段（§4.1 #3 #4 #5） -->
-    <ElRow :gutter="12">
-      <ElCol :span="10">
-        <ElCard shadow="never" class="ov-card">
-          <template #header><span class="card-title">全网兴趣构成</span></template>
-          <div ref="catRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-      <ElCol :span="7">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">时段占比</span>
-            <span class="card-sub">7 时段</span>
-          </template>
-          <div ref="blockRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-      <ElCol :span="7">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">风险分层</span>
-            <span class="card-sub">按资产 criticality</span>
-          </template>
-          <div ref="riskRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-    </ElRow>
   </div>
 </template>
 
@@ -275,10 +247,8 @@
   const page = ref(1)
   const pageSize = 15
 
-  const hourRef = ref<HTMLElement>()
   const catRef = ref<HTMLElement>()
   const blockRef = ref<HTMLElement>()
-  const riskRef = ref<HTMLElement>()
 
   const BLOCK_ORDER = ['深夜', '早晨', '上午', '午间', '下午', '傍晚', '夜间']
   const BLOCK_COLORS: Record<string, string> = {
@@ -307,12 +277,6 @@
     兴趣广泛: '#2f9e44',
     'AI 重度用户': '#7048e8',
     'AI 尝鲜者': '#7048e8'
-  }
-  const RISK_COLORS: Record<string, string> = {
-    critical: '#c92a2a',
-    high: '#e8590c',
-    medium: '#fcc419',
-    low: '#74c0fc'
   }
 
   let charts: echarts.ECharts[] = []
@@ -400,27 +364,6 @@
     const o = overview.value
     if (!o) return
 
-    // 24h 聚合
-    makeChart(hourRef.value, {
-      grid: { left: 48, right: 12, top: 20, bottom: 24 },
-      xAxis: {
-        type: 'category',
-        data: Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0')),
-        axisLabel: { fontSize: 10 }
-      },
-      yAxis: { type: 'value' },
-      tooltip: { trigger: 'axis' },
-      series: [
-        {
-          type: 'bar',
-          data: (o.global_by_hour || []).map((v: number, h: number) => ({
-            value: v,
-            itemStyle: { color: BLOCK_COLORS[BLOCK_ORDER[blockIndexOf(h)]] }
-          }))
-        }
-      ]
-    })
-
     // 兴趣构成饼
     makeChart(catRef.value, {
       tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
@@ -452,36 +395,6 @@
         }
       ]
     })
-
-    // 风险分层（criticality）
-    makeChart(riskRef.value, {
-      tooltip: { trigger: 'item', formatter: '{b}: {c} 个 ({d}%)' },
-      legend: { bottom: 0, textStyle: { fontSize: 10 } },
-      series: [
-        {
-          type: 'pie',
-          radius: ['38%', '68%'],
-          data: Object.entries(o.risk_distribution || {})
-            .filter(([, v]) => (v as number) > 0)
-            .map(([k, v]) => ({
-              name: { critical: '严重', high: '高', medium: '中', low: '低' }[k] || k,
-              value: v,
-              itemStyle: { color: RISK_COLORS[k] }
-            })),
-          label: { show: false }
-        }
-      ]
-    })
-  }
-
-  const blockIndexOf = (hour: number) => {
-    if (hour < 6) return 0
-    if (hour < 9) return 1
-    if (hour < 12) return 2
-    if (hour < 14) return 3
-    if (hour < 18) return 4
-    if (hour < 21) return 5
-    return 6
   }
 
   const onResize = () => charts.forEach((c) => c.resize())
@@ -523,17 +436,14 @@
 
 <style scoped lang="scss">
   .bp-ov-page {
+    // 单一滚动容器：.art-full-height 的固定 height + flex column 会把多行
+    // ElCard 当 flex 项挤压（主体列表被压成一条线，缩放 50% 才恢复）。
+    // 改成随内容伸展，滚动交给外层文档——与 asset/overview/reconciliation
+    // /compliance/detail 同款处理。
+    height: auto;
+    min-height: var(--art-full-height);
     position: relative;
     padding: 12px;
-
-    .ov-watermark {
-      position: absolute;
-      top: 10px;
-      right: 18px;
-      z-index: 1;
-      font-size: 10px;
-      color: var(--el-text-color-placeholder);
-    }
 
     .ov-kpis {
       margin-bottom: 12px;
@@ -586,6 +496,11 @@
 
     // 人设分布条形
     .tag-bars {
+      // 人设分布区固定高度，与同排兴趣/时段饼图的 chart-box 同高
+      // 饼图卡与人设卡 body 总高均为 264px（chart-box 224px + ElCard body 上下 padding 20px）
+      height: 224px;
+      overflow-y: auto;
+
       .tb-row {
         display: flex;
         gap: 10px;
@@ -668,13 +583,5 @@
       margin-top: 10px;
     }
 
-    .entry-note {
-      margin-top: 8px;
-      padding: 8px 12px;
-      font-size: 12px;
-      color: var(--el-text-color-secondary);
-      background: var(--el-color-primary-light-9);
-      border-radius: 6px;
-    }
   }
 </style>

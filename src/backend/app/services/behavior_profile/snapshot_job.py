@@ -66,7 +66,7 @@ def discover_targets(db: Session) -> List[dict]:
             "ip": ip,
             "asset_id": str(a.id) if a else None,
             "mac": getattr(a, "mac_address", None),
-            "hostname": getattr(a, "asset_name", None),
+            "hostname": getattr(a, "name", None),
         })
     return targets
 

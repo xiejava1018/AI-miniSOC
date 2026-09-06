@@ -145,11 +145,17 @@ def get_profiles_summary(db: Session, traffic_type: Optional[str] = None,
     ]
     q = q.filter(BehaviorProfile.id.in_(latest_ids))
     rows = q.order_by(BehaviorProfile.total.desc()).limit(limit).all()
+    # 实时从 Asset 取名（资产表字段是 .name，CLAUDE.md 坑 #9）
+    asset_names = dict(
+        db.query(Asset.asset_ip, Asset.name)
+        .filter(Asset.asset_ip.in_([r.ip for r in rows]))
+        .all()
+    ) if rows else {}
     return [
         {
             "ip": r.ip,
             "asset_id": str(r.asset_id) if r.asset_id else None,
-            "hostname": r.hostname,
+            "hostname": r.hostname or asset_names.get(r.ip),
             "profile_date": str(r.profile_date),
             "total": r.total,
             "traffic_type": r.traffic_type,
