@@ -1765,3 +1765,37 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 - 验收 #7（异常判定核心规则）待快照积累 ≥4 天
 - .17 立即变 machine：可删其窗口内旧快照让水位重拉（未做，避免改写历史）
 - 拓扑图图例筛选（方案 §6.3 V2 项）
+
+---
+
+## 今日补充（2026-09-06 续二：L1 主体列表首屏不可见修复 + 排查记录）
+
+### 用户反馈
+「行为画像页面没有显示原型中的画像主体列表，进不了具体 IP 的详情界面」。
+
+### 排查过程（证据链，未复现"列表缺失"本体）
+1. **生产 DB/服务层全绿**：146 快照/73 IP/overview+list 服务层直调正常；菜单 68(profile)+69(隐藏 detail) 组件/授权正确
+2. **生产静态资源全绿**：index.html 引用资源全部 200，dist 含新页面字符串
+3. **生产审计表定时间线**：今天仅 13:43 有 5 条旧版页面请求序列（list+profile+trend+anomalies+risk，无 overview）；**19:46 部署后零审计零 LOGIN = 用户部署后没在生产打开过** → 用户看的是本地 5173
+4. **本地 5173 无头浏览器实测（puppeteer-core + 系统 Chrome）**：L1 一切正常——KPI/人设分布/列表 15 行(共74条)全渲染，dispatch click 行 → detail 跳转成功，L2 身份档案+4Tab 正常
+5. **根因**：主体列表排在 5 个图表区块之后（人设分布/节律/兴趣/时段/风险），真实页面这些卡片很高，**列表被推出首屏**——L1→L2 唯一入口首屏不可见，用户未滚动即得出"没有列表"
+
+### 修复（commit d34ed95，已部署生产 12:33）
+- **布局重排**：KPI → **画像主体列表**（主入口）→ 图表洞察区。列表卡片首屏 236px 处完整可见（实测）
+- 列表空数据 ElEmpty 兜底（区分"筛选无匹配" vs "无快照/无权限"）
+- 无迁移、纯前端
+
+### 无头浏览器实测登录注入法（后续可复用）
+`document.querySelector('#app').__vue_app__.config.globalProperties.$pinia._s.get('userStore')`
+→ 直改内存 accessToken/isLogin/info → location.hash 导航（守卫放行 + 动态路由注册走真实流程）。
+注意：store id 是 `userStore` 不是 `user`；reload+localStorage 注入会被 401 轮询竞态清掉，不可靠。
+
+### 踩坑
+1. **入口型组件不能排在洞察型图表后面**——列表/按钮是"下一步动作"，图表是"看完的洞察"；首屏（~1000px）必须看到主入口
+2. **puppeteer page.click 坐标点击对长页面元素会失败**（elementFromPoint null），dispatchEvent MouseEvent bubbles:true 可靠
+3. **生产排障先查审计表时间线**：soc_audit_logs 的 action 序列能还原用户实际访问了哪些接口、什么版本（旧版序列 list+profile+trend vs 新版 overview），比猜环境快得多
+4. **登录验证码后端不强制**（不带 captcha_key 字段直接放行；带 key 才校验）——前端表单必填挡了个寂寞，**安全洞待修**（见下）
+
+### 待办（新发现，不阻塞）
+- **登录验证码可绕过**：POST /auth/login 不带 captcha_key/captcha_code 即跳过验证（实测 curl 200 拿 token）。建议后端对启用验证码的配置强制校验，或前端 captchaEnabled 与后端配置对齐
+- 无头浏览器 e2e 脚本沉淀到 scripts/（当前在 /tmp/pptr，含登录注入/首屏断言/点行跳转）
