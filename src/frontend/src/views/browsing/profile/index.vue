@@ -424,7 +424,7 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-  import { useRoute } from 'vue-router'
+  import { useRoute, useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { echarts } from '@/plugins/echarts'
   import { useAuth } from '@/hooks/core/useAuth'
@@ -543,7 +543,7 @@
         trafficFilter.value ? { traffic_type: trafficFilter.value } : undefined
       )
       subjects.value = res?.data?.items || []
-      if (!currentIp.value && subjects.value.length) {
+      if (!currentIp.value && !_initIp && subjects.value.length) {
         await selectSubject(subjects.value[0].ip)
       }
     } finally {
@@ -886,13 +886,20 @@
 
   const onResize = () => charts.forEach((c) => c.resize())
 
+  // 入口跳转支持：从资产/告警/上网行为列表跳来时带 ?ip=xxx，自动选中
+  const route = useRoute()
+  const router = useRouter()
+  const _ipFromQuery = (route.query.ip || route.query.agent_ip) as string | undefined
+  const _initIp = _ipFromQuery || ''
+
+  // 初次加载默认选中的 IP：query 优先；其次 subjects[0]；否则空
   onMounted(async () => {
     await loadList()
-    // 入口跳转支持：从资产/告警/上网行为列表跳来时带 ?ip=xxx，自动选中
-    const route = useRoute()
-    const ipParam = (route.query.ip || route.query.agent_ip) as string | undefined
-    if (ipParam && subjects.value.some((s: any) => s.ip === ipParam)) {
-      await selectSubject(ipParam)
+    if (_initIp) {
+      // 无条件 selectSubject：未快照的 IP（API 返 404）会显示空态而不是错位到 subjects[0]
+      await selectSubject(_initIp)
+      // 选中后清除 query，避免用户手动切主体时仍被 query 覆盖
+      router.replace({ query: {} })
     }
     window.addEventListener('resize', onResize)
   })
