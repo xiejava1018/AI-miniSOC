@@ -457,6 +457,7 @@
   const trend = ref<any[]>([])
   const risk = ref<any>(null)
   const anomalies = ref<any>(null)
+  const relations = ref<any>(null)
 
   const hourRef = ref<HTMLElement>()
   const blockRef = ref<HTMLElement>()
@@ -924,8 +925,15 @@
       height: 100%;
     }
 
+    // 同一横排的卡片高度拉齐（ElRow 是 flex，ElCol 改为 flex 容器让卡片撑满）
+    .el-row > .el-col {
+      display: flex;
+      flex-direction: column;
+    }
+
     .bp-card {
       margin-bottom: 12px;
+      flex: 1;
     }
 
     .bp-banner {
