@@ -37,7 +37,7 @@
 
   // 跳转到该 IP 的画像页
   const goProfile = (ip: string) => {
-    router.push({ path: '/browsing/profile/index', query: { ip } })
+    router.push({ path: '/browsing/profile', query: { ip } })
   }
 
   // 表格（服务端分页，仿 event 页范式：searchParams 由 useTable 提供，

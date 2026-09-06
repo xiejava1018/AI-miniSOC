@@ -485,7 +485,7 @@
                 style: 'cursor:pointer',
                 onClick: (e: MouseEvent) => {
                   e.stopPropagation()
-                  router.push({ path: '/browsing/profile/index', query: { ip } })
+                  router.push({ path: '/browsing/profile', query: { ip } })
                 }
               },
               { default: () => ip }

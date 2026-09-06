@@ -144,7 +144,7 @@
 
   // 跳转该 IP 到画像页（入口联动，§9.5）
   const goProfile = (ip: string) => {
-    router.push({ path: '/browsing/profile/index', query: { ip } })
+    router.push({ path: '/browsing/profile', query: { ip } })
   }
 
   // 统计
