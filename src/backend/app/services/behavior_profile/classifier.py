@@ -175,6 +175,12 @@ CATEGORIES: dict[str, dict] = {
             "systemupdate", "ota", "checkip", "ipify", "ip.sb",
             "connectivitycheck", "msftconnecttest", "gstatic",
             "captive.apple", "uuid", "metrics", "telemetry",
+            # S6（2026-09-06 两层结构改造）：机器心跳/组网打洞/DDNS 回源类，
+            # 此前误归 ACT 导致 .17（NAS）等机器主体判不出 machine（实测 SYS 仅 8.9%）
+            "stun", "easytier", "tailscale", "zerotier", "wireguard",
+            "turn.", "ddns", "dynv6", "no-ip", "duckdns", "ipw.cn",
+            "whoami", "myip", "oray", "synology", "quickconnect.to",
+            "fnnas.com", "ts.net", "natapp",
         ],
     },
 }

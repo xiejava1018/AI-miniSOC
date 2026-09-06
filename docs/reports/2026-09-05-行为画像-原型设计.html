@@ -192,13 +192,54 @@ h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
 .foot code{background:#f1f3f5;padding:1px 5px;border-radius:3px;font-size:11px}
 .demo-badge{margin:0 0 12px;padding:8px 12px;background:#fff9db;border:1px solid #ffe066;border-radius:8px;font-size:12px;color:#92690a;font-weight:600}
 .demo-badge::before{content:"⚠ ";}
+
+/* ===== L1 群体概览（v2 新增） ===== */
+.viewbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;padding:10px 12px;background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px}
+.viewbar .vlab{font-size:12px;color:#868e96;margin-right:2px}
+.vbtn{padding:7px 14px;border:1px solid #dee2e6;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;color:#495057;font-family:inherit}
+.vbtn:hover{border-color:#1971c2;color:#1971c2}
+.vbtn.on{background:#1971c2;color:#fff;border-color:#1971c2}
+.vbtn .vstep{font-size:11px;opacity:.75;margin-right:4px}
+.crumb{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:13px;color:#868e96}
+.crumb a{color:#1971c2;cursor:pointer;text-decoration:none}
+.crumb a:hover{text-decoration:underline}
+.crumb .sep{color:#adb5bd}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi{background:#f8f9fa;border:1px solid #e9ecef;border-radius:8px;padding:14px 16px}
+.kpi .kv{font-size:24px;font-weight:700;color:#1971c2;line-height:1.2}
+.kpi .kv.warn{color:#e8590c}
+.kpi .kv.dang{color:#c92a2a}
+.kpi .kv.mute{color:#868e96}
+.kpi .kl{font-size:12px;color:#495057;margin-top:4px}
+.kpi .ks{font-size:11px;color:#adb5bd;margin-top:3px}
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.pgrid.g3{grid-template-columns:1fr 1fr 1fr}
+.slist{width:100%;border-collapse:collapse;font-size:13px}
+.slist th{background:#f8f9fa;padding:9px 10px;text-align:left;border-bottom:1px solid #e9ecef;font-weight:600;color:#495057;font-size:12px;white-space:nowrap}
+.slist td{padding:9px 10px;border-bottom:1px solid #f1f3f5}
+.slist tbody tr{cursor:pointer}
+.slist tbody tr:hover{background:#f8f9fa}
+.slist tbody tr.hl{background:#e7f1ff}
+.slist .go{color:#1971c2;font-size:12px;white-space:nowrap}
+.pbar{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.pbar .pn{width:88px;font-size:12px;color:#495057;text-align:right;flex-shrink:0}
+.pbar .pt{flex:1;height:18px;background:#f1f3f5;border-radius:3px;overflow:hidden;min-width:40px}
+.pbar .pf{height:100%;border-radius:3px}
+.pbar .pv{width:52px;font-size:12px;color:#868e96;flex-shrink:0}
+.jump{display:inline-block;padding:3px 10px;background:#1971c2;color:#fff;border-radius:4px;font-size:12px;cursor:pointer}
+.jump:hover{background:#1864ab}
+.hint{background:#fff9db;border:1px solid #ffe066;border-radius:6px;padding:10px 12px;font-size:12px;color:#7a5c00;margin-bottom:14px;line-height:1.6}
+.hint.blue{background:#e7f1ff;border-color:#a5c8f0;color:#0b4a8f}
+.tagcloud{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tchip{padding:4px 10px;border-radius:12px;font-size:12px;color:#fff}
+.flowarrow{text-align:center;color:#adb5bd;font-size:18px;margin:10px 0;letter-spacing:2px}
 </style>
 </head>
 <body data-page-node-id="profProtoBody">
 <div class="wrap" data-page-node-id="profProtoWrap">
 <div class="hd" data-page-node-id="profProtoHd">
   <h1 data-page-node-id="profProtoTitle">AI-miniSOC · 用户/IP 深度行为画像 · 原型设计</h1>
-  <div class="sub-t" data-page-node-id="profProtoSub">行为画像详情页（Profile）高保真原型 —— 五层维度 = 左栏身份卡 + 四个主区 Tab（行为 / 风险 / 关系 / 异常判定）</div>
+  <div class="sub-t" data-page-node-id="profProtoSub">两层结构高保真原型 —— <b>L1 群体画像概览</b>（看人群结构：多少夜猫子 / 全网几点最活跃）⇄ <b>L2 单 IP 画像详情</b>（看单设备五层维度 = 左栏身份档案 + 行为 / 风险 / 关系 / 异常 4 个 Tab）</div>
   <div class="badges" data-page-node-id="profProtoBadges">
     <span class="badge" data-page-node-id="b1">数据源 <b data-page-node-id="b1b">Loki + PostgreSQL + OpenSearch</b></span>
     <span class="badge" data-page-node-id="b2">画像主体 <b data-page-node-id="b2b">IP / 设备（自然人待 Phase 0）</b></span>
@@ -213,6 +254,11 @@ h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
   风险 / 关系 / 异常判定三个 Tab 的数据来自本次 POC 的告警与认证抽取实查结果（如 .102：866 告警组 / 76,055 条 / 被登录 610 次），
   以 <code data-page-node-id="pC">真实</code> 标出；未装 agent 的设备（如 .8）相应分层显示"数据不足"空态——这正是产品上线后真实会遇到的两种状态。
   点击左上角主体可切换查看不同设备的画像。
+  <br><br>
+  <b data-page-node-id="pT2">v2 更新（2026-09-06）：新增 L1 群体画像概览层</b> —— 解决"菜单叫行为画像（群体语义）、点进去却是某 IP 详情（个体语义）"的名实不符问题。
+  <br>① <b data-page-node-id="pT3">L1 群体概览</b>：回答"全网是什么样"——人设群体分布、全网活跃节律、兴趣构成、风险分层、数据可信度、画像主体列表。
+  <br>② <b data-page-node-id="pT4">L2 单 IP 详情</b>：回答"这个设备/人是什么样"——左栏身份档案卡（固定不随 Tab 切换）+ 右侧行为 / 风险 / 关系 / 异常 4 个 Tab。
+  <br>③ <b data-page-node-id="pT5">跳转交互</b>：L1 主体列表<b>点任意一行</b> → 进入 L2；L2 左上角<b>「← 返回群体概览」</b>面包屑 → 回 L1。也可用顶部<b>层级切换器</b>直接跳。
 </div>
 
 <div class="subj" id="subj" data-page-node-id="profSubj"></div>
@@ -221,10 +267,11 @@ h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
 <div class="foot" data-page-node-id="profFoot">
   <h3 data-page-node-id="profFootH">原型与《方案设计 v1.3》的对应关系</h3>
   <ul data-page-node-id="profFootL">
+    <li data-page-node-id="f0"><b data-page-node-id="f0b">L1 群体画像概览</b>（v2 新增）= 《两层结构改造方案》L1；回答"全网是什么样"——人设群体分布 / 全网节律 / 兴趣构成 / 风险分层 / 数据可信度 / 画像主体列表。<b>主体列表点任意行 → 进入 L2</b>。</li>
     <li data-page-node-id="f1"><b data-page-node-id="f1b">左栏身份档案卡</b> = 方案 §3 层1；固定不随 Tab 切换，含关联账号双向钻取。</li>
     <li data-page-node-id="f2"><b data-page-node-id="f2b">行为画像 Tab</b> = 方案 §3 层2；严格沿用报告布局：画像标签置顶 → 24h 曲线 + 时段分布 → 星期×小时热力图 → 访问习惯构成 + 各时段在干什么 → 域名 TOP N。</li>
     <li data-page-node-id="f3"><b data-page-node-id="f3b">风险画像 Tab</b> = 方案 §3 层3；指标卡 + 告警规则榜(risk_bars) + 漏洞严重度 + 暴露端口 + 趋势折线(数据足够时)。</li>
-    <li data-page-node-id="f4"><b data-page-node-id="f4b">关系画像 Tab</b> = 方案 §3 层4；rel_graph 关系网络(出边绿/入边蓝/外联红) + 同网段设备列表，点击节点钻取对方画像。</li>
+    <li data-page-node-id="f4"><b data-page-node-id="f4b">关系画像 Tab</b> = 方案 §3 层4；rel_graph 关系网络(出边绿/入边蓝/外联红) + 同网段设备列表，点击节点钻取对方画像。<b style="color:#c92a2a">⚠ 待补：真实平台当前只有三张表、无拓扑图（偏差 D2），需补 ECharts graph 力导向图。</b></li>
     <li data-page-node-id="f5"><b data-page-node-id="f5b">异常判定 Tab</b> = 方案 §3 层5；异常信号清单(可审计证据) + 「生成安全事件/加白名单」处置按钮，并接回 §P1 事件闭环。</li>
     <li data-page-node-id="f6">标识条下方异常横幅 + 审计水印 = 方案 §3.0 / §6 合规要求。</li>
   </ul>
@@ -507,9 +554,156 @@ function banner(L){
   return '<div class="banner '+ (h.sev==='high'?'high':'mid') +'"><span class="bt">⚠ 异常信号</span><div class="bx"><b>'+esc(h.name)+'</b> —— '+esc(h.desc)+' <a href="#" style="color:#c92a2a;margin-left:8px" onclick="switchTab(\'anomaly\');return false">查看全部 →</a></div></div>';
 }
 
+/* ============ L1 群体概览数据（v2 新增，2026-09-06 实测自 /api/v1/behavior-profile/list） ============ */
+const OVERVIEW = {
+  subject_total: 74,
+  snapshot_days: 1,
+  latest_date: "2026-09-04",
+  active_subjects: 15,
+  traffic_type: {human:74, machine:0, mixed:0},
+  confidence: {high:7, mid:3, low:64},
+  night_avg: 8.4,
+  tag_dist: [
+    {name:"间歇上线型", count:19, color:"#868e96"},
+    {name:"夜猫子", count:15, color:"#4c6ef5"},
+    {name:"作息极规律", count:7, color:"#20c997"},
+    {name:"作息发散", count:4, color:"#f59f00"},
+    {name:"早起鸟", count:4, color:"#22b8cf"},
+    {name:"轻度熬夜", count:4, color:"#845ef7"},
+    {name:"AI 尝鲜者", count:1, color:"#7048e8"},
+    {name:"码农", count:1, color:"#1971c2"},
+    {name:"下载机", count:1, color:"#5c7cfa"},
+    {name:"学生党", count:1, color:"#51cf66"},
+    {name:"夜间活跃型", count:1, color:"#ae3ec9"}
+  ],
+  global_by_hour: [1820,1240,860,720,690,980,2150,4380,6820,7450,6980,5420,6180,7240,7860,8120,7540,6280,5420,6180,7240,6820,4260,2680],
+  global_by_block: {深夜:8.4, 早晨:12.1, 上午:19.8, 午间:10.2, 下午:26.4, 傍晚:14.7, 夜间:8.4},
+  global_cat: {"AI 工具":28.6,"开发技术":19.4,"系统背景":14.2,"工作办公":11.8,"影音娱乐":8.6,"社交沟通":6.4,"新闻资讯":4.2,"其他":6.8},
+  risk_dist: {critical:0, high:3, medium:12, low:59}
+};
+
+/* 画像主体名册（L1 列表；74 个主体中取 8 个代表） */
+const ROSTER = [
+  {ip:"192.168.0.100", name:"AI 工作站",      total:26467, tt:"human", conf:100, tags:["夜猫子","间歇上线型"]},
+  {ip:"192.168.0.17",  name:"NAS 下载机",     total:14445, tt:"human", conf:100, tags:["夜猫子"], warn:"疑似机器流量未识别"},
+  {ip:"192.168.0.25",  name:"追剧手机",       total:2457,  tt:"human", conf:100, tags:["轻度熬夜","早起鸟"]},
+  {ip:"192.168.0.102", name:"xiejava-8g-host",total:185,   tt:"human", conf:20,  tags:["夜猫子","码农"]},
+  {ip:"192.168.0.8",   name:"xiejavadeMini",  total:0,     tt:"human", conf:0,   tags:[], note:"当日无流量"},
+  {ip:"192.168.0.30",  name:"Wazuh 服务器",   total:3180,  tt:"human", conf:100, tags:["作息极规律"]},
+  {ip:"192.168.0.45",  name:"办公笔记本",      total:892,   tt:"human", conf:49,  tags:["作息极规律","早起鸟"]},
+  {ip:"192.168.0.60",  name:"测试终端",        total:126,   tt:"human", conf:4,   tags:["间歇上线型"], note:"样本极少"}
+];
+
+/* —— L1：群体概览面板 —— */
+function viewBar(){
+  return '<div class="viewbar">'
+    +'<span class="vlab">原型层级：</span>'
+    +'<button class="vbtn'+(curView==="L1"?' on':'')+'" onclick="goOverview()"><span class="vstep">L1</span>群体画像概览</button>'
+    +'<span style="color:#adb5bd">→</span>'
+    +'<button class="vbtn'+(curView==="L2"?' on':'')+'" onclick="goDetail(curIP)"><span class="vstep">L2</span>单 IP 画像详情</button>'
+    +'<span class="vlab" style="margin-left:auto">当前：<b style="color:#1971c2">'+(curView==="L1"?'L1 群体概览':('L2 · '+esc(curIP)))+'</b></span>'
+    +'</div>';
+}
+
+function overviewPanel(){
+  const O=OVERVIEW;
+  let h=viewBar();
+
+  h+='<div class="hint blue">'
+    +'<b>本层回答「全网是什么样」</b>：不看单个设备，而看<b>人群结构</b>——有多少夜猫子、多少规律党，全网几点最活跃、主要在干什么、哪些主体风险高。'
+    +'<br>点下方<b>画像主体列表</b>的任意一行 → 进入 <b>L2 单 IP 画像详情</b>（左栏身份档案 + 行为/风险/关系/异常 4 个 Tab）。'
+    +'</div>';
+
+  /* 群体 KPI */
+  h+='<div class="kpis">'
+    +'<div class="kpi"><div class="kv">'+O.subject_total+'</div><div class="kl">画像主体总数</div><div class="ks">有上网行为的 IP / 设备</div></div>'
+    +'<div class="kpi"><div class="kv">'+O.active_subjects+'</div><div class="kl">有效活跃主体</div><div class="ks">当日访问 ≥ 50 次</div></div>'
+    +'<div class="kpi"><div class="kv warn">'+O.snapshot_days+' 天</div><div class="kl">快照积累</div><div class="ks">最新 '+O.latest_date+' · 需 ≥4 天方可判异常</div></div>'
+    +'<div class="kpi"><div class="kv dang">'+O.traffic_type.machine+'</div><div class="kl">机器流量主体</div><div class="ks">⚠ 分类待修（见页尾说明）</div></div>'
+    +'</div>';
+
+  /* 人设群体分布 + 风险分布 */
+  h+='<div class="pgrid">';
+  h+='<div class="card"><div class="card-t">人设群体分布<span class="card-sub">全网画像标签命中人数（可打标签的主体 '+O.tag_dist.reduce((a,b)=>a+b.count,0)+' 人次）</span></div>';
+  const mx=O.tag_dist[0].count;
+  for(const t of O.tag_dist){
+    const w=t.count/mx*100;
+    h+='<div class="pbar"><div class="pn">'+esc(t.name)+'</div><div class="pt"><div class="pf" style="width:'+Math.max(w,3).toFixed(1)+'%;background:'+t.color+'"></div></div><div class="pv">'+t.count+' 个</div></div>';
+  }
+  h+='<div class="tagcloud">'+O.tag_dist.slice(0,7).map(t=>'<span class="tchip" style="background:'+t.color+'">'+esc(t.name)+' '+t.count+'</span>').join('')+'</div>';
+  h+='</div>';
+
+  h+='<div class="card"><div class="card-t">全网活跃节律<span class="card-sub">24 小时聚合 · 深夜均值 '+O.night_avg+'%</span></div>'+hourBars(O.global_by_hour);
+  h+='<div style="margin-top:12px">'+blockBars(O.global_by_block, Object.values(O.global_by_block).reduce((a,b)=>a+b,0))+'</div>';
+  h+='</div>';
+  h+='</div>';
+
+  /* 兴趣构成 + 风险分布 + 置信度 */
+  h+='<div class="pgrid g3">';
+  h+='<div class="card"><div class="card-t">全网兴趣构成</div>'+catBars(O.global_cat, Object.values(O.global_cat).reduce((a,b)=>a+b,0))+'</div>';
+  h+='<div class="card"><div class="card-t">风险分层</div>'
+    +'<div class="pbar"><div class="pn">critical</div><div class="pt"><div class="pf" style="width:'+(O.risk_dist.critical/O.subject_total*100).toFixed(1)+'%;background:#c92a2a"></div></div><div class="pv">'+O.risk_dist.critical+' 个</div></div>'
+    +'<div class="pbar"><div class="pn">high</div><div class="pt"><div class="pf" style="width:'+(O.risk_dist.high/O.subject_total*100).toFixed(1)+'%;background:#e8590c"></div></div><div class="pv">'+O.risk_dist.high+' 个</div></div>'
+    +'<div class="pbar"><div class="pn">medium</div><div class="pt"><div class="pf" style="width:'+(O.risk_dist.medium/O.subject_total*100).toFixed(1)+'%;background:#fcc419"></div></div><div class="pv">'+O.risk_dist.medium+' 个</div></div>'
+    +'<div class="pbar"><div class="pn">low</div><div class="pt"><div class="pf" style="width:'+(O.risk_dist.low/O.subject_total*100).toFixed(1)+'%;background:#74c0fc"></div></div><div class="pv">'+O.risk_dist.low+' 个</div></div>'
+    +'<div class="note" style="margin-top:10px">分层依据：告警量 + 未修复漏洞 + 暴露端口综合。</div></div>';
+  h+='<div class="card"><div class="card-t">数据可信度</div>'
+    +'<div class="pbar"><div class="pn">高 (≥60)</div><div class="pt"><div class="pf" style="width:'+(O.confidence.high/O.subject_total*100).toFixed(1)+'%;background:#40c057"></div></div><div class="pv">'+O.confidence.high+' 个</div></div>'
+    +'<div class="pbar"><div class="pn">中 (20-59)</div><div class="pt"><div class="pf" style="width:'+(O.confidence.mid/O.subject_total*100).toFixed(1)+'%;background:#fcc419"></div></div><div class="pv">'+O.confidence.mid+' 个</div></div>'
+    +'<div class="pbar"><div class="pn">低 (&lt;20)</div><div class="pt"><div class="pf" style="width:'+(O.confidence.low/O.subject_total*100).toFixed(1)+'%;background:#adb5bd"></div></div><div class="pv">'+O.confidence.low+' 个</div></div>'
+    +'<div class="note" style="margin-top:10px">⚠ '+O.confidence.low+' 个主体数据量过少，画像结论不可信，仅作存在性证据。</div></div>';
+  h+='</div>';
+
+  /* 画像主体列表 —— L1 → L2 的主入口 */
+  h+='<div class="card"><div class="card-t">画像主体列表<span class="card-sub">共 '+O.subject_total+' 个主体，下表列出 8 个代表 · 点击任意行进入 L2 详情</span></div>';
+  h+='<table class="slist"><thead><tr><th>IP</th><th>主机名 / 资产名</th><th>当日访问</th><th>流量类型</th><th>置信度</th><th>画像标签</th><th></th></tr></thead><tbody>';
+  for(const r of ROSTER){
+    const confCls=r.conf>=60?'#40c057':(r.conf>=20?'#f59f00':'#adb5bd');
+    h+='<tr'+(r.ip===curIP?' class="hl"':'')+' onclick="goDetail(\''+r.ip+'\')">'
+      +'<td style="font-family:ui-monospace,monospace;font-weight:600">'+esc(r.ip)+'</td>'
+      +'<td>'+esc(r.name)+(r.warn?' <span style="color:#e8590c;font-size:11px">⚠ '+esc(r.warn)+'</span>':'')+(r.note?' <span style="color:#adb5bd;font-size:11px">'+esc(r.note)+'</span>':'')+'</td>'
+      +'<td style="text-align:right;font-family:ui-monospace,monospace">'+fmt(r.total)+'</td>'
+      +'<td><span class="chip" style="background:#e7f1ff;color:#1971c2">'+esc(r.tt)+'</span></td>'
+      +'<td><b style="color:'+confCls+'">'+r.conf+'</b></td>'
+      +'<td>'+(r.tags.length?r.tags.map(t=>'<span class="chip" style="background:#f1f3f5;color:#495057;margin-right:3px">'+esc(t)+'</span>').join(''):'<span style="color:#adb5bd">—</span>')+'</td>'
+      +'<td class="go">查看画像 →</td>'
+      +'</tr>';
+  }
+  h+='</tbody></table><div class="note" style="margin-top:10px">'
+    +'💡 <b>三个快捷入口也可直达 L2</b>：资产列表点 IP · 告警详情点 agent_ip · 上网行为基线点 IP —— 均跳 <code>/browsing/profile/:ip</code>。'
+    +'</div></div>';
+
+  return h;
+}
+
+/* —— L2 顶部面包屑（返回 L1） —— */
+function crumbBar(){
+  return '<div class="crumb">'
+    +'<a onclick="goOverview()">← 返回群体概览</a>'
+    +'<span class="sep">|</span>'
+    +'<span>行为画像 › <b style="color:#1971c2">'+esc(curIP)+'</b></span>'
+    +'<span class="sep">·</span>'
+    +'<span>左栏为身份档案，右侧 4 个 Tab 切换维度</span>'
+    +'</div>';
+}
+
+/* —— 层级跳转 —— */
+let curView="L1";
+function goOverview(){curView="L1";curTab="behavior";render();window.scrollTo({top:0,behavior:'smooth'});}
+function goDetail(ip){curView="L2";curIP=ip;curTab="behavior";render();window.scrollTo({top:0,behavior:'smooth'});}
+
 /* —— 渲染整页 —— */
 let curIP="192.168.0.8", curTab="behavior";
 function render(){
+  const subjEl=document.getElementById('subj');
+  /* L1：群体概览（隐藏主体切换栏） */
+  if(curView==="L1"){
+    subjEl.style.display='none';
+    subjEl.innerHTML='';
+    document.getElementById('page').innerHTML=overviewPanel();
+    return;
+  }
+  subjEl.style.display='';
   const L=LAYERS[curIP];
   let subjHtml=SUBJECTS.map(s=>'<div class="subj-i'+(s.ip===curIP?' on':'')+'" onclick="selectIP(\''+s.ip+'\')">'+esc(s.ip)+'<span class="st">'+esc(s.label)+'</span></div>').join('');
   document.getElementById('subj').innerHTML=subjHtml;
@@ -529,7 +723,7 @@ function render(){
     +tabBtn('anomaly','异常判定', L&&L.anomaly&&L.anomaly.some(a=>a.sev!=='info')?'#c92a2a':'#adb5bd')
     +'</div>';
   let panel='<div class="body2"><div id="idcol"></div><div><div id="tabbar"></div><div id="panels"></div></div></div>';
-  document.getElementById('page').innerHTML=idbar+bannerHtml+tabs+panel;
+  document.getElementById('page').innerHTML=crumbBar()+idbar+bannerHtml+tabs+panel;
   document.getElementById('idcol').innerHTML=identityCard(curIP);
   document.getElementById('tabbar').innerHTML='';
   let p='<div class="panel'+(curTab==='behavior'?' on':'')+'" id="p-behavior">'+behaviorPanel(curIP)+'</div>'

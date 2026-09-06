@@ -37,14 +37,15 @@ export enum RoutesAlias {
   BrowsingConfig = '/browsing/config/index', // 上网行为规则配置
   BrowsingLogs = '/browsing/logs/index', // 上网行为日志
   BrowsingStatistics = '/browsing/statistics/index', // 行为统计概览
-  BrowsingProfile = '/browsing/profile', // 行为画像
+  BrowsingProfile = '/browsing/profile/index', // 行为画像（L1 群体概览）
+  BrowsingProfileDetail = '/browsing/profile/detail', // 行为画像（L2 单 IP 详情，隐藏路由）
   BrowsingBaseline = '/browsing/baseline/index', // 行为基线查看
   // P3 资产扫描控制面（final.md §6.4 / 原型 2026-08-26-control-plane-prototype）
-  AssetScan = '/scan/index',                    // 扫描器/任务/目标/发现/健康总入口
-  AssetScanners = '/scan/scanners/index',       // 扫描器列表 + 详情
-  AssetScanTasks = '/scan/tasks/index',          // 扫描任务列表
-  AssetScanFindings = '/scan/findings/index',    // 发现清单 + 纳管/忽略
-  AssetScanTargets = '/scan/targets/index',      // 扫描目标管理
+  AssetScan = '/scan/index', // 扫描器/任务/目标/发现/健康总入口
+  AssetScanners = '/scan/scanners/index', // 扫描器列表 + 详情
+  AssetScanTasks = '/scan/tasks/index', // 扫描任务列表
+  AssetScanFindings = '/scan/findings/index', // 发现清单 + 纳管/忽略
+  AssetScanTargets = '/scan/targets/index', // 扫描目标管理
   Placeholder = '/placeholder' // 占位页面
   // 已精简：示例与演示页面别名已移除
 }

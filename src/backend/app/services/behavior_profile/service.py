@@ -101,9 +101,13 @@ def get_profile(db: Session, ip: str, days: int = 7) -> Optional[dict]:
             "name": asset.name if asset else (latest.hostname if latest else None),
             "asset_type": asset.asset_type if asset else None,
             "os_name": asset.os_name if asset else None,
+            "os_version": asset.os_version if asset else None,
             "owner": asset.owner if asset else None,
-            "mac_address": asset.mac_address if asset else None,
+            "business_unit": asset.business_unit if asset else None,
             "criticality": asset.criticality if asset else None,
+            "mac_address": asset.mac_address if asset else None,
+            "data_source": asset.data_source if asset else None,
+            "last_synced_at": asset.last_synced_at.isoformat() if (asset and asset.last_synced_at) else None,
         } if asset else None,
         "days": days,
         "total": total,
@@ -161,6 +165,113 @@ def _night_share(by_hour) -> float:
     if not by_hour or not sum(by_hour):
         return 0.0
     return round(sum(by_hour[:6]) / sum(by_hour) * 100, 1)
+
+
+def get_overview(db: Session, days: int = 7) -> dict:
+    """L1 群体概览（两层结构改造方案 §4.3 v1.1）。
+
+    口径：主体级统计取每主体最近一条 ok 快照（不限窗口）；
+    全网节律/兴趣取窗口内全部 ok 快照求和；风险分层用 criticality（V1）。
+    """
+    from collections import Counter
+
+    # 每主体最近一条 ok 快照（主体级统计）
+    latest_ids = [
+        row[1] for row in db.query(
+            BehaviorProfile.ip, func.max(BehaviorProfile.id),
+        ).filter(BehaviorProfile.status == "ok").group_by(BehaviorProfile.ip).all()
+    ]
+    latest_rows = db.query(BehaviorProfile).filter(
+        BehaviorProfile.id.in_(latest_ids)).all() if latest_ids else []
+
+    # 窗口内全部 ok 快照（全网节律/兴趣）
+    since = dt.date.today() - dt.timedelta(days=days)
+    win_rows = (
+        db.query(BehaviorProfile)
+        .filter(BehaviorProfile.status == "ok",
+                BehaviorProfile.profile_date >= since)
+        .all()
+    )
+
+    tt = Counter(r.traffic_type for r in latest_rows)
+    conf = Counter(
+        "high" if r.confidence >= 60 else "mid" if r.confidence >= 20 else "low"
+        for r in latest_rows
+    )
+    tags = Counter(
+        t.get("name") for r in latest_rows for t in (r.tags or []) if t.get("name")
+    )
+
+    by_hour = [0] * 24
+    cat_counter: Counter = Counter()
+    for r in win_rows:
+        for h in range(24):
+            by_hour[h] += (r.by_hour or [0] * 24)[h]
+        # cat_by_block 是 ACT 层计数，直接按分类求和即全网兴趣构成
+        for _b, cats in (r.cat_by_block or {}).items():
+            for c, v in cats.items():
+                cat_counter[c] += v
+    cat_total = sum(cat_counter.values()) or 1
+    hour_total = sum(by_hour) or 1
+    block_of_hour = {}
+    from .classifier import block_of
+    for h, v in enumerate(by_hour):
+        b = block_of(h).name
+        block_of_hour[b] = block_of_hour.get(b, 0) + v
+
+    # 全网 TOP 域名（窗口内）
+    top_domains_q = (
+        db.query(BehaviorDomain.domain, func.sum(BehaviorDomain.visits).label("visits"))
+        .filter(BehaviorDomain.profile_date >= since)
+        .group_by(BehaviorDomain.domain)
+        .order_by(func.sum(BehaviorDomain.visits).desc())
+        .limit(20)
+        .all()
+    )
+    from .classifier import classify
+    dom_total = sum(v for _, v in top_domains_q) or 1
+    top_domains = [
+        {"domain": d, "visits": int(v), "category": classify(d)[0],
+         "share": round(v / dom_total * 100, 2)}
+        for d, v in top_domains_q
+    ]
+
+    # 风险分层（V1 = criticality 四档；无资产记录归 low）
+    asset_crit = dict(
+        db.query(Asset.asset_ip, Asset.criticality)
+        .filter(Asset.asset_ip.in_([r.ip for r in latest_rows])).all()
+    ) if latest_rows else {}
+    crit = Counter((asset_crit.get(r.ip) or "low") for r in latest_rows)
+
+    dates = sorted({str(r.profile_date) for r in win_rows})
+    return {
+        "days": days,
+        "subject_total": len(latest_rows),
+        "traffic_type": {"human": tt.get("human", 0), "machine": tt.get("machine", 0),
+                          "mixed": tt.get("mixed", 0)},
+        "confidence_dist": {"high": conf.get("high", 0), "mid": conf.get("mid", 0),
+                             "low": conf.get("low", 0)},
+        "tag_distribution": [
+            {"name": n, "count": c} for n, c in tags.most_common(30)
+        ],
+        "global_by_hour": by_hour,
+        "global_by_block": {
+            b: round(v / hour_total * 100, 1) for b, v in block_of_hour.items()
+        },
+        "global_cat_share": {
+            c: round(v / cat_total * 100, 1)
+            for c, v in cat_counter.most_common()
+        },
+        "global_top_domains": top_domains,
+        "risk_distribution": {
+            "critical": crit.get("critical", 0), "high": crit.get("high", 0),
+            "medium": crit.get("medium", 0), "low": crit.get("low", 0),
+        },
+        "data_freshness": {
+            "latest_date": dates[-1] if dates else None,
+            "snapshot_days": len(dates),
+        },
+    }
 
 
 def get_domains(db: Session, ip: str, days: int = 7, limit: int = 50,

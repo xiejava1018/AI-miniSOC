@@ -16,6 +16,15 @@ export const getBehaviorProfiles = (params?: Record<string, any>): Promise<any> 
   })
 }
 
+/** L1 群体画像概览（人设分布/全网节律/兴趣构成/风险分层） */
+export const getBehaviorOverview = (params?: Record<string, any>): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/behavior-profile/overview`,
+    params,
+    keepFullResponse: true
+  })
+}
+
 /** 单主体聚合画像 */
 export const getBehaviorProfile = (ip: string, params?: Record<string, any>): Promise<any> => {
   return httpClient.get({
@@ -115,10 +124,9 @@ export const getBehaviorAiSummary = (ip: string, params?: Record<string, any>): 
 /** 导出画像 HTML 报告（返回 blob 下载，token 从 user store 取） */
 export const exportBehaviorProfile = async (ip: string, days = 7): Promise<void> => {
   const { useUserStore } = await import('@/store/modules/user')
-  const resp = await fetch(
-    `${API_PREFIX}/behavior-profile/${ip}/export?days=${days}`,
-    { headers: { Authorization: `Bearer ${(useUserStore() as any).accessToken || ''}` } }
-  )
+  const resp = await fetch(`${API_PREFIX}/behavior-profile/${ip}/export?days=${days}`, {
+    headers: { Authorization: `Bearer ${(useUserStore() as any).accessToken || ''}` }
+  })
   if (!resp.ok) throw new Error('export failed')
   const blob = await resp.blob()
   const url = URL.createObjectURL(blob)

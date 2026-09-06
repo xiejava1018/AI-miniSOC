@@ -265,6 +265,24 @@ def get_relations(db: Session, ip: str, days: int = 30) -> dict:
 
     accounts_on_host = sorted({r["account"] for r in in_ok if r["account"] != "?"})
 
+    # 同网段邻居（拓扑图用，§6.4；排除自己，取前 12 防爆炸）
+    me = db.query(Asset).filter(Asset.asset_ip == ip).first()
+    same_segment = []
+    if me:
+        neighbors = (
+            db.query(Asset.asset_ip, Asset.name)
+            .filter(Asset.network_segment == me.network_segment,
+                    Asset.asset_ip != ip,
+                    Asset.asset_ip.notin_(("0.0.0.0", "127.0.0.1")))
+            .order_by(Asset.asset_ip)
+            .limit(12)
+            .all()
+        )
+        same_segment = [
+            {"ip": n.asset_ip, "name": n.name}
+            for n in neighbors
+        ]
+
     return {
         "ip": ip,
         "days": days,
@@ -274,6 +292,7 @@ def get_relations(db: Session, ip: str, days: int = 30) -> dict:
         "external_attackers": externals,
         "accounts_on_host": accounts_on_host,
         "device_shared_by": len(accounts_on_host),
+        "same_segment": same_segment,
         "note": None if (in_ok or out_ok) else "该设备无认证事件记录（未装 agent 或无 SSH 活动）",
     }
 

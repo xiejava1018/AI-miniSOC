@@ -1636,7 +1636,7 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 
 ---
 
-**文档版本**: v2.25
+**文档版本**: v2.26
 **最后更新**: 2026-09-06
 
 ---
@@ -1729,4 +1729,39 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 
 ---
 
-**文档版本**: v2.25
+**文档版本**: v2.26
+
+---
+
+## 今日补充（2026-09-06 续：行为画像两层结构改造实施）
+
+### 本次交付（方案 `docs/design/2026-09-06-行为画像-两层结构改造方案.md` v1.2，S1-S7 全落地）
+
+**结构**：菜单「行为画像」从"单 IP 详情页塞主体列表"拆成两层——
+- **L1 群体概览** `/browsing/profile`（重写 `profile/index.vue`）：KPI 卡（主体总数/人类/快照天数/低置信度数）+ 人设分布条形（可点筛列表）+ 全网 24h/时段/兴趣/风险分层四图 + 主体列表（traffic_type/conf/搜索/四列排序/分页，行点击进 L2）
+- **L2 单 IP 详情** `/browsing/profile/detail/:ip`（新建 `profile/detail.vue`）：左栏**身份档案卡**（基本信息/归属/关联账号双向钻取/数据来源新鲜度色标/画像摘要，sticky 不随 Tab 消失）+ 面包屑 + IP 切换下拉 + 原 4 Tab
+- **D2 修复**：关系 Tab 新增 ECharts graph 力导向拓扑（入站蓝/出站绿/攻击源红/同网段灰虚线，边粗细按次数对数映射，>30 节点自动切环形，节点点击跳对方画像）；`relations` 接口补 `same_segment`（已滤 0.0.0.0/127.0.0.1）
+- **D3 根因确认**：`len(ok_rows)>=4` 硬门槛 + 仅 1 天快照，非 bug；S7 核实 top_rules 非 bug（.102 实测 8 条，空数组仅无 agent 设备的正常空态）
+
+**后端**：`GET /behavior-profile/overview?days=7`（admin+auditor+审计，主体级取最近 ok 快照、全网聚合取窗口内快照求和、风险分层用 criticality）；`get_profile` asset 补 business_unit/data_source/last_synced_at/criticality
+
+**S6 traffic_type 修复**（方案 §2.3 的真问题）：
+- classifier 系统背景层补机器心跳/组网打洞域名（stun/easytier/tailscale/zerotier/ddns/ipw.cn/fnnas/whoami/oray 等）——.17 NAS 的 SYS 占比从 8.9% → 81.5%
+- `compute_traffic_type` 加双辅助判据：SYS≥50% → machine；SYS≥30% 且 TOP3 域名集中度≥50% 且 24h 变异系数≤0.15 → machine；mixed 需 SYS 参与（防邮箱心跳类人类设备误判）
+- **POC 四主体回归全过**：.17→machine；.8 Mac（top3 98.9% 但 SYS 0.2%）/.100（CV 0.055 但 SYS 0%）/.25（CV 1.2）→ human
+- **生效时间**：次日起的新快照（存量快照 layer_visit 是旧词典算的，不改写历史）
+
+**迁移 `b1c2d3e4f5g6`**（down_revision=z6a7b8c9d0e1）：插隐藏菜单 `profile/detail/:ip`（component=/browsing/profile/detail，is_visible=false）+ 授权自动派生自「行为画像」菜单持有角色（admin+auditor）；downgrade→upgrade 循环幂等已验
+
+### 踩坑（本轮新增）
+1. **SQL 里 `:ip` 路径字符串会被 text() 当绑定参数**——验证查询报 "A value is required for bind parameter 'ip'"（`:perms::jsonb` 同款坑）。用 `"profile/detail/:" + "ip"` 拼接或参数化传值
+2. **`Asset` 没有 `hostname` 列**（name/asset_ip/mac_address…），第一版 same_segment 查询带了 hostname 直接炸；写查询前先确认列存在
+3. **compute_traffic_type 的辅助判据必须要求 SYS 参与**：纯"集中度+平直"会把邮箱客户端心跳（top3 98.9%）的人类设备判成机器——.8 就是活例子
+4. **模拟数据验证判据不可靠**：第一轮用随机数模拟 by_hour，.8/.25 全被误判 mixed；必须用 POC 真实 by_hour 数组回归
+5. **menu component `/browsing/profile/detail` 直接命中 detail.vue**（ComponentLoader 先试 `path.vue` 再试 `path/index.vue`），不需要建目录/index.vue——与资产详情（/asset/detail/index 是目录）两种形态都支持
+
+### 待办（不阻塞）
+- 生产部署后需手跑 `alembic upgrade head`（b1c2d3e4f5g6）
+- 验收 #7（异常判定核心规则）待快照积累 ≥4 天
+- .17 立即变 machine：可删其窗口内旧快照让水位重拉（未做，避免改写历史）
+- 拓扑图图例筛选（方案 §6.3 V2 项）

@@ -54,6 +54,18 @@ async def get_behavior_profiles(
     return {"total": len(data), "items": data}
 
 
+@router.get("/behavior-profile/overview")
+async def get_behavior_overview(
+    days: int = Query(7, ge=1, le=30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "auditor")),
+):
+    """L1 群体画像概览（两层结构 §4.3）：人设分布/全网节律/兴趣构成/风险分层/数据新鲜度。"""
+    data = svc.get_overview(db, days)
+    _audit(current_user, "QUERY", "*", f"overview days={days}")
+    return data
+
+
 @router.get("/behavior-profile/{ip}")
 async def get_behavior_profile(
     ip: str,

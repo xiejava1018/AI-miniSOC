@@ -62,19 +62,34 @@ def aggregate_day(events: Sequence[Tuple[dt.datetime, str]]) -> dict:
 
 
 def compute_traffic_type(day_stat: dict) -> str:
-    """机器流量判定（§9.7.1，P0）。
+    """机器流量判定（§9.7.1，P0；S6 增强双辅助判据）。
 
-    SYS 层占比 ≥60% 或（数据量足够时）分布高度集中于少数域名且无时段起伏
-    → machine；两者之间 → mixed。
+    主判据：SYS 层占比 ≥50% → machine（原 60%，classifier 补机器心跳域名后校准）。
+    辅助判据（§9.7.1 原文"分布高度集中于少数域名且无时段起伏"）：
+      SYS ≥30% 且 TOP3 域名集中度 ≥50% 且 24h 曲线变异系数 ≤0.15 → machine；
+      中间状态 → mixed；样本 <50 不判定按人对待（confidence 兜底）。
     """
     total = day_stat.get("total", 0)
     if total < 50:
-        return "human"  # 样本太少不判定，按人对待并让 confidence 说话
+        return "human"
+
     lv = day_stat.get("layer_visit", {})
     sys_ratio = lv.get("SYS", 0) / total
-    if sys_ratio >= 0.6:
+    if sys_ratio >= 0.5:
         return "machine"
-    if sys_ratio >= 0.4:
+
+    # 辅助判据：域名集中度 + 24h 曲线平直度（必须 SYS 参与才算机器特征，
+    # 避免邮箱/推送心跳类人类设备被误判）
+    domain_visits = sorted(day_stat.get("domain_visits", {}).values(), reverse=True)
+    top3_share = sum(domain_visits[:3]) / total if domain_visits else 0
+    by_hour = day_stat.get("by_hour") or [0] * 24
+    mean = sum(by_hour) / 24
+    cv = (sum((v - mean) ** 2 for v in by_hour) / 24) ** 0.5 / mean if mean > 0 else 1.0
+    flat = cv <= 0.15
+
+    if sys_ratio >= 0.3 and top3_share >= 0.5 and flat:
+        return "machine"
+    if 0.15 <= sys_ratio < 0.5 or (sys_ratio >= 0.05 and top3_share >= 0.5 and flat):
         return "mixed"
     return "human"
 
