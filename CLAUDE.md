@@ -1636,5 +1636,97 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 
 ---
 
-**文档版本**: v2.24
-**最后更新**: 2026-08-26
+**文档版本**: v2.25
+**最后更新**: 2026-09-06
+
+---
+
+## 今日补充（2026-09-06：行为画像全量落地 + 入口跳转）
+
+### 本次交付
+
+**方案**：`docs/design/2026-09-05-用户IP行为画像-方案设计.md`（v1.5，~600 行，§9 落地方案含 9.7.1–9.7.9 修复清单）
+**原型**：`docs/reports/2026-09-05-行为画像-原型设计.html`（5 主体 × 4 Tab 全量渲染，附附录 C 已知问题清单）
+
+### 9 个 commit 速查
+
+| Commit | 内容 |
+|--------|------|
+| `0353abc` | Phase 1.5 落地（快照表 + 服务模块 + 水位回溯） |
+| `59812a0` | Phase 2 产品化（API + 前端 + 菜单 + MCP） |
+| `b21603a` | fix: service 误用 Asset.asset_name → .name（CLAUDE.md P3 坑 #9） |
+| `7d9e772` | Phase 3 AI 增强（LLM 解读 + F4.2 场景8 推送） |
+| `89495bc` | 四 Tab 全量 + 身份管道 Phase 0 + B2/B3 批次 |
+| `69f55ff` | fix: 身份管道分批 + 风险榜 level→level_max |
+| `110547e` | fix: 身份管道预加载已有文档id+关autoflush+每250条 |
+| `4caa4cf` | fix: 身份管道 pending 绑定内存去重 |
+| `0c9a504` | fix: 画像图表空白——echarts 在 0 宽容器 init 时序 |
+| `eb911f6` | fix: 脚本块多余大括号 |
+| `a755750` | **本批**：列表页 IP 列点击跳画像页（入口联动） |
+
+### §9 验收核对（方案 §9.9）
+
+- ✅ 活跃时段分布（原始日志逐条计数，口径已固化在 `loki_source.py`）
+- ✅ 行为节律 7 时段占比 + 星期×小时热力（ECharts heatmap，行为 Tab 第 3 卡）
+- ✅ 域名 TOP N + 下钻到日明细
+- ✅ 14 类兴趣分类（**新增"学习教育"类**让"学生党"标签可触发）
+- ✅ 画像标签（PERSONA_MAP：夜猫子→野猫子、周末战士→工作狂）
+- ✅ 机器流量自动折叠/降权（traffic_type=human/machine/mixed）
+- ✅ 快照留存 ≥180 天（`soc_behavior_profiles`+`soc_behavior_domains`）
+- ✅ 主体键 `(asset_id, profile_date)`，DHCP 漂移不分裂
+- ✅ 断点补拉 + `status='gap'` 显式缺口标记（防假绿）
+- ✅ 告警分级阈值 import `app.core.alert_levels`（13/10/7/4）
+- ✅ X1 矩阵：读端点 admin+auditor，refresh 走 `require_button_permission`
+- ✅ 审计留痕：所有查看行为写 `soc_audit_logs`（`resource_type=behavior_profile`）
+- ✅ 合规水印「本数据仅用于安全审计」+「仅输出信号不定性」
+- ✅ 入口跳转（资产/告警/上网行为 → 画像，§9.5）
+
+### 9.7.1–9.7.9 修复落点
+
+| # | 修复 | 落地位置 |
+|---|------|----------|
+| 9.7.1 | traffic_type 自动判定（SYS≥60% → machine） | `aggregator.compute_traffic_type()` |
+| 9.7.2 | 快照表突破 Loki 7 天 | `soc_behavior_profiles`+`_domains` |
+| 9.7.3 | 分类词典可配置 | `classifier.py` 读 `soc_system_config.domain_categories` |
+| 9.7.4 | PERSONA_MAP 规则→人设解耦 | `tagger.py` PERSONA_MAP 字典 |
+| 9.7.5 | 新增「学习教育」分类 | `classifier.CATEGORIES["学习教育"]` |
+| 9.7.6 | IP≠人，明示"设备画像"+关联账号入口 | 身份管道 Phase 0（已上线） |
+| 9.7.7 | 原始日志逐条计数（禁用 count_over_time） | `loki_source.py` 注释约束 + 写死 |
+| 9.7.8 | 主体键 `(asset_id, profile_date)` | 模型 `UniqueConstraint` |
+| 9.7.9 | 断点补拉 + gap 占位 | `snapshot_job.mark_gap()` + `BehaviorProfileWatermark` |
+
+### 入口跳转实现要点（`a755750`）
+
+**入口侧**（IP 列变 ElLink/可点击）：
+- `views/asset/list/index.vue` — asset_ip 列 → ElLink
+- `views/alert/list/index.vue` — agent.ip 列 → ElLink（需新增 `useRouter`）
+- `views/browsing/baseline/index.vue` — baseline ip 列 → `<a>` click
+- `views/browsing/event/index.vue` — event ip 列 → `<a>` click（需新增 `useRouter`+`h`）
+
+**出口侧**：`views/browsing/profile/index.vue` onMounted 读 `route.query.ip / agent_ip`，
+若在 `subjects` 列表则自动 `selectSubject(ip)`。`stopPropagation` 防行点击穿透。
+
+### 踩坑（本批+前批，4 条核心）
+
+1. **`useRouter` 必须在 setup 顶层声明**——`useTable` 的 `columnsFactory.formatter` 是普通函数，没有 setup 上下文
+2. **`<component :is>` 会渲染 `formatter(row)` 返回的对象**——art-table 已支持（`isObject()` 判断分支），返回 `h(ElLink,...)` 即可
+3. **baseline/event 原本只 import `useTable`**——需补 `h` 和 `useRouter`，否则 vue-tsc 报 no-unused-vars
+4. **`route.query` 要在 onMounted 里读**——setup 顶层读时 subjects 还没加载完，`some()` 永远 false 失效
+
+### 测试入口
+
+- 画像列表页：菜单「上网行为」→「行为画像」→ 左侧栏选主体 → 四 Tab
+- 入口跳转：① 资产管理→点任意 IP ② 告警管理→点告警 IP ③ 上网行为→基线/事件→点 IP，均跳过来
+- 实时刷新：标识条右上「实时刷新」按钮（v-auth=refresh，仅 admin/operator 可见）
+- AI 解读：「AI 解读」按钮（GLM 降级会显示"规则模板（AI 不可用降级）"）
+- 导出：标识条「导出」按钮 → 自包含 HTML（含合规水印，浏览器可直接打开）
+
+### 待办（不阻塞）
+
+- 9.7.3 分类词典表独立化（当前是 soc_system_config JSON 字段，量大了再抽表）
+- 历史快照补跑（生产已跑通 9/5 当日，之前日期因 Loki 已过窗需 status=gap）
+- Phase 4 双 Key 收口（scanner 独立 SCANNER_API_KEY）
+
+---
+
+**文档版本**: v2.25
