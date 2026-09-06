@@ -474,7 +474,23 @@
           label: 'IP地址',
           align: 'center',
           minWidth: 140,
-          formatter: (row: any) => row.asset_ip || '--'
+          formatter: (row: any) => {
+            const ip = row.asset_ip
+            if (!ip) return '--'
+            return h(
+              resolveComponent('ElLink'),
+              {
+                type: 'primary',
+                underline: false,
+                style: 'cursor:pointer',
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation()
+                  router.push({ path: '/browsing/profile/index', query: { ip } })
+                }
+              },
+              { default: () => ip }
+            )
+          }
         },
         {
           prop: 'public_ip',

@@ -125,6 +125,7 @@
 
 <script setup lang="ts">
   import { ref, reactive, h, computed, onMounted } from 'vue'
+  import { useRouter } from 'vue-router'
   import { ElMessage, ElMessageBox, ElTag } from 'element-plus'
   import { useTable } from '@/composables/useTable'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
@@ -138,6 +139,13 @@
     getBrowsingStats
   } from '@/api/browsing'
   import type { SearchFormItem } from '@/types'
+
+  const router = useRouter()
+
+  // 跳转该 IP 到画像页（入口联动，§9.5）
+  const goProfile = (ip: string) => {
+    router.push({ path: '/browsing/profile/index', query: { ip } })
+  }
 
   // 统计
   const stats = ref<any>({})
@@ -171,7 +179,21 @@
       columnsFactory: () => [
         { prop: 'created_at', label: '检测时间', align: 'center', width: 160,
           formatter: (r: any) => fmtTime(r.created_at) },
-        { prop: 'ip', label: '源 IP', align: 'center', width: 130 },
+        {
+          prop: 'ip', label: '源 IP', align: 'center', width: 130,
+          formatter: (r: any) => {
+            const ip = r.ip
+            if (!ip) return '--'
+            return h(
+              'a',
+              {
+                style: 'color:var(--el-color-primary);cursor:pointer;text-decoration:none',
+                onClick: (e: MouseEvent) => { e.preventDefault(); goProfile(ip) }
+              },
+              ip
+            )
+          }
+        },
         { prop: 'domain', label: '目标域名', align: 'left', showOverflowTooltip: true,
           formatter: (r: any) => r.domain || '--' },
         { prop: 'severity', label: '等级', align: 'center', width: 90,

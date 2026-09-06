@@ -101,6 +101,7 @@
 
 <script setup lang="ts">
   import { ref, reactive, computed, h, resolveComponent, onMounted } from 'vue'
+  import { useRouter } from 'vue-router'
   import {
     getAlertList,
     getAlertStatistics,
@@ -118,6 +119,8 @@
   const statsCritical = ref(0)
   const statsMedium = ref(0)
   const statsLow = ref(0)
+
+  const router = useRouter()
 
   const loadStatistics = async () => {
     try {
@@ -191,7 +194,23 @@
           label: 'IP',
           align: 'center',
           width: 140,
-          formatter: (row: any) => row.agent?.ip || '--'
+          formatter: (row: any) => {
+            const ip = row.agent?.ip
+            if (!ip) return '--'
+            return h(
+              resolveComponent('ElLink'),
+              {
+                type: 'primary',
+                underline: false,
+                style: 'cursor:pointer',
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation()
+                  router.push({ path: '/browsing/profile/index', query: { ip } })
+                }
+              },
+              { default: () => ip }
+            )
+          }
         },
         {
           prop: 'location',

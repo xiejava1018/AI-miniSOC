@@ -424,6 +424,7 @@
 
 <script setup lang="ts">
   import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+  import { useRoute } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { echarts } from '@/plugins/echarts'
   import { useAuth } from '@/hooks/core/useAuth'
@@ -887,6 +888,12 @@
 
   onMounted(async () => {
     await loadList()
+    // 入口跳转支持：从资产/告警/上网行为列表跳来时带 ?ip=xxx，自动选中
+    const route = useRoute()
+    const ipParam = (route.query.ip || route.query.agent_ip) as string | undefined
+    if (ipParam && subjects.value.some((s: any) => s.ip === ipParam)) {
+      await selectSubject(ipParam)
+    }
     window.addEventListener('resize', onResize)
   })
 

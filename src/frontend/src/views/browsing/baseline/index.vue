@@ -27,9 +27,18 @@
 </template>
 
 <script setup lang="ts">
+  import { h } from 'vue'
+  import { useRouter } from 'vue-router'
   import { useTable } from '@/composables/useTable'
   import { getBrowsingBaseline } from '@/api/browsing'
   import type { SearchFormItem } from '@/types'
+
+  const router = useRouter()
+
+  // 跳转到该 IP 的画像页
+  const goProfile = (ip: string) => {
+    router.push({ path: '/browsing/profile/index', query: { ip } })
+  }
 
   // 表格（服务端分页，仿 event 页范式：searchParams 由 useTable 提供，
   // ArtSearchBar v-model 双向同步，查询走 getDataByPage 以当前筛选请求）
@@ -39,7 +48,21 @@
       apiFn: getBrowsingBaseline,
       apiParams: { ip: '', domain: '' },
       columnsFactory: () => [
-        { prop: 'ip', label: '内网 IP', align: 'left', showOverflowTooltip: true },
+        {
+          prop: 'ip', label: '内网 IP', align: 'left', showOverflowTooltip: true,
+          formatter: (r: any) => {
+            const ip = r.ip
+            if (!ip) return '--'
+            return h(
+              'a',
+              {
+                style: 'color:var(--el-color-primary);cursor:pointer;text-decoration:none',
+                onClick: (e: MouseEvent) => { e.preventDefault(); goProfile(ip) }
+              },
+              ip
+            )
+          }
+        },
         { prop: 'domain', label: '域名', align: 'left', showOverflowTooltip: true },
         { prop: 'total_count', label: '累计访问次数', align: 'center', width: 120 },
         { prop: 'first_seen', label: '首次观测', align: 'center', width: 170,
