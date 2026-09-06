@@ -49,68 +49,6 @@
       </ElCol>
     </ElRow>
 
-    <!-- 人设分布 + 全网节律（§4.1 #2 #3） -->
-    <ElRow :gutter="12">
-      <ElCol :span="10">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">人设群体分布</span>
-            <span class="card-sub">全网画像标签命中数（每主体取最近快照）</span>
-          </template>
-          <div v-if="tagRows.length" class="tag-bars">
-            <div v-for="t in tagRows" :key="t.name" class="tb-row" @click="filterByTag(t.name)">
-              <span class="tb-name">{{ t.name }}</span>
-              <div class="tb-track">
-                <div
-                  class="tb-fill"
-                  :style="{ width: tagPct(t.count), background: tagColor(t.name) }"
-                />
-              </div>
-              <span class="tb-v">{{ t.count }} 个</span>
-            </div>
-          </div>
-          <ElEmpty v-else description="暂无标签命中（等待快照积累）" :image-size="60" />
-        </ElCard>
-      </ElCol>
-      <ElCol :span="14">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">全网活跃节律</span>
-            <span class="card-sub">窗口内全部主体 24 小时访问聚合</span>
-          </template>
-          <div ref="hourRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-    </ElRow>
-
-    <!-- 兴趣构成 + 风险分层 + 时段（§4.1 #3 #4 #5） -->
-    <ElRow :gutter="12">
-      <ElCol :span="10">
-        <ElCard shadow="never" class="ov-card">
-          <template #header><span class="card-title">全网兴趣构成</span></template>
-          <div ref="catRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-      <ElCol :span="7">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">时段占比</span>
-            <span class="card-sub">7 时段</span>
-          </template>
-          <div ref="blockRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-      <ElCol :span="7">
-        <ElCard shadow="never" class="ov-card">
-          <template #header>
-            <span class="card-title">风险分层</span>
-            <span class="card-sub">按资产 criticality</span>
-          </template>
-          <div ref="riskRef" class="chart-box" style="height: 240px"></div>
-        </ElCard>
-      </ElCol>
-    </ElRow>
-
     <!-- 画像主体列表（§4.1 #6，L1 → L2 主入口） -->
     <ElCard shadow="never" class="ov-card">
       <template #header>
@@ -155,6 +93,16 @@
         @row-click="(row: any) => goDetail(row.ip)"
         @sort-change="onSortChange"
       >
+        <template #empty>
+          <ElEmpty
+            :description="
+              subjects.length
+                ? '当前筛选条件下无匹配主体'
+                : '暂无画像快照（等待快照任务运行，或检查接口权限 admin/auditor）'
+            "
+            :image-size="70"
+          />
+        </template>
         <ElTableColumn prop="ip" label="IP" width="140" sortable="custom">
           <template #default="{ row }">
             <span class="cell-ip">{{ row.ip }}</span>
@@ -241,6 +189,68 @@
         💡 三个快捷入口也可直达详情：资产列表点 IP · 告警详情点 agent_ip · 行为基线点 IP
       </div>
     </ElCard>
+
+    <!-- 人设分布 + 全网节律（§4.1 #2 #3） -->
+    <ElRow :gutter="12">
+      <ElCol :span="10">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">人设群体分布</span>
+            <span class="card-sub">全网画像标签命中数（每主体取最近快照）</span>
+          </template>
+          <div v-if="tagRows.length" class="tag-bars">
+            <div v-for="t in tagRows" :key="t.name" class="tb-row" @click="filterByTag(t.name)">
+              <span class="tb-name">{{ t.name }}</span>
+              <div class="tb-track">
+                <div
+                  class="tb-fill"
+                  :style="{ width: tagPct(t.count), background: tagColor(t.name) }"
+                />
+              </div>
+              <span class="tb-v">{{ t.count }} 个</span>
+            </div>
+          </div>
+          <ElEmpty v-else description="暂无标签命中（等待快照积累）" :image-size="60" />
+        </ElCard>
+      </ElCol>
+      <ElCol :span="14">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">全网活跃节律</span>
+            <span class="card-sub">窗口内全部主体 24 小时访问聚合</span>
+          </template>
+          <div ref="hourRef" class="chart-box" style="height: 240px"></div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
+
+    <!-- 兴趣构成 + 风险分层 + 时段（§4.1 #3 #4 #5） -->
+    <ElRow :gutter="12">
+      <ElCol :span="10">
+        <ElCard shadow="never" class="ov-card">
+          <template #header><span class="card-title">全网兴趣构成</span></template>
+          <div ref="catRef" class="chart-box" style="height: 240px"></div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="7">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">时段占比</span>
+            <span class="card-sub">7 时段</span>
+          </template>
+          <div ref="blockRef" class="chart-box" style="height: 240px"></div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="7">
+        <ElCard shadow="never" class="ov-card">
+          <template #header>
+            <span class="card-title">风险分层</span>
+            <span class="card-sub">按资产 criticality</span>
+          </template>
+          <div ref="riskRef" class="chart-box" style="height: 240px"></div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
   </div>
 </template>
 
