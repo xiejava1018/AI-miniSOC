@@ -1761,7 +1761,7 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 5. **menu component `/browsing/profile/detail` 直接命中 detail.vue**（ComponentLoader 先试 `path.vue` 再试 `path/index.vue`），不需要建目录/index.vue——与资产详情（/asset/detail/index 是目录）两种形态都支持
 
 ### 待办（不阻塞）
-- 生产部署后需手跑 `alembic upgrade head`（b1c2d3e4f5g6）
+- ~~生产部署后需手跑 `alembic upgrade head`（b1c2d3e4f5g6）~~ ✅ 已于 2026-09-06 19:52 执行（连跑 z6a7b8c9d0e1 + b1c2d3e4f5g6，生产 /browsing 父菜单 component 修复同时生效；隐藏菜单 id=69，授权 admin+auditor）
 - 验收 #7（异常判定核心规则）待快照积累 ≥4 天
 - .17 立即变 machine：可删其窗口内旧快照让水位重拉（未做，避免改写历史）
 - 拓扑图图例筛选（方案 §6.3 V2 项）
