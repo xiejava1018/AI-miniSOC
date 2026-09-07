@@ -284,14 +284,6 @@
 
             <ElCard shadow="never" class="bp-card">
               <template #header
-                ><span class="card-title">多日趋势</span>
-                <span class="card-sub">灰色段 = 数据缺失（Loki 窗口外）</span>
-              </template>
-              <div ref="trendRef" class="chart-box" style="height: 200px"></div>
-            </ElCard>
-
-            <ElCard shadow="never" class="bp-card">
-              <template #header
                 ><span class="card-title">访问域名 TOP 20</span>
                 <span class="card-sub">点域名查看逐日明细</span>
               </template>
@@ -597,7 +589,6 @@
   import {
     getBehaviorProfiles,
     getBehaviorProfile,
-    getBehaviorTrend,
     refreshBehaviorProfile,
     getBehaviorAiSummary,
     getBehaviorRisk,
@@ -623,7 +614,6 @@
   const days = ref(7)
   const activeTab = ref('behavior')
   const profile = ref<any>(null)
-  const trend = ref<any[]>([])
   const risk = ref<any>(null)
   const anomalies = ref<any>(null)
   const relations = ref<any>(null)
@@ -633,7 +623,6 @@
   const heatRef = ref<HTMLElement>()
   const catRef = ref<HTMLElement>()
   const stackRef = ref<HTMLElement>()
-  const trendRef = ref<HTMLElement>()
   const vulnRef = ref<HTMLElement>()
   const riskTrendRef = ref<HTMLElement>()
   const relGraphRef = ref<HTMLElement>()
@@ -762,13 +751,11 @@
     relations.value = null
     switchIp.value = ip.value
     try {
-      const [p, t, an] = await Promise.all([
+      const [p, an] = await Promise.all([
         getBehaviorProfile(ip.value, { days: days.value }).catch(() => null),
-        getBehaviorTrend(ip.value, { days: 30 }).catch(() => null),
         getBehaviorAnomalies(ip.value).catch(() => null)
       ])
       profile.value = p?.data || null
-      trend.value = t?.data?.items || []
       anomalies.value = an?.data || null
       await nextTick()
       renderCharts()
@@ -974,34 +961,6 @@
         itemStyle: { color: catColors[i % catColors.length] },
         data: BLOCK_ORDER.map((b) => p.cat_by_block?.[b]?.[c] ?? 0)
       }))
-    })
-
-    // 5: 多日趋势（gap 日 = null 断线）
-    makeChart(trendRef.value, {
-      grid: { left: 44, right: 12, top: 20, bottom: 24 },
-      xAxis: {
-        type: 'category',
-        data: trend.value.map((i) => i.profile_date?.slice(5) || ''),
-        axisLabel: { fontSize: 9 }
-      },
-      yAxis: { type: 'value' },
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params: any) => {
-          const idx = params[0]?.dataIndex
-          const item = trend.value[idx]
-          if (!item) return ''
-          if (item.status === 'gap') return `${item.profile_date}<br/>数据缺失（Loki 窗口外）`
-          return `${item.profile_date}<br/>访问 ${formatNumber(item.total)} · 主动行为 ${item.act_ratio}%`
-        }
-      },
-      series: [
-        {
-          type: 'bar',
-          data: trend.value.map((i) => (i.status === 'gap' ? null : i.total)),
-          itemStyle: { color: '#1971c2' }
-        }
-      ]
     })
   }
 
