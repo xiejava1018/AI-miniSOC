@@ -430,7 +430,7 @@
 
               <ElRow :gutter="12">
                 <ElCol :span="8">
-                  <ElCard shadow="never" class="bp-card">
+                  <ElCard shadow="never" class="bp-card rel-eq">
                     <template #header><span class="card-title">设备共享度</span></template>
                     <div class="rel-stat">
                       <div class="kpi-v">{{ relations.device_shared_by }}</div>
@@ -467,23 +467,9 @@
                       </span>
                     </div>
                   </ElCard>
-                  <ElCard shadow="never" class="bp-card" v-if="relations.same_segment?.length">
-                    <template #header><span class="card-title">同网段设备</span></template>
-                    <div class="seg-list">
-                      <div
-                        v-for="s in relations.same_segment"
-                        :key="s.ip"
-                        class="seg-item"
-                        @click="jumpTo(s.ip)"
-                      >
-                        <span class="seg-ip">{{ s.ip }}</span>
-                        <span class="seg-name">{{ s.name || s.hostname || '' }}</span>
-                      </div>
-                    </div>
-                  </ElCard>
                 </ElCol>
                 <ElCol :span="8">
-                  <ElCard shadow="never" class="bp-card">
+                  <ElCard shadow="never" class="bp-card rel-eq">
                     <template #header
                       ><span class="card-title">入站登录（谁登了本机）</span></template
                     >
@@ -504,7 +490,7 @@
                   </ElCard>
                 </ElCol>
                 <ElCol :span="8">
-                  <ElCard shadow="never" class="bp-card">
+                  <ElCard shadow="never" class="bp-card rel-eq">
                     <template #header
                       ><span class="card-title">出站登录（本机登了谁）</span></template
                     >
@@ -1382,36 +1368,6 @@
       }
     }
 
-    .seg-list {
-      .seg-item {
-        display: flex;
-        gap: 6px;
-        align-items: center;
-        padding: 6px 8px;
-        margin-bottom: 4px;
-        font-size: 12px;
-        cursor: pointer;
-        border: 1px solid var(--el-border-color-lighter);
-        border-radius: 6px;
-
-        &:hover {
-          border-color: var(--el-color-primary);
-          background: var(--el-color-primary-light-9);
-        }
-
-        .seg-ip {
-          font-family: ui-monospace, monospace;
-          color: var(--el-color-primary);
-        }
-
-        .seg-name {
-          margin-left: auto;
-          color: var(--el-text-color-secondary);
-          font-size: 11px;
-        }
-      }
-    }
-
     // 标识条
     .idbar {
       display: flex;
@@ -1541,6 +1497,20 @@
       .dim {
         color: var(--el-text-color-secondary);
         font-size: 12px;
+      }
+    }
+
+    // ── 关系画像三卡等高（设备共享度 / 入站登录 / 出站登录）──
+    // 固定高度而非 stretch：三卡分处不同 ElCol，flex 拉伸不跨列生效。
+    // 320 = 表格 max-height，+ header/padding 约 60。
+    .rel-eq {
+      height: 380px;
+      display: flex;
+      flex-direction: column;
+
+      :deep(.el-card__body) {
+        flex: 1;
+        overflow: auto;
       }
     }
 
