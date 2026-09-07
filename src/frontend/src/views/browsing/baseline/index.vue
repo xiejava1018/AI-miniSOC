@@ -35,9 +35,10 @@
 
   const router = useRouter()
 
-  // 跳转到该 IP 的画像页
+  // 跳转到该 IP 的画像详情页（L2）。直达详情路由，不走 L1 的 ?ip= 重定向——
+  // L1 是叶子菜单会被 keep-alive 缓存，二次进入不触发 onMounted，重定向会失效
   const goProfile = (ip: string) => {
-    router.push({ path: '/browsing/profile', query: { ip } })
+    router.push(`/browsing/profile/detail/${encodeURIComponent(ip)}`)
   }
 
   // 表格（服务端分页，仿 event 页范式：searchParams 由 useTable 提供，

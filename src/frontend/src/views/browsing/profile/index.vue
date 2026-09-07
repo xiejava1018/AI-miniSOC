@@ -227,7 +227,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+  import { ref, computed, onMounted, onActivated, onBeforeUnmount, nextTick } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { echarts } from '@/plugins/echarts'
   import { getBehaviorOverview, getBehaviorProfiles } from '@/api/behaviorProfile'
@@ -399,13 +399,19 @@
 
   const onResize = () => charts.forEach((c) => c.resize())
 
-  onMounted(async () => {
-    // ?ip= 入口兼容（§3.2）：重定向到 L2 详情路由
+  // ?ip= 入口兼容（§3.2）：重定向到 L2 详情路由。
+  // 本页是叶子菜单，会被 <KeepAlive> 缓存（api/system-manage.ts 的 keepAlive: !hasChildren），
+  // 二次进入只触发 onActivated 不触发 onMounted——所以两个钩子都要挂，
+  // 只写 onMounted 会让重定向失效、停在 L1 概览页（刷新才恢复）。
+  const redirectIfQueryIp = () => {
     const qip = (route.query.ip || route.query.agent_ip) as string | undefined
-    if (qip) {
-      router.replace(`/browsing/profile/detail/${encodeURIComponent(qip)}`)
-      return
-    }
+    if (!qip) return false
+    router.replace(`/browsing/profile/detail/${encodeURIComponent(qip)}`)
+    return true
+  }
+
+  onMounted(async () => {
+    if (redirectIfQueryIp()) return
     loading.value = true
     try {
       const [ov, list] = await Promise.all([
@@ -420,6 +426,16 @@
       loading.value = false
     }
     window.addEventListener('resize', onResize)
+  })
+
+  // 缓存命中的二次进入（首次挂载已由 onMounted 处理，跳过避免重复导航）
+  let activatedOnce = false
+  onActivated(() => {
+    if (!activatedOnce) {
+      activatedOnce = true
+      return
+    }
+    redirectIfQueryIp()
   })
 
   onBeforeUnmount(() => {

@@ -142,9 +142,10 @@
 
   const router = useRouter()
 
-  // 跳转该 IP 到画像页（入口联动，§9.5）
+  // 跳转该 IP 到画像详情页（入口联动，§9.5）。直达 L2，不走 L1 的 ?ip= 重定向——
+  // L1 是叶子菜单会被 keep-alive 缓存，二次进入不触发 onMounted，重定向会失效
   const goProfile = (ip: string) => {
-    router.push({ path: '/browsing/profile', query: { ip } })
+    router.push(`/browsing/profile/detail/${encodeURIComponent(ip)}`)
   }
 
   // 统计
