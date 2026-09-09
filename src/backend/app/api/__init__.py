@@ -152,6 +152,9 @@ include_human_router(
 include_human_router(api_router, data_health.router, tags=["数据健康"])
 include_human_router(api_router, behavior_profile.router, tags=["行为画像"])
 include_human_router(api_router, reports.router, tags=["AI安全报告"])
+# 上网行为异常检测（browsing 模块 endpoint 形如 /events /blacklist /baseline 等，
+# 需在前缀 /browsing 下挂载；写端点依赖 require_admin/operator 已在 browsing.py 内部声明）
+include_human_router(api_router, browsing.router, prefix="/browsing", tags=["行为检测"])
 
 # 扫描器管理 + 扫描任务（人类侧，与 scan_agents 的机器侧区分）
 include_human_router(
