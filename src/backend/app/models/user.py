@@ -47,8 +47,16 @@ class User(Base):
 
     @property
     def is_admin(self) -> bool:
-        """判断是否为管理员"""
-        return self.role and self.role.code == "admin"
+        """判断是否为管理员。
+
+        WO-3 收口定义（PRD §10.2）：管理员判定统一为
+        ``is_superuser=True`` OR ``role.code == 'admin'``。
+        与 ``api/auth.py`` 旧版重复表达式合并后，单一定义在此处。
+        顺序：先看 ``is_superuser`` 再看 ``role.code``——前者优先（适用于跨系统老用户）。
+        """
+        if self.is_superuser:
+            return True
+        return bool(self.role and self.role.code == "admin")
 
     @property
     def is_locked(self) -> bool:

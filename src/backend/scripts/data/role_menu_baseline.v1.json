@@ -1,0 +1,790 @@
+{
+  "version": "v1",
+  "managed_roles": [
+    "admin",
+    "operator",
+    "user",
+    "viewer",
+    "auditor"
+  ],
+  "disabled_roles": [
+    "readonly",
+    "test_role"
+  ],
+  "roles": {
+    "admin": {
+      "name": "管理员",
+      "is_active": true,
+      "menus": [
+        {
+          "locator": "/alerts",
+          "name": "告警管理",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/governance",
+          "name": "alert-governance",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/list",
+          "name": "alert-list",
+          "permissions": []
+        },
+        {
+          "locator": "/assets",
+          "name": "资产管理",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/compliance",
+          "name": "合规基线",
+          "permissions": [
+            "view",
+            "check",
+            "interpret"
+          ]
+        },
+        {
+          "locator": "/assets/detail/:id",
+          "name": "资产详情",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/list",
+          "name": "资产列表",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/overview",
+          "name": "资产概览",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/reconciliation",
+          "name": "资产稽核",
+          "permissions": [
+            "view",
+            "reconcile",
+            "resolve",
+            "report"
+          ]
+        },
+        {
+          "locator": "/browsing",
+          "name": "行为分析",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/baseline",
+          "name": "baseline",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/blacklist",
+          "name": "黑名单管理",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/config",
+          "name": "规则配置",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/event",
+          "name": "异常事件",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/logs",
+          "name": "行为日志",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/profile",
+          "name": "行为画像",
+          "permissions": [
+            "refresh"
+          ]
+        },
+        {
+          "locator": "/browsing/profile/detail/:ip",
+          "name": "画像详情",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/statistics",
+          "name": "行为统计",
+          "permissions": []
+        },
+        {
+          "locator": "/dashboard",
+          "name": "概览仪表板",
+          "permissions": []
+        },
+        {
+          "locator": "/incidents",
+          "name": "事件管理",
+          "permissions": []
+        },
+        {
+          "locator": "/incidents/list",
+          "name": "incident-list",
+          "permissions": []
+        },
+        {
+          "locator": "/ops/data-health",
+          "name": "数据健康",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/ops/impact-analysis",
+          "name": "变更影响分析",
+          "permissions": [
+            "view",
+            "analyze"
+          ]
+        },
+        {
+          "locator": "/ops/knowledge",
+          "name": "知识库",
+          "permissions": [
+            "view",
+            "add",
+            "edit",
+            "validate",
+            "auto_extract"
+          ]
+        },
+        {
+          "locator": "/ops/task-center",
+          "name": "TaskCenter",
+          "permissions": [
+            "view",
+            "trigger",
+            "cancel",
+            "toggle",
+            "view_runs"
+          ]
+        },
+        {
+          "locator": "/reports/list",
+          "name": "报告列表",
+          "permissions": [
+            "view",
+            "generate",
+            "trigger"
+          ]
+        },
+        {
+          "locator": "/scan",
+          "name": "scan",
+          "permissions": [
+            "scan_run",
+            "scan_finding_manage",
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/findings",
+          "name": "findings",
+          "permissions": [
+            "scan_view",
+            "scan_finding_manage"
+          ]
+        },
+        {
+          "locator": "/scan/scanners",
+          "name": "scanners",
+          "permissions": [
+            "scan_view",
+            "scanner_manage"
+          ]
+        },
+        {
+          "locator": "/scan/tasks",
+          "name": "tasks",
+          "permissions": [
+            "scan_view",
+            "scan_run"
+          ]
+        },
+        {
+          "locator": "/system",
+          "name": "系统管理",
+          "permissions": []
+        },
+        {
+          "locator": "/system/audit-log",
+          "name": "审计日志",
+          "permissions": []
+        },
+        {
+          "locator": "/system/department",
+          "name": "部门管理",
+          "permissions": [
+            "view",
+            "add"
+          ]
+        },
+        {
+          "locator": "/system/dict",
+          "name": "字典管理",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/system/menu",
+          "name": "菜单管理",
+          "permissions": []
+        },
+        {
+          "locator": "/system/role",
+          "name": "角色管理",
+          "permissions": []
+        },
+        {
+          "locator": "/system/system-config",
+          "name": "系统配置",
+          "permissions": []
+        },
+        {
+          "locator": "/system/user",
+          "name": "用户管理",
+          "permissions": []
+        },
+        {
+          "locator": "/vulnerabilities",
+          "name": "脆弱性管理",
+          "permissions": []
+        },
+        {
+          "locator": "/vulnerabilities/list",
+          "name": "脆弱性列表",
+          "permissions": []
+        },
+        {
+          "locator": "/vulnerabilities/overview",
+          "name": "脆弱性概览",
+          "permissions": []
+        }
+      ]
+    },
+    "operator": {
+      "name": "运维",
+      "is_active": true,
+      "menus": [
+        {
+          "locator": "/alerts",
+          "name": "告警管理",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/list",
+          "name": "alert-list",
+          "permissions": []
+        },
+        {
+          "locator": "/assets",
+          "name": "资产管理",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/compliance",
+          "name": "合规基线",
+          "permissions": [
+            "view",
+            "check",
+            "interpret"
+          ]
+        },
+        {
+          "locator": "/assets/detail/:id",
+          "name": "资产详情",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/list",
+          "name": "资产列表",
+          "permissions": [
+            "view",
+            "edit"
+          ]
+        },
+        {
+          "locator": "/assets/overview",
+          "name": "资产概览",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/reconciliation",
+          "name": "资产稽核",
+          "permissions": [
+            "view",
+            "reconcile",
+            "resolve",
+            "report"
+          ]
+        },
+        {
+          "locator": "/dashboard",
+          "name": "概览仪表板",
+          "permissions": []
+        },
+        {
+          "locator": "/ops/data-health",
+          "name": "数据健康",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/ops/impact-analysis",
+          "name": "变更影响分析",
+          "permissions": [
+            "view",
+            "analyze"
+          ]
+        },
+        {
+          "locator": "/ops/knowledge",
+          "name": "知识库",
+          "permissions": [
+            "view",
+            "edit",
+            "validate"
+          ]
+        },
+        {
+          "locator": "/reports",
+          "name": "安全报告",
+          "permissions": []
+        },
+        {
+          "locator": "/reports/list",
+          "name": "报告列表",
+          "permissions": [
+            "view",
+            "generate",
+            "trigger"
+          ]
+        },
+        {
+          "locator": "/scan",
+          "name": "scan",
+          "permissions": [
+            "scan_run",
+            "scan_finding_manage",
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/findings",
+          "name": "findings",
+          "permissions": [
+            "scan_view",
+            "scan_finding_manage"
+          ]
+        },
+        {
+          "locator": "/scan/scanners",
+          "name": "scanners",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/tasks",
+          "name": "tasks",
+          "permissions": [
+            "scan_view",
+            "scan_run"
+          ]
+        }
+      ]
+    },
+    "user": {
+      "name": "普通用户",
+      "is_active": true,
+      "menus": [
+        {
+          "locator": "/alerts",
+          "name": "告警管理",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/list",
+          "name": "alert-list",
+          "permissions": []
+        },
+        {
+          "locator": "/assets",
+          "name": "资产管理",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/compliance",
+          "name": "合规基线",
+          "permissions": [
+            "view",
+            "check",
+            "interpret"
+          ]
+        },
+        {
+          "locator": "/assets/detail/:id",
+          "name": "资产详情",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/list",
+          "name": "资产列表",
+          "permissions": [
+            "view",
+            "edit"
+          ]
+        },
+        {
+          "locator": "/assets/overview",
+          "name": "资产概览",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/reconciliation",
+          "name": "资产稽核",
+          "permissions": [
+            "view",
+            "reconcile",
+            "resolve",
+            "report"
+          ]
+        },
+        {
+          "locator": "/dashboard",
+          "name": "概览仪表板",
+          "permissions": []
+        },
+        {
+          "locator": "/ops/data-health",
+          "name": "数据健康",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/ops/impact-analysis",
+          "name": "变更影响分析",
+          "permissions": [
+            "view",
+            "analyze"
+          ]
+        },
+        {
+          "locator": "/ops/knowledge",
+          "name": "知识库",
+          "permissions": [
+            "view",
+            "edit",
+            "validate"
+          ]
+        },
+        {
+          "locator": "/reports",
+          "name": "安全报告",
+          "permissions": []
+        },
+        {
+          "locator": "/reports/list",
+          "name": "报告列表",
+          "permissions": [
+            "view",
+            "generate",
+            "trigger"
+          ]
+        },
+        {
+          "locator": "/scan",
+          "name": "scan",
+          "permissions": [
+            "scan_run",
+            "scan_finding_manage",
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/findings",
+          "name": "findings",
+          "permissions": [
+            "scan_view",
+            "scan_finding_manage"
+          ]
+        },
+        {
+          "locator": "/scan/scanners",
+          "name": "scanners",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/tasks",
+          "name": "tasks",
+          "permissions": [
+            "scan_view",
+            "scan_run"
+          ]
+        }
+      ]
+    },
+    "viewer": {
+      "name": "观察者",
+      "is_active": true,
+      "menus": [
+        {
+          "locator": "/alerts",
+          "name": "告警管理",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/list",
+          "name": "alert-list",
+          "permissions": []
+        },
+        {
+          "locator": "/assets",
+          "name": "资产管理",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/compliance",
+          "name": "合规基线",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/assets/detail/:id",
+          "name": "资产详情",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/list",
+          "name": "资产列表",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/assets/overview",
+          "name": "资产概览",
+          "permissions": []
+        },
+        {
+          "locator": "/dashboard",
+          "name": "概览仪表板",
+          "permissions": []
+        },
+        {
+          "locator": "/ops/data-health",
+          "name": "数据健康",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/ops/knowledge",
+          "name": "知识库",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/reports",
+          "name": "安全报告",
+          "permissions": []
+        },
+        {
+          "locator": "/reports/list",
+          "name": "报告列表",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/scan",
+          "name": "scan",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/findings",
+          "name": "findings",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/scanners",
+          "name": "scanners",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/tasks",
+          "name": "tasks",
+          "permissions": [
+            "scan_view"
+          ]
+        }
+      ]
+    },
+    "auditor": {
+      "name": "审计人员",
+      "is_active": true,
+      "menus": [
+        {
+          "locator": "/alerts",
+          "name": "告警管理",
+          "permissions": []
+        },
+        {
+          "locator": "/alerts/list",
+          "name": "alert-list",
+          "permissions": []
+        },
+        {
+          "locator": "/assets",
+          "name": "资产管理",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/compliance",
+          "name": "合规基线",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/assets/detail/:id",
+          "name": "资产详情",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/list",
+          "name": "资产列表",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/assets/overview",
+          "name": "资产概览",
+          "permissions": []
+        },
+        {
+          "locator": "/assets/reconciliation",
+          "name": "资产稽核",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/browsing/profile",
+          "name": "行为画像",
+          "permissions": []
+        },
+        {
+          "locator": "/browsing/profile/detail/:ip",
+          "name": "画像详情",
+          "permissions": []
+        },
+        {
+          "locator": "/dashboard",
+          "name": "概览仪表板",
+          "permissions": []
+        },
+        {
+          "locator": "/ops/data-health",
+          "name": "数据健康",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/ops/knowledge",
+          "name": "知识库",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/reports",
+          "name": "安全报告",
+          "permissions": []
+        },
+        {
+          "locator": "/reports/list",
+          "name": "报告列表",
+          "permissions": [
+            "view"
+          ]
+        },
+        {
+          "locator": "/scan",
+          "name": "scan",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/findings",
+          "name": "findings",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/scanners",
+          "name": "scanners",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/scan/tasks",
+          "name": "tasks",
+          "permissions": [
+            "scan_view"
+          ]
+        },
+        {
+          "locator": "/system",
+          "name": "系统管理",
+          "permissions": []
+        },
+        {
+          "locator": "/system/audit-log",
+          "name": "审计日志",
+          "permissions": [
+            "view"
+          ]
+        }
+      ]
+    }
+  },
+  "disabled": {
+    "readonly": {
+      "name": "只读用户",
+      "is_active": false
+    },
+    "test_role": {
+      "name": "测试角色",
+      "is_active": false
+    }
+  }
+}

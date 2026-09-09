@@ -117,6 +117,20 @@ jobs:
         #   - test_auth_api: 需 live uvicorn，CI 跑不动
         # 这些会在后续修复后纳入
 
+      - name: Security authorization gate (PRD §10.4 P0-T16)
+        working-directory: src/backend
+        run: |
+          # 阻断式门禁：路由授权分类 + 只读角色硬拒绝 + 角色菜单基线
+          # 不设 continue-on-error：失败 = 拒绝合入
+          # 失败时 stdout 会包含未分类 / 未授权的 method+path 清单
+          set -e
+          python -m pytest tests/security/ -v --tb=short --maxfail=5 \
+            2>&1 | tee /tmp/security_gate.log || {
+              echo "::: security gate 失败, log 已存入 ci-debug-logs artifact :::"
+              cat /tmp/security_gate.log
+              exit 1
+            }
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4

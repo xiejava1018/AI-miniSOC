@@ -167,8 +167,13 @@ async def get_dashboard_summary(
 @router.get("/trend")
 async def get_dashboard_trend(
     days: int = Query(14, ge=1, le=90, description="趋势跨度（天）"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """告警簇趋势（复用已修复口径的 AlertGroupSnapshotService.get_trend）。"""
+    """告警簇趋势（复用已修复口径的 AlertGroupSnapshotService.get_trend）。
+
+    WO-1：补 ``Depends(get_current_user)``；router 级 ``enforce_write_default``
+    不会作用于 GET，仅要求登录。
+    """
     svc = AlertGroupSnapshotService(db)
     return svc.get_trend(days=days)

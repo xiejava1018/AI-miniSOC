@@ -14,6 +14,7 @@ from app.core.auth import create_access_token, create_refresh_token, verify_toke
 from app.core.config import settings
 from app.core.security import verify_password
 from app.core.captcha import create_captcha, verify_captcha
+from app.core.route_security import require_session_write
 from app.core.token_blacklist import revoke as revoke_token
 from app.models.user import User, UserStatus
 from app.services.audit_log_service import AuditLogService
@@ -223,8 +224,8 @@ async def login(
             detail="用户名或密码错误"
         )
 
-    # 4. 检查是否是管理员（is_superuser优先于role）
-    is_admin = user.is_superuser or (user.role and user.role.code == "admin")
+    # 4. 检查是否是管理员（统一走 ``User.is_admin`` —— WO-3 收口后单一判定）
+    is_admin = user.is_admin
 
     # 5. 创建JWT tokens
     token_data = {
@@ -348,7 +349,7 @@ async def refresh_token(
             )
 
         # 5. 创建新的 access token + 新的 refresh token
-        is_admin = user.is_superuser or (user.role and user.role.code == "admin")
+        is_admin = user.is_admin
 
         token_data = {
             "sub": str(user.id),
@@ -382,7 +383,7 @@ async def refresh_token(
 async def logout(
     req: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_session_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -390,6 +391,9 @@ async def logout(
 
     将当前 access token 的 jti 加入黑名单，使该 token 立即失效。
     客户端也应删除本地存储的 access / refresh token。
+
+    注意：本端点是 ``viewer/readonly`` 唯一允许的写例外（PRD §10.1 AC-1）。
+    跳开 ``enforce_write_default`` 是必要的；新代码禁止额外引入类似例外。
     """
     # 1. 解码当前 access token 拿到 jti / exp，加入黑名单
     # verify_token 已包含黑名单校验（首次登出时该 jti 尚未撤销，必然通过）
