@@ -4,8 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.auth import get_current_user
-from app.core.permissions import require_menu_permission
+from app.core.permissions import require_admin, require_menu_permission
 from app.core.audit_decorator import log_audit
 from app.schemas.user import (
     UserCreate,
@@ -16,8 +15,7 @@ from app.schemas.user import (
     LockUserRequest
 )
 from app.services.user_service import UserService
-from app.schemas.user import UserResponse as UserResponseSchema
-from app.models.user import UserStatus
+from app.models.user import User, UserStatus
 
 
 router = APIRouter(tags=["用户管理"])
@@ -54,7 +52,7 @@ async def get_users(
     search: Optional[str] = Query(None, description="搜索关键词"),
     role_id: Optional[int] = Query(None, description="角色ID"),
     status: Optional[int] = Query(None, ge=1, le=2, description="状态: 1=启用, 2=禁用"),
-    current_user: UserResponseSchema = Depends(require_menu_permission("user")),
+    current_user: User = Depends(require_menu_permission("user")),
     db: Session = Depends(get_db)
 ):
     """
@@ -88,7 +86,7 @@ async def get_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
-    current_user: UserResponseSchema = Depends(require_menu_permission("user")),
+    current_user: User = Depends(require_menu_permission("user")),
     db: Session = Depends(get_db)
 ):
     """获取用户详情"""
@@ -115,20 +113,14 @@ async def get_user(
 async def create_user(
     request: Request,
     user_data: UserCreate,
-    current_user: UserResponseSchema = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
     """
     创建用户
 
-    需要权限: 仅管理员
+    需要权限: 仅管理员（由 ``require_admin()`` 声明式依赖保证）
     """
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有管理员可以创建用户"
-        )
-
     service = UserService(db)
     try:
         user = service.create_user(user_data, creator_id=current_user.id)
@@ -152,20 +144,14 @@ async def update_user(
     request: Request,
     user_id: int,
     user_data: UserUpdate,
-    current_user: UserResponseSchema = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
     """
     更新用户
 
-    需要权限: 仅管理员
+    需要权限: 仅管理员（由 ``require_admin()`` 声明式依赖保证）
     """
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有管理员可以更新用户"
-        )
-
     service = UserService(db)
     try:
         user = service.update_user(user_id, user_data, updater_id=current_user.id)
@@ -186,20 +172,14 @@ async def update_user(
 async def delete_user(
     request: Request,
     user_id: int,
-    current_user: UserResponseSchema = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
     """
     删除用户
 
-    需要权限: 仅管理员
+    需要权限: 仅管理员（由 ``require_admin()`` 声明式依赖保证）
     """
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有管理员可以删除用户"
-        )
-
     service = UserService(db)
     try:
         service.delete_user(user_id, deleter_id=current_user.id)
@@ -221,20 +201,14 @@ async def reset_password(
     request: Request,
     user_id: int,
     password_data: ResetPasswordRequest,
-    current_user: UserResponseSchema = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
     """
     重置用户密码
 
-    需要权限: 仅管理员
+    需要权限: 仅管理员（由 ``require_admin()`` 声明式依赖保证）
     """
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有管理员可以重置密码"
-        )
-
     service = UserService(db)
     try:
         new_password = service.reset_password(
@@ -266,20 +240,14 @@ async def lock_user(
     request: Request,
     user_id: int,
     lock_data: LockUserRequest,
-    current_user: UserResponseSchema = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db)
 ):
     """
     锁定或解锁用户
 
-    需要权限: 仅管理员
+    需要权限: 仅管理员（由 ``require_admin()`` 声明式依赖保证）
     """
-    if not current_user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="只有管理员可以锁定用户"
-        )
-
     service = UserService(db)
     try:
         user = service.lock_user(
