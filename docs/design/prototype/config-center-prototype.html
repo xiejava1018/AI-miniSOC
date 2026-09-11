@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="s296TBnkilf0H5XP37gPub">
+<head data-page-node-id="FI3xIOHqdFYluljj9GVNU8">
+<meta charset="UTF-8" data-page-node-id="aNloUOBrr5Np7vBGWZYomA">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="cfaBnyHkMoGjHDULKCkeWs">
+<title>AI-miniSOC 配置中心 界面原型</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f8; color: #2c2c2a; font-size: 13px; line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .sub { color: #5f5e5a; font-size: 12px; margin-bottom: 14px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid #e3e3e0; }
+  .tab {
+    padding: 8px 16px; cursor: pointer; font-size: 13px; color: #5f5e5a;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; user-select: none;
+  }
+  .tab.active { color: #185fa5; border-bottom-color: #185fa5; font-weight: 500; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .card { background: #fff; border: 1px solid #e3e3e0; border-radius: 12px; padding: 16px; }
+  .breadcrumb { color: #888780; font-size: 12px; margin-bottom: 12px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  input, select, textarea {
+    font-family: inherit; font-size: 13px; padding: 6px 10px;
+    border: 1px solid #d3d1c7; border-radius: 6px; background: #fff; color: #2c2c2a; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: #378add; }
+  input[readonly] { background: #f7f7f5; color: #888780; }
+  .grow { flex: 1; }
+  button {
+    font-family: inherit; font-size: 13px; padding: 6px 14px; border-radius: 6px;
+    border: 1px solid #d3d1c7; background: #fff; color: #2c2c2a; cursor: pointer;
+  }
+  button.primary { background: #185fa5; border-color: #185fa5; color: #fff; }
+  button.ghost { background: #fff; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; font-weight: 500; color: #5f5e5a; font-size: 12px;
+    padding: 9px 10px; border-bottom: 1px solid #e3e3e0; background: #fafaf8;
+  }
+  td { padding: 11px 10px; border-bottom: 1px solid #f0f0ee; vertical-align: middle; }
+  .code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #185fa5; }
+  .muted { color: #888780; font-size: 12px; }
+  .tag {
+    display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px;
+    border: 1px solid; line-height: 18px;
+  }
+  .tag.blue { background: #e6f1fb; border-color: #85b7eb; color: #185fa5; }
+  .tag.green { background: #eaf3de; border-color: #97c459; color: #3b6d11; }
+  .tag.gray { background: #f1efe8; border-color: #b4b2a9; color: #5f5e5a; }
+  .tag.amber { background: #faeeda; border-color: #ef9f27; color: #854f0b; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+  .dot.ok { background: #639922; } .dot.err { background: #e24b4a; }
+  .dot.gray { background: #b4b2a9; } .dot.warn { background: #ef9f27; }
+  .link { color: #185fa5; cursor: pointer; }
+  .link + .link { margin-left: 10px; }
+
+  .notice {
+    margin-top: 14px; padding: 11px 14px; background: #f1efe8;
+    border-radius: 8px; font-size: 12px; color: #5f5e5a;
+  }
+  .notice b { color: #2c2c2a; font-weight: 500; }
+
+  .layout { display: flex; gap: 16px; align-items: flex-start; }
+  .side { width: 190px; flex-shrink: 0; }
+  .side-item {
+    padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #2c2c2a;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .side-item.active { background: #e6f1fb; color: #185fa5; font-weight: 500; }
+  .main { flex: 1; }
+  .sec-title { font-size: 13px; font-weight: 500; margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #f0f0ee; }
+  .sec-title:first-child { margin-top: 0; }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-size: 12px; color: #5f5e5a; margin-bottom: 5px; }
+  .field input, .field select, .field textarea { width: 100%; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .hint { font-size: 11px; color: #888780; margin-top: 4px; }
+  .effect {
+    float: right; font-size: 11px; padding: 0 7px; border-radius: 4px;
+    border: 1px solid; line-height: 18px;
+  }
+  .effect.now { background: #eaf3de; border-color: #97c459; color: #3b6d11; }
+  .effect.next { background: #faeeda; border-color: #ef9f27; color: #854f0b; }
+  .effect.restart { background: #fcebeb; border-color: #f09595; color: #a32d2d; }
+  .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .sw { width: 34px; height: 18px; border-radius: 9px; background: #b4b2a9; position: relative; }
+  .sw.on { background: #185fa5; }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+  .sw.on i { left: 18px; }
+  .checks { border: 1px solid #e3e3e0; border-radius: 8px; padding: 12px; background: #fafaf8; }
+  .checks .row { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; font-size: 12px; }
+  .checks .row.warn { color: #854f0b; }
+  .footer { margin-top: 18px; padding-top: 14px; border-top: 1px solid #f0f0ee; display: flex; justify-content: flex-end; gap: 8px; }
+
+  .drawer-mask { position: absolute; inset: 0; background: rgba(0,0,0,.05); border-radius: 12px; }
+  .drawer {
+    position: relative; background: #fff;
+    border: 1px solid #e3e3e0; border-radius: 12px; padding: 18px;
+  }
+  .drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .drawer-head h3 { font-size: 14px; font-weight: 500; }
+  .checkbox-row { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; align-items: center; }
+  .cb { display: flex; align-items: center; gap: 6px; }
+  .cb span.box {
+    width: 14px; height: 14px; border: 1px solid #b4b2a9; border-radius: 3px;
+    display: inline-block; position: relative;
+  }
+  .cb.checked span.box { background: #185fa5; border-color: #185fa5; }
+  .cb.checked span.box::after {
+    content: ""; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+    border: solid #fff; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+  }
+</style>
+</head>
+<body data-page-node-id="qzxsgPxKIq2bYuZzxJA8nG">
+<div class="wrap" data-page-node-id="p0Zh9W6FMZaSiSDjZrA2vN">
+  <h1 data-page-node-id="7lhZCgi74HWQ6oVr3USGGy">AI-miniSOC 配置中心 · 界面原型</h1>
+  <div class="sub" data-page-node-id="B3NTUOGoUwRrLuplZsaZjP">配套文档：docs/design/2026-09-11-配置中心详细设计规格.md ｜ 状态：设计评审稿</div>
+
+  <div class="tabs" data-page-node-id="WoAsi7sGcHAb8ftlfsOpFo">
+    <div class="tab active" onclick="show('p1', this)" data-page-node-id="4MyBBhxaECIYFRPHAEnxZr">数据源管理（列表）</div>
+    <div class="tab" onclick="show('p2', this)" data-page-node-id="wQyj4CNmNtkiIFn0etRzhg">新增/编辑数据源（抽屉）</div>
+    <div class="tab" onclick="show('p3', this)" data-page-node-id="mgNKOfCPHj9Bz32cPj2uO0">配置中心（Schema 驱动）</div>
+    <div class="tab" onclick="show('p4', this)">配置审计（变更历史）</div>
+  </div>
+
+  <!-- 页面 1 -->
+  <div class="page active" id="p1" data-page-node-id="EOAv42dUSzuTKr1GQabEBR">
+    <div class="card" data-page-node-id="HQzGTOu8h5ogyWzBlr0yyD">
+      <div class="breadcrumb" data-page-node-id="o1XAuXD20vViPyhRGCQBHL">系统管理 / 数据源管理</div>
+      <div class="toolbar" data-page-node-id="8nBrBjQuKpXYl9JG98HyGb">
+        <select style="width:150px" data-page-node-id="lAfVQAFznmjSaSGMQSydUf"><option data-page-node-id="xNFzMiOpxDuHz6Bcj5d4iY">全部类型</option><option data-page-node-id="XeG1HPN89YQNDF4P7uLiji">Wazuh</option><option data-page-node-id="CcJJhaxG5YEup7WjvonYJd">OpenSearch</option><option data-page-node-id="URD6IH7Fg8SrqPVpiEm5IY">Loki</option></select>
+        <input placeholder="搜索编码或名称" style="width:260px" data-page-node-id="i0Ln2SLx1sVEr7rXRrjFWE">
+        <button data-page-node-id="2DFSEXoewR1s7nrBEHyXXT">批量测试</button>
+        <div class="grow" data-page-node-id="PsAEM32CIGp241CtjdNtkQ"></div>
+        <button class="primary" data-page-node-id="QhpFzSszkNUR3WeEAKSyFa">+ 新增数据源</button>
+      </div>
+
+      <table data-page-node-id="59yO0Uo2aWvd7hqHw2RbH8">
+        <thead data-page-node-id="HLtYJ111HSTQhjmxKGcKZD"><tr data-page-node-id="5JnMYWfovT65ZfFLrOpKLZ">
+          <th style="width:130px" data-page-node-id="JwpQP9KtEnMEDBNSwwqbia">编码</th><th style="width:92px" data-page-node-id="GCVh01WXEqQ9LWJvdI1voa">类型</th><th style="width:150px" data-page-node-id="o0EPSWxfSlG4Z77Nax4WAx">名称</th>
+          <th data-page-node-id="6rTPkxLgjHA8gjqKf7nC0j">服务地址</th><th style="width:120px" data-page-node-id="ZrHutZXr20oWF70YueliV8">状态</th><th style="width:96px" data-page-node-id="ah4pNzpUHpruzTnAl7pLO9">健康</th><th style="width:150px" data-page-node-id="hcqW5Bmn9nzNFbbas9eVNL">操作</th>
+        </tr></thead>
+        <tbody data-page-node-id="gsare9Gkl5ut4hpHuG7RPf">
+          <tr data-page-node-id="dGQlyePvHTgqCTvBkkatKu">
+            <td data-page-node-id="WvnOlRigK4VTVBQuY9fj9a"><span class="code" data-page-node-id="VmBDwi9W90UhaGC578HUkg">wazuh-prod</span></td>
+            <td data-page-node-id="h3I9UgmBWppHxk1Mx7Z9I1">Wazuh</td>
+            <td data-page-node-id="w90ZG4cstEuEgboUVD3dpd">生产 Wazuh</td>
+            <td class="code" data-page-node-id="yzfwmu5DZlGbrWRMu9HgMb">https://192.168.0.40:55000</td>
+            <td data-page-node-id="zRiXGArCGix76FMzwT5KDq"><span class="tag blue" data-page-node-id="XpEbdQzFJsmP7z3me11SuB">默认</span> <span class="tag green" data-page-node-id="IDmRyAHrSee4mVSaFbR7Hd">启用</span></td>
+            <td data-page-node-id="15QblO8mJt89vQ9XD2Y6Cj"><span class="dot ok" data-page-node-id="V8w5ZOKHElVPI2h3Fne0zE"></span>正常</td>
+            <td data-page-node-id="pjWqZbekYuFX6tD8GVm9FR"><span class="link" data-page-node-id="dhyCi8Q9bucjUGTyAXBm3h">测试</span><span class="link" data-page-node-id="VyCoP4EvwyvSkN7GzFHlHr">编辑</span><span class="link" data-page-node-id="SFWxCnJlczoQ9CtA5a2NZP">更多</span></td>
+          </tr>
+          <tr data-page-node-id="aiHIKlrllWXECC7vIczxQd">
+            <td data-page-node-id="os34ircLpSqHecXHO7BQoB"><span class="code" data-page-node-id="KEMDqE9QYVNa0Zj5xqFtcg">loki-main</span></td>
+            <td data-page-node-id="NQEiBcUUJ5mgYuCiz5IAEz">Loki</td>
+            <td data-page-node-id="jrFHdjJj4YxpP3OosuHRdF">主 Loki</td>
+            <td class="code" data-page-node-id="hyt6qQoNZDwCSIvsYKmnkB">http://192.168.0.30:3100</td>
+            <td data-page-node-id="z2DvjcAUBEN6b8ELuaTwcZ"><span class="tag blue" data-page-node-id="IAt6FO7T0OnBojMj4DHPKt">默认</span> <span class="tag green" data-page-node-id="svamkzYNV1pf4nlGeVjoIt">启用</span></td>
+            <td data-page-node-id="1PYaNyMehAtnPgebmhT00n"><span class="dot ok" data-page-node-id="unXFBYHqF6yvxV1WmgWL9b"></span>正常</td>
+            <td data-page-node-id="ulFyrGI3nliXq5OQYpTjMc"><span class="link" data-page-node-id="lGPTtOLvuhopFkWFLxoO1z">测试</span><span class="link" data-page-node-id="UiGdZzQPYIAKiF20gp9iHd">编辑</span><span class="link" data-page-node-id="f528qmDE1hcuilnE2BzSk6">更多</span></td>
+          </tr>
+          <tr data-page-node-id="DFnt3eiSKZQltn1zPUdiun">
+            <td data-page-node-id="ssBSwKoElUvIo79AUMvJFT"><span class="code" data-page-node-id="H4bHrA2RLJZAEdaUKYA4ZW">opensearch-idx</span></td>
+            <td data-page-node-id="hE6o0IkU0NH9gFkddGNsTE">OpenSearch</td>
+            <td data-page-node-id="XnzyZBkeimWmUhuBcgNBfj">Wazuh Indexer</td>
+            <td class="code" data-page-node-id="zxRAfw2Bsn0H4QML5oP7Fv">https://192.168.0.40:9200</td>
+            <td data-page-node-id="yCPJPQP8KBciXm4v97faVt"><span class="tag blue" data-page-node-id="FsDkx58C2VELhklVUTM7Ix">默认</span> <span class="tag green" data-page-node-id="8ZNgcnraNCjolWzQJjl2FT">启用</span></td>
+            <td data-page-node-id="NFawLMXI55RZcOM7vV8lzG"><span class="dot warn" data-page-node-id="8u2Dmdglqv4QlltxXxknOk"></span>过期</td>
+            <td data-page-node-id="Lwx5lON9a2PaCTJknBBuzr"><span class="link" data-page-node-id="JA4xQXbalSWpyELuZ3cYN8">测试</span><span class="link" data-page-node-id="fsSbplBoMOPSsfFTMLZWjp">编辑</span><span class="link" data-page-node-id="Fs6rhven1PFHefrMBQtwuw">更多</span></td>
+          </tr>
+          <tr data-page-node-id="8881OHPvAsAJ3A1dqSc2ak">
+            <td data-page-node-id="9Z3sOSiXnQ22mWkLWGBkO2"><span class="code" data-page-node-id="2k3dOwFCO5EJ7JLhjIR93I">wazuh-branch</span></td>
+            <td data-page-node-id="SRs4B5RLYvzxObMpn1rixq">Wazuh</td>
+            <td data-page-node-id="6d4RhwEP4dg4moPCMsu04B">分支 Wazuh</td>
+            <td class="code" data-page-node-id="5QLjSxkLMYo0BVLcY4txoz">https://10.0.1.9:55000</td>
+            <td data-page-node-id="wtWvNULyINZwH2Zlax8SCK"><span class="tag gray" data-page-node-id="IH0DWKk4M8fYoqNMBCbPub">停用</span></td>
+            <td data-page-node-id="pkjFDTIrWHqGYm8RLOs8Ca"><span class="dot gray" data-page-node-id="BDWABV3AWIGIRIICcrLOIf"></span>未测</td>
+            <td data-page-node-id="xqCMmfXH93AZizGPRhXB1i"><span class="link" data-page-node-id="lRylivDflR1u9r5d6Q2Eir">测试</span><span class="link" data-page-node-id="oVqvcenp2SRAQRzmFnDgQY">编辑</span><span class="link" data-page-node-id="FOie8xS95EDwY3kHZDv2zJ">更多</span></td>
+          </tr>
+          <tr data-page-node-id="vn2pSGq3c4H3OrrR5EZJ1m">
+            <td data-page-node-id="i9F6DauBGv21VD2nGq4URO"><span class="code" data-page-node-id="RNN1pSo7tIA7gD8enNJWa6">tplink-gw</span></td>
+            <td data-page-node-id="DgMakaUvHMWfOm6g5rhAer">TP-Link</td>
+            <td data-page-node-id="2l7KP8cVI8NXJ7qh33BodG">出口路由器</td>
+            <td class="code" data-page-node-id="xohEyiOcp5Aod9xniVcAZE">http://192.168.0.1:80</td>
+            <td data-page-node-id="e88VHqn92ourJvgRaWyxmf"><span class="tag gray" data-page-node-id="o33hYxdWrtxkmialmhlKqD">未配置</span></td>
+            <td data-page-node-id="XA5lPeSioQtg1HBqc7hHHk"><span class="dot err" data-page-node-id="zHbfjBNjdzfs6lj6qnEk3J"></span>异常</td>
+            <td data-page-node-id="0OlcICht3bH96NeD68OCbQ"><span class="link" data-page-node-id="rwp8YKGJX6pswM1fSg6cYe">测试</span><span class="link" data-page-node-id="CuLQXwrs6FHp04SB22Cf4c">编辑</span><span class="link" data-page-node-id="oGMQB1vA6KScr6DiSUJskj">更多</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="notice" data-page-node-id="L9xONlNiGoVViphvNxH2HH">
+        <b data-page-node-id="OQwNLdk8Y8l9M9QnDAXj8p">当前生效来源</b>　Wazuh → 数据库 <span class="code" data-page-node-id="KOTGYnopXTZTXwa5N2U6a9">wazuh-prod</span>　｜　Loki → 数据库 <span class="code" data-page-node-id="SCcwoBy0QSQlDCzPSisfFR">loki-main</span>　｜　OpenSearch → 数据库 <span class="code" data-page-node-id="rabNMr8wFOTClLGuM2kzfH">opensearch-idx</span>　｜　TP-Link → <span style="color:#a32d2d" data-page-node-id="G415TrUOyOB8FBJbbYGYnA">未配置（无可用实例）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页面 2 -->
+  <div class="page" id="p2" data-page-node-id="YLS4HvXmHa5OLB1IlN1TeX">
+    <div class="card" data-page-node-id="5VvCTE6RfuRoc5aGqgvW2O">
+      <div class="breadcrumb" data-page-node-id="aZlfvnBox0glQBmieB98nS">系统管理 / 数据源管理 / 新增</div>
+      <div class="layout" style="position:relative" data-page-node-id="yASP2MTKQYya9cGGqM6Dlj">
+        <div style="flex:1; opacity:.35" data-page-node-id="xBaRHuyL2dgQhIhKxmIkB2">
+          <div class="toolbar" data-page-node-id="AT7M7LGE31fRXVx0lN2zNV">
+            <select style="width:150px" data-page-node-id="xv7cxG9Eca1Ue8HUD30BpO"><option data-page-node-id="mxZRReJwLmfpHs4ObFCx78">全部类型</option></select>
+            <input placeholder="搜索编码或名称" style="width:260px" data-page-node-id="fQx3KF0jtHdFIPI3i37Wnk">
+            <div class="grow" data-page-node-id="K4iGMOVu4nUnndbXUj2gH5"></div><button class="primary" data-page-node-id="AD72yqVj6n9sMYwdqkLe5A">+ 新增数据源</button>
+          </div>
+          <table data-page-node-id="xLXlMCu2MjBXoLqQyi5IOn"><thead data-page-node-id="Gc8rlubYjWq2jQnebyj0uX"><tr data-page-node-id="Ezw2AxJvEZUrMZ6DDV8bKW">
+            <th style="width:130px" data-page-node-id="KhBSPXM8ahlTr0AKoqe0Sg">编码</th><th style="width:92px" data-page-node-id="qmMQFuWRWRGUN5EhnyvaH3">类型</th><th style="width:150px" data-page-node-id="lit9lbyW0Y3ER8R8eFkTDF">名称</th>
+            <th data-page-node-id="94JMiJOzujTfGESvyAn2TR">服务地址</th><th style="width:120px" data-page-node-id="zrZBiuwEeJNW0BBNrx8loZ">状态</th><th style="width:96px" data-page-node-id="XVivklBL0YTz54XmCYJOcp">健康</th><th style="width:150px" data-page-node-id="x9wW1Vh4AtqtEwMxjmZ3Kj">操作</th>
+          </tr></thead><tbody data-page-node-id="urBas9bRBsYBY1eSKu2XwQ">
+            <tr data-page-node-id="QIO3X1pd9yGwXFyl7hRHUd"><td data-page-node-id="OikCMVyKOskdZnGwMDBkzo"><span class="code" data-page-node-id="59KrVBcvScitFt05zoUnBh">wazuh-prod</span></td><td data-page-node-id="LDf43v7pukZ2xhRnwMz2mK">Wazuh</td><td data-page-node-id="c5sid9tp63y8G5TSA2GHhA">生产 Wazuh</td>
+            <td class="code" data-page-node-id="t3GgZ544RoIquqjs5aHN3H">https://192.168.0.40:55000</td>
+            <td data-page-node-id="XKt9CwCvwVL7HxBN5sGjHz"><span class="tag blue" data-page-node-id="BvE3lMzoGZKINTBt4A9vzb">默认</span> <span class="tag green" data-page-node-id="AHpBIEfbS4cvHLLZZ124Bk">启用</span></td><td data-page-node-id="YxMQbcILtIQ9Ccxv70EUqH"><span class="dot ok" data-page-node-id="qhCHNZyDHp6sN2Kc1Z5rfC"></span>正常</td><td data-page-node-id="tA1h8CqAtJ8ieIr1DLn92E"></td></tr>
+            <tr data-page-node-id="sGXLWesiEIszfSwz5YLAtO"><td colspan="7" class="muted" data-page-node-id="m5yvNz776yHfnWdDMFJ4Wd">… 其余行省略 …</td></tr>
+          </tbody></table>
+        </div>
+
+        <div style="width:660px; flex-shrink:0" data-page-node-id="7irvDYhobFWbp8dT0RWX55">
+          <div class="drawer" data-page-node-id="OQEtJFBVU4dnKII4f7SnjG">
+            <div class="drawer-head" data-page-node-id="RcCFrBYxDHwuDmEiA9qdCR">
+              <h3 data-page-node-id="vItUN3MPBTLpfl1eT3rwxL">新增数据源</h3>
+              <span class="muted" style="cursor:pointer" data-page-node-id="pfjEpwFEWdrkB3jKuA7cWL">✕</span>
+            </div>
+            <div class="muted" style="margin-bottom:14px" data-page-node-id="FVJ3GwvSFWJFkwGyeNYf0M">Wazuh 类型 · 字段随类型动态变化</div>
+
+            <div class="sec-title" data-page-node-id="dVAPG3CK6wmftScXNhAh4I">基本信息</div>
+            <div class="grid2" data-page-node-id="ZaX7J0TqLtPAC0OIdGFfbM">
+              <div class="field" data-page-node-id="kFUF7j1ONQxgMVWMaVQ6Rg">
+                <label data-page-node-id="B5GDEZBcwcgchFMyeimAtB">数据源编码 *</label>
+                <input value="wazuh-prod" data-page-node-id="JC5AIXFg898JLxPz2hFEec">
+                <div class="hint" data-page-node-id="FbdBWYxf2vOKSyhKUkKqVg">小写字母、数字与连字符，3-64 位</div>
+              </div>
+              <div class="field" data-page-node-id="D2C7Q1djKz12BuZPP20vB8">
+                <label data-page-node-id="3Yb5VSu1bD1G7QC2HFcTH1">数据源类型 *</label>
+                <select data-page-node-id="1qEUUYYQHTQFgQ1NtGfvCh"><option data-page-node-id="l6zAcSCC9NfwoiI1NG5HeL">Wazuh</option><option data-page-node-id="X7HAMSW8pJO6tDhmPnffEF">OpenSearch</option><option data-page-node-id="Nv49euDEzyXXIhVn8zC7Ld">Loki</option></select>
+              </div>
+            </div>
+            <div class="field" data-page-node-id="PO3T3DRS6FgPUt9nDaCAld">
+              <label data-page-node-id="I4IJE3zSEDIXZInEdSrqJW">显示名称 *</label>
+              <input value="生产 Wazuh（192.168.0.40）" data-page-node-id="F1NvFIUr1YzGulFMPX8z63">
+            </div>
+
+            <div class="sec-title" data-page-node-id="A6o0yUBYi1BaBU8wCF3al2">连接参数</div>
+            <div class="field" data-page-node-id="R6RB0inQHJPQHfuKVX05VU">
+              <label data-page-node-id="S1Pu3n64iSNhpCjlKhEFa8">服务地址 *</label>
+              <input value="https://192.168.0.40:55000" data-page-node-id="CFArSq9z6OPsfvSp73AMlG">
+              <div class="hint" data-page-node-id="Z7D5ZEUMFv1ZohBAU1pMNI">需以 http:// 或 https:// 开头，结尾不含 /</div>
+            </div>
+            <div class="grid3" data-page-node-id="XTT1i1owcNUdiUMUW7Vvzn">
+              <div class="field" data-page-node-id="kJaE6HpuUYeaHkLXI5EMsL"><label data-page-node-id="yaOUNcOFz8KEl7tUuoaTPc">认证方式</label><select data-page-node-id="qx6kQybXKvh7ipWoXgTfFY"><option data-page-node-id="aRuJDRVabPLQpqz7h13Nnb">Basic 用户名密码</option><option data-page-node-id="FhZ8BmpocOmWJRllJplKQn">Token</option><option data-page-node-id="mkI6mD7VtcWlPj6NmIbNPo">无</option></select></div>
+              <div class="field" data-page-node-id="vJPiPbmm4jq3GtGna14EwO"><label data-page-node-id="o9EG3Ic5O3BQwjNG14WXjA">超时（秒）</label><input value="30" data-page-node-id="G3h3oWCJKTy42oVv9K6vh8"></div>
+              <div class="field" data-page-node-id="BK7ACJxnPRlzQjLBQ1BMBP"><label data-page-node-id="6QsBueXYGi7VtDcAuhhdMS">重试次数</label><input value="3" data-page-node-id="4lcBmVaJIbNGVQllWZZOVW"></div>
+            </div>
+            <div class="field" data-page-node-id="YaVDTBcE2JAnFNhB2BE08R"><label data-page-node-id="5Q3jpXoY7kUVAAeg95DhYt">用户名</label><input value="wazuh" data-page-node-id="k3LlYfJyjTAv1SLz2p4uaJ"></div>
+            <div class="field" data-page-node-id="9eiBOCPfxkN3uG4Xk6tF5f">
+              <label data-page-node-id="HQ4yz3xPfAYjQ1jj162fAk">密码 / 密钥</label>
+              <input type="password" value="••••••••••••" data-page-node-id="sU5WUHxcCdsLAxVqKMnN6G">
+              <div class="hint" data-page-node-id="JtL3ApDl9K4jL4OoUCXb4G">编辑态显示占位符；留空表示不修改</div>
+            </div>
+            <div class="switch" style="margin-bottom:15px" data-page-node-id="TGCRNVpaCe6LEZpD0AoWUD">
+              <span class="sw" data-page-node-id="wptibNGKgkO2WRd5iB6ulP"><i data-page-node-id="C9i0NsUC3IZeQak8jMIV97"></i></span> 校验 SSL 证书
+            </div>
+
+            <div class="sec-title" data-page-node-id="QEjMIGEIO4CiiykaYCqzYO">采集范围</div>
+            <div class="checkbox-row" style="margin-bottom:12px" data-page-node-id="Ix3naTrn5jhrG1MCu0RG6R">
+              <label class="cb checked" data-page-node-id="BJEvQNtBYhifdfDFywG9iK"><span class="box" data-page-node-id="VhUv6AbojKtHDYWgENrQZA"></span>资产</label>
+              <label class="cb checked" data-page-node-id="iqLp7txaoaw3QUiqZKlGeC"><span class="box" data-page-node-id="l9x1c6pBmgSEk0x4mWBtH8"></span>漏洞</label>
+              <label class="cb" data-page-node-id="h5fBCbQqF0jvr9RbzS62cG"><span class="box" data-page-node-id="HYV7sPU0TWFLDA6Ro8tf7S"></span>基线</label>
+            </div>
+            <div class="field" style="width:200px" data-page-node-id="biZlBZekyLQviIMFy3pArz"><label data-page-node-id="qBH0Awj41TYRxwlc1EGKrZ">同步间隔（秒）</label><input value="300" data-page-node-id="ONa2YjovzCiKPT7mROMImh"></div>
+
+            <div class="sec-title" style="display:flex;align-items:center" data-page-node-id="04jfu7KwMZ8qi6kjRmvuwn">
+              状态
+              <span style="flex:1" data-page-node-id="TF3J6cnzvIqHllCHQ6Zm0N"></span>
+            </div>
+            <div class="checkbox-row" data-page-node-id="HKuk0HCSTg6CH7GPOCk7EV">
+              <label class="cb checked" data-page-node-id="z7yMmiBHjvNW2RHrdSE7x3"><span class="box" data-page-node-id="x3E556Nqji1z06oAhy3Www"></span>启用此数据源</label>
+              <label class="cb checked" data-page-node-id="vzSlUWyADKLJj9AUiCaeW8"><span class="box" data-page-node-id="L3eFUbHiZYbmtR2ESAahkW"></span>设为同类型默认实例</label>
+            </div>
+
+            <div class="sec-title" data-page-node-id="N5rcTHREOEY7VF5s3k0ADX">测试结果</div>
+            <div class="checks" data-page-node-id="pT7pCF4KIHIiTtExK1dbGn">
+              <div class="row" data-page-node-id="rBTDaLtPSvnrrSxo3pGZA2"><span class="dot ok" data-page-node-id="DcE5Ta6yE96AFvnA0hIGdP"></span><span data-page-node-id="KiHvH15Rgtz8RBPalOA0eB">认证成功　JWT 获取正常</span></div>
+              <div class="row" data-page-node-id="AJE4ASg5pljfRLGKSDav58"><span class="dot ok" data-page-node-id="G7GxLk8v88VQ9YRqn82Lro"></span><span data-page-node-id="T5H8TYDOVyTMGlBhWBEriG">版本 4.7.2</span></div>
+              <div class="row" data-page-node-id="FItXPs6nsSZd1lBUGSjWpL"><span class="dot ok" data-page-node-id="PygjEco26Jjo5Vg5g3FSFL"></span><span data-page-node-id="Im6jx9uU2NtBuYLrgK0QxS">Agents 接口可达　返回 1 条</span></div>
+              <div class="row warn" data-page-node-id="iOvgyvKvkaEdB4KCbZzMvN"><span class="dot warn" data-page-node-id="U026RePL3SMIDq5b4cyKWw"></span><span data-page-node-id="1o3JaA2D1SlrBp1OuSXfe9">/vulnerability 返回 404 — 本环境不支持，CVE 数据源走 OpenSearch</span></div>
+              <div class="row muted" style="margin-top:6px" data-page-node-id="7QgKWcycTODI44BF8isj5H">耗时 128ms　·　测试于 2026-09-11 12:40</div>
+            </div>
+
+            <div class="footer" data-page-node-id="zbwlMvwlMVtETuL1U0D0HJ">
+              <button class="ghost" data-page-node-id="sSjtMvzQTJRqzFS7Y03O9z">测试连接</button>
+              <button class="ghost" data-page-node-id="7M5Piqytm2h3iDxOSuKL92">取消</button>
+              <button class="primary" data-page-node-id="hY67pVcX3FJS7utpCpojn2">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页面 3 -->
+  <div class="page" id="p3" data-page-node-id="G22DldyuZxHTviw4tOX1ET">
+    <div class="card" data-page-node-id="IPRxGejWCRDt3bVKWrEjLr">
+      <div class="breadcrumb" data-page-node-id="n5buON2ZexNXUg8AOTlUp7">系统管理 / 配置中心</div>
+      <div class="layout" data-page-node-id="EZPW5Xz4NUmHtEByDsFh5I">
+        <div class="side" data-page-node-id="XRH4eZjZe0FLBU0IsStmC2">
+          <div class="side-item active" data-page-node-id="j3EibfeozsNThxA6JRJMnp">告警治理 <span class="muted" data-page-node-id="f3fPUdtqqAubTxnfRDVGku">3</span></div>
+          <div class="side-item" data-page-node-id="r3guDkz4peytawRJnoSx2K">行为检测 <span class="muted" data-page-node-id="esAbRO5jTPjBPvp1t84Isv">18</span></div>
+          <div class="side-item" data-page-node-id="EZZH1awqaXd20YOlRotIqK">风险规则 <span class="muted" data-page-node-id="EgQGytOBPg10FggD2CshyU">5</span></div>
+          <div class="side-item" data-page-node-id="HtqRwc6s6oBzX6EeoRgT4y">推送规则 <span class="muted" data-page-node-id="CNQdpR0ppE2cGLqcFT7nXD">4</span></div>
+          <div class="side-item" data-page-node-id="WG1BUrs1TzFJAgm7J7FkvB">报告 <span class="muted" data-page-node-id="UEoxDdB3RqsAZ1TC5ebCau">6</span></div>
+        </div>
+
+        <div class="main" data-page-node-id="4CUffCLArHwL9NLArbldhG">
+          <div class="drawer-head" data-page-node-id="irhjgY6CvOHV1l0U8yiEG7">
+            <h3 data-page-node-id="Fo0nZ5zusw4xSbZ30gzI0x">告警治理 <span class="muted" style="font-weight:400" data-page-node-id="kCHx7udpn4fBTTIsJdRl9d">alert_governance</span></h3>
+            <button class="ghost" data-page-node-id="GxslGieeWQbDzT4projDZ7">恢复默认</button>
+          </div>
+
+          <div class="sec-title" data-page-node-id="f5ajmzyJjcXLkoTMh8vof9">告警研判</div>
+          <div class="field" data-page-node-id="AREYh6SSSHFFZilsyqf6KP">
+            <label data-page-node-id="6Q3LZMdeclFs6BR1ZlhSNh">
+              每日 AI 研判 TopN 簇数 *
+              <span class="effect now" data-page-node-id="iSDGiQZ7fLHi4xwa8KkcjG">立即生效</span>
+            </label>
+            <input value="20" style="width:180px" data-page-node-id="3abO7zQKPrclZBkhWM1v3l">
+            <div class="hint" data-page-node-id="Y5ulT8f1eqqvwxyFPUbGky">每日参与 AI 研判的告警簇数量，成本约等于 N 次/天模型调用</div>
+          </div>
+
+          <div class="sec-title" data-page-node-id="zNfemXUzo472RVdmtTFi9J">噪声抑制</div>
+          <div class="field" data-page-node-id="GjGShjdyvcxsG54X4Q5UzX">
+            <label data-page-node-id="EUx2xhW4ubDwPHBo0LH9Eq">
+              告警簇最小条数 *
+              <span class="effect next" data-page-node-id="1MuCVOWNlFKNH8f1RXDmDr">下周期生效</span>
+            </label>
+            <input value="1" style="width:180px" data-page-node-id="KyTQJHjJjvgMlT6U3nMfz1">
+            <div class="hint" data-page-node-id="szvAidsOSuXceUeBSL32ZI">少于该值的簇不进入摘要与研判清单</div>
+          </div>
+          <div class="field" data-page-node-id="TSwzbK548mv4k1JgnTZaot">
+            <label data-page-node-id="C5l1jiGUImHA39cjWt1XT1">
+              噪声抑制规则 ID
+              <span class="effect now" data-page-node-id="flCZGDE8Z8qMhVd4DDX3Ny">立即生效</span>
+            </label>
+            <input placeholder="留空则不过滤；多个用逗号分隔" data-page-node-id="WCBs269BReKFySGJqLFtEe">
+            <div class="hint" data-page-node-id="6drGgd4o2mKr8nyLHGKseD">命中的告警簇将被移出必处理清单</div>
+          </div>
+
+          <!-- 环境级配置：只读展示。兑现 US-04「能看到何时生效」的第三档语义（.effect.restart 原本定义了却未使用）-->
+          <div class="sec-title">环境级（只读，来自 .env）</div>
+          <div class="field">
+            <label>
+              MCP SSE 端口
+              <span class="effect restart">需重启服务</span>
+            </label>
+            <input value="8100" style="width:180px" disabled>
+            <div class="hint">环境级配置不在本页编辑。重启会导致 MCP 令牌（进程内内存态）全部失效，需重新配置凭据。</div>
+          </div>
+
+          <div class="footer" data-page-node-id="pegvFJVyEHcZ4yKAQiO2wc">
+            <button class="ghost" data-page-node-id="OUfA3WxkuwFqJjLosAROkc">取消</button>
+            <button class="primary" data-page-node-id="XwhVYLUkJBTPaGYbFytvhs">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- p4 配置审计：对应菜单 configLogs / 表 soc_config_change_logs，兑现 P5「无变更审计」 -->
+  <div class="page" id="p4">
+    <div class="card">
+      <div class="breadcrumb">系统管理 / 配置审计</div>
+      <div class="toolbar">
+        <select style="width:150px"><option>全部对象</option><option>数据源</option><option>系统配置</option></select>
+        <select style="width:130px"><option>全部动作</option><option>新建</option><option>更新</option><option>删除</option><option>连接测试</option></select>
+        <input placeholder="操作人 / 配置键" style="width:220px">
+        <div class="grow"></div>
+        <button>导出 CSV</button>
+      </div>
+
+      <table>
+        <thead><tr>
+          <th style="width:150px">时间</th><th style="width:96px">操作人</th><th style="width:88px">动作</th>
+          <th style="width:150px">对象</th><th>变更内容</th><th style="width:110px">来源 IP</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="code">2026-09-11 14:22:07</td>
+            <td>admin</td>
+            <td><span class="tag blue">更新</span></td>
+            <td class="code">data_source / wazuh-prod</td>
+            <td><span class="code">endpoint</span>：<span class="muted">https://192.168.0.40:55000</span> → https://192.168.0.41:55000<br>
+                <span class="code">auth_secret</span>：<span class="muted">已变更（值不记录）</span></td>
+            <td class="code">192.168.0.8</td>
+          </tr>
+          <tr>
+            <td class="code">2026-09-11 11:05:33</td>
+            <td>admin</td>
+            <td><span class="tag">测试</span></td>
+            <td class="code">data_source / loki-main</td>
+            <td>连接测试成功，耗时 142ms</td>
+            <td class="code">192.168.0.8</td>
+          </tr>
+          <tr>
+            <td class="code">2026-09-10 09:48:12</td>
+            <td>admin</td>
+            <td><span class="tag green">新建</span></td>
+            <td class="code">data_source / opensearch-idx</td>
+            <td>创建数据源，设为该类型默认实例</td>
+            <td class="code">192.168.0.8</td>
+          </tr>
+          <tr>
+            <td class="code">2026-09-09 17:31:56</td>
+            <td>admin</td>
+            <td><span class="tag blue">更新</span></td>
+            <td class="code">system_config / alert_governance</td>
+            <td><span class="code">daily_ai_topn</span>：10 → 20</td>
+            <td class="code">192.168.0.8</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="hint" style="margin-top:10px">
+        审计记录只增不改不删；敏感字段（密码/密钥）只记录「已变更」事实，<b>永不记录明文或密文</b>。
+      </div>
+    </div>
+  </div>
+
+  <div class="sub" style="margin-top:16px" data-page-node-id="jJ2V695t9nHgkotma8MdZ5">
+    原型说明：仅用于评审交互与信息架构，非最终视觉稿。字段、校验规则、生效语义以详细设计规格文档为准。
+  </div>
+</div>
+
+<script>
+  function show(id, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    el.classList.add('active');
+  }
+</script>
+</body>
+</html>

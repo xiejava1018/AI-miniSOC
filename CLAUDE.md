@@ -230,7 +230,7 @@ export enum RoutesAlias {
 ### 已部署的监控栈
 
 #### Wazuh SIEM
-- **位置**: 192.168.0.30:55000
+- **API 位置**: 192.168.0.40:55000（2026-09-11 按 `.env` 的 `WAZUH_API_URL` 核实；**旧记 `.30` 已过期**）
 - **功能**: 安全信息和事件管理
 - **数据源**: 多个主机的日志
 - **OpenSearch**: 192.168.0.40:9200（详见下方 OpenSearch 小节）
@@ -355,8 +355,8 @@ GET  /label/<name>/values
 
 ### Wazuh API
 ```bash
-# 基础URL
-https://192.168.0.30:55000/api
+# 基础URL（2026-09-11 按 .env WAZUH_API_URL 核实，旧记 .30 已过期）
+https://192.168.0.40:55000/api
 
 # 认证
 POST /security/user/authenticate
@@ -480,10 +480,10 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 ### CI pytest 仍 advisory（2026-08-19）
 - CI logs/artifacts 需 admin token 才能读，个别失败用例待拿到日志后修复，修复后移除 continue-on-error
 
-### ENCRYPTION_KEY 不是合法 Fernet 密钥（pre-existing, 2026-06-02 发现）
-- 启动 warning: `Fernet key must be 32 url-safe base64-encoded bytes.. Using temporary key.`
-- 临时密钥每次重启换 → 旧加密数据（如有）解不开
-- **不阻塞功能**，但生产部署前必须修（生成 32 字节 url-safe base64 写入 .env）
+### ~~ENCRYPTION_KEY 不是合法 Fernet 密钥~~（✅ 已修复，2026-09-11 核实）
+- 当前 `.env` 的 `ENCRYPTION_KEY` 为**合法 Fernet 密钥**（44 字符 url-safe base64），`Fernet()` 构造成功，无启动 warning
+- **注意**：改密钥会导致全部已加密数据（如配置中心的 `auth_secret`）解不开——它属安装期一次性配置，**不要界面化、不要随意轮换**
+- ~~启动 warning: `Fernet key must be 32 url-safe base64-encoded bytes.. Using temporary key.`~~（历史记录）
 
 ### tests/integration/test_user_workflow.py::test_user_lifecycle（pre-existing）
 - 测试 `assert response.status_code == 201` 但中间件包成 HTTP 200 + `body.code=201`
@@ -578,7 +578,7 @@ ssh xiejava@192.168.0.30 'bash -s' < skills/ops-health-check/scripts/health-chec
 - 支持 `--once` 单次执行、`--interval` 自定义间隔、`--test` 连通性验证
 
 ### 本次未做但建议尽快处理
-1. `ENCRYPTION_KEY` 修成合法 Fernet 密钥（pre-existing 启动 warning，重启丢加密数据）
+1. ~~`ENCRYPTION_KEY` 修成合法 Fernet 密钥（pre-existing 启动 warning，重启丢加密数据）~~（**已于 2026-09-11 核实为合法密钥**，见「当前已知问题」节）
 2. 修 `tests/integration/test_user_workflow.py` 的 envelope 断言
 3. ~~数据库仍连 `AI-miniSOC-testdb`，生产环境应切到正式库~~（**已于 2026-08-18 完成**：服务器 `.env` 已切 `AI-miniSOC-db`，三层库分离见 cicd.md §1.2）
 
@@ -606,7 +606,7 @@ ssh xiejava@192.168.0.102 'cd ~/AIproject/AI-miniSOC && bash deploy/deploy.sh <s
 ```
 
 ### 遗留（不阻塞，按需修）
-1. alembic 迁移历史缺 soc_menus 手工列 + 8 张 P4 表（check 一直 WARN，CI 用 create_all 绕过）
+1. ~~alembic 迁移历史缺 soc_menus 手工列 + 8 张 P4 表（check 一直 WARN，CI 用 create_all 绕过）~~（**✅ 已于 2026-08-22 修复**，commit 9238f78 / 迁移 `ab9cd0e1f2a3` 幂等补齐，空库 upgrade/downgrade 全绿；当前单 head 线性，新表一律走迁移不要再 `create_all`）
 2. lint/pytest 仍 advisory（历史欠账：ESLint 2614 错、ruff 数百）
 3. wazuh collector 的 config.yaml 明文密码在服务器端手工维护（未入库，待改 env/secret 注入）
 4. 服务器上前端 `npm run dev`（nohup）仍在跑，可随时停（生产走 nginx:8080）
@@ -1799,3 +1799,51 @@ record_failure → `/data-health` 转 degraded。这是**正确**的，但会改
 ### 待办（新发现，不阻塞）
 - **登录验证码可绕过**：POST /auth/login 不带 captcha_key/captcha_code 即跳过验证（实测 curl 200 拿 token）。建议后端对启用验证码的配置强制校验，或前端 captchaEnabled 与后端配置对齐
 - 无头浏览器 e2e 脚本沉淀到 scripts/（当前在 /tmp/pptr，含登录注入/首屏断言/点行跳转）
+
+---
+
+## 今日补充（2026-09-11：配置中心设计文档评审修订 + CLAUDE.md 过期记载清理）
+
+### 背景
+评审三份配置中心设计稿（`docs/design/2026-09-11-平台配置能力梳理与配置化方案.md`、
+`docs/design/2026-09-11-配置中心详细设计规格.md`、`docs/design/prototype/config-center-prototype.html`），
+逐条对照真实代码核实后修订。设计稿本身（多实例模型 D1、幽灵配置清理 D2、三层生效语义、
+resolver 降级、auth_secret 不出参）质量不错，问题集中在**两处未核实的前提**。
+
+### 修订一：推翻 D5「不走 Alembic」——前提错误
+设计稿 D5 写「Alembic 迁移图碎片化（多 head），追加迁移不生效，走 `create_all` 风险更低」。
+**实测不成立**：`alembic heads` 单 head `c1d2e3f4g5h6`，48 个迁移线性无分叉
+（9238f78 早就修完了）。且设计稿自己就撞上 `create_all` 的代价——
+`soc_source_health.source_id` 加列不生效，只好安排一次性 scripts 补丁。
+已改为走正常迁移，并补 4 条迁移红线（dry-run 禁止回读、禁硬编码 id、
+`op.execute` 双参数不兼容、JSONB 用 `CAST(:x AS jsonb)`）。
+**教训：凡是「项目现状」类的技术断言，写进设计文档前必须跑一遍命令核实，
+不能凭印象或凭几个月前的记忆。**
+
+### 修订二：§6.5 菜单 SQL 6 处错误（照抄执行菜单必坏）
+component 写成 `xxx/index.vue`（404）、子菜单 path 带前导斜杠（拼成双段）、
+icon 用 Material 字符串（静默不渲染）、缺 `permissions` JSONB（按钮全隐藏）、
+硬编码 parent_id=2（实际 5）、无幂等守卫无回读（静默插 0 行）。
+全部已在设计规格 §6.5 重写，并新增约定 C11（icon 必须 iconify `ri:*` 且真实存在）、
+C12（`soc_role_menus` 只有三列）。**三种失败模式全静默——404/无图标/按钮消失都不报错，
+只能靠约定和回读校验防。**
+
+### 原型修订
+补第 4 个 tab「配置审计」（规格注册了 configLogs 菜单 + change_logs 表，P5 是核心痛点，
+原型却漏了）；补「需重启」生效档位示例（`.effect.restart` 样式定义了却从未使用，
+而它恰是 US-04 最该警示的一档）。
+
+### 核实为正确、未改的部分（避免误伤）
+- P1「MCP 令牌因重启失效」成立：`token_manager.py` 明写进程内 in-memory
+- 原型 Wazuh 地址 `.40:55000` 与 `.env` 一致——过期的是 CLAUDE.md 旧记 `.30`（本次已改）
+- `auth_secret` 不出参、resolver try/except 降级、include_human_router/路由白名单 CI 约定均与代码一致
+
+### CLAUDE.md 本次清理的过期记载（3 处 4 条）
+1. ENCRYPTION_KEY「不是合法 Fernet 密钥」→ 实测合法（44 字符，Fernet 构造成功），两处条目改已修复
+2. Wazuh 地址 `.30:55000` → `.40:55000`（按 .env 核实），两处
+3. 2026-08-19 遗留第 1 条「alembic 迁移历史缺表缺列」→ 标已修复（9238f78），并明确「新表一律走迁移不要再 create_all」
+
+---
+
+**文档版本**: v2.27
+**最后更新**: 2026-09-11
