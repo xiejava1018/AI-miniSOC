@@ -8,7 +8,7 @@ query() 鼓励用于聚合下推（sum by / topk / count_over_time）。
 """
 import logging
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import httpx
 
@@ -48,8 +48,24 @@ class LokiTruncationError(RuntimeError):
 class LokiClient:
     """Loki 查询客户端（同步 httpx，P3-T1 加重试）"""
 
-    def __init__(self, base_url: str | None = None, timeout: float = 30.0) -> None:
-        self.base_url = (base_url or settings.LOKI_API_URL).rstrip("/")
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout: float = 30.0,
+        db: Optional[object] = None,
+    ) -> None:
+        # 配置中心 v1（X1E-11）：未显式传 base_url 时，尝试从 DataSourceResolver 解析；
+        # 解析失败一律回落 settings，保持向后兼容。
+        resolved_url: Optional[str] = None
+        if db is not None and not base_url:
+            try:
+                from app.services.data_source_resolver import data_source_resolver
+
+                rc = data_source_resolver.resolve("loki", db)
+                resolved_url = (rc.config or {}).get("endpoint") if rc else None
+            except Exception as e:
+                logger.warning("DataSourceResolver 读 loki 失败（fallback env）: %s", e)
+        self.base_url = (base_url or resolved_url or settings.LOKI_API_URL).rstrip("/")
         self._client = httpx.Client(
             base_url=self.base_url,
             timeout=timeout,

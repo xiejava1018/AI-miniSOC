@@ -21,6 +21,7 @@ from app.api import (
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
     compliance, asset_reconciliation, data_health, reports, impact_analysis,
     scan_agents, scan_human_agents, scan_tasks,
+    data_sources, config_schemas, config_change_logs,
 )
 from app.core.auth import get_current_user
 from app.core.route_security import enforce_write_default
@@ -174,6 +175,16 @@ include_human_router(api_router, audit_logs.router, tags=["审计日志管理"])
 include_human_router(api_router, dicts.router, prefix="/dicts", tags=["字典管理"])
 include_human_router(
     api_router, system_configs.router, prefix="/system-configs", tags=["系统配置"],
+)
+include_human_router(
+    api_router, data_sources.router, prefix="/data-sources", tags=["数据源管理"],
+)
+include_human_router(
+    api_router, config_schemas.router, prefix="/config-schemas", tags=["配置Schema"],
+)
+include_human_router(
+    api_router, config_change_logs.router,
+    prefix="/config-change-logs", tags=["配置变更审计"],
 )
 include_human_router(api_router, notifications.router, tags=["站内通知"])
 

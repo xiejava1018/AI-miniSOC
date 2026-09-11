@@ -110,6 +110,51 @@ export const asyncRoutes: AppRouteRecord[] = [
             { title: '删除', authMark: 'delete' }
           ]
         }
+      },
+      // X1E-11 配置中心（数据源管理 / 配置中心 / 配置审计）
+      {
+        path: 'data-source',
+        name: 'DataSource',
+        component: RoutesAlias.DataSource,
+        meta: {
+          title: '数据源管理',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN'],
+          authList: [
+            { title: '查看', authMark: 'view' },
+            { title: '新增', authMark: 'add' },
+            { title: '编辑', authMark: 'edit' },
+            { title: '删除', authMark: 'delete' },
+            { title: '连接测试', authMark: 'test' }
+          ]
+        }
+      },
+      {
+        path: 'config-center',
+        name: 'ConfigCenter',
+        component: RoutesAlias.ConfigCenter,
+        meta: {
+          title: '配置中心',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN'],
+          authList: [
+            { title: '查看', authMark: 'view' },
+            { title: '编辑', authMark: 'edit' }
+          ]
+        }
+      },
+      {
+        path: 'config-logs',
+        name: 'ConfigLogs',
+        component: RoutesAlias.ConfigLogs,
+        meta: {
+          title: '配置审计',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN'],
+          authList: [
+            { title: '查看', authMark: 'view' }
+          ]
+        }
       }
     ]
   },

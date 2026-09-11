@@ -19,6 +19,10 @@ export enum RoutesAlias {
   AuditLog = '/system/audit-log/index', // 审计日志
   Dict = '/system/dict', // 字典管理
   SystemConfig = '/system/config', // 系统配置
+  // X1E-11 配置中心
+  DataSource = '/system/data-source', // 数据源管理
+  ConfigCenter = '/system/config-center', // 配置中心
+  ConfigLogs = '/system/config-logs', // 配置审计
   Assets = '/asset/list/index', // 资产管理
   AssetOverview = '/asset/overview/index', // 资产概览
   AssetDetail = '/asset/detail/index', // 资产详情

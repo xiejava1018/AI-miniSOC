@@ -61,10 +61,28 @@ class OpenSearchSCAPSyncService:
         "Low": SeverityEnum.LOW,
     }
 
-    def __init__(self):
+    def __init__(self, db: Optional[Session] = None):
+        # 配置中心 v1（X1E-11）：先从 resolver 解析连接参数，失败/无 db 一律回落 settings。
+        endpoint = settings.OPENSEARCH_URL.rstrip("/")
+        username: Optional[str] = settings.OPENSEARCH_USER
+        password: Optional[str] = settings.OPENSEARCH_PASSWORD
+        if db is not None:
+            try:
+                from app.services.data_source_resolver import data_source_resolver
+
+                rc = data_source_resolver.resolve("opensearch", db)
+                cfg = rc.config or {}
+                if cfg.get("endpoint"):
+                    endpoint = cfg["endpoint"].rstrip("/")
+                if cfg.get("username") is not None:
+                    username = cfg["username"]
+                if cfg.get("password") is not None:
+                    password = cfg["password"]
+            except Exception as e:
+                logger.warning("DataSourceResolver 读 opensearch 失败（fallback env）: %s", e)
         self._os = httpx.Client(
-            base_url=settings.OPENSEARCH_URL.rstrip("/"),
-            auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
+            base_url=endpoint,
+            auth=(username or "", password or ""),
             verify=False,  # Wazuh/OpenSearch 自签名证书
             timeout=30.0,
         )

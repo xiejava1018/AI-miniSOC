@@ -10,14 +10,33 @@ T0（2026-08-15 脆弱性管理点亮计划）：
   由 `services/opensearch_scap_sync.py`（T5）接管。
 """
 
-import httpx
+import logging
 from typing import Optional, List, Dict, Any
+
+import httpx
+
 from app.core.config import settings
 from app.core.http_retry import RetryConfig, http_retry, RetryStats
+
+logger = logging.getLogger(__name__)
 
 
 class WazuhClient:
     """Wazuh API 客户端"""
+
+    @staticmethod
+    def _resolve_config(db: Optional[object]) -> Optional[Dict[str, Any]]:
+        """从 DataSourceResolver 解析 Wazuh 配置；失败/无 DB 一律返回 None（回落 settings）。"""
+        if db is None:
+            return None
+        try:
+            from app.services.data_source_resolver import data_source_resolver
+
+            rc = data_source_resolver.resolve("wazuh", db)
+            return rc.config if rc and rc.config else None
+        except Exception as e:
+            logger.warning("DataSourceResolver 读 wazuh 失败（fallback env）: %s", e)
+            return None
 
     def __init__(
         self,
@@ -26,10 +45,26 @@ class WazuhClient:
         password: str = None,
         use_mock_data: bool = False,
         retry_config: Optional[RetryConfig] = None,
+        db: Optional[object] = None,
     ):
-        self.base_url = base_url or settings.WAZUH_API_URL
-        self.username = username or settings.WAZUH_API_USERNAME
-        self.password = password or settings.WAZUH_API_PASSWORD
+        # 配置中心 v1（X1E-11）：如果未显式传参，尝试从 DataSourceResolver 读取；
+        # 解析失败一律回落 settings，保持向后兼容。
+        resolved = self._resolve_config(db)
+        self.base_url = (
+            base_url
+            or (resolved.get("endpoint") if resolved else None)
+            or settings.WAZUH_API_URL
+        )
+        self.username = (
+            username
+            or (resolved.get("username") if resolved else None)
+            or settings.WAZUH_API_USERNAME
+        )
+        self.password = (
+            password
+            or (resolved.get("password") if resolved else None)
+            or settings.WAZUH_API_PASSWORD
+        )
         # T0: mock 开关（POST /vulnerabilities/sync/wazuh?use_mock=true 时置 True）
         self.use_mock_data = use_mock_data
         self._token: Optional[str] = None

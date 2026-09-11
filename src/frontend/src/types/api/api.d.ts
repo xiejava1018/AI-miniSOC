@@ -453,6 +453,168 @@ declare namespace Api {
     }
   }
 
+  /** 数据源管理（X1E-11 配置中心） */
+  namespace DataSource {
+    type SourceType = 'wazuh' | 'opensearch' | 'loki' | 'tplink' | 'scanner'
+    type AuthType = 'basic' | 'token' | 'apikey' | 'none'
+    type HealthStatus = 'normal' | 'abnormal' | 'untested' | 'stale'
+
+    interface TypeItem {
+      value: SourceType
+      label: string
+      auth_types: AuthType[]
+      default_port: number
+    }
+
+    interface Item {
+      id: number
+      source_code: string
+      source_type: SourceType
+      name: string
+      endpoint: string
+      auth_type: AuthType
+      auth_username: string | null
+      has_secret: boolean
+      secret_masked: string
+      verify_ssl: boolean
+      timeout_seconds: number
+      retry_times: number
+      retry_backoff_seconds: number
+      enabled: boolean
+      is_default: boolean
+      config_json: Record<string, any>
+      last_test_at: string | null
+      last_test_ok: boolean | null
+      last_test_message: string | null
+      health_status: HealthStatus | null
+      created_at?: string
+      updated_at?: string
+      updated_by?: number | null
+    }
+
+    interface Payload {
+      source_code: string
+      source_type: SourceType
+      name: string
+      endpoint: string
+      auth_type: AuthType
+      auth_username?: string | null
+      auth_secret?: string | null
+      verify_ssl?: boolean
+      timeout_seconds?: number
+      retry_times?: number
+      retry_backoff_seconds?: number
+      enabled?: boolean
+      is_default?: boolean
+      config_json?: Record<string, any>
+    }
+
+    interface UpdatePayload {
+      source_type?: SourceType
+      name?: string
+      endpoint?: string
+      auth_type?: AuthType
+      auth_username?: string | null
+      auth_secret?: string | null  // 留空/None 表示不修改
+      verify_ssl?: boolean
+      timeout_seconds?: number
+      retry_times?: number
+      retry_backoff_seconds?: number
+      enabled?: boolean
+      is_default?: boolean
+      config_json?: Record<string, any>
+    }
+
+    interface ResolveStatusItem {
+      source_type: SourceType
+      origin: string  // 'db:code' | 'env' | 'none'
+      source_code: string | null
+      enabled: boolean
+      is_default: boolean
+    }
+
+    interface TestCheck {
+      name: string
+      ok: boolean
+      message: string
+    }
+
+    interface TestResult {
+      ok: boolean
+      latency_ms: number
+      message: string
+      checks: TestCheck[]
+      details: Record<string, any>
+    }
+
+    interface SearchParams {
+      page?: number
+      page_size?: number
+      source_type?: SourceType
+      search?: string
+    }
+  }
+
+  /** 配置 Schema（X1E-11 配置中心） */
+  namespace ConfigSchema {
+    type ValueType = 'string' | 'number' | 'boolean' | 'json' | 'password' | 'multiline' | 'list'
+    type EffectScope = 'immediate' | 'next_cycle' | 'restart'
+
+    interface Item {
+      id: number
+      category: string
+      key: string
+      label: string
+      value_type: ValueType
+      default_value: string | null
+      options: Array<{ label: string; value: string }> | null
+      validation: Record<string, any> | null
+      effect_scope: EffectScope
+      sensitive: boolean
+      group_name: string | null
+      sort_order: number
+      help_text: string | null
+      editable: boolean
+      created_at?: string
+      updated_at?: string
+    }
+
+    interface Group {
+      category: string
+      count: number
+      items: Item[]
+    }
+  }
+
+  /** 配置变更审计（X1E-11 配置中心） */
+  namespace ConfigChangeLog {
+    type TargetType = 'system_config' | 'data_source'
+    type Action = 'create' | 'update' | 'delete' | 'enable' | 'disable' | 'set_default' | 'test'
+    type Result = 'success' | 'failure'
+
+    interface Item {
+      id: number
+      target_type: TargetType
+      target_key: string
+      action: Action
+      before_value: string | null
+      after_value: string | null
+      changed_fields: string[] | null
+      operator_id: number | null
+      operator_ip: string | null
+      result: Result | null
+      created_at?: string
+    }
+
+    interface SearchParams {
+      page?: number
+      page_size?: number
+      target_type?: TargetType
+      action?: Action
+      search?: string
+    }
+  }
+
   /** 审计日志 */
   namespace AuditLog {
     interface AuditLogItem {

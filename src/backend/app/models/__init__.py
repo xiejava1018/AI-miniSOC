@@ -44,6 +44,14 @@ from .compliance import ComplianceRun, ComplianceFinding
 from .asset_reconciliation import AssetReconciliation
 from .security_report import SecurityReport
 
+# 配置中心 v1（X1E-11 / 2026-09-11）：
+# DataSource / ConfigSchema / ConfigChangeLog 三张表 + Alembic 迁移。
+# 必须在 models/__init__.py 导入，否则 alembic env.py 的 Base.metadata 缺失，
+# `alembic check` 会误报要 DROP 这 3 张表（参考 P4 注释）。
+from .data_source import DataSource
+from .config_schema import ConfigSchema
+from .config_change_log import ConfigChangeLog
+
 # P4 数据可靠性 / 脆弱性 / SCA 模块。
 # 这 4 个模块此前漏在这里导入，导致 alembic env.py 的 Base.metadata 缺失下面 8 张表，
 # `alembic check` 每次都把它们误报成 remove_table——一旦有人照着 autogenerate 出迁移，
@@ -104,6 +112,10 @@ __all__ = [
     "ComplianceRun",
     "ComplianceFinding",
     "SecurityReport",
+    # 配置中心 v1
+    "DataSource",
+    "ConfigSchema",
+    "ConfigChangeLog",
     # P4 / 脆弱性 / SCA
     "Vulnerability",
     "AssetVulnerability",

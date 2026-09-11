@@ -41,6 +41,13 @@ from app.models import Asset, AssetPort, AssetTag, Department
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
 
+# X1E-11 配置中心：保证 DataSource/ConfigSchema/ConfigChangeLog 三个类
+# 进入 Base.metadata，否则 alembic check / autogenerate 会把它们误报为要 DROP。
+#（与 P3/P4 注释同因 —— 详见 app/models/__init__.py）
+from app.models.data_source import DataSource  # noqa: F401
+from app.models.config_schema import ConfigSchema  # noqa: F401
+from app.models.config_change_log import ConfigChangeLog  # noqa: F401
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
