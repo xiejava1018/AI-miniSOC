@@ -152,6 +152,10 @@ def init_menus(db: Session):
     print("初始化菜单...")
 
     # 业务菜单
+    # 注：系统管理 path 早期为 ''（空 Layout 容器约定），
+    # 但 menu 迁移（a0b1c2d3e4f5 等）/ 菜单 API 都按 path='/system' 定位父菜单，
+    # 不一致会导致菜单种入迁移静默 0 行。已统一为 '/system'，
+    # 历史 '' 行由 e2f3g4h5i6j7 兜底改写。
     menus = [
         {"name": "概览仪表板", "path": "/dashboard", "icon": "ri:bar-chart-box-line", "sort_order": 1, "is_visible": True},
         {"name": "资产管理", "path": "/assets", "icon": "ri:computer-line", "sort_order": 2, "is_visible": True},
@@ -159,7 +163,7 @@ def init_menus(db: Session):
         {"name": "告警管理", "path": "/alerts", "icon": "ri:notification-3-line", "sort_order": 4, "is_visible": True},
         # T10（2026-08-15 脆弱性管理点亮）：新增一级菜单，排在告警之后、系统管理之前
         {"name": "脆弱性管理", "path": "/vulnerabilities", "icon": "ri:shield-check-line", "sort_order": 5, "is_visible": True},
-        {"name": "系统管理", "path": "", "icon": "ri:settings-3-line", "sort_order": 6, "is_visible": True}
+        {"name": "系统管理", "path": "/system", "icon": "ri:settings-3-line", "sort_order": 6, "is_visible": True}
     ]
 
     for menu_data in menus:

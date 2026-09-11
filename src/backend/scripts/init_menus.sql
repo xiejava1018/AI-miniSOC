@@ -8,9 +8,12 @@ INSERT INTO soc_menus (name, path, icon, sort_order, is_visible) VALUES
 ('告警管理', '/alerts', 'Bell', 4, true)
 ON CONFLICT (path) DO NOTHING;
 
--- 系统管理（父菜单 - 使用空字符串path）
+-- 系统管理（父菜单 - 顶级菜单 path 与路由别名一致）
+-- 注：早期 init 用过 '' 作为 path，但 menu 迁移（a0b1c2d3e4f5 / e2f3g4h5i6j7 等）
+-- 一律按 WHERE path='/system' 定位父菜单，'' 会导致种入静默 0 行。
+-- 现统一为 '/system'；历史 '' 行由 e2f3g4h5i6j7 兜底改写。
 INSERT INTO soc_menus (name, path, icon, sort_order, is_visible) VALUES
-('系统管理', '', 'Setting', 5, true)
+('系统管理', '/system', 'Setting', 5, true)
 ON CONFLICT (name, path) DO NOTHING;
 
 -- 系统管理子菜单
