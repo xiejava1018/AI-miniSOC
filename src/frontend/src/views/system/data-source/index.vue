@@ -52,20 +52,6 @@
         @pagination:current-change="handleCurrentChange"
       />
 
-      <!-- 当前生效来源 -->
-      <div class="resolve-status">
-        <span class="title">当前生效来源：</span>
-        <template v-for="(item, idx) in resolveStatus" :key="item.source_type">
-          <span class="origin-item">
-            <span class="type-name">{{ sourceTypeLabel(item.source_type) }}</span>
-            <span class="arrow"> → </span>
-            <span :class="['origin', { 'env': item.origin === 'env', 'none': item.origin === 'none' }]">
-              {{ formatOrigin(item) }}
-            </span>
-          </span>
-          <span v-if="idx < resolveStatus.length - 1" class="divider">｜</span>
-        </template>
-      </div>
     </ElCard>
 
     <!-- 抽屉（新增/编辑） -->
@@ -216,7 +202,6 @@ import type { FormInstance, FormRules } from 'element-plus'
 import {
   getDataSourceList,
   getDataSourceTypes,
-  getResolveStatus,
   addDataSource,
   updateDataSource,
   deleteDataSource,
@@ -297,21 +282,28 @@ const columns = ref<any[]>([
   {
     prop: 'actions',
     label: '操作',
-    width: 280,
+    width: 380,
     fixed: 'right',
     formatter: (row: Api.DataSource.Item) => {
-      return h('div', { class: 'actions' }, [
-        h('span', { class: 'link', onClick: () => onTestById(row) }, '测试'),
-        h('span', { class: 'link', onClick: () => onEdit(row), style: 'margin-left: 10px' }, '编辑'),
+      const link = (text: string, onClick: () => void, opts: { danger?: boolean } = {}) =>
         h(
           'span',
           {
             class: 'link',
-            style: 'margin-left: 10px',
-            onClick: (e: MouseEvent) => onMore(e, row),
+            style: `margin-left: 10px;${opts.danger ? ' color:#e24b4a;' : ''}`,
+            onClick,
           },
-          '更多▾'
-        ),
+          text
+        )
+      return h('div', { class: 'actions' }, [
+        h('span', { class: 'link', onClick: () => onTestById(row) }, '测试'),
+        link('编辑', () => onEdit(row)),
+        // 「设为默认」改用提示确认（生产切换默认源影响 resolver）
+        link('设为默认', () => onSetDefault(row)),
+        link(row.enabled ? '停用' : '启用', () => onToggle(row), {
+          danger: row.enabled,
+        }),
+        link('删除', () => onDelete(row), { danger: true }),
       ])
     },
   },
@@ -352,32 +344,12 @@ function handleCurrentChange(page: number) {
   getData()
 }
 
-function sourceTypeLabel(v: string) {
-  return typeOptions.value.find((t) => t.value === v)?.label || v
-}
-
-// 当前生效来源
-const resolveStatus = ref<Api.DataSource.ResolveStatusItem[]>([])
-async function loadResolveStatus() {
-  try {
-    const res: any = await getResolveStatus()
-    const payload = res?.data || res
-    resolveStatus.value = Array.isArray(payload) ? payload : payload?.items || []
-  } catch (e) {
-    resolveStatus.value = []
-  }
-}
-function formatOrigin(item: Api.DataSource.ResolveStatusItem) {
-  if (item.origin === 'env') return '环境变量'
-  if (item.origin === 'none') return '未配置'
-  if (item.origin.startsWith('db:')) return `数据库 ${item.origin.slice(3)}`
-  return item.origin
-}
+// 当前生效来源面板已移除（设计变更：仅在「数据源管理」操作列内做启停/默认切换，不再展示全局来源汇总）。
+// /api/v1/data-sources/resolve-status 接口保留（后续 dashboard / data-health 等模块可能复用）。
 
 onMounted(async () => {
   const res: any = await getDataSourceTypes()
   typeOptions.value = (res?.data || res?.items || res || []) as Api.DataSource.TypeItem[]
-  await loadResolveStatus()
   await getData()
 })
 
@@ -542,7 +514,6 @@ async function onTestById(row: Api.DataSource.Item) {
     } else {
       ElMessage.warning(`${row.source_code}：${result.message}`)
     }
-    await loadResolveStatus()
     await getData()
   } catch (e: any) {
     ElMessage.error(`${row.source_code}：${e?.message || '测试失败'}`)
@@ -592,7 +563,6 @@ async function onSubmit() {
       ElMessage.success('已保存，🟢 立即生效')
     }
     drawerVisible.value = false
-    await loadResolveStatus()
     await getData()
   } catch (e: any) {
     // 二次确认：测试未通过仍要保存
@@ -604,58 +574,49 @@ async function onSubmit() {
   }
 }
 
-function onMore(e: MouseEvent, row: Api.DataSource.Item) {
-  // 简化为直接 confirm 模式操作（避免再实现 dropdown）
-  const items: Array<{ label: string; action: () => void }> = [
-    {
-      label: '设为默认',
-      action: async () => {
-        try {
-          await setDefaultDataSource(row.id)
-          await loadResolveStatus()
-          await getData()
-        } catch (err: any) {
-          ElMessage.error(err?.message || '操作失败')
-        }
-      },
-    },
-    {
-      label: row.enabled ? '停用' : '启用',
-      action: async () => {
-        try {
-          await toggleDataSource(row.id, !row.enabled)
-          await getData()
-        } catch (err: any) {
-          ElMessage.error(err?.message || '操作失败')
-        }
-      },
-    },
-    {
-      label: '删除',
-      action: async () => {
-        try {
-          await ElMessageBox.confirm(
-            `确定删除数据源 ${row.source_code}？删除不可恢复`,
-            '删除确认',
-            { type: 'warning' }
-          )
-          await deleteDataSource(row.id)
-          await loadResolveStatus()
-          await getData()
-        } catch (err: any) {
-          if (err !== 'cancel') ElMessage.error(err?.message || '删除失败')
-        }
-      },
-    },
-  ]
-  const label = window.prompt(`操作：设为默认｜${items[1].label}｜删除`, '更多') || ''
-  if (!label.trim()) return
-  const target = items.find((i) => i.label === label.trim())
-  if (!target) {
-    ElMessage.info('输入有误，请输入：设为默认 / 启用 / 停用 / 删除')
+async function onSetDefault(row: Api.DataSource.Item) {
+  if (row.is_default) {
+    ElMessage.info(`${row.source_code} 已是默认实例`)
     return
   }
-  target.action()
+  try {
+    await ElMessageBox.confirm(
+      `将 ${row.source_code} 设为该类型的默认实例？\n原默认实例将被替换，业务层 60s 内生效。`,
+      '切换默认',
+      { type: 'info' }
+    )
+    await setDefaultDataSource(row.id)
+    ElMessage.success(`已将 ${row.source_code} 设为默认`)
+    await getData()
+  } catch (err: any) {
+    if (err !== 'cancel') ElMessage.error(err?.message || '操作失败')
+  }
+}
+
+async function onToggle(row: Api.DataSource.Item) {
+  const next = !row.enabled
+  try {
+    await toggleDataSource(row.id, next)
+    ElMessage.success(`${row.source_code} 已${next ? '启用' : '停用'}`)
+    await getData()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '操作失败')
+  }
+}
+
+async function onDelete(row: Api.DataSource.Item) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除数据源 ${row.source_code}？\n删除不可恢复。`,
+      '删除确认',
+      { type: 'warning' }
+    )
+    await deleteDataSource(row.id)
+    ElMessage.success(`已删除 ${row.source_code}`)
+    await getData()
+  } catch (err: any) {
+    if (err !== 'cancel') ElMessage.error(err?.message || '删除失败')
+  }
 }
 </script>
 
@@ -701,30 +662,6 @@ function onMore(e: MouseEvent, row: Api.DataSource.Item) {
   .dot.err { background: #e24b4a; }
   .dot.gray { background: #b4b2a9; }
   .dot.warn { background: #ef9f27; }
-
-  .resolve-status {
-    margin-top: 14px;
-    padding: 11px 14px;
-    background: #f1efe8;
-    border-radius: 8px;
-    font-size: 12px;
-    color: #5f5e5a;
-  }
-  .resolve-status .title {
-    color: #2c2c2a;
-    font-weight: 500;
-    margin-right: 8px;
-  }
-  .resolve-status .origin-item {
-    display: inline-block;
-    margin-right: 8px;
-  }
-  .resolve-status .origin.env { color: #854f0b; }
-  .resolve-status .origin.none { color: #a32d2d; }
-  .resolve-status .divider {
-    color: #b4b2a9;
-    margin: 0 6px;
-  }
 }
 
 .drawer-wrap {
