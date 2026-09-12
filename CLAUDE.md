@@ -1845,5 +1845,55 @@ C12（`soc_role_menus` 只有三列）。**三种失败模式全静默——404/
 
 ---
 
-**文档版本**: v2.27
-**最后更新**: 2026-09-11
+**文档版本**: v2.28
+**最后更新**: 2026-09-12
+
+---
+
+## 今日补充（2026-09-12：配置中心 v1 上线 + Wazuh/OpenSearch 走 DB）
+
+### 本次交付
+配置中心三件套从「master 上有代码但本地/生产 DB 未 migrate + 环境仍走 .env」状态，到「菜单可见、数据源热生效」全打通：
+
+1. **本地 testdb alembic upgrade head**（迁移 d2e3f4g5h6i7 + e2f3g4h5i6j7 补齐）
+   - 3 张表 `soc_data_sources` / `soc_config_schema` / `soc_config_change_log` 创建
+   - 3 个菜单行 + admin 授权 + permissions JSONB 齐
+   - 端到端 admin 能看到「数据源管理 / 配置中心 / 配置审计」 3 个菜单
+2. **生产 102 同步 + migrate**
+   - 102 原本 HEAD 停在 fdf52821（落后 3 个 commit），手动 git reset + migrate 到达 e2f3g4h5i6j7
+   - 后端 restart 后 3 个新 API 全 200
+3. **3a：写 3 个数据源到 soc_data_sources**
+   - Wazuh / OpenSearch / Loki 三个默认实例，auth_secret 走 Fernet 加密
+4. **3b：.env 数据源键 标记废弃**
+   - 7 个键（WAZUH_API_URL/USERNAME/PASSWORD + OPENSEARCH_URL/USER/PASSWORD + LOKI_URL）从 .env 移到 .env.bak-20260912-datasrc-migration
+   - .env 顶部加 DEPRECATED 注释，回滚路 = cat .env.bak >> .env
+5. **3c：11 个后端调用点迁移到 data_source_resolver**
+   - 新增 data_source_resolver.get_endpoint / get_config 便捷函数
+   - 迁移 dashboard_service / wazuh_inventory_service / loki_tools (3 处) / internal/tools / behavior_profile/loki_source / behavior_profile/identity / alert_query
+   - 全部保留 or settings.X 兑底链
+
+### 踩到的 4 个新坑
+1. **3b 后 Settings 启动失败**：WAZUH_API_USERNAME/PASSWORD 原定义为 `str`（必填），.env 移除后 Settings 报 ValidationError，后端启不来。**已加 commit 157f4d1 改为 Optional[str] = None**。教训：移除 env 键之前要先看 pydantic Settings 定义。
+2. **第一个 seed 脚本写错了密码**：当时解密后看是「wazuh」（5 字 = username），不是 .env.bak 里的真密码。原因未复现，**已用 .env.bak 权威值重写**（commit 未提交，临时修复）后续在 .env.example 中加 「3a 会话脚本需重读 .env 验证」备注。
+3. **3b 的 .env.bak 只备份 8 个匹配行**：因 .env.bak = 原 .env 全量备份，含 LOKI_RETENTION_DAYS=7。回头看从 .env 移走的其实只有 7 个键，额外保留键不动是正确设计（不是全部数据源键，只移 source endpoint / 账号 / 密码）。
+4. **Loki 连通在 102 仍超时**：与 CLAUDE.md 里 loki:browsing_detection 过期状态同源（192.168.0.30:3100 路由不可达）。本次迁移本身正确，部署后 /test 仍报 No route to host 是网络/防火墙问题，与本轮无关。
+
+### 验证状态（生产 102）
+- 迁移到 head e2f3g4h5i6j7 + 后端能启动 + 3 个新 API 200
+- Wazuh /test ok=True（JWT、版本、agents 都到）
+- OpenSearch /test ok=True（7.10.2、集群 yellow）
+- Loki /test ok=False（No route to host，pre-existing 不在本次范围）
+- dashboard/summary 中的 sources_health.wazuh/opensearch 走的是 DB endpoint，验证 3c 生效
+
+### 遗留（不阻塞）
+- **Loki 192.168.0.30:3100 不可达**——与 loki:browsing_detection 同一问题，需查路由器 ACL / 服务状态（独立工单）
+- **GLM_ 键未动**（留在 .env）—— GLM 不是「数据源」，应走独立 AI Provider 配置表（设计文档 §4.5 留口）
+- **.env.bak 7 天后删除**（2026-09-19 后）——到时确认 Wazuh/OpenSearch/Loki 仍走 DB 后 rm
+- **S2：配置文件热重载**（设计文档 §7 后续项）——服务器端口 / MCP 端口这类环境级配置仍需重启
+- **S3：X1 跨部门隔离**（设计文档 §5.4.4）—— operator 只能改本部门数据源需要 Asset↔Department 关联（独立工单）
+- **3c 全量验证仅采样 3/11 调用点**（dashboard_service / wazuh_inventory_service / alert_query 在 102 跳到 200；MCP / internal 是后端没限走、没跳过）。「远程调用返回值为零」不能等同于「调用成功」，需补在 CI 里加个 /api/v1/data-sources 路由检查。
+
+### 阶段结论
+配置中心 v1（P1 主功能）：**代码、菜单、授权、数据、热生效、缓存、审计** 7 个环节都已落地。3a + 3b + 3c 是「能走」不是「走完全」——后续 X1 部门隔离、黄金 4 指标、CI 补充验证 是独立工单。生产 102 后端已加载新代码、admin 登录后能看 3 个新菜单、可在「数据源管理」页面改地址并热生效。
+
+---
