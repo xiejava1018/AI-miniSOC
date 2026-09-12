@@ -273,7 +273,8 @@ const columns = ref<any[]>([
         stale: { text: '过期', cls: 'warn' },
       }
       const m = map[row.health_status || 'untested']
-      return h('span', { class: 'health' }, [
+      // 在外层 span 上加 cls，以便同步设置文本颜色（不只点）
+      return h('span', { class: ['health', m.cls] }, [
         h('span', { class: ['dot', m.cls] }),
         m.text,
       ])
@@ -290,7 +291,9 @@ const columns = ref<any[]>([
           'span',
           {
             class: 'link',
-            style: `margin-left: 10px;${opts.danger ? ' color:#e24b4a;' : ''}`,
+            // 显式 cursor: pointer：原先靠 .actions .link CSS 生效，但 flex 布局下偶尔被
+            // inherit 覆盖（实测部分浏览器 hover 仍为 text）。inline 写死不依赖 class 解析。
+            style: `margin-left: 10px; cursor: pointer;${opts.danger ? ' color:#e24b4a;' : ''}`,
             onClick,
           },
           text
@@ -652,6 +655,12 @@ async function onDelete(row: Api.DataSource.Item) {
     gap: 5px;
     font-size: 12px;
   }
+  // 健康列文本颜色与点同步：
+  // 正常=绿、异常=橙、未测=灰、过期=橙（与 design prototype 配色一致）
+  .health.ok    { color: #639922; }
+  .health.err   { color: #ef9f27; }
+  .health.gray  { color: #888780; }
+  .health.warn  { color: #ef9f27; }
   .dot {
     display: inline-block;
     width: 7px;
@@ -659,7 +668,7 @@ async function onDelete(row: Api.DataSource.Item) {
     border-radius: 50%;
   }
   .dot.ok { background: #639922; }
-  .dot.err { background: #e24b4a; }
+  .dot.err { background: #ef9f27; }
   .dot.gray { background: #b4b2a9; }
   .dot.warn { background: #ef9f27; }
 }
