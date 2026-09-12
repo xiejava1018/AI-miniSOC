@@ -11,7 +11,8 @@
 #   3. 检查无 uncommitted
 #   4. pip install backend deps
 #   5. alembic check（不升级，仅告警）
-#   6. npx vite build 前端（旁路构建 dist.new + 原子替换，不中断服务）
+#   6. npx vite build 前端（旁路构建 dist.new + 原子替换，不中断服务；
+#      v2.8: package-lock.json 有变更才 npm ci，否则复用 node_modules）
 #   7. systemctl restart aisoc-backend
 #   8. 健康检查：HTTP 端点 + DB 探活（v2.2 加）
 #   9. 任何步骤失败 → 全局 trap 自动 git reset 回滚 (R5 修复)
@@ -179,7 +180,26 @@ log "===== alembic check (非阻塞，仅告警) ====="
 # ===== 6. 前端 build =====
 log "===== 前端 build (npx vite build) ====="
 cd "$PROJECT_DIR/src/frontend"
-npm ci --silent 2>&1 | tail -10 | tee -a "$LOG_FILE"
+
+# npm ci 仅在 package-lock.json 有变更时执行（v2.8）
+# 背景：npm ci 每次清空 node_modules 重装，在 8GB 主机上紧接着的 vite build
+# 会间歇性踩到竞态，报三种假错（SASS @use 'config' / ERR_MODULE_NOT_FOUND /
+# rollup externalized），2026-09-12 实测一轮部署失败 3 次、手动 build 全部成功。
+# lock 无变更时复用现有 node_modules，既快又稳。
+# 兑底：node_modules 缺失 / PREVIOUS_SHA 不可达（shallow fetch 丢了历史）时仍执行 npm ci。
+LOCK_CHANGED=1
+if [[ -d node_modules ]] && git cat-file -e "$PREVIOUS_SHA" 2>/dev/null; then
+    if git diff --quiet "$PREVIOUS_SHA" "$TARGET_SHA" -- package-lock.json 2>/dev/null; then
+        LOCK_CHANGED=0
+    fi
+fi
+if [[ $LOCK_CHANGED -eq 1 ]]; then
+    log "package-lock.json 有变更（或无法判定/node_modules 缺失），执行 npm ci"
+    npm ci --silent 2>&1 | tail -10 | tee -a "$LOG_FILE"
+else
+    log "package-lock.json 未变化，跳过 npm ci（复用 node_modules）"
+fi
+
 if ! build_frontend; then
     log "ERROR: 前端 build 失败"
     exit 4   # trap 会回滚
