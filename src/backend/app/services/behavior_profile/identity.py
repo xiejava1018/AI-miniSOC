@@ -65,9 +65,15 @@ def _extract(log: str, rule_id: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def _os_search(body: dict) -> dict:
+    # 配置中心 v1（X1E-11）：从 data_source_resolver 读 opensearch
+    from app.services.data_source_resolver import get_config
+    cfg = get_config("opensearch")
     with httpx.Client(
-        base_url=settings.OPENSEARCH_URL.rstrip("/"),
-        auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
+        base_url=(cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/"),
+        auth=(
+            cfg.get("username") or settings.OPENSEARCH_USER,
+            cfg.get("password") or settings.OPENSEARCH_PASSWORD,
+        ),
         verify=False,
         timeout=60,
     ) as c:

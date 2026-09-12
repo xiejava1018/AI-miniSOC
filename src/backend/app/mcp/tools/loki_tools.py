@@ -44,9 +44,12 @@ def register(mcp) -> None:
         end = int(time.time() * 1e9)
         start = end - hours * 3600 * 1e9
         try:
+            # 配置中心 v1（X1E-11）：从 data_source_resolver 读 loki（无 db 调用点用便捷函数开短会话）
+            from app.services.data_source_resolver import get_endpoint
+            loki_base = (get_endpoint("loki") or settings.LOKI_API_URL).rstrip("/")
             with httpx.Client(timeout=30) as c:
                 r = c.get(
-                    f"{settings.LOKI_API_URL}/loki/api/v1/query_range",
+                    f"{loki_base}/loki/api/v1/query_range",
                     params={
                         "query": query,
                         "start": start,
@@ -67,8 +70,10 @@ def register(mcp) -> None:
     )
     def loki_list_labels() -> list[str]:
         try:
+            from app.services.data_source_resolver import get_endpoint
+            loki_base = (get_endpoint("loki") or settings.LOKI_API_URL).rstrip("/")
             with httpx.Client(timeout=10) as c:
-                r = c.get(f"{settings.LOKI_API_URL}/loki/api/v1/labels")
+                r = c.get(f"{loki_base}/loki/api/v1/labels")
                 r.raise_for_status()
                 return r.json().get("data", [])
         except Exception as e:
@@ -80,8 +85,10 @@ def register(mcp) -> None:
     )
     def loki_label_values(label: str) -> list[str]:
         try:
+            from app.services.data_source_resolver import get_endpoint
+            loki_base = (get_endpoint("loki") or settings.LOKI_API_URL).rstrip("/")
             with httpx.Client(timeout=10) as c:
-                r = c.get(f"{settings.LOKI_API_URL}/loki/api/v1/label/{label}/values")
+                r = c.get(f"{loki_base}/loki/api/v1/label/{label}/values")
                 r.raise_for_status()
                 return r.json().get("data", [])
         except Exception as e:

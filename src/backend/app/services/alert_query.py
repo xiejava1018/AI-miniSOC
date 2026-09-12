@@ -27,9 +27,16 @@ class AlertQueryService:
     def __init__(self, db: Session):
         self.db = db
         self._srcip_field_cached = None
+        # 配置中心 v1（X1E-11）：从 data_source_resolver 读 opensearch（用现成 db 会话）
+        from app.services.data_source_resolver import data_source_resolver
+        rc = data_source_resolver.resolve("opensearch", db)
+        cfg = rc.config or {}
         self._os = httpx.Client(
-            base_url=settings.OPENSEARCH_URL.rstrip("/"),
-            auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
+            base_url=(cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/"),
+            auth=(
+                cfg.get("username") or settings.OPENSEARCH_USER,
+                cfg.get("password") or settings.OPENSEARCH_PASSWORD,
+            ),
             verify=False,
             timeout=15,
         )

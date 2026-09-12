@@ -228,7 +228,10 @@ async def search_logs(
         start_ns = req.start or int((now - timedelta(hours=1)).timestamp() * 1e9)
         end_ns = req.end or int(now.timestamp() * 1e9)
 
-        loki_url = settings.LOKI_API_URL.rstrip("/")
+        # 配置中心 v1（X1E-11）：从 data_source_resolver 读 loki，db 传进去用现成会话
+        from app.services.data_source_resolver import data_source_resolver
+        rc = data_source_resolver.resolve("loki", db)
+        loki_url = (rc.config.get("endpoint") or settings.LOKI_API_URL).rstrip("/")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             params = {
@@ -273,7 +276,8 @@ async def search_logs(
             }
 
     except httpx.TimeoutException:
-        logger.warning("search_logs timeout: Loki %s", settings.LOKI_API_URL)
+        from app.services.data_source_resolver import get_endpoint
+        logger.warning("search_logs timeout: Loki %s", get_endpoint("loki") or settings.LOKI_API_URL)
         tool_execution_count.labels(tool="search_logs", status="timeout").inc()
         return {"ok": False, "error": "Loki request timeout"}
 

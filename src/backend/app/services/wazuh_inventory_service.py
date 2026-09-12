@@ -39,9 +39,17 @@ class WazuhInventoryService:
     """Wazuh states inventory 直查服务（应用清单 / 端口）"""
 
     def __init__(self):
+        # 配置中心 v1（X1E-11）：从 data_source_resolver 读 opensearch 连接参数
+        # （WazuhInventoryService 启动期不拿 db，用便捷函数开短会话；60s 缓存。
+        # 迁移后下发任何变更能 60s 内生效，无需重启服务。）
+        from app.services.data_source_resolver import get_config
+        cfg = get_config("opensearch")
+        endpoint = (cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/")
+        username = cfg.get("username") or settings.OPENSEARCH_USER
+        password = cfg.get("password") or settings.OPENSEARCH_PASSWORD
         self._os = httpx.Client(
-            base_url=settings.OPENSEARCH_URL.rstrip("/"),
-            auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
+            base_url=endpoint,
+            auth=(username, password),
             verify=False,  # Wazuh/OpenSearch 自签名证书
             timeout=30.0,
         )

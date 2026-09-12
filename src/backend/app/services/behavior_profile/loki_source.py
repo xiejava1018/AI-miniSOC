@@ -28,7 +28,9 @@ RE_DOM = re.compile(r"网址:([^\s:：]+)")
 
 
 def _loki_base() -> str:
-    return settings.LOKI_API_URL.rstrip("/")
+    # 配置中心 v1（X1E-11）：从 data_source_resolver 读 loki
+    from app.services.data_source_resolver import get_endpoint
+    return (get_endpoint("loki") or settings.LOKI_API_URL).rstrip("/")
 
 
 def _ns(d: dt.datetime) -> str:

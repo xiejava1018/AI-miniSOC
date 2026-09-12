@@ -173,11 +173,24 @@ class DashboardService:
         return health
 
     def _probe_opensearch(self) -> Dict[str, Any]:
-        """OpenSearch 探活：HEAD / （Wazuh Indexer 自签名证书，verify=False）。"""
+        """OpenSearch 探活：HEAD / （Wazuh Indexer 自签名证书，verify=False）。
+
+        配置中心 v1（X1E-11）：连接参数从 data_source_resolver 读取，
+        DB 优先，失败回退 settings。明确这一类业务调用点用 self.db 现成会话
+        （dashboard 是请求级服务、self.db 由调用方注入）。
+        """
         try:
+            from app.services.data_source_resolver import data_source_resolver
+            rc = data_source_resolver.resolve("opensearch", self.db)
+            cfg = rc.config or {}
+            endpoint = (cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/")
+            auth = (
+                (cfg.get("username") or settings.OPENSEARCH_USER),
+                (cfg.get("password") or settings.OPENSEARCH_PASSWORD),
+            )
             resp = httpx.head(
-                settings.OPENSEARCH_URL.rstrip("/") + "/",
-                auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD),
+                endpoint + "/",
+                auth=auth,
                 verify=False,
                 timeout=PROBE_TIMEOUT,
             )
@@ -190,8 +203,12 @@ class DashboardService:
     def _probe_loki(self) -> Dict[str, Any]:
         """Loki 探活：GET /ready（2xx 视为在线；503 等如实暴露 ingester 状态）。"""
         try:
+            from app.services.data_source_resolver import data_source_resolver
+            rc = data_source_resolver.resolve("loki", self.db)
+            cfg = rc.config or {}
+            endpoint = (cfg.get("endpoint") or settings.LOKI_API_URL).rstrip("/")
             resp = httpx.get(
-                settings.LOKI_API_URL.rstrip("/") + "/ready",
+                endpoint + "/ready",
                 timeout=PROBE_TIMEOUT,
             )
             if resp.status_code < 400:

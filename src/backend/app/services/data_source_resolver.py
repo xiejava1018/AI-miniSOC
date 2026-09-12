@@ -220,4 +220,31 @@ class DataSourceResolver:
         return result
 
 
+def get_endpoint(source_type: str) -> Optional[str]:
+    """便捷函数：开短会话读 endpoint（适用于无 db 入参的调用点，如 MCP tool / 单次探活）。
+
+    60s 进程内缓存意味着频繁调用不会打 DB。遇异常返回 None（调用方需自行处理）。
+    """
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        return data_source_resolver.resolve(source_type, db).config.get("endpoint")
+    except Exception:
+        return None
+    finally:
+        db.close()
+
+
+def get_config(source_type: str) -> Dict[str, Any]:
+    """便捷函数：开短会话读完整 config dict。同 get_endpoint 适用场景。"""
+    from app.core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        return data_source_resolver.resolve(source_type, db).config or {}
+    except Exception:
+        return {}
+    finally:
+        db.close()
+
+
 data_source_resolver = DataSourceResolver()
