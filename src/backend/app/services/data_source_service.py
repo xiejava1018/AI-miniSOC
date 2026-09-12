@@ -382,6 +382,8 @@ class DataSourceService:
         *,
         ok: bool,
         message: str,
+        operator_id: Optional[int] = None,
+        operator_ip: Optional[str] = None,
     ) -> None:
         ds = self.get_by_id(ds_id)
         ds.last_test_at = datetime.utcnow()
@@ -395,5 +397,7 @@ class DataSourceService:
             before=None,
             after={"ok": ok, "message": ds.last_test_message},
             changed_fields=None,
+            operator_id=operator_id,
+            operator_ip=operator_ip,
             result="success" if ok else "failure",
         )

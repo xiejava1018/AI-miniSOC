@@ -249,10 +249,13 @@ async def test_data_source(
 
     # 若指定了 id，把结果写回 + 写审计
     if payload.id is not None:
+        ip = request.client.host if request.client else None
         svc.record_test_result(
             payload.id,
             ok=result.ok,
             message=result.message,
+            operator_id=current_user.id,
+            operator_ip=ip,
         )
 
     return result
