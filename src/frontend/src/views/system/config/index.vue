@@ -1,5 +1,17 @@
 <template>
   <div class="system-config-page art-full-height" id="table-full-screen">
+    <!-- 降级警示（路线 C：日常调参请用配置中心，本页仅限高级 KV 操作） -->
+    <ElAlert
+      type="warning"
+      :closable="false"
+      show-icon
+      style="margin-bottom: 12px"
+    >
+      <template #title>
+        高级入口：本页为无校验的通用 KV 编辑器，仅限开发/排障时使用
+      </template>
+      日常配置请使用「<b>配置中心</b>」（带类型校验、生效方式提示与变更保护）；本页修改已注册项同样会经过后端 Schema 校验，删除受管项会被拒绝。
+    </ElAlert>
     <ElCard shadow="never" class="art-table-card config-card">
       <ElRow :gutter="16" class="config-row">
         <!-- 左侧：分类列表 -->
@@ -57,6 +69,7 @@
               table-layout="fixed"
               :table-config="{ rowKey: 'id' }"
               :layout="{ marginTop: 10 }"
+              class="table-flex"
               @pagination:size-change="onPageSizeChange"
               @pagination:current-change="onCurrentPageChange"
             />
@@ -504,8 +517,20 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .system-config-page {
+  // 高度链：页面定高(art-full-height) → 外层卡片 → ElRow → ElCol → 内层卡片 → ArtTable(height 100%)
+  // 表头固定、表体在表格内部滚动（与 /browsing/event 一致），不再整块区域滚动
+  .config-card {
+    :deep(.el-card__body) {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+  }
+
   .config-row {
-    min-height: calc(100vh - 200px);
+    flex: 1;
+    min-height: 0;
   }
 
   .category-col {
@@ -576,6 +601,16 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    :deep(.el-card__body) {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .table-flex {
+      flex: 1;
+      min-height: 0;
+    }
   }
 
   .config-key {

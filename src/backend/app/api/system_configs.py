@@ -16,6 +16,7 @@ from app.schemas.system_config import (
     CategoryItem,
 )
 from app.services.system_config_service import SystemConfigService
+from app.services import config_validation
 
 
 router = APIRouter()
@@ -96,6 +97,8 @@ async def create_config(
 ):
     service = SystemConfigService(db)
     try:
+        # schema 校验：已注册项按类型/范围/正则校验，editable=False 拒绝
+        config_validation.validate_value(db, data.category, data.key, data.value)
         item = service.create(data, user_id=current_user.id)
         return SystemConfigResponse.model_validate(item)
     except ValueError as e:
@@ -118,6 +121,10 @@ async def update_config(
 ):
     service = SystemConfigService(db)
     try:
+        # schema 校验：按现有行的 category/key 校验新值
+        existing = service.get_by_id(config_id)
+        if data.value is not None:
+            config_validation.validate_value(db, existing.category, existing.key, data.value)
         item = service.update(config_id, data, user_id=current_user.id)
         return SystemConfigResponse.model_validate(item)
     except ValueError as e:
@@ -138,6 +145,9 @@ async def delete_config(
 ):
     service = SystemConfigService(db)
     try:
+        # schema 保护：已注册项禁止删除（防静默回落默认值）
+        existing = service.get_by_id(config_id)
+        config_validation.validate_delete(db, existing.category, existing.key)
         service.delete(config_id)
         return {"success": True, "message": "配置项已删除"}
     except ValueError as e:

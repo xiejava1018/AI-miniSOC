@@ -100,6 +100,12 @@ def log_audit(
                         if get_new_values:
                             new_values = get_new_values(result, kwargs)
 
+                        # soc_audit_logs 的 old/new_values 是 JSONB，datetime 等类型
+                        # 必须先转字符串，否则 INSERT 报 TypeError、审计丢失（不阻断业务）
+                        from app.services.config_audit_service import _jsonify
+                        old_values = _jsonify(old_values)
+                        new_values = _jsonify(new_values)
+
                         # 获取客户端信息
                         ip_address = None
                         user_agent = None

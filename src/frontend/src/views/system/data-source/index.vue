@@ -286,27 +286,22 @@ const columns = ref<any[]>([
     width: 380,
     fixed: 'right',
     formatter: (row: Api.DataSource.Item) => {
-      const link = (text: string, onClick: () => void, opts: { danger?: boolean } = {}) =>
+      // 与 /scan/findings 等页面保持一致：ElButton link 型按钮（主题 primary 色）
+      const btn = (text: string, onClick: () => void, opts: { type?: string } = {}) =>
         h(
-          'span',
-          {
-            class: 'link',
-            // 显式 cursor: pointer：原先靠 .actions .link CSS 生效，但 flex 布局下偶尔被
-            // inherit 覆盖（实测部分浏览器 hover 仍为 text）。inline 写死不依赖 class 解析。
-            style: `margin-left: 10px; cursor: pointer;${opts.danger ? ' color:#e24b4a;' : ''}`,
-            onClick,
-          },
-          text
+          resolveComponent('ElButton'),
+          { link: true, type: (opts.type || 'primary') as any, size: 'small', onClick },
+          { default: () => text }
         )
       return h('div', { class: 'actions' }, [
-        h('span', { class: 'link', onClick: () => onTestById(row) }, '测试'),
-        link('编辑', () => onEdit(row)),
+        btn('测试', () => onTestById(row)),
+        btn('编辑', () => onEdit(row)),
         // 「设为默认」改用提示确认（生产切换默认源影响 resolver）
-        link('设为默认', () => onSetDefault(row)),
-        link(row.enabled ? '停用' : '启用', () => onToggle(row), {
-          danger: row.enabled,
+        btn('设为默认', () => onSetDefault(row)),
+        btn(row.enabled ? '停用' : '启用', () => onToggle(row), {
+          type: row.enabled ? 'warning' : 'primary',
         }),
-        link('删除', () => onDelete(row), { danger: true }),
+        btn('删除', () => onDelete(row), { type: 'danger' }),
       ])
     },
   },
@@ -467,23 +462,31 @@ function onPasswordFocus(e: FocusEvent) {
 async function onTest() {
   testing.value = true
   try {
-    const payload: any = {
-      draft: {
-        source_code: form.source_code || 'draft',
-        source_type: form.source_type,
-        name: form.name || 'draft',
-        endpoint: form.endpoint,
-        auth_type: form.auth_type,
-        auth_username: form.auth_username || null,
-        auth_secret: form.auth_secret || null,
-        verify_ssl: form.verify_ssl,
-        timeout_seconds: form.timeout_seconds,
-        retry_times: form.retry_times,
-        retry_backoff_seconds: form.retry_backoff_seconds,
-        enabled: form.enabled,
-        is_default: form.is_default,
-        config_json: form.config_json,
-      },
+    // 编辑态：走 id 路径，用后端 DB 里存的凭证测试。
+    // 若走 draft：编辑态 form.auth_secret 为空（留空表示不修改），
+    // 后端会拿空密码发 basic auth → HTTP 401（假失败）。
+    let payload: any
+    if (isEdit.value && editingId.value) {
+      payload = { id: editingId.value }
+    } else {
+      payload = {
+        draft: {
+          source_code: form.source_code || 'draft',
+          source_type: form.source_type,
+          name: form.name || 'draft',
+          endpoint: form.endpoint,
+          auth_type: form.auth_type,
+          auth_username: form.auth_username || null,
+          auth_secret: form.auth_secret || null,
+          verify_ssl: form.verify_ssl,
+          timeout_seconds: form.timeout_seconds,
+          retry_times: form.retry_times,
+          retry_backoff_seconds: form.retry_backoff_seconds,
+          enabled: form.enabled,
+          is_default: form.is_default,
+          config_json: form.config_json,
+        },
+      }
     }
     const res: any = await testDataSourceConnection(payload)
     const result: Api.DataSource.TestResult = res?.data || res
@@ -644,19 +647,26 @@ async function onDelete(row: Api.DataSource.Item) {
     color: #888780;
   }
 
-  .actions .link {
-    color: #185fa5;
-    cursor: pointer;
-    margin-right: 10px;
-  }
   .health {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     font-size: 12px;
   }
-  // 健康列文本颜色与点同步：
-  // 正常=绿、异常=橙、未测=灰、过期=橙（与 design prototype 配色一致）
+}
+</style>
+
+// 健康列 / 操作列链接由 ArtTable 内部渲染（formatter 回调），scoped 样式的 data-v 属性
+// 挂在 ArtTable 上而非本页面，scoped 规则永远匹配不到 → 必须用全局（非 scoped）样式。
+// 加 .data-source-page 前缀防止污染其它页面。
+<style lang="scss">
+.data-source-page {
+  .health {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+  }
   .health.ok    { color: #639922; }
   .health.err   { color: #ef9f27; }
   .health.gray  { color: #888780; }
@@ -672,6 +682,9 @@ async function onDelete(row: Api.DataSource.Item) {
   .dot.gray { background: #b4b2a9; }
   .dot.warn { background: #ef9f27; }
 }
+</style>
+
+<style scoped lang="scss">
 
 .drawer-wrap {
   padding: 18px;
@@ -751,8 +764,7 @@ async function onDelete(row: Api.DataSource.Item) {
 }
 .footer {
   margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f0f0ee;
+  padding-top: 4px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
