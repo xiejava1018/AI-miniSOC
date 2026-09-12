@@ -1957,4 +1957,16 @@ C12（`soc_role_menus` 只有三列）。**三种失败模式全静默——404/
 ### 阶段结论
 配置中心 v1（P1 主功能）：**代码、菜单、授权、数据、热生效、缓存、审计** 7 个环节都已落地。3a + 3b + 3c 是「能走」不是「走完全」——后续 X1 部门隔离、黄金 4 指标、CI 补充验证 是独立工单。生产 102 后端已加载新代码、admin 登录后能看 3 个新菜单、可在「数据源管理」页面改地址并热生效。
 
+### 收尾：deploy.sh v2.8（commit ee3871a）
+上述坑 4 已修：`npm ci` 改为仅 `package-lock.json` 有变更时执行
+（`git diff PREVIOUS_SHA..TARGET_SHA -- package-lock.json` 判定；
+node_modules 缺失 / PREVIOUS_SHA 不可达时兑底仍执行）。
+生产验证：同 SHA 重部署 → 日志出现「跳过 npm ci（复用 node_modules）」，
+build 无竞态错误，部署成功。
+注意：修改 deploy.sh 的那次部署本身跑的还是旧脚本（bash 持旧 fd），
+新逻辑从下一次部署生效——验证时需跑两次。
+
 ---
+
+**文档版本**: v2.30
+**最后更新**: 2026-09-12
