@@ -1845,8 +1845,69 @@ C12（`soc_role_menus` 只有三列）。**三种失败模式全静默——404/
 
 ---
 
-**文档版本**: v2.28
+**文档版本**: v2.29
 **最后更新**: 2026-09-12
+
+---
+
+## 今日补充（2026-09-12 续：配置审计合并到审计日志）
+
+### 背景：两套并行的审计基础设施
+用户问「配置审计能不能并到审计日志」，查下去发现不只是页面重复：
+
+| | 审计日志 | 配置审计（已删）|
+|---|---|---|
+| 表 | `soc_audit_logs`（2588 行）| `soc_config_change_log`（37 行）|
+| 写入 | `@log_audit` 装饰器 | `ConfigAuditService.log()` |
+| **hash 链** | ✅ `log_hash`+`prev_log_hash` | ❌ 无 |
+| 覆盖 | auth/asset/user/role/scanner… | 只 data_source |
+
+**真问题：data_source 写操作完全不在 hash 链审计中**——绕开了防篡改保护，
+与「取证级审计」设计意图相违。不是单纯重复，是安全洞。
+
+### 交付（commit bb22d20 + 547346e）
+- `ConfigAuditService.log()` 内部转调 `AuditLogService.create_audit_log()`，
+  `data_source_service.py` 的 6 个调用点**零改动**，审计自动进 hash 链
+- 新增 `_jsonify()`：`soc_audit_logs.old/new_values` 是 JSONB，
+  `to_response()` 里的 datetime 需转 ISO 字符串才能落库
+- 删 ConfigChangeLog 模型/schema/service/router + 4 处 import
+  （`models/__init__.py`、`api/__init__.py`、**`alembic/env.py`**、`types/api.d.ts`）
+- 迁移 `f3g4h5i6j7k8`：删 configLogs 菜单 + 授权 + DROP TABLE
+- 前端删 `views/system/config-logs/`、`api/configChangeLog.ts`、`routesAlias.ConfigLogs`
+- **顺手修：**`record_test_result()` 从未接 operator，导致 `/test` 审计
+  `username` 恒为 `system`。并入 hash 链后这变成「取证链里有一条无主记录」，一并修掉
+
+### 实测（本地 + 生产）
+- 单测：update 触发 → `audit_logs` Δ=1 / `config_change_log` Δ=0，
+  hash 链生效，`auth_secret` 脱敏为 `***`
+- HTTP 端到端：旧路由 404、`/audit-logs?resource_type=data_source` 可查、
+  `PATCH /enabled` ×2 → 审计 Δ=2、菜单树无 configLogs
+- alembic `downgrade -1` → `upgrade head` 循环幂等（表/菜单/授权全复原）
+- 生产 102：表删除、菜单删除、alembic `f3g4h5i6j7k8`、
+  operator 修复前后对比 `user=system` → `user=admin ip=192.168.0.8`
+
+### 踩到的坑
+1. **删模型要同步改 `alembic/env.py`**——它独立 import 了三个配置中心模型
+   （防 autogenerate 误报 DROP）。漏改导致 `alembic --sql` 直接 ModuleNotFoundError
+2. **`soc_audit_logs` 用 JSONB、旧表用 Text**——旧实现靠 `json.dumps(default=str)`
+   绕过 datetime；换 JSONB 后必须先递归转 ISO，否则 `TypeError: Object of type
+   datetime is not JSON serializable`
+3. **测试脚本用活 ORM 对象做「恢复现场」会静默失败**——`ds` 被第一次 update
+   改写后，恢复 payload 拿到的已是新值 → `changed=[]` → 不记审计。
+   先把原值 `str()` 快照出来再改
+4. **102 前端 build 极不稳定**（本轮失败 3 次）：deploy.sh 第 182 行 `npm ci`
+   会先清空 node_modules，紧接着 build 在 8GB 主机上会报三种不同的假错
+   （SASS `@use 'config'` / `ERR_MODULE_NOT_FOUND` / rollup externalized）。
+   **手动跑 `npx vite build` 全都成功**。判定为竞态，重跑 deploy 即可。
+   → 建议后续把 `npm ci` 改成「lock 变了才重装」（独立工单）
+
+### 收益
+- 配置变更进入防篡改 hash 链（安全洞已堵）
+- 删了 ~400 行重复基础设施（1 表 + 4 文件 + 1 页面 + 1 菜单）
+- 配置审计现在复用审计日志页的 ArtSearchBar 富搜索 + 详情弹窗 + 导出 CSV，
+  比原「配置审计」页功能更全
+
+---
 
 ---
 
