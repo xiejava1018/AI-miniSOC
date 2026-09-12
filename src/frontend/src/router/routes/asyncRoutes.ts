@@ -142,19 +142,6 @@ export const asyncRoutes: AppRouteRecord[] = [
             { title: '编辑', authMark: 'edit' }
           ]
         }
-      },
-      {
-        path: 'config-logs',
-        name: 'ConfigLogs',
-        component: RoutesAlias.ConfigLogs,
-        meta: {
-          title: '配置审计',
-          keepAlive: true,
-          roles: ['R_SUPER', 'R_ADMIN'],
-          authList: [
-            { title: '查看', authMark: 'view' }
-          ]
-        }
       }
     ]
   },

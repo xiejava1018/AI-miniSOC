@@ -45,12 +45,12 @@ from .asset_reconciliation import AssetReconciliation
 from .security_report import SecurityReport
 
 # 配置中心 v1（X1E-11 / 2026-09-11）：
-# DataSource / ConfigSchema / ConfigChangeLog 三张表 + Alembic 迁移。
+# DataSource / ConfigSchema 两张表 + Alembic 迁移。
+# （ConfigChangeLog 已于 2026-09-12 废弃：配置变更审计合并到 soc_audit_logs）
 # 必须在 models/__init__.py 导入，否则 alembic env.py 的 Base.metadata 缺失，
 # `alembic check` 会误报要 DROP 这 3 张表（参考 P4 注释）。
 from .data_source import DataSource
 from .config_schema import ConfigSchema
-from .config_change_log import ConfigChangeLog
 
 # P4 数据可靠性 / 脆弱性 / SCA 模块。
 # 这 4 个模块此前漏在这里导入，导致 alembic env.py 的 Base.metadata 缺失下面 8 张表，
@@ -115,7 +115,6 @@ __all__ = [
     # 配置中心 v1
     "DataSource",
     "ConfigSchema",
-    "ConfigChangeLog",
     # P4 / 脆弱性 / SCA
     "Vulnerability",
     "AssetVulnerability",

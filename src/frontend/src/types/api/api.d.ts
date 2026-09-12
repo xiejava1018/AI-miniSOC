@@ -586,35 +586,6 @@ declare namespace Api {
     }
   }
 
-  /** 配置变更审计（X1E-11 配置中心） */
-  namespace ConfigChangeLog {
-    type TargetType = 'system_config' | 'data_source'
-    type Action = 'create' | 'update' | 'delete' | 'enable' | 'disable' | 'set_default' | 'test'
-    type Result = 'success' | 'failure'
-
-    interface Item {
-      id: number
-      target_type: TargetType
-      target_key: string
-      action: Action
-      before_value: string | null
-      after_value: string | null
-      changed_fields: string[] | null
-      operator_id: number | null
-      operator_ip: string | null
-      result: Result | null
-      created_at?: string
-    }
-
-    interface SearchParams {
-      page?: number
-      page_size?: number
-      target_type?: TargetType
-      action?: Action
-      search?: string
-    }
-  }
-
   /** 审计日志 */
   namespace AuditLog {
     interface AuditLogItem {
