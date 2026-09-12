@@ -5,7 +5,7 @@
 
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
-from typing import List, Union
+from typing import List, Optional, Union
 from urllib.parse import quote_plus
 
 
@@ -76,8 +76,11 @@ class Settings(BaseSettings):
 
     # Wazuh配置
     WAZUH_API_URL: str = "https://192.168.0.40:55000"
-    WAZUH_API_USERNAME: str
-    WAZUH_API_PASSWORD: str
+    # 配置中心 v1（X1E-11）：账号/密码走 DB（soc_data_sources）为主，
+    # 设为 Optional 是为 Settings 启动验证：若 DB 有 wazuh 记录则 env 可缺。
+    # 运行时读不到时由 data_source_resolver 走 DB；DB 也无则报「未配置」错误而非启动失败。
+    WAZUH_API_USERNAME: Optional[str] = None
+    WAZUH_API_PASSWORD: Optional[str] = None
 
     # OpenSearch 配置（Wazuh Indexer）
     OPENSEARCH_URL: str = "https://192.168.0.40:9200"
