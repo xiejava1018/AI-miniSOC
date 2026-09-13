@@ -112,6 +112,21 @@ def _fallback_from_env(source_type: str) -> Optional[Dict[str, Any]]:
                 "config_json": {},
             }
         return None
+    if source_type == "ai":
+        # AI Provider 回落：GLM_* 环境变量（OpenAI 兼容协议）
+        if getattr(settings, "GLM_API_KEY", None):
+            return {
+                "endpoint": getattr(settings, "GLM_API_BASE", "https://open.bigmodel.cn/api/paas/v4/"),
+                "auth_type": "apikey",
+                "username": None,
+                "password": settings.GLM_API_KEY,
+                "verify_ssl": False,
+                "timeout_seconds": 60,
+                "retry_times": 2,
+                "retry_backoff_seconds": 2,
+                "config_json": {"model": getattr(settings, "GLM_MODEL", "glm-4-flash"), "protocol": "openai"},
+            }
+        return None
     return None
 
 
@@ -218,6 +233,91 @@ class DataSourceResolver:
         for t in types:
             result[t] = self.resolve(t, db)
         return result
+
+    def resolve_ai(self, scene: Optional[str] = None, db: Optional[Session] = None) -> ResolvedConfig:
+        """AI Provider 场景路由（多模型核心）：
+
+        优先级：
+        1. config_json.scenes 含 scene 的启用 ai 实例（精确路由，如报告用 deepseek）
+        2. is_default=true 的启用 ai 实例
+        3. 任一启用 ai 实例（WARN）
+        4. env 回落 GLM_*（origin="env"，现行为不变）
+
+        scene=None 表示不路由，直接取默认。场景例：asset_query/report/impact/
+        chat/compliance/knowledge/risk/reconcile/behavior
+        """
+        cache_key = f"ai:{scene or '*'}"
+        with self._lock:
+            if self._is_fresh(cache_key):
+                return self._cache[cache_key]
+
+        resolved = self._resolve_ai_uncached(scene, db)
+        with self._lock:
+            self._cache[cache_key] = resolved
+            self._cached_at[cache_key] = self._now()
+        return resolved
+
+    def _resolve_ai_uncached(
+        self, scene: Optional[str], db: Optional[Session]
+    ) -> ResolvedConfig:
+        """查 soc_ai_providers（AI 配置独立表，2026-09-13 拆分）。"""
+        if db is not None:
+            try:
+                from app.models.ai_provider import AIProvider
+
+                rows = (
+                    db.query(AIProvider)
+                    .filter(AIProvider.enabled.is_(True))
+                    .all()
+                )
+                if rows:
+                    # 1) 精确场景路由
+                    for p in rows:
+                        if scene and scene in (p.scenes or []):
+                            return self._ai_provider_to_config(p)
+                    # 2) 默认实例
+                    for p in rows:
+                        if p.is_default:
+                            return self._ai_provider_to_config(p)
+                    # 3) 任一启用
+                    logger.warning(
+                        "ai provider 未设默认且场景 %s 无精确路由，使用 %s",
+                        scene,
+                        rows[0].provider_code,
+                    )
+                    return self._ai_provider_to_config(rows[0])
+            except Exception as e:
+                logger.warning("resolve_ai 读 DB 失败（fallback env）：err=%s", e)
+        return self.resolve("ai", db)
+
+    @staticmethod
+    def _ai_provider_to_config(p) -> ResolvedConfig:
+        cfg = {
+            "endpoint": p.base_url,
+            "auth_type": "apikey",
+            "username": None,
+            "password": _decrypt_or_none(p.api_key),
+            "verify_ssl": False,
+            "timeout_seconds": p.timeout_seconds,
+            "retry_times": 2,
+            "retry_backoff_seconds": 2,
+            "config_json": {
+                "model": p.model_name,
+                "protocol": p.protocol,
+                "scenes": p.scenes or [],
+                "max_tokens": p.max_tokens,
+            },
+        }
+        return ResolvedConfig(
+            config=cfg, origin=f"db:{p.provider_code}", source_code=p.provider_code
+        )
+
+    def invalidate_ai(self) -> None:
+        """AI 配置变更后清场景路由缓存（键为 ai:*）。"""
+        with self._lock:
+            for k in [k for k in self._cache if k.startswith("ai:")]:
+                self._cache.pop(k, None)
+                self._cached_at.pop(k, None)
 
 
 def get_endpoint(source_type: str) -> Optional[str]:

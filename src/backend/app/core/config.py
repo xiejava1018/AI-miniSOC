@@ -36,8 +36,8 @@ class Settings(BaseSettings):
         encoded_password = quote_plus(self.DB_PASSWORD)
         return f"postgresql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.TEST_DB_NAME}"
 
-    # 智谱AI配置
-    GLM_API_KEY: str
+    # 智谱AI配置（回落用；正式配置在数据源管理 source_type=ai，改后免重启）
+    GLM_API_KEY: Optional[str] = None
     GLM_MODEL: str = "glm-4-flash"
     GLM_API_BASE: str = "https://open.bigmodel.cn/api/paas/v4/"
 

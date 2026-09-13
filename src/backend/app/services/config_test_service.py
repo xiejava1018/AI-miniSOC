@@ -99,6 +99,14 @@ class ConfigTestService:
                 result = self._test_tplink(endpoint_clean, timeout_seconds)
             elif source_type == "scanner":
                 result = self._test_scanner(endpoint_clean, verify_ssl, timeout_seconds)
+            elif source_type == "ai":
+                result = self._test_ai_provider(
+                    endpoint_clean,
+                    auth_type,
+                    auth_secret,
+                    config_json,
+                    timeout_seconds,
+                )
             else:
                 return TestConnectionResponse(
                     ok=False,
@@ -455,6 +463,98 @@ class ConfigTestService:
                 message=str(e),
                 checks=[TestCheck(name="异常", ok=False, message=str(e))],
                 details={},
+            )
+
+    # ---------------- AI Provider（OpenAI 兼容协议探活）----------------
+
+    def _test_ai_provider(
+        self,
+        endpoint: str,
+        auth_type: str,
+        auth_secret: Optional[str],
+        config_json: Optional[Dict[str, Any]],
+        timeout_seconds: int,
+    ) -> TestConnectionResponse:
+        """向 {base_url}/chat/completions 发 1-token 探活请求。
+
+        同时验证 base_url + api_key + model 三者有效（比 ping 通更进一步）。
+        """
+        checks: List[TestCheck] = []
+        details: Dict[str, Any] = {}
+        timeout = _cap_timeout(timeout_seconds)
+        extra = config_json or {}
+        model = extra.get("model") or "glm-4-flash"
+
+        if not auth_secret:
+            return TestConnectionResponse(
+                ok=False,
+                latency_ms=0,
+                message="缺少 API Key（auth_secret）",
+                checks=[TestCheck(name="认证", ok=False, message="API Key 为空")],
+                details=details,
+            )
+
+        t0 = time.time()
+        try:
+            with httpx.Client(verify=False, timeout=timeout) as client:
+                resp = client.post(
+                    f"{endpoint.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {auth_secret}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "messages": [{"role": "user", "content": "hi"}],
+                        "max_tokens": 1,
+                    },
+                )
+            latency = int((time.time() - t0) * 1000)
+
+            if resp.status_code == 200:
+                try:
+                    body = resp.json()
+                    details["model_reply"] = (
+                        body.get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")[:50]
+                    )
+                    usage = body.get("usage") or {}
+                    details["usage"] = usage
+                except Exception:
+                    pass
+                checks.append(
+                    TestCheck(
+                        name="对话接口",
+                        ok=True,
+                        message=f"model={model} 响应 {latency}ms",
+                    )
+                )
+                return TestConnectionResponse(
+                    ok=True,
+                    latency_ms=latency,
+                    message="连接成功",
+                    checks=checks,
+                    details=details,
+                )
+
+            # 常见错误分类
+            if resp.status_code == 401:
+                msg = "API Key 无效（401）"
+            elif resp.status_code == 404:
+                msg = "地址或模型不存在（404），请检查 base_url 与模型名"
+            elif resp.status_code == 429:
+                msg = "限流/配额不足（429）"
+            else:
+                msg = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            checks.append(TestCheck(name="对话接口", ok=False, message=msg))
+            return TestConnectionResponse(
+                ok=False, latency_ms=latency, message="连接失败", checks=checks, details=details
+            )
+        except httpx.HTTPError as e:
+            checks.append(TestCheck(name="对话接口", ok=False, message=str(e)))
+            return TestConnectionResponse(
+                ok=False, latency_ms=0, message=str(e), checks=checks, details=details
             )
 
     # ---------------- TP-Link（仅 TCP 探测）----------------

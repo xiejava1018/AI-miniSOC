@@ -45,6 +45,7 @@ SOURCE_TYPES: List[Dict[str, Any]] = [
         "auth_types": ["apikey", "none"],
         "default_port": 8000,
     },
+    # AI 模型已拆分到独立的「AI 模型管理」（soc_ai_providers，/ai-providers）
 ]
 SOURCE_TYPE_VALUES = [t["value"] for t in SOURCE_TYPES]
 AUTH_TYPE_VALUES = ["basic", "token", "apikey", "none"]
