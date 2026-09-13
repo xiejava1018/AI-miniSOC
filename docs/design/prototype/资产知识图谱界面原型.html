@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>资产知识图谱 · 界面原型</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --primary: #185FA5;
+    --primary-bg: #E6F1FB;
+    --text: #26215C;
+    --text2: #5F5E5A;
+    --text3: #888780;
+    --border: rgba(0,0,0,0.08);
+    --border2: rgba(0,0,0,0.15);
+    --bg: #F5F6F8;
+    --card: #FFFFFF;
+    --danger: #A32D2D;
+    --danger-bg: #FCEBEB;
+    --warn: #854F0B;
+    --warn-bg: #FAEEDA;
+    --ok: #0F6E56;
+    --ok-bg: #E1F5EE;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 13px; padding: 20px;
+  }
+  .proto-switch {
+    display: flex; align-items: center; gap: 0; margin-bottom: 16px;
+    background: var(--card); border: 0.5px solid var(--border2); border-radius: 8px;
+    padding: 4px; width: fit-content;
+  }
+  .proto-switch button {
+    border: none; background: transparent; padding: 8px 20px; font-size: 13px;
+    border-radius: 6px; cursor: pointer; color: var(--text2); font-weight: 500;
+  }
+  .proto-switch button.active { background: var(--primary); color: #fff; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ========== 应用框架 ========== */
+  .app { display: flex; height: 760px; background: var(--card); border: 0.5px solid var(--border2); border-radius: 12px; overflow: hidden; }
+  .sidebar { width: 180px; background: #FFFFFF; border-right: 0.5px solid var(--border); padding: 12px 8px; flex-shrink: 0; }
+  .sidebar .logo { font-size: 14px; font-weight: 500; padding: 8px 12px 16px; color: var(--primary); }
+  .menu-item { padding: 9px 12px; border-radius: 6px; color: var(--text2); cursor: pointer; margin-bottom: 2px; font-size: 13px; }
+  .menu-item:hover { background: var(--bg); }
+  .menu-item.active { background: var(--primary-bg); color: var(--primary); font-weight: 500; }
+  .menu-group { font-size: 11px; color: var(--text3); padding: 14px 12px 6px; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .breadcrumb { padding: 12px 20px; border-bottom: 0.5px solid var(--border); color: var(--text3); font-size: 12px; display:flex; align-items:center; justify-content: space-between; }
+  .breadcrumb b { color: var(--text); font-weight: 500; }
+  .demo-badge { background: var(--warn-bg); color: var(--warn); padding: 2px 10px; border-radius: 10px; font-size: 11px; }
+
+  /* ========== 全局图谱页 ========== */
+  .global-body { flex: 1; display: flex; min-height: 0; }
+  .filter-panel { width: 220px; border-right: 0.5px solid var(--border); padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .filter-panel h4 { font-size: 12px; color: var(--text3); font-weight: 500; margin: 0 0 8px; }
+  .filter-panel .fg { margin-bottom: 18px; }
+  select, input[type=text] { width: 100%; padding: 7px 10px; border: 0.5px solid var(--border2); border-radius: 6px; font-size: 12px; color: var(--text); background: #fff; }
+  .legend-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: 12px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-line { width: 16px; height: 0; border-top: 2px solid; flex-shrink: 0; }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); margin-bottom: 6px; }
+  .graph-area { flex: 1; position: relative; min-width: 0; }
+  #globalChart { width: 100%; height: 100%; }
+  .graph-toolbar { position: absolute; top: 12px; right: 16px; display: flex; gap: 8px; z-index: 5; }
+  .graph-toolbar button { padding: 6px 12px; border: 0.5px solid var(--border2); background: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; color: var(--text2); }
+  .graph-toolbar button.on { background: var(--primary-bg); color: var(--primary); border-color: var(--primary); }
+  .stat-panel { width: 230px; border-left: 0.5px solid var(--border); padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .stat-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--bg); border-radius: 8px; padding: 10px; }
+  .stat-card .num { font-size: 20px; font-weight: 500; }
+  .stat-card .lbl { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .stat-panel h4 { font-size: 12px; color: var(--text3); font-weight: 500; margin: 0 0 8px; }
+  .node-detail { background: var(--bg); border-radius: 8px; padding: 12px; margin-bottom: 16px; }
+  .node-detail .nd-title { font-weight: 500; font-size: 13px; margin-bottom: 6px; }
+  .node-detail .nd-row { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; color: var(--text2); }
+  .node-detail .nd-row span:last-child { color: var(--text); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+  .tag-red { background: var(--danger-bg); color: var(--danger); }
+  .tag-amber { background: var(--warn-bg); color: var(--warn); }
+  .tag-green { background: var(--ok-bg); color: var(--ok); }
+  .tag-blue { background: var(--primary-bg); color: var(--primary); }
+  .tag-gray { background: #F1EFE8; color: #5F5E5A; }
+
+  /* ========== 资产详情页 ========== */
+  .detail-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .asset-header { padding: 16px 20px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .asset-icon { width: 44px; height: 44px; border-radius: 10px; background: var(--primary-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; }
+  .asset-title { font-size: 15px; font-weight: 500; }
+  .asset-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .asset-meta { display: flex; gap: 18px; font-size: 12px; color: var(--text2); margin-left: 8px; flex-wrap: wrap; }
+  .asset-meta b { color: var(--text); font-weight: 500; }
+  .tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 0.5px solid var(--border); }
+  .tab { padding: 10px 14px; font-size: 13px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+  .detail-main { flex: 1; display: flex; min-height: 0; }
+  .ego-area { flex: 1; position: relative; min-width: 0; }
+  #egoChart { width: 100%; height: 100%; }
+  .ego-hint { position: absolute; bottom: 12px; left: 16px; font-size: 11px; color: var(--text3); background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; }
+  .evidence-panel { width: 320px; border-left: 0.5px solid var(--border); padding: 16px; overflow-y: auto; flex-shrink: 0; }
+  .evidence-panel h4 { font-size: 13px; font-weight: 500; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+  .ev-empty { color: var(--text3); text-align: center; padding: 40px 0; }
+  .ev-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ev-type { padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+  .kv { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; }
+  .kv .k { color: var(--text3); }
+  .kv .v { color: var(--text); text-align: right; max-width: 190px; }
+  .conf-bar { height: 6px; background: var(--bg); border-radius: 3px; margin: 6px 0 2px; overflow: hidden; }
+  .conf-bar i { display: block; height: 100%; border-radius: 3px; }
+  .ev-evidence { background: var(--bg); border-radius: 8px; padding: 12px; font-size: 12px; color: var(--text2); line-height: 1.7; margin: 12px 0; }
+  .ev-evidence b { color: var(--text); font-weight: 500; }
+  .ev-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 0.5px solid var(--border2); background: #fff; color: var(--text2); }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .inferred-note { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.6; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<h2 class="sr-only" style="position:absolute;left:-9999px">资产知识图谱界面原型：全局资产图谱页与资产详情关系图谱Tab</h2>
+
+<div class="proto-switch">
+  <button id="btnGlobal" class="active" onclick="switchView('global')">① 全局资产图谱页</button>
+  <button id="btnDetail" onclick="switchView('detail')">② 资产详情 · 关系图谱Tab</button>
+</div>
+
+<!-- ================= 视图 1：全局资产图谱页 ================= -->
+<div class="view active" id="viewGlobal">
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo">AI-miniSOC</div>
+      <div class="menu-group">安全运营</div>
+      <div class="menu-item">安全告警</div>
+      <div class="menu-item">事件中心</div>
+      <div class="menu-group">资产中心</div>
+      <div class="menu-item">资产列表</div>
+      <div class="menu-item active">资产图谱</div>
+      <div class="menu-item">漏洞管理</div>
+      <div class="menu-item">影响分析</div>
+      <div class="menu-group">系统</div>
+      <div class="menu-item">数据源健康</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">
+        <div>资产管理 / <b>资产图谱</b></div>
+        <div class="demo-badge">界面原型 · 数据为演示数据</div>
+      </div>
+      <div class="global-body">
+        <div class="filter-panel">
+          <div class="fg">
+            <h4>搜索节点</h4>
+            <input type="text" id="searchInput" placeholder="输入 IP / 主机名 / 业务系统">
+          </div>
+          <div class="fg">
+            <h4>业务系统</h4>
+            <select id="bizFilter">
+              <option value="">全部业务系统</option>
+              <option>SOC 安全平台</option>
+              <option>核心业务库</option>
+              <option>OA 办公系统</option>
+              <option>DMZ 对外服务</option>
+            </select>
+          </div>
+          <div class="fg">
+            <h4>网段</h4>
+            <select id="segFilter">
+              <option value="">全部网段</option>
+              <option>192.168.0.0/24</option>
+              <option>10.10.0.0/24</option>
+              <option>172.16.0.0/24</option>
+            </select>
+          </div>
+          <div class="fg">
+            <h4>快速过滤</h4>
+            <div class="chk"><input type="checkbox" id="chkCritical"> 仅看核心资产</div>
+            <div class="chk"><input type="checkbox" id="chkBlind" checked> 显示无 agent 盲区</div>
+            <div class="chk"><input type="checkbox" id="chkInferred" checked> 显示推断边（灰色）</div>
+          </div>
+          <div class="fg">
+            <h4>节点类型</h4>
+            <div class="legend-row" data-cat="0"><span class="legend-dot" style="background:#185FA5"></span>资产</div>
+            <div class="legend-row" data-cat="1"><span class="legend-dot" style="background:#534AB7"></span>业务系统</div>
+            <div class="legend-row" data-cat="2"><span class="legend-dot" style="background:#0F6E56"></span>账号</div>
+            <div class="legend-row" data-cat="3"><span class="legend-dot" style="background:#A32D2D"></span>漏洞</div>
+            <div class="legend-row" data-cat="4"><span class="legend-dot" style="background:#BA7517"></span>告警簇</div>
+            <div class="legend-row" data-cat="5"><span class="legend-dot" style="background:#888780"></span>网段</div>
+            <div class="legend-row" data-cat="6"><span class="legend-dot" style="background:#1D9E75"></span>外部</div>
+          </div>
+          <div class="fg">
+            <h4>关系类型</h4>
+            <div class="legend-row"><span class="legend-line" style="border-color:#185FA5"></span>部署于业务系统</div>
+            <div class="legend-row"><span class="legend-line" style="border-color:#0F6E56"></span>账号登录</div>
+            <div class="legend-row"><span class="legend-line" style="border-color:#A32D2D"></span>存在漏洞</div>
+            <div class="legend-row"><span class="legend-line" style="border-color:#BA7517"></span>产生告警</div>
+            <div class="legend-row"><span class="legend-line" style="border-color:#B4B2A9;border-top-style:dashed"></span>推断边（不参与攻击路径）</div>
+          </div>
+        </div>
+        <div class="graph-area">
+          <div class="graph-toolbar">
+            <button class="on" onclick="setLayout('force', this)">力导布局</button>
+            <button onclick="setLayout('circular', this)">环形布局</button>
+          </div>
+          <div id="globalChart"></div>
+        </div>
+        <div class="stat-panel">
+          <div class="stat-cards">
+            <div class="stat-card"><div class="num" id="stNodes">26</div><div class="lbl">节点</div></div>
+            <div class="stat-card"><div class="num" id="stEdges">33</div><div class="lbl">关系边</div></div>
+            <div class="stat-card"><div class="num">62%</div><div class="lbl">边覆盖率</div></div>
+            <div class="stat-card"><div class="num" style="color:#A32D2D">3</div><div class="lbl">无 agent 盲区</div></div>
+          </div>
+          <div class="node-detail" id="nodeDetail">
+            <div class="nd-title">点击图中节点查看详情</div>
+            <div class="nd-row"><span>提示</span><span>可拖拽 / 缩放</span></div>
+          </div>
+          <h4>边置信度说明</h4>
+          <div style="font-size:12px;color:var(--text2);line-height:1.8">
+            <div style="display:flex;justify-content:space-between"><span>≥90 采集/人工确认</span><b style="color:var(--ok)">实线</b></div>
+            <div style="display:flex;justify-content:space-between"><span>60–89 规则归一化</span><b style="color:var(--warn)">实线</b></div>
+            <div style="display:flex;justify-content:space-between"><span>&lt;60 推断</span><b style="color:var(--text3)">虚线</b></div>
+            <div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);color:var(--text3)">推断边仅作展示线索，不参与攻击路径与影响面计算。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 视图 2：资产详情 · 关系图谱 Tab ================= -->
+<div class="view" id="viewDetail">
+  <div class="app">
+    <div class="sidebar">
+      <div class="logo">AI-miniSOC</div>
+      <div class="menu-group">安全运营</div>
+      <div class="menu-item">安全告警</div>
+      <div class="menu-item">事件中心</div>
+      <div class="menu-group">资产中心</div>
+      <div class="menu-item">资产列表</div>
+      <div class="menu-item active">资产详情</div>
+      <div class="menu-item">漏洞管理</div>
+      <div class="menu-item">影响分析</div>
+      <div class="menu-group">系统</div>
+      <div class="menu-item">数据源健康</div>
+    </div>
+    <div class="main">
+      <div class="breadcrumb">
+        <div>资产管理 / 资产列表 / <b>srv-soc-01（192.168.0.30）</b> / 关系图谱</div>
+        <div class="demo-badge">界面原型 · 点击边查看证据</div>
+      </div>
+      <div class="detail-body">
+        <div class="asset-header">
+          <div class="asset-icon">SOC</div>
+          <div>
+            <div class="asset-title">srv-soc-01 <span style="font-weight:400;color:var(--text3)">192.168.0.30</span></div>
+            <div class="asset-sub">Linux 5.15 · Ubuntu 22.04 · Wazuh Agent #3 · 最后活跃 2026-09-13 14:02</div>
+          </div>
+          <div class="asset-meta">
+            <div>重要性 <b class="tag tag-red">critical</b></div>
+            <div>业务系统 <b>SOC 安全平台</b></div>
+            <div>责任人 <b>张工</b></div>
+            <div>开放端口 <b>22 / 8000 / 8100</b></div>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn" onclick="switchView('global')">← 全局图谱</button>
+            <button class="btn btn-primary">导出子图</button>
+          </div>
+        </div>
+        <div class="tabs">
+          <div class="tab">概览</div>
+          <div class="tab">监控指标</div>
+          <div class="tab">漏洞</div>
+          <div class="tab">端口与服务</div>
+          <div class="tab">日志</div>
+          <div class="tab">变更历史</div>
+          <div class="tab active">关系图谱</div>
+        </div>
+        <div class="detail-main">
+          <div class="ego-area">
+            <div id="egoChart"></div>
+            <div class="ego-hint">点击右侧任意一条边，查看该关系的置信度、数据来源与原始证据</div>
+          </div>
+          <div class="evidence-panel" id="evidencePanel">
+            <div class="ev-empty">点击图中的连线<br>查看关系证据</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 公共数据 ================= */
+var COLORS = { asset:'#185FA5', biz:'#534AB7', account:'#0F6E56', vuln:'#A32D2D', alert:'#BA7517', segment:'#888780', external:'#1D9E75' };
+var CAT = { asset:0, biz:1, account:2, vuln:3, alert:4, segment:5, external:6 };
+
+/* 全局图谱节点 */
+var gNodes = [
+  { name:'srv-soc-01\n192.168.0.30', cat:'asset', size:34, critical:true, ip:'192.168.0.30', agent:true,
+    info:{ hostname:'srv-soc-01', os:'Ubuntu 22.04', biz:'SOC 安全平台', owner:'张工', crit:'critical' } },
+  { name:'srv-wazuh-01\n192.168.0.40', cat:'asset', size:30, critical:true, ip:'192.168.0.40', agent:true,
+    info:{ hostname:'srv-wazuh-01', os:'Ubuntu 22.04', biz:'SOC 安全平台', owner:'张工', crit:'critical' } },
+  { name:'ad-dc-01\n192.168.0.10', cat:'asset', size:30, critical:true, ip:'192.168.0.10', agent:true,
+    info:{ hostname:'ad-dc-01', os:'Windows Server 2019', biz:'核心业务库', owner:'李工', crit:'critical' } },
+  { name:'db-core-01\n192.168.0.15', cat:'asset', size:30, critical:true, ip:'192.168.0.15', agent:false,
+    info:{ hostname:'db-core-01', os:'CentOS 7.9', biz:'核心业务库', owner:'李工', crit:'critical', blind:'无 agent · 数据盲区' } },
+  { name:'gw-core-01\n192.168.0.2', cat:'asset', size:26, critical:true, ip:'192.168.0.2', agent:true,
+    info:{ hostname:'gw-core-01', os:'RouterOS', biz:'核心业务库', owner:'王工', crit:'critical' } },
+  { name:'oa-app-01\n192.168.0.12', cat:'asset', size:26, critical:false, ip:'192.168.0.12', agent:true,
+    info:{ hostname:'oa-app-01', os:'Ubuntu 20.04', biz:'OA 办公系统', owner:'陈工', crit:'high' } },
+  { name:'web-dmz-01\n10.10.0.5', cat:'asset', size:26, critical:false, ip:'10.10.0.5', agent:false,
+    info:{ hostname:'web-dmz-01', os:'Debian 11', biz:'DMZ 对外服务', owner:'陈工', crit:'high', blind:'无 agent · 数据盲区' } },
+  { name:'bastion-01\n10.10.0.8', cat:'asset', size:26, critical:true, ip:'10.10.0.8', agent:true,
+    info:{ hostname:'bastion-01', os:'Ubuntu 22.04', biz:'核心业务库', owner:'王工', crit:'critical' } },
+  { name:'nas-backup-01\n192.168.0.60', cat:'asset', size:22, critical:false, ip:'192.168.0.60', agent:true,
+    info:{ hostname:'nas-backup-01', os:'TrueNAS', biz:'—', owner:'未指定', crit:'medium' } },
+  { name:'pc-zhang\n192.168.0.51', cat:'asset', size:18, critical:false, ip:'192.168.0.51', agent:true,
+    info:{ hostname:'pc-zhang', os:'Windows 11', biz:'OA 办公系统', owner:'张工', crit:'low' } },
+  { name:'pc-li\n192.168.0.52', cat:'asset', size:18, critical:false, ip:'192.168.0.52', agent:false,
+    info:{ hostname:'pc-li', os:'Windows 10', biz:'OA 办公系统', owner:'未指定', crit:'low', blind:'无 agent · 数据盲区' } },
+  { name:'SOC 安全平台', cat:'biz', size:30, bizName:'SOC 安全平台', owner:'张工' },
+  { name:'核心业务库', cat:'biz', size:30, bizName:'核心业务库', owner:'李工' },
+  { name:'OA 办公系统', cat:'biz', size:26, bizName:'OA 办公系统', owner:'陈工' },
+  { name:'DMZ 对外服务', cat:'biz', size:26, bizName:'DMZ 对外服务', owner:'陈工' },
+  { name:'root', cat:'account', size:18, acct:'root · 本地特权账号' },
+  { name:'admin', cat:'account', size:18, acct:'admin · 域账号' },
+  { name:'deploy', cat:'account', size:16, acct:'deploy · 发布账号' },
+  { name:'svc_mysql', cat:'account', size:16, acct:'svc_mysql · 服务账号' },
+  { name:'CVE-2021-44228\nLog4Shell', cat:'vuln', size:24, cvss:'CVSS 10.0 · KEV 在列' },
+  { name:'CVE-2020-1472\nZerologon', cat:'vuln', size:24, cvss:'CVSS 10.0 · KEV 在列' },
+  { name:'CVE-2023-44487\nHTTP/2 Rapid Reset', cat:'vuln', size:20, cvss:'CVSS 7.5' },
+  { name:'暴力破解告警簇\n#AC-20260912-01', cat:'alert', size:22, ac:'217 条告警聚合 · 2 资产' },
+  { name:'可疑外联告警簇\n#AC-20260910-05', cat:'alert', size:22, ac:'96 条告警聚合 · 1 资产' },
+  { name:'192.168.0.0/24\n办公网', cat:'segment', size:22 },
+  { name:'10.10.0.0/24\n服务器网', cat:'segment', size:22 },
+  { name:'互联网', cat:'external', size:26 }
+];
+
+/* 全局图谱边：c=置信度 */
+var gEdges = [
+  { s:'SOC 安全平台', t:'srv-soc-01', type:'biz', c:100, src:'人工确认' },
+  { s:'SOC 安全平台', t:'srv-wazuh-01', type:'biz', c:100, src:'人工确认' },
+  { s:'核心业务库', t:'ad-dc-01', type:'biz', c:100, src:'人工确认' },
+  { s:'核心业务库', t:'db-core-01', type:'biz', c:100, src:'人工确认' },
+  { s:'核心业务库', t:'gw-core-01', type:'biz', c:100, src:'人工确认' },
+  { s:'核心业务库', t:'bastion-01', type:'biz', c:100, src:'人工确认' },
+  { s:'OA 办公系统', t:'oa-app-01', type:'biz', c:100, src:'人工确认' },
+  { s:'OA 办公系统', t:'pc-zhang', type:'biz', c:85, src:'规则推断(同网段+同标签)' },
+  { s:'OA 办公系统', t:'pc-li', type:'biz', c:85, src:'规则推断(同网段+同标签)' },
+  { s:'DMZ 对外服务', t:'web-dmz-01', type:'biz', c:100, src:'人工确认' },
+  { s:'root', t:'srv-soc-01', type:'login', c:95, src:'Wazuh 认证事件' },
+  { s:'root', t:'srv-wazuh-01', type:'login', c:95, src:'Wazuh 认证事件' },
+  { s:'admin', t:'ad-dc-01', type:'login', c:95, src:'Wazuh 认证事件' },
+  { s:'admin', t:'bastion-01', type:'login', c:92, src:'Wazuh 认证事件' },
+  { s:'deploy', t:'oa-app-01', type:'login', c:88, src:'Wazuh 认证事件' },
+  { s:'svc_mysql', t:'db-core-01', type:'login', c:90, src:'Wazuh 认证事件' },
+  { s:'pc-zhang', t:'bastion-01', type:'login', c:93, src:'Wazuh 认证事件' },
+  { s:'CVE-2021-44228\nLog4Shell', t:'oa-app-01', type:'vuln', c:98, src:'Wazuh SCA' },
+  { s:'CVE-2020-1472\nZerologon', t:'ad-dc-01', type:'vuln', c:98, src:'Wazuh SCA' },
+  { s:'CVE-2023-44487\nHTTP/2 Rapid Reset', t:'srv-soc-01', type:'vuln', c:95, src:'Wazuh SCA' },
+  { s:'暴力破解告警簇\n#AC-20260912-01', t:'srv-wazuh-01', type:'alert', c:92, src:'OpenSearch 告警簇' },
+  { s:'可疑外联告警簇\n#AC-20260910-05', t:'web-dmz-01', type:'alert', c:92, src:'OpenSearch 告警簇' },
+  { s:'互联网', t:'web-dmz-01', type:'exposure', c:100, src:'暴露面探测' },
+  { s:'互联网', t:'gw-core-01', type:'exposure', c:100, src:'暴露面探测' },
+  { s:'192.168.0.0/24\n办公网', t:'srv-soc-01', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'srv-wazuh-01', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'ad-dc-01', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'db-core-01', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'pc-zhang', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'pc-li', type:'seg', c:100, src:'网段归属' },
+  { s:'192.168.0.0/24\n办公网', t:'nas-backup-01', type:'seg', c:100, src:'网段归属' },
+  { s:'10.10.0.0/24\n服务器网', t:'web-dmz-01', type:'seg', c:100, src:'网段归属' },
+  { s:'10.10.0.0/24\n服务器网', t:'bastion-01', type:'seg', c:100, src:'网段归属' },
+  /* 推断边：灰色虚线，低置信度 */
+  { s:'srv-soc-01', t:'srv-wazuh-01', type:'inferred', c:40, src:'同网段+同业务系统推断', inferred:true },
+  { s:'oa-app-01', t:'db-core-01', type:'inferred', c:45, src:'同标签(infra)推断·疑似依赖', inferred:true }
+];
+
+var EDGE_STYLE = {
+  biz:    { color:'#534AB7', width:2.5 },
+  login:  { color:'#0F6E56', width:2 },
+  vuln:   { color:'#A32D2D', width:2.5 },
+  alert:  { color:'#BA7517', width:2 },
+  exposure:{ color:'#1D9E75', width:2 },
+  seg:    { color:'#B4B2A9', width:1 },
+  inferred:{ color:'#B4B2A9', width:1.5, dashed:true }
+};
+var TYPE_NAME = { biz:'部署于业务系统', login:'账号登录', vuln:'存在漏洞', alert:'产生告警', exposure:'公网暴露', seg:'位于网段', inferred:'推断关系' };
+
+/* ================= 全局图谱渲染 ================= */
+function edgeLineStyle(e) {
+  var st = EDGE_STYLE[e.type];
+  return {
+    curveness: e.type==='seg' ? 0.08 : 0.12,
+    color: st.color,
+    width: st.width,
+    type: st.dashed ? [5,5] : 'solid',
+    opacity: e.type==='seg' ? 0.5 : 0.85
+  };
+}
+function buildGlobalOption(layout) {
+  return {
+    layout: layout,
+    roam: true,
+    draggable: true,
+    force: { repulsion: 420, edgeLength: [70,140], gravity: 0.08, layoutAnimation: false },
+    circular: { rotateLabel: true },
+    emphasis: { focus: 'adjacency', lineStyle: { width: 4 } },
+    label: { show: true, position: 'bottom', fontSize: 11, color: '#444441', formatter: function(p){ return p.data.rawName || p.name; } },
+    edgeLabel: { show: false },
+    series: [{
+      type: 'graph', name: '资产图谱',
+      data: gNodes.map(function(n, i) {
+        var blind = n.agent === false;
+        return {
+          id: 'n'+i, name: 'n'+i, rawName: n.name, category: CAT[n.cat],
+          x: undefined, y: undefined,
+          symbolSize: n.size,
+          itemStyle: {
+            color: blind ? '#D3D1C7' : COLORS[n.cat],
+            borderColor: '#fff', borderWidth: 1.5,
+            borderType: blind ? 'dashed' : 'solid'
+          },
+          node: n
+        };
+      }),
+      links: gEdges.map(function(e, i) {
+        var si = gNodes.findIndex(function(n){return n.name===e.s;});
+        var ti = gNodes.findIndex(function(n){return n.name===e.t;});
+        return { id:'e'+i, source:'n'+si, target:'n'+ti, edge:e, lineStyle: edgeLineStyle(e) };
+      }),
+      categories: [
+        { name:'资产', itemStyle:{color:'#185FA5'} },
+        { name:'业务系统', itemStyle:{color:'#534AB7'} },
+        { name:'账号', itemStyle:{color:'#0F6E56'} },
+        { name:'漏洞', itemStyle:{color:'#A32D2D'} },
+        { name:'告警簇', itemStyle:{color:'#BA7517'} },
+        { name:'网段', itemStyle:{color:'#888780'} },
+        { name:'外部', itemStyle:{color:'#1D9E75'} }
+      ]
+    }]
+  };
+}
+
+/* ================= 资产详情 ego 图 ================= */
+var egoNodes = [
+  { id:'center', name:'srv-soc-01\n192.168.0.30', x:430, y:290, cat:'asset', size:44 },
+  { id:'biz', name:'SOC 安全平台', x:140, y:130, cat:'biz', size:30 },
+  { id:'seg', name:'192.168.0.0/24\n办公网', x:720, y:130, cat:'segment', size:26 },
+  { id:'acctRoot', name:'root', x:150, y:300, cat:'account', size:24 },
+  { id:'acctDeploy', name:'deploy', x:170, y:460, cat:'account', size:20 },
+  { id:'owner', name:'张工\n(责任人)', x:430, y:80, cat:'account', size:26 },
+  { id:'vuln', name:'CVE-2023-44487\nCVSS 7.5', x:700, y:420, cat:'vuln', size:28 },
+  { id:'wazuh', name:'srv-wazuh-01\n192.168.0.40', x:640, y:280, cat:'asset', size:30 },
+  { id:'alert', name:'暴力破解告警簇\n#AC-20260912-01', x:850, y:540, cat:'alert', size:26 },
+  { id:'pc', name:'pc-zhang\n192.168.0.51', x:260, y:560, cat:'asset', size:22 }
+];
+/* 证据边定义 */
+var egoEdges = [
+  { id:'e1', s:'center', t:'biz', type:'biz', c:100, src:'人工确认（WO-0b）', updated:'2026-09-12',
+    ev:'<b>归属依据：</b>运维负责人在业务系统登记中确认 srv-soc-01 部署于「SOC 安全平台」。<br><b>交叉验证：</b>主机名前缀 srv-soc-* 与业务命名规范一致；同业务系统另有 2 台资产（srv-wazuh-01、srv-loki-01）。' },
+  { id:'e2', s:'center', t:'seg', type:'seg', c:100, src:'网段归属（资产台账）', updated:'2026-09-10',
+    ev:'<b>依据：</b>IP 192.168.0.30 落在办公网段 192.168.0.0/24（掩码 255.255.255.0）。<br><b>同网段资产：</b>8 台（其中 2 台无 agent 盲区）。' },
+  { id:'e3', s:'acctRoot', t:'center', type:'login', c:95, src:'Wazuh 认证事件（soc_identity_events）', updated:'近 7 天',
+    ev:'<b>近 7 天：</b>root 账号对 192.168.0.30 <b>成功登录 202 次</b>、失败 3 次。<br><b>来源 IP：</b>10.10.0.8（堡垒机）占 89%，192.168.0.51 占 11%。<br><b>最近活动：</b>2026-09-13 14:02（sshd 会话 #48213）。' },
+  { id:'e4', s:'acctDeploy', t:'center', type:'login', c:88, src:'Wazuh 认证事件（soc_identity_events）', updated:'近 7 天',
+    ev:'<b>近 7 天：</b>deploy 账号成功登录 41 次、失败 0 次。<br><b>行为特征：</b>仅工作日 09:00–19:00 出现，符合发布账号行为基线。' },
+  { id:'e5', s:'owner', t:'center', type:'owner', c:100, src:'人工补录（WO-0c）', updated:'2026-09-08',
+    ev:'<b>责任人：</b>张工（网络与安服产线）。<br><b>联系方式：</b>企业微信 / 站内信可达。<br><b>备份责任人：</b>李工。' },
+  { id:'e6', s:'vuln', t:'center', type:'vuln', c:95, src:'Wazuh SCA 漏洞扫描', updated:'2026-09-11',
+    ev:'<b>CVE-2023-44487（HTTP/2 Rapid Reset）</b>CVSS 7.5（High）。<br><b>受影响组件：</b>uvicorn / h2 0.25.0（8000 端口）。<br><b>修复建议：</b>升级 h2 ≥ 0.26.1。<br><b>可达性：</b>资产位于办公网段，非公网直接可达，暂无已知在野利用链到达核心库。' },
+  { id:'e7', s:'center', t:'wazuh', type:'login', c:93, src:'Wazuh 认证事件（soc_identity_events）', updated:'近 7 天',
+    ev:'<b>横向关系：</b>192.168.0.30 上的账号对 srv-wazuh-01 存在认证行为，近 7 天成功 <b>156 次</b>。<br><b>含义：</b>若本机失陷，攻击者可复用凭据横向至 SIEM 服务器（critical）。<br><b>缓解：</b>该路径经堡垒机收敛，建议确认是否走 10.10.0.8 跳板。' },
+  { id:'e8', s:'center', t:'wazuh', type:'inferred', c:40, src:'同网段 + 同业务系统规则推断', updated:'每日重算', inferred:true,
+    ev:'<b>推断依据：</b>两台资产同属 192.168.0.0/24 且同属「SOC 安全平台」，推断存在部署依赖。<br><span style="color:#854F0B">推断边：仅作线索展示，不参与攻击路径与影响面计算。</span>' },
+  { id:'e9', s:'alert', t:'wazuh', type:'alert', c:92, src:'OpenSearch 告警簇聚合', updated:'2026-09-12',
+    ev:'<b>告警簇 #AC-20260912-01</b>：217 条认证失败告警聚合（相似源 IP + 相同目标），命中 2 台资产。<br><b>本资产：</b>未直接命中；相邻资产 srv-wazuh-01 命中 189 条。<br><b>AI 建议：</b>关注 192.168.0.51 → .40 的失败登录激增。' },
+  { id:'e10', s:'pc', t:'center', type:'login', c:78, src:'Loki 日志（低频行为）', updated:'近 7 天',
+    ev:'<b>近 7 天：</b>192.168.0.51 对本机有 9 次 SSH 会话（用户：zhangw）。<br><b>基线偏离：</b>其中 2 次发生在 02:00–04:00（非工作时段），已计入行为风险分。<br><b>置信度 78：</b>仅 Loki 日志单一来源，无 Wazuh 认证事件交叉验证。' }
+];
+var EGO_TYPE_NAME = { biz:'部署于业务系统', seg:'位于网段', login:'账号登录', owner:'资产责任人', vuln:'存在漏洞', alert:'产生告警（相邻）', inferred:'推断关系' };
+var EGO_TYPE_COLOR = { biz:'#534AB7', seg:'#B4B2A9', login:'#0F6E56', owner:'#185FA5', vuln:'#A32D2D', alert:'#BA7517', inferred:'#B4B2A9' };
+
+function buildEgoOption() {
+  return {
+    roam: true, draggable: true,
+    label: { show: true, position: 'bottom', fontSize: 11, color: '#444441' },
+    emphasis: { focus: 'adjacency' },
+    series: [{
+      type: 'graph', layout: 'none',
+      data: egoNodes.map(function(n) {
+        var isCenter = n.id === 'center';
+        return {
+          id: n.id, name: n.id, x: n.x, y: n.y,
+          symbolSize: n.size,
+          label: { show: true, position: 'bottom', fontSize: 11, fontWeight: isCenter ? 500 : 400, color: isCenter ? '#185FA5' : '#444441' },
+          itemStyle: { color: COLORS[n.cat], borderColor:'#fff', borderWidth:2,
+                       shadow: undefined },
+          node: n
+        };
+      }),
+      links: egoEdges.map(function(e) {
+        var inferred = !!e.inferred;
+        var strong = e.c >= 90;
+        return {
+          id: e.id, source: e.s, target: e.t, edge: e,
+          lineStyle: {
+            color: EGO_TYPE_COLOR[e.type], width: inferred ? 1.5 : (e.type==='login'||e.type==='vuln' ? 2.5 : 2),
+            type: inferred ? [5,5] : 'solid',
+            opacity: inferred ? 0.7 : (strong ? 0.95 : 0.8),
+            curveness: 0.1
+          }
+        };
+      })
+    }]
+  };
+}
+
+/* ================= 证据面板渲染 ================= */
+function renderEvidence(e) {
+  var confColor = e.inferred ? '#B4B2A9' : (e.c >= 90 ? '#0F6E56' : (e.c >= 60 ? '#BA7517' : '#B4B2A9'));
+  var confLabel = e.inferred ? '推断 · 不参与攻击路径' : (e.c >= 90 ? '已验证' : (e.c >= 60 ? '规则归一化' : '低置信'));
+  var srcNode = egoNodes.find(function(n){return n.id===e.s;});
+  var tgtNode = egoNodes.find(function(n){return n.id===e.t;});
+  var el = document.getElementById('evidencePanel');
+  el.innerHTML =
+    '<h4>关系证据' + '<span class="ev-type" style="background:' + (e.inferred?'#F1EFE8':(e.c>=90?'#E1F5EE':'#FAEEDA')) + ';color:' + (e.inferred?'#5F5E5A':(e.c>=90?'#0F6E56':'#854F0B')) + '">' + (e.inferred?'推断边':'已验证关系') + '</span></h4>' +
+    '<div class="ev-head"><span style="font-weight:500;font-size:13px">' + EGO_TYPE_NAME[e.type] + '</span></div>' +
+    '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + (srcNode?srcNode.name.split('\n')[0]:'') + ' <span style="color:var(--text3)">──▶</span> ' + (tgtNode?tgtNode.name.split('\n')[0]:'') + '</div>' +
+    '<div class="kv"><span class="k">置信度</span><span class="v" style="color:'+confColor+';font-weight:500">' + e.c + ' / 100 · ' + confLabel + '</span></div>' +
+    '<div class="conf-bar"><i style="width:' + e.c + '%;background:'+confColor+'"></i></div>' +
+    '<div class="kv"><span class="k">数据来源</span><span class="v">' + e.src + '</span></div>' +
+    '<div class="kv"><span class="k">证据时间</span><span class="v">' + e.updated + '</span></div>' +
+    '<div class="ev-evidence">' + e.ev + '</div>' +
+    (e.inferred
+      ? '<div class="inferred-note">该边为规则推断生成，仅提供排查线索；按设计约束，推断边不参与攻击路径、影响面与阻塞点计算。</div>'
+      : '<div class="ev-actions"><button class="btn btn-primary" onclick="alert(\'原型演示：跳转原始日志查询\\n（Loki / OpenSearch 按证据时间窗过滤）\')">查看原始日志</button><button class="btn" onclick="alert(\'原型演示：将本条关系加入研判上下文\\n（AI 研判自动携带该子图）\')">加入 AI 研判</button></div>');
+}
+
+/* ================= 初始化 ================= */
+var gChart = echarts.init(document.getElementById('globalChart'));
+var eChart = echarts.init(document.getElementById('egoChart'));
+gChart.setOption(buildGlobalOption('force'));
+eChart.setOption(buildEgoOption());
+renderEvidence(egoEdges.find(function(e){return e.id==='e3';}));
+eChart.on('click', function(p) { if (p.dataType === 'edge' && p.data.edge) renderEvidence(p.data.edge); });
+gChart.on('click', function(p) {
+  if (p.dataType !== 'node') return;
+  var n = p.data.node;
+  var html = '<div class="nd-title">' + n.name.split('\n')[0] + '</div>';
+  if (n.info) {
+    var rows = [['主机名', n.info.hostname], ['操作系统', n.info.os], ['业务系统', n.info.biz], ['责任人', n.info.owner], ['重要性', n.info.crit]];
+    rows.forEach(function(r) { html += '<div class="nd-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>'; });
+    if (n.info.blind) html += '<div class="nd-row"><span style="color:#A32D2D">数据状态</span><span style="color:#A32D2D">' + n.info.blind + '</span></div>';
+    html += '<div style="margin-top:8px"><button class="btn btn-primary" style="width:100%" onclick="switchView(\'detail\')">进入资产详情 · 关系图谱</button></div>';
+  } else if (n.bizName) {
+    html += '<div class="nd-row"><span>责任人</span><span>' + n.owner + '</span></div><div class="nd-row"><span>资产数</span><span>2–4 台</span></div><div class="nd-row"><span>关系边</span><span>6–9 条</span></div>';
+  } else if (n.acct) {
+    html += '<div class="nd-row"><span>类型</span><span>' + n.acct + '</span></div><div class="nd-row"><span>登录资产</span><span>1–2 台</span></div>';
+  } else if (n.cvss) {
+    html += '<div class="nd-row"><span>评分</span><span>' + n.cvss + '</span></div><div class="nd-row"><span>影响资产</span><span>1 台</span></div>';
+  } else if (n.ac) {
+    html += '<div class="nd-row"><span>聚合说明</span><span>' + n.ac + '</span></div>';
+  } else {
+    html += '<div class="nd-row"><span>类型</span><span>网段</span></div><div class="nd-row"><span>资产数</span><span>8 台</span></div>';
+  }
+  document.getElementById('nodeDetail').innerHTML = html;
+});
+
+function setLayout(mode, btn) {
+  document.querySelectorAll('.graph-toolbar button').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  gChart.setOption(buildGlobalOption(mode));
+}
+function switchView(v) {
+  document.getElementById('viewGlobal').classList.toggle('active', v==='global');
+  document.getElementById('viewDetail').classList.toggle('active', v==='detail');
+  document.getElementById('btnGlobal').classList.toggle('active', v==='global');
+  document.getElementById('btnDetail').classList.toggle('active', v==='detail');
+  setTimeout(function(){ gChart.resize(); eChart.resize(); }, 50);
+}
+window.addEventListener('resize', function(){ gChart.resize(); eChart.resize(); });
+
+/* 简单过滤演示 */
+function applyFilters() {
+  var kw = document.getElementById('searchInput').value.trim().toLowerCase();
+  var biz = document.getElementById('bizFilter').value;
+  var onlyCrit = document.getElementById('chkCritical').checked;
+  var hideBlind = !document.getElementById('chkBlind').checked;
+  var hideInf = !document.getElementById('chkInferred').checked;
+  var keepNodes = gNodes.filter(function(n) {
+    if (kw && n.name.toLowerCase().indexOf(kw) < 0) return false;
+    if (onlyCrit && n.cat==='asset' && !n.critical) return false;
+    if (hideBlind && n.agent === false) return false;
+    if (biz && n.cat==='asset' && n.info && n.info.biz !== biz && biz !== '—') return false;
+    return true;
+  });
+  var keepNames = keepNodes.map(function(n){ return n.name; });
+  var keepEdges = gEdges.filter(function(e) {
+    if (hideInf && e.inferred) return false;
+    return keepNames.indexOf(e.s) >= 0 && keepNames.indexOf(e.t) >= 0;
+  });
+  var visibleCat = {};
+  document.querySelectorAll('.legend-row[data-cat]').forEach(function(r) {
+    if (r.style.opacity !== '0.35') visibleCat[r.dataset.cat] = true;
+  });
+  keepNodes = keepNodes.filter(function(n){ return visibleCat[CAT[n.cat]]; });
+  keepNames = keepNodes.map(function(n){ return n.name; });
+  keepEdges = keepEdges.filter(function(e){ return keepNames.indexOf(e.s)>=0 && keepNames.indexOf(e.t)>=0; });
+  var opt = buildGlobalOption(document.querySelector('.graph-toolbar button.on').textContent.indexOf('力导')>=0 ? 'force' : 'circular');
+  opt.series[0].data = keepNodes.map(function(n, i) {
+    var blind = n.agent === false;
+    return { id:'n'+i, name:'n'+i, rawName:n.name, category:CAT[n.cat], symbolSize:n.size,
+      itemStyle:{ color: blind?'#D3D1C7':COLORS[n.cat], borderColor:'#fff', borderWidth:1.5, borderType: blind?'dashed':'solid' }, node:n };
+  });
+  opt.series[0].links = keepEdges.map(function(e, i) {
+    var si = keepNodes.findIndex(function(n){return n.name===e.s;});
+    var ti = keepNodes.findIndex(function(n){return n.name===e.t;});
+    return { id:'e'+i, source:'n'+si, target:'n'+ti, edge:e, lineStyle: edgeLineStyle(e) };
+  });
+  document.getElementById('stNodes').textContent = keepNodes.length;
+  document.getElementById('stEdges').textContent = keepEdges.length;
+  gChart.setOption(opt, true);
+}
+['searchInput','bizFilter','segFilter','chkCritical','chkBlind','chkInferred'].forEach(function(id) {
+  var el = document.getElementById(id);
+  el.addEventListener(el.tagName==='INPUT' && el.type==='text' ? 'input' : 'change', applyFilters);
+});
+document.querySelectorAll('.legend-row[data-cat]').forEach(function(r) {
+  r.addEventListener('click', function() {
+    r.style.opacity = r.style.opacity === '0.35' ? '1' : '0.35';
+    applyFilters();
+  });
+});
+</script>
+</body>
+</html>
