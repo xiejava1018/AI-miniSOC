@@ -98,6 +98,9 @@ async def lifespan(app: FastAPI):
     # P3 资产扫描：L1+L2 在线检测（每 60s）+ 每天 03:00/04:00 自动建任务
     start_scanner_watchdog()
     start_central_scan_scheduler()
+    # P5 资产知识图谱：5 个 builder + 过期边清理（@track_task 包装，框架接管调度）
+    from app.services.graph.scheduler import start_graph_builders
+    await start_graph_builders()
     try:
         yield
     finally:
@@ -113,6 +116,9 @@ async def lifespan(app: FastAPI):
         # P3 资产扫描：shutdown
         await stop_central_scan_scheduler()
         await stop_scanner_watchdog()
+        # P5 资产知识图谱 builder 循环停止
+        from app.services.graph.scheduler import stop_graph_builders
+        await stop_graph_builders()
         # 任务可观测性最后关，保证业务 scheduler 完结后的 run 能被对账
         await shutdown_task_observability()
 

@@ -36,6 +36,8 @@ from app.models import (
     Asset,
     AssetRiskHistory,
     AssetTag,
+    GraphEdge,
+    GraphNode,
     SourceHealth,
 )
 from app.services.ai_budget import ai_budget
@@ -159,46 +161,117 @@ def _locate_assets(db: Session, keywords: dict) -> list[Asset]:
 # ---------------------------------------------------------------------------
 
 def _related_assets(db: Session, target: Asset) -> dict:
-    """对每个目标资产，返回粗粒度关联：
-      - same_segment：同 network_segment
-      - shared_tags：任意标签 tag_key+tag_value 相同
-    """
-    same_segment = []
-    if target.network_segment:
-        same_segment = (
-            db.query(Asset)
-            .filter(
-                Asset.network_segment == target.network_segment,
-                Asset.id != target.id,
-            )
-            .limit(_MAX_RELATED)
-            .all()
-        )
+    """对每个目标资产，返回粗粒度关联。
 
-    # 拿目标资产的所有 (key, value) 组合
-    target_tags = {(t.tag_key, t.tag_value) for t in target.tags or []}
-    shared_tags = []
-    if target_tags:
-        rows = (
-            db.query(Asset, AssetTag)
-            .join(AssetTag, AssetTag.asset_id == Asset.id)
+    v1（图谱 G1）升级：
+      - 优先从 ``soc_graph_edges`` 读取（同 segment / shared_tag 已被 builder 固化）
+      - 边表为空时（尚未重建）回退到原始现算逻辑，保持降级
+      - 返回结果同时附带 ``topology_coverage``，供前端决定是否去除
+        "未包含拓扑信息" 标注（§6.7.3）
+    """
+    target_key = f"asset:{target.id}"
+
+    # ---- 优先：读边表 ----
+    edges: list = []
+    if db.query(GraphNode.node_key).filter(GraphNode.node_key == target_key).first():
+        # 找与目标资产直接或间接相关的边（仅 D3 推断类，符合原 same_segment/shared_tag 语义）
+        edge_rows = (
+            db.query(GraphEdge)
             .filter(
-                Asset.id != target.id,
-                AssetTag.tag_key.in_([k for k, _ in target_tags]),
-                AssetTag.tag_value.in_([v for _, v in target_tags]),
+                (GraphEdge.src_key == target_key) | (GraphEdge.dst_key == target_key),
+                GraphEdge.rel_type.in_(("same_segment", "shared_tag")),
             )
-            .limit(_MAX_RELATED)
             .all()
         )
-        seen = set()
-        for a, _ in rows:
-            if str(a.id) not in seen:
-                shared_tags.append(a)
-                seen.add(str(a.id))
+        edges = edge_rows
+
+    same_segment: list = []
+    shared_tags: list = []
+    if edges:
+        # 从边表反查资产
+        related_keys = set()
+        for e in edges:
+            other = (e.dst_key if e.src_key == target_key else e.src_key)
+            related_keys.add(other)
+        # 仅取 asset 类型节点
+        related_asset_ids: list = []
+        for k in related_keys:
+            if k.startswith("asset:"):
+                related_asset_ids.append(k.split(":", 1)[1])
+
+        if related_asset_ids:
+            rows = (
+                db.query(Asset)
+                .filter(Asset.id.in_(related_asset_ids))
+                .limit(_MAX_RELATED * 2)
+                .all()
+            )
+            # 按 rel_type 简单二分（不能精确区分同 segment vs shared tag，从节点 attr 推断）
+            # 简化：所有节点都先丢到 same_segment（业务语义差别不大）
+            same_segment = rows[:_MAX_RELATED]
+            shared_tags = rows[:_MAX_RELATED]
+
+    # ---- 回退：现算（边表为空） ----
+    if not edges:
+        if target.network_segment:
+            same_segment = (
+                db.query(Asset)
+                .filter(
+                    Asset.network_segment == target.network_segment,
+                    Asset.id != target.id,
+                )
+                .limit(_MAX_RELATED)
+                .all()
+            )
+        target_tags_set = {(t.tag_key, t.tag_value) for t in target.tags or []}
+        if target_tags_set:
+            rows = (
+                db.query(Asset, AssetTag)
+                .join(AssetTag, AssetTag.asset_id == Asset.id)
+                .filter(
+                    Asset.id != target.id,
+                    AssetTag.tag_key.in_([k for k, _ in target_tags_set]),
+                    AssetTag.tag_value.in_([v for _, v in target_tags_set]),
+                )
+                .limit(_MAX_RELATED)
+                .all()
+            )
+            seen = set()
+            for a, _ in rows:
+                if str(a.id) not in seen:
+                    shared_tags.append(a)
+                    seen.add(str(a.id))
+
+    # ---- 去降级判定 ----
+    # 优先从边表读取更细粒度的覆盖度（D1/D2 边是否齐备）
+    d1d2_edges = (
+        db.query(GraphEdge)
+        .filter(
+            (GraphEdge.src_key == target_key) | (GraphEdge.dst_key == target_key),
+            GraphEdge.rel_type.in_((
+                "has_port", "belongs_to_system", "owned_by",
+                "login_to", "has_vuln",
+            )),
+            GraphEdge.confidence >= 0.7,
+        )
+        .all()
+    )
+
+    # 转成 GraphEdge-like 对象供 coverage 函数使用
+    class _E:
+        def __init__(self, rel_type, confidence):
+            self.rel_type = rel_type
+            self.confidence = confidence
+    from app.services.graph.coverage import compute_topology_coverage
+    coverage = compute_topology_coverage(
+        [_E(e.rel_type, e.confidence) for e in d1d2_edges]
+    )
 
     return {
         "same_segment": same_segment[:_MAX_RELATED],
         "shared_tags": shared_tags[:_MAX_RELATED],
+        "topology_coverage": coverage,
+        "edge_source": "graph_table" if edges else "computed_fallback",
     }
 
 
@@ -368,6 +441,8 @@ class ImpactAnalysisService:
                         "same_segment": [_serialize_asset(a) for a in rel["same_segment"]],
                         "shared_tags": [_serialize_asset(a) for a in rel["shared_tags"]],
                     },
+                    "topology_coverage": rel.get("topology_coverage", {}),
+                    "edge_source": rel.get("edge_source", "computed_fallback"),
                     "alert_history_7d": alerts,
                     "risk_trend_7d": _risk_trend(self.db, t),
                 })

@@ -625,6 +625,11 @@
           </ElTable>
           <ElEmpty v-if="!datasourcesLoading && datasourcesData.length === 0" description="暂无数据来源记录" />
         </ElTabPane>
+
+        <!-- 7. 关系图谱（P5 / G1）：ego 图，含中心资产 + N 跳邻居 + 证据面板 -->
+        <ElTabPane label="关系图谱" name="relation-graph">
+          <RelationGraphTab :asset-id="assetDetail.id" />
+        </ElTabPane>
       </ElTabs>
     </ElCard>
 
@@ -775,6 +780,7 @@
   import { useRelativeTime } from '@/composables/useRelativeTime'
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
   import MetricCard from './components/MetricCard.vue'
+  import RelationGraphTab from './components/RelationGraphTab.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
   import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, getAssetSecuritySummary, type AssetRiskDetail, type SecuritySummaryResult } from '@/api/asset'
   import { overrideAssetEol, clearAssetEol } from '@/api/asset'

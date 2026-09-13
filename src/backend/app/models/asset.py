@@ -83,9 +83,18 @@ class Asset(Base):
     expected_eol = Column(Date)                        # 预期 EOL（preset 自动匹配 / manual 手动覆盖）
     expected_eol_source = Column(String(20), default="preset", server_default="preset")
 
+    # v1（图谱 G1）：责任人外键化（迁移 t3u4v5w6x7y8 已建）。
+    # ⚠️ soc_users.id 为 Integer（非 UUID）。
+    owner_id = Column(Integer, ForeignKey("soc_users.id", ondelete="SET NULL"), nullable=True)
+
     # 关系
     ports = relationship("AssetPort", backref="asset", cascade="all, delete-orphan")
     tags = relationship("AssetTag", backref="asset", cascade="all, delete-orphan")
+    # 责任人（user 关系引用 user.py 中的 User）
+    owner_user = relationship("User", foreign_keys=[owner_id])
+    # 业务系统归属
+    business_links = relationship("AssetBusiness", back_populates="asset",
+                                  cascade="all, delete-orphan")
 
     # 关系 - 暂时注释掉，因为soc_asset_incidents表不存在
     # incidents = relationship("AssetIncident", back_populates="asset")
