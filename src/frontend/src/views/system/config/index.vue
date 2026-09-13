@@ -1,17 +1,5 @@
 <template>
   <div class="system-config-page art-full-height" id="table-full-screen">
-    <!-- 降级警示（路线 C：日常调参请用配置中心，本页仅限高级 KV 操作） -->
-    <ElAlert
-      type="warning"
-      :closable="false"
-      show-icon
-      style="margin-bottom: 12px"
-    >
-      <template #title>
-        高级入口：本页为无校验的通用 KV 编辑器，仅限开发/排障时使用
-      </template>
-      日常配置请使用「<b>配置中心</b>」（带类型校验、生效方式提示与变更保护）；本页修改已注册项同样会经过后端 Schema 校验，删除受管项会被拒绝。
-    </ElAlert>
     <ElCard shadow="never" class="art-table-card config-card">
       <ElRow :gutter="16" class="config-row">
         <!-- 左侧：分类列表 -->
@@ -226,8 +214,9 @@ const tableApi = useTable<any>({
         prop: 'category',
         label: '分类',
         align: 'center',
-        width: 100,
-        formatter: (row: any) => row.category || '--',
+        width: 140,
+        showOverflowTooltip: true,
+        formatter: (row: any) => h('span', { class: 'config-category' }, row.category || '--'),
       },
       {
         prop: 'key',
@@ -616,6 +605,12 @@ onMounted(() => {
   .config-key {
     font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
     color: var(--el-color-primary);
+  }
+
+  // ArtTable formatter 返回的 span 挂的是 ArtTable scopeId，本页 scoped 选择器匹配不到。
+  // 用 :deep() 穿透；同时按 system-config-page 前缀限定，避免污染其它页面
+  :deep(.config-category) {
+    white-space: nowrap;
   }
 
   .masked-value {
