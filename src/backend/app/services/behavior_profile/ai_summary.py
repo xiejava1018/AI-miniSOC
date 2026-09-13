@@ -117,19 +117,15 @@ class ProfileAIService:
             logger.info("画像 AI：预算熔断中，走模板")
             return None, "template"
         try:
-            from zhipuai import ZhipuAI
+            from app.services.ai_client import ai_chat
 
             prompt = self._prompt(facts)
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
-            resp = client.chat.completions.create(
-                model=getattr(settings, "GLM_MODEL", "glm-4-flash"),
-                messages=[
-                    {"role": "system", "content": "你是企业内网安全审计助手，只基于给定事实输出，不编造。"},
-                    {"role": "user", "content": prompt},
-                ],
+            text = ai_chat(
+                prompt,
+                scene="behavior",
+                system="你是企业内网安全审计助手，只基于给定事实输出，不编造。",
                 temperature=0.3,
             )
-            text = resp.choices[0].message.content
             ai_budget.record_success()
             parsed = self._parse_json(text)
             return parsed, "glm"

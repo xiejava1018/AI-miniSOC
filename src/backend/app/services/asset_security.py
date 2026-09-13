@@ -138,9 +138,7 @@ class AssetSecurityService:
         if not ai_budget.allow():
             return None
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             compact = {
                 "asset": stats["asset"],
                 "window_days": stats["window"]["days"],
@@ -154,13 +152,8 @@ class AssetSecurityService:
                 "引用具体数字；若告警为 0 且无事件，如实说明并给一条加固建议；不要寒暄、不要罗列全部数据。\n"
                 f"统计数据(JSON): {json.dumps(compact, ensure_ascii=False)}"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-            )
+            text = ai_chat(prompt, scene="ai_analysis", temperature=0.3)
             ai_budget.record_success()
-            text = (resp.choices[0].message.content or "").strip()
             return text or None
         except Exception as e:
             ai_budget.record_failure()

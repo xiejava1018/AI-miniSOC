@@ -447,9 +447,11 @@ class ImpactAnalysisService:
         if not ai_budget.allow():
             return None, "template"
         if not getattr(settings, "GLM_API_KEY", None):
-            return None, "template"
+            from app.services.ai_client import ai_provider_available
+            if not ai_provider_available():
+                return None, "template"
         try:
-            from zhipuai import ZhipuAI
+            from app.services.ai_client import ai_chat
             facts_str = json_dumps_safe(facts)
             sys_prompt = (
                 "你是 AI-miniSOC 变更影响分析助手。基于给定事实生成结构化报告。\n"
@@ -473,18 +475,13 @@ class ImpactAnalysisService:
                 f"【计划维护窗口】{window_hours} 小时\n"
                 f"【事实】{facts_str}"
             )
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
-            resp = client.chat.completions.create(
-                model=getattr(settings, "GLM_MODEL", "glm-4-flash"),
-                messages=[
-                    {"role": "system", "content": sys_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+            text = ai_chat(
+                user_prompt,
+                scene="impact",
+                system=sys_prompt,
                 temperature=0.3,
                 max_tokens=900,
             )
-            text = (resp.choices[0].message.content or "").strip()
-            ai_budget.record_success()
             parsed = self._parse_glm_json(text)
             return parsed, "glm"
         except Exception as exc:

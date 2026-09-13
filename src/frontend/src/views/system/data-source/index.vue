@@ -153,6 +153,7 @@
             </span>
           </ElFormItem>
 
+
           <!-- 测试结果 -->
           <div class="sec-title">
             测试结果
@@ -450,6 +451,7 @@ function onTypeChange() {
     }
   }
 }
+
 
 function onPasswordFocus(e: FocusEvent) {
   // 编辑态聚焦清空占位符

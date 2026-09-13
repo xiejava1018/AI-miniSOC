@@ -2,7 +2,7 @@
 智谱 AI 分析服务 (支持 Pi Agent 集成)
 """
 
-from zhipuai import ZhipuAI
+
 from app.core.config import settings
 from app.core.alert_levels import LEVEL_CRITICAL, LEVEL_HIGH, LEVEL_MEDIUM, level_to_priority
 from app.models import AIAnalysis, AlertGroupAnalysis
@@ -24,12 +24,7 @@ class AIAnalysisService:
         self.db = db
         # 容错：智谱客户端初始化失败（如未配密钥）不应阻断整个服务，
         # 后续簇研判会自动降级到启发式兜底。
-        try:
-            self.client = ZhipuAI(api_key=settings.GLM_API_KEY)
-        except Exception as e:
-            logger.warning("ZhipuAI 初始化失败，将仅走启发式兜底: %s", e)
-            self.client = None
-        # POC: 懒加载 AgentProcessManager
+        # AI 调用统一走 app.services.ai_client（多 Provider 路由 + 熔断）
         self._agent_manager = None
 
     def _get_agent_manager(self):
@@ -295,19 +290,13 @@ class AIAnalysisService:
     def _call_ai_analysis(self, prompt: str) -> Dict[str, str]:
         """调用智谱AI进行分析"""
 
-        response = self.client.chat.completions.create(
-            model=settings.GLM_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "你是一个专业的网络安全分析师，擅长分析安全告警和日志。"
-                },
-                {"role": "user", "content": prompt}
-            ],
+        from app.services.ai_client import ai_chat
+        content = ai_chat(
+            prompt,
+            scene="ai_analysis",
+            system="你是一个专业的网络安全分析师，擅长分析安全告警和日志。",
             temperature=0.3,  # 降低随机性，提高一致性
         )
-
-        content = response.choices[0].message.content.strip()
 
         # 尝试解析JSON响应
         try:
@@ -441,21 +430,14 @@ class AIAnalysisService:
         except Exception as e:
             logger.warning("Agent 簇研判失败，降级智谱: %s", e)
 
-        # 2. 智谱
-        if self.client is None:
-            raise RuntimeError("智谱客户端未初始化")
-        resp = self.client.chat.completions.create(
-            model=settings.GLM_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "你是一个资深网络安全分析师，擅长对一批同类安全告警做整体研判与优先级排序。",
-                },
-                {"role": "user", "content": prompt},
-            ],
+        # 2. 统一 AI 客户端（多 Provider 路由）
+        from app.services.ai_client import ai_chat
+        text = ai_chat(
+            prompt,
+            scene="ai_analysis",
+            system="你是一个资深网络安全分析师，擅长对一批同类安全告警做整体研判与优先级排序。",
             temperature=0.3,
         )
-        text = resp.choices[0].message.content.strip()
         return text, "zhipu"
 
     def _build_group_triage_prompt(self, signature: dict) -> str:
@@ -631,14 +613,8 @@ class AIAnalysisService:
 请用2-3句话概括。"""
 
         try:
-            response = self.client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-
-            content = response.choices[0].message.content.strip()
+            from app.services.ai_client import ai_chat
+            content = ai_chat(prompt, scene="ai_analysis")
             return {"explanation": content}
 
         except Exception as e:

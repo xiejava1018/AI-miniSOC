@@ -46,6 +46,7 @@ from app.models.asset_change_log import AssetChangeLog
 #（与 P3/P4 注释同因 —— 详见 app/models/__init__.py）
 # ConfigChangeLog 已于 2026-09-12 删除（配置变更审计合并到 soc_audit_logs）
 from app.models.data_source import DataSource  # noqa: F401
+from app.models.ai_provider import AIProvider  # noqa: F401
 from app.models.config_schema import ConfigSchema  # noqa: F401
 
 target_metadata = Base.metadata

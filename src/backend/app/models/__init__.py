@@ -50,6 +50,7 @@ from .security_report import SecurityReport
 # 必须在 models/__init__.py 导入，否则 alembic env.py 的 Base.metadata 缺失，
 # `alembic check` 会误报要 DROP 这 3 张表（参考 P4 注释）。
 from .data_source import DataSource
+from .ai_provider import AIProvider
 from .config_schema import ConfigSchema
 
 # P4 数据可靠性 / 脆弱性 / SCA 模块。
@@ -114,6 +115,7 @@ __all__ = [
     "SecurityReport",
     # 配置中心 v1
     "DataSource",
+    "AIProvider",
     "ConfigSchema",
     # P4 / 脆弱性 / SCA
     "Vulnerability",

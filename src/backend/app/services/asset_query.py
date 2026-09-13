@@ -127,22 +127,15 @@ class AssetQueryService:
         if not ai_budget.allow():
             raise RuntimeError("budget")
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
+            from app.services.ai_client import ai_chat, AIClientError
             from app.services.query_templates import template_catalog_for_prompt
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
             prompt = INTENT_PROMPT_TEMPLATE.format(
                 templates=template_catalog_for_prompt(),
                 context=f"此前对话上下文（可继承其中的筛选条件）：{context}\n" if context else "",
                 question=question,
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-            )
-            ai_budget.record_success()
-            parsed = _extract_json(resp.choices[0].message.content or "")
+            content = ai_chat(prompt, scene="asset_query", temperature=0.1)
+            parsed = _extract_json(content)
             if not parsed:
                 return {"level": "L1", "intent": "unsupported", "params": {}}
             # 兼容：LLM 可能只给 template_id 而忘了 level，反之也可能
@@ -251,9 +244,7 @@ class AssetQueryService:
         if not ai_budget.allow():
             return template + "（AI 摘要服务暂不可用）"
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             rows = "\n".join(
                 f"- {r['name'] or r['ip']} ({r['ip']}, {r['os_name'] or '未知OS'}, {r['criticality']}, {r['asset_status'] or '未知状态'})"
                 for r in results[:20]
@@ -262,13 +253,7 @@ class AssetQueryService:
                 f"用户问题：{question}\n查询结果（{n} 台）：\n{rows}\n"
                 "用一两句中文总结结果（总数 + 值得注意的点，如高危系统版本、离线设备），不超过60字，不要寒暄。"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-            )
-            ai_budget.record_success()
-            text = (resp.choices[0].message.content or "").strip()
+            text = ai_chat(prompt, scene="asset_query", temperature=0.3)
             return text or template
         except Exception as e:
             ai_budget.record_failure()
@@ -453,9 +438,7 @@ class AssetQueryService:
         if not ai_budget.allow():
             return template
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             # 字段名必须无歧义：曾经传模糊的 "total"（实为资产数）导致 GLM 把
             # 「匹配到 1 台资产」说成「有 1 个告警」，后半句又说 635 个高危——
             # 自相矛盾。歧义字段名本身就是幻觉源。
@@ -492,13 +475,7 @@ class AssetQueryService:
                 "两者是不同的量，绝不得混用或互相替代；\n"
                 "3) 不要寒暄，不要重复参数原文。"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-            )
-            ai_budget.record_success()
-            text = (resp.choices[0].message.content or "").strip()
+            text = ai_chat(prompt, scene="asset_query", temperature=0.3)
             return text or template
         except Exception as e:
             ai_budget.record_failure()

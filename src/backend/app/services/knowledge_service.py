@@ -167,9 +167,7 @@ class KnowledgeService:
         if not ai_budget.allow():
             return None
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             ai_part = ""
             if inc.ai_analysis:
                 ai_part = (
@@ -189,13 +187,9 @@ class KnowledgeService:
                 f"处理备注: {(inc.resolution_notes or '')[:600]}"
                 f"{ai_part}"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-            )
+            content = ai_chat(prompt, scene="knowledge", temperature=0.2)
             ai_budget.record_success()
-            m = re.search(r"\{.*\}", resp.choices[0].message.content or "", re.S)
+            m = re.search(r"\{.*\}", content or "", re.S)
             if not m:
                 return None
             d = json.loads(m.group(0))
@@ -308,9 +302,7 @@ class KnowledgeService:
         if not ai_budget.allow():
             return None
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             docs = [{"id": str(k.id), "title": k.title,
                      "excerpt": (k.content or "")[:200]} for k in candidates]
             prompt = (
@@ -318,13 +310,9 @@ class KnowledgeService:
                 "只输出 JSON 数组（按相关性降序的 id 列表），不要其他文字。\n"
                 f"用户问题: {question}\n候选知识: {json.dumps(docs, ensure_ascii=False)}"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-            )
+            content = ai_chat(prompt, scene="knowledge", temperature=0.1)
             ai_budget.record_success()
-            m = re.search(r"\[.*\]", resp.choices[0].message.content or "", re.S)
+            m = re.search(r"\[.*\]", content or "", re.S)
             if not m:
                 return None
             order = json.loads(m.group(0))

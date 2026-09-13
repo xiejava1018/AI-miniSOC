@@ -154,13 +154,7 @@ class ComplianceAIService:
         if not asset:
             return None
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(
-                api_key=settings.GLM_API_KEY,
-                timeout=GLM_CALL_TIMEOUT_SECONDS,
-                max_retries=GLM_MAX_RETRIES,
-            )
+            from app.services.ai_client import ai_chat
 
             os_label = f"{asset.os_name or ''} {asset.os_version or ''}".strip() or "未知"
             prompt = (
@@ -183,13 +177,8 @@ class ComplianceAIService:
                 f"类型 {asset.asset_type}，重要度 {asset.criticality}，"
                 f"暴露面 {asset.exposure_level}，系统 {os_label}）"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-            )
+            text = ai_chat(prompt, scene="compliance", temperature=0.3)
             ai_budget.record_success()
-            text = (resp.choices[0].message.content or "").strip()
             if len(text) < 20:
                 return None
             # 溯源：AI 文本前置规则 ID，审计时可直接对照规则库版本

@@ -21,6 +21,7 @@ export enum RoutesAlias {
   SystemConfig = '/system/config', // 系统配置
   // X1E-11 配置中心（配置变更审计已合并到「审计日志」，不再单独建页）
   DataSource = '/system/data-source', // 数据源管理
+  AIProvider = '/system/ai-provider', // AI 模型管理
   ConfigCenter = '/system/config-center', // 配置中心
   Assets = '/asset/list/index', // 资产管理
   AssetOverview = '/asset/overview/index', // 资产概览

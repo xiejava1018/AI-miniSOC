@@ -21,7 +21,7 @@ from app.api import (
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
     compliance, asset_reconciliation, data_health, reports, impact_analysis,
     scan_agents, scan_human_agents, scan_tasks,
-    data_sources, config_schemas,
+    data_sources, config_schemas, ai_providers,
 )
 from app.core.auth import get_current_user
 from app.core.route_security import enforce_write_default
@@ -178,6 +178,9 @@ include_human_router(
 )
 include_human_router(
     api_router, data_sources.router, prefix="/data-sources", tags=["数据源管理"],
+)
+include_human_router(
+    api_router, ai_providers.router, prefix="/ai-providers", tags=["AI 模型管理"],
 )
 include_human_router(
     api_router, config_schemas.router, prefix="/config-schemas", tags=["配置Schema"],

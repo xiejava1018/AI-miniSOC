@@ -443,9 +443,7 @@ class AssetRiskService:
             return self._fallback_summary(asset, breakdown), "rule"
 
         try:
-            from zhipuai import ZhipuAI
-            from app.core.config import settings
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
+            from app.services.ai_client import ai_chat
             compact = {
                 "total": breakdown["total"],
                 "dimensions": {
@@ -460,12 +458,7 @@ class AssetRiskService:
                 f"OS: {(asset.os_name or '')} {(asset.os_version or '')}".strip() + "\n"
                 f"评分明细(JSON): {json.dumps(compact, ensure_ascii=False)}"
             )
-            resp = client.chat.completions.create(
-                model=settings.GLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-            )
-            text = (resp.choices[0].message.content or "").strip()
+            text = ai_chat(prompt, scene="risk", temperature=0.3)
             ai_budget.record_success()
             if text:
                 return text, "glm"

@@ -138,30 +138,25 @@ class ReconciliationReportService:
             logger.info("对账报告降级为模板：AI 预算/限流不允许")
             return None
         if not getattr(settings, "GLM_API_KEY", None):
-            return None
+            from app.services.ai_client import ai_provider_available
+            if not ai_provider_available():
+                return None
         try:
-            from zhipuai import ZhipuAI
+            from app.services.ai_client import ai_chat
 
-            client = ZhipuAI(api_key=settings.GLM_API_KEY)
-            resp = client.chat.completions.create(
-                model=getattr(settings, "GLM_MODEL", "glm-4-flash"),
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "你是资产管理运维助手。基于给定的对账事实撰写简报，要求："
-                            "1) 只使用给定事实，不得推测未提供的信息；"
-                            "2) 如数据可信度为降级，开头必须先提示结果可能不全；"
-                            "3) 按影子资产、疑似下线、信息不一致分组，各给出可执行建议；"
-                            "4) 中文，200-350 字，不用 Markdown 标题，可用短横线列表。"
-                        ),
-                    },
-                    {"role": "user", "content": facts},
-                ],
+            text = ai_chat(
+                facts,
+                scene="reconcile",
+                system=(
+                    "你是资产管理运维助手。基于给定的对账事实撰写简报，要求："
+                    "1) 只使用给定事实，不得推测未提供的信息；"
+                    "2) 如数据可信度为降级，开头必须先提示结果可能不全；"
+                    "3) 按影子资产、疑似下线、信息不一致分组，各给出可执行建议；"
+                    "4) 中文，200-350 字，不用 Markdown 标题，可用短横线列表。"
+                ),
                 temperature=0.3,
                 max_tokens=700,
             )
-            text = (resp.choices[0].message.content or "").strip()
             ai_budget.record_success()
             return text or None
         except Exception as exc:  # noqa: BLE001 — AI 失败绝不能影响对账结论的可用性
