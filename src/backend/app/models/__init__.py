@@ -68,6 +68,12 @@ from .sync_dead_letter import SyncDeadLetter
 # 与上方 P4 注释同因。设计依据：docs/design/2026-08-26-asset-discovery-and-attack-surface-scanner-final.md §6.3。
 from .scanner_models import ScannerTask, ScanTarget, ScanFinding, ScannerAgent
 
+# 资产知识图谱 v1（G1）：节点/边表 + 业务系统 + 账号→人 + 网络链路。
+# 不导入会复刻 P4/P3 同款坑（alembic env.py metadata 缺失，autogenerate 误报 DROP）。
+# 设计依据：docs/design/2026-09-13-资产知识图谱研究与实施方案.md §6.2。
+from .graph import GraphNode, GraphEdge, NetworkLink, AccountPerson
+from .business_system import BusinessSystem, AssetBusiness
+
 __all__ = [
     "Base",
     "Asset",
@@ -130,4 +136,11 @@ __all__ = [
     "ScanTarget",
     "ScanFinding",
     "ScannerAgent",
+    # 资产知识图谱 v1
+    "GraphNode",
+    "GraphEdge",
+    "NetworkLink",
+    "AccountPerson",
+    "BusinessSystem",
+    "AssetBusiness",
 ]

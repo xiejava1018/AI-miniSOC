@@ -121,13 +121,38 @@
           </ElAlert>
 
           <ElAlert
-            v-if="result.source === 'template'"
+            v-if="result.source === 'template' && topologyDegraded"
             type="info"
             show-icon
             :closable="false"
             class="banner"
             title="AI 解读未启用，以下为基于事实拼装的模板分析（未包含拓扑信息）"
           />
+          <ElAlert
+            v-if="result.source === 'template' && !topologyDegraded"
+            type="success"
+            show-icon
+            :closable="false"
+            class="banner"
+            title="拓扑信息充足：未包含拓扑信息”小字以去除（依据 P5 图谱覆盖度判定）"
+          />
+          <ElAlert
+            v-if="result.source !== 'template' && topologyDegraded && topologyWarnings.length > 0"
+            type="warning"
+            show-icon
+            :closable="false"
+            class="banner"
+            title="部分拓扑信息缺失"
+          >
+            <div class="banner-body">
+              <div v-for="(tw, idx) in topologyWarnings" :key="idx">
+                · {{ tw.asset }}：
+                <span v-for="(w, widx) in tw.warnings" :key="widx">
+                  {{ w.message }}<span v-if="widx < tw.warnings.length - 1">；</span>
+                </span>
+              </div>
+            </div>
+          </ElAlert>
 
           <!-- 未匹配到资产 -->
           <ElAlert
@@ -355,6 +380,34 @@
   const overdueSources = computed(() =>
     (result.value?.source_health || []).filter((s: any) => s.overdue)
   )
+
+  // v1 (P5/G1)：按边覆盖度动态决定是否去除“未包含拓扑信息”小字
+  // （docs/design/2026-09-13-资产知识图谱研究与实施方案.md §6.7.3）
+  // 任何目标的 coverage.score < 0.75 则保留降级提示。
+  const topologyDegraded = computed(() => {
+    const details = result.value?.details || []
+    if (details.length === 0) return true
+    return details.some((d: any) => {
+      const c = d.topology_coverage || {}
+      return c.degraded === true || (typeof c.score === 'number' && c.score < 0.75)
+    })
+  })
+
+  // 供报告页“节点拓扑状态”使用：汇总全部目标的 warnings
+  const topologyWarnings = computed(() => {
+    const details = result.value?.details || []
+    const all: Array<{ asset: string; warnings: any[] }> = []
+    for (const d of details) {
+      const ws = d.topology_coverage?.warnings || []
+      if (ws.length > 0) {
+        all.push({
+          asset: d.asset?.name || d.asset?.ip || '未知',
+          warnings: ws,
+        })
+      }
+    }
+    return all
+  })
 
   const hasAlerts = (a: any) =>
     a && (a.critical || a.high || a.medium || a.low)

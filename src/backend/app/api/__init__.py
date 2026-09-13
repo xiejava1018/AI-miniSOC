@@ -19,7 +19,7 @@ from app.api import (
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance, asset_reconciliation, data_health, reports, impact_analysis,
+    compliance, asset_reconciliation, data_health, reports, impact_analysis, graph,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers,
 )
@@ -116,6 +116,11 @@ include_human_router(
 )
 include_human_router(
     api_router, impact_analysis.router, prefix="/assets", tags=["变更影响分析"],
+)
+
+# 资产知识图谱 v1（G1）：独立前缀 /graph；包含资产邻居、影响面、chokepoint 等端点
+include_human_router(
+    api_router, graph.router, prefix="/graph", tags=["资产知识图谱"],
 )
 
 # 用户管理（含登录态读 + admin 写）

@@ -13,6 +13,7 @@ from app.mcp.tools import (
     loki_tools,
     behavior_profile_tools,
     system_tools,
+    graph_tools,
 )
 
 
@@ -28,6 +29,7 @@ def register_all(mcp) -> None:
     loki_tools.register(mcp)
     behavior_profile_tools.register(mcp)
     dict_tools.register(mcp)  # 字典查询
+    graph_tools.register(mcp)  # 资产知识图谱关系类（v1）
 
 
 __all__ = ["register_all"]
