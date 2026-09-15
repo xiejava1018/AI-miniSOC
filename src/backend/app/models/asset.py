@@ -31,7 +31,8 @@ class Asset(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     network_segment = Column(String(50), nullable=False, default="default")
-    network_zone = Column(String(50), default="other")
+    network_zone = Column(String(50), default="unknown", server_default="unknown",
+                       comment="网络区域（public/dmz/production/office/dev/management/isolated/unknown），详见 docs/design/network-zone-redesign.md")
     asset_ip = Column(Text, nullable=False)
     # 互联网暴露面扫描用：公网 IP（云上资产 asset_ip 是内网 IP，如 ECS；内网资产保持 NULL）。
     # central_scan_scheduler public 模式自动汇总此字段，而非 asset_ip

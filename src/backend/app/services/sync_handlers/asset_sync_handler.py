@@ -192,9 +192,12 @@ class AssetSyncHandler(BaseSyncHandler):
         if "network_segment" not in item:
             item["network_segment"] = "default"
 
-        valid_zones = {"intranet", "dmz", "office", "management", "other"}
+        # 8 值方案（详见 docs/design/network-zone-redesign.md）：
+        # public/dmz/production/office/dev/management/isolated/unknown
+        # 同步数据中不合法值（如 wazuh 老 inventory）一律收敛为 unknown 触发人工复核
+        valid_zones = {"public", "dmz", "production", "office", "dev", "management", "isolated", "unknown"}
         if item.get("network_zone") not in valid_zones:
-            item["network_zone"] = "intranet"
+            item["network_zone"] = "unknown"
 
         item["last_synced_at"] = now
 

@@ -20,7 +20,9 @@ class AssetBase(BaseModel):
     """资产基础模型"""
     name: Optional[str] = None
     network_segment: str = "default"
-    network_zone: Optional[str] = "other"
+    # network_zone：8 值（public/dmz/production/office/dev/management/isolated/unknown），
+    # 含义与判定详见 docs/design/network-zone-redesign.md。
+    network_zone: Optional[str] = "unknown"
     asset_ip: str
     # 公网 IP（可空）：互联网暴露面扫描目标；云上资产 asset_ip 是内网 IP
     public_ip: Optional[str] = None
@@ -207,6 +209,8 @@ class AssetResponse(AssetBase):
     department_id: Optional[int] = None
     # 业务系统名称列表（用走后取，仅供详情页展示用；不作为必填重复的输入口径）
     business_system_names: Optional[list[str]] = None
+    # 业务系统 ID 列表（仅供列表/编辑回填“已关联的系统”；后端不接写入，关联走独立 API）
+    business_system_ids: Optional[list[str]] = None
     # criticality：DEPRECATED 兼容垫片（API 序列化时由 to_response 钩子从 data_sensitivity 派生，
     # 6 个月内外部脚本可继续读；前端建议改用三维度字段）
 

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from app.core.database import engine, SessionLocal
 from app.models import User, Role, Menu, RoleMenu, Dict, SystemConfig
 from app.core.security import get_password_hash
@@ -85,12 +86,16 @@ def init_dicts(db: Session):
         {"dict_type": "asset_status", "dict_code": "decommissioned", "dict_label": "已下线", "color": "info", "sort_order": 4},
         {"dict_type": "asset_status", "dict_code": "unknown", "dict_label": "未知", "color": "info", "sort_order": 5},
 
-        # 网络区域
-        {"dict_type": "network_zone", "dict_code": "intranet", "dict_label": "内网", "color": "primary", "sort_order": 1},
-        {"dict_type": "network_zone", "dict_code": "dmz", "dict_label": "DMZ", "color": "warning", "sort_order": 2},
-        {"dict_type": "network_zone", "dict_code": "office", "dict_label": "办公网", "color": "info", "sort_order": 3},
-        {"dict_type": "network_zone", "dict_code": "management", "dict_label": "管理网", "color": "info", "sort_order": 4},
-        {"dict_type": "network_zone", "dict_code": "other", "dict_label": "其他", "color": "info", "sort_order": 5},
+        # 网络区域（8 值方案，详见 docs/design/network-zone-redesign.md）
+        # 历史 intranet/other 需合并生产环境的 soc_dict：合并逻辑见脚本末尾的 _migrate_dict_rows。
+        {"dict_type": "network_zone", "dict_code": "public",      "dict_label": "公网区",   "color": "danger",  "sort_order": 1},
+        {"dict_type": "network_zone", "dict_code": "dmz",         "dict_label": "DMZ",      "color": "warning", "sort_order": 2},
+        {"dict_type": "network_zone", "dict_code": "production",  "dict_label": "生产内网",  "color": "primary", "sort_order": 3},
+        {"dict_type": "network_zone", "dict_code": "office",      "dict_label": "办公网",    "color": "info",    "sort_order": 4},
+        {"dict_type": "network_zone", "dict_code": "dev",         "dict_label": "开发测试网", "color": "info",    "sort_order": 5},
+        {"dict_type": "network_zone", "dict_code": "management",  "dict_label": "管理网/带外","color": "info",    "sort_order": 6},
+        {"dict_type": "network_zone", "dict_code": "isolated",    "dict_label": "隔离区",    "color": "danger",  "sort_order": 7},
+        {"dict_type": "network_zone", "dict_code": "unknown",     "dict_label": "未分类",    "color": "info",    "sort_order": 8},
 
         # 数据来源
         {"dict_type": "data_source", "dict_code": "wazuh", "dict_label": "Wazuh", "color": "success", "sort_order": 1},
@@ -112,18 +117,93 @@ def init_dicts(db: Session):
         {"dict_type": "severity", "dict_code": "low", "dict_label": "低", "color": "info", "sort_order": 4},
     ]
 
+    # === Step 1: 字典就地升级（必须先跑） ===
+    # 如果有 intranet/other 行，直接改名 production/unknown。
+    # flush 会把改名写进数据库（同一个事务），for 循环的 existing 查询就能看到。
+    _migrate_network_zone_dict(db)
+    db.flush()
+
     for item_data in dict_items:
-        existing = db.query(Dict).filter(
-            Dict.dict_type == item_data["dict_type"],
-            Dict.dict_code == item_data["dict_code"],
-        ).first()
-        if not existing:
-            item = Dict(**item_data)
-            db.add(item)
+        # 用原生 SQL INSERT ... ON CONFLICT DO NOTHING，避免 ORM session 缓存。
+        # ON CONFLICT 处理 race：即使 _migrate 改名后的旧对象也在 session 里，新行会被丢弃。
+        # 这同时避免我们额外调 expire_all 丢掉 _migrate 的内存修改。
+        params = {
+            "t": item_data["dict_type"],
+            "c": item_data["dict_code"],
+            "l": item_data["dict_label"],
+            "col": item_data["color"],
+            "s": item_data["sort_order"],
+        }
+        result = db.execute(text("""
+            INSERT INTO soc_dicts
+                (dict_type, dict_code, dict_label, color, sort_order, is_active, is_default, remark)
+            VALUES (:t, :c, :l, :col, :s, true, false, null)
+            ON CONFLICT (dict_type, dict_code) DO NOTHING
+        """), params)
+        if result.rowcount > 0:
             print(f"  ✅ 创建字典: {item_data['dict_type']} - {item_data['dict_label']}")
 
     db.commit()
     print("字典数据初始化完成！")
+
+
+def _migrate_network_zone_dict(db: Session):
+    """将历史 network_zone 字典行 intranet/other 合并为 production/unknown。
+
+    背景：CLAUDE.md §0 + 2026-XX-XX 立项的 network_zone 8 值改造。
+
+    顺序关键：必须在本函数主 for 循环之前调用——主循环会创建 production/unknown 两行
+    (全新 dict_code)；如果 production/unknown 已经被旧 intranet/other 改名占用，
+    主循环会撞 UniqueViolation。
+
+    幂等：
+      - 库里有 intranet 行 → 改名 production
+      - 库里没 intranet 行但有 production 行 → 跳过（说明已跑过迁移）
+      - 同上 for other/unknown
+
+    顺带：重排所有 network_zone 字典行的 sort_order 为连续 1-8，避免 office(原 sort=3)
+    和 production(改名后 sort=3) 顺序重叠造成前端下拉难看。
+    """
+    for old_code, new_label, new_color, new_sort in (
+        ("intranet",   "生产内网",  "primary", 3),
+        ("other",      "未分类",    "info",    8),
+    ):
+        old_row = db.query(Dict).filter(
+            Dict.dict_type == "network_zone",
+            Dict.dict_code == old_code,
+        ).first()
+        if not old_row:
+            # 已经没有旧 code 可迁移（已跑过 or 从库就是新的）
+            continue
+        old_row.dict_code = {
+            "intranet": "production",
+            "other":    "unknown",
+        }[old_code]
+        old_row.dict_label = new_label
+        old_row.color = new_color
+        old_row.sort_order = new_sort
+        print(f"  ♻️  合并字典: network_zone/{old_code} → {old_row.dict_code}")
+
+    # 整理 sort_order 为 1-8 连续（独立于上块迁移逻辑，即使已跑过也会执行）
+    # 用原生 SQL 避免 ORM session 缓存问题。
+    _sort_orders = [
+        ("public",     1),
+        ("dmz",        2),
+        ("production", 3),
+        ("office",     4),
+        ("management", 5),
+        ("dev",        6),
+        ("isolated",   7),
+        ("unknown",    8),
+    ]
+    from sqlalchemy import text as _sql_text
+    for code, sort in _sort_orders:
+        db.execute(_sql_text(
+            "UPDATE soc_dicts SET sort_order = :s "
+            "WHERE dict_type = 'network_zone' AND dict_code = :c"
+        ), {"s": sort, "c": code})
+    db.flush()
+    print(f"  ↕️  重排 sort_order 为 1-8 连续")
 
 
 def init_roles(db: Session):

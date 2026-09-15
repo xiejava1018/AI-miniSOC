@@ -620,7 +620,7 @@ async def adopt_finding(
     # 新建 Asset（criticality/owner 由请求体显式提供）
     asset = Asset(
         network_segment="default",
-        network_zone="other",
+        network_zone="unknown",  # scanner 发现的设备，默认未分类（详见 docs/design/network-zone-redesign.md）
         asset_ip=f.asset_ip,
         mac_address=f.mac_address,
         os_name=f.os_guess or "Unknown",
