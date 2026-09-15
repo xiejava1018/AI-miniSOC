@@ -230,14 +230,18 @@ class AssetOverviewService:
         """
         评分前 N 的高危资产
 
-        评分公式(D7):
-        - criticality in ('critical','core') → +100  （决策1：core 为遗留值兼容保留）
+        评分公式（D7 · 治本版 2026-09-14）：
+        - data_sensitivity='extreme'（原 criticality='critical'）→ +100
         - open_incidents(该资产) × 30
         - high_risk_ports(该资产) × 20
         - open_ports >= 5 → +10
         - alert_24h(该资产) × 1
 
-        排序后取前 N,资产 ID 用于前端跳转详情页。
+        兼容垫片：
+        - 迁移边界上 criticality='critical' 但 data_sensitivity 未刷新的资产也计入
+        - business_impact 不进评分（仅进 SLA），业务影响不 = 资产安全价值
+
+        排序后取前 N，资产 ID 用于前端跳转详情页。
         """
         try:
             # 一次拉所有资产,在内存里计算
@@ -262,8 +266,10 @@ class AssetOverviewService:
                     factors: List[str] = []
                     score = 0
 
-                    # criticality 权重（决策1：四档枚举；'core' 为字典遗留值，兼容保留）
-                    if asset.criticality in ("critical", "core"):
+                    # 治本方案 2026-09-14：data_sensitivity='extreme'（CIA 维度最高档）
+                    # 替代原 criticality='critical'。criticality 保留为迁移边界兼容。
+                    # business_impact 不进评分。
+                    if asset.data_sensitivity == "extreme" or asset.criticality in ("critical", "core"):
                         score += self.SCORE_WEIGHT_CRITICAL_CORE
                         factors.append("关键资产")
 
@@ -301,7 +307,11 @@ class AssetOverviewService:
                         "ip": asset.asset_ip,
                         "name": asset.name or asset.asset_ip,
                         "asset_type": asset.asset_type,
-                        "criticality": asset.criticality,
+                        # 治本方案：三维度全部返回供前端展示
+                        "business_impact": asset.business_impact,
+                        "data_sensitivity": asset.data_sensitivity,
+                        "protection_level": asset.protection_level,
+                        "criticality": asset.criticality,  # 兼容垫片
                         "score": score,
                         "factors": factors,
                     })
@@ -322,10 +332,11 @@ class AssetOverviewService:
         open_incidents: int,
         alert_24h: int,
         high_risk_ports: int,
+        data_sensitivity: Optional[str] = None,  # 治本方案 2026-09-14
     ) -> bool:
         """
-        D6 高危资产定义:5 条件命中任一
-        1. criticality in ('critical','core') AND (alert_24h>0 OR high_risk_ports>0 OR open_incidents>0)
+        D6 高危资产定义：5 条件命中任一（治本版 2026-09-14）
+        1. data_sensitivity='extreme'（或旧 criticality='critical'/'core'）AND 有任一风险因子
         2. open_incidents>0
         3. alert_24h>=10
         """
@@ -333,7 +344,9 @@ class AssetOverviewService:
             return True
         if alert_24h >= self.HIGH_RISK_ALERT_THRESHOLD:
             return True
-        if criticality in ("critical", "core") and (alert_24h > 0 or high_risk_ports > 0 or open_incidents > 0):
+        # 治本：data_sensitivity='extreme' 是 CIA 维度最高档；兼容旧 criticality
+        if (data_sensitivity == "extreme" or criticality in ("critical", "core")) \
+                and (alert_24h > 0 or high_risk_ports > 0 or open_incidents > 0):
             return True
         return False
 

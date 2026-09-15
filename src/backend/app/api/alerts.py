@@ -8,6 +8,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from app.core.database import get_db
 from app.services.alert_query import AlertQueryService
+from app.services.alert_sla import AlertSlaService
 
 router = APIRouter()
 
@@ -68,7 +69,25 @@ async def list_alerts(
 
         # 格式化响应
         formatted_alerts = []
+        sla_service = AlertSlaService(db)
         for alert in alerts:
+            agent_ip = alert.get("agent", {}).get("ip")
+            ts = alert.get("timestamp") or alert.get("@timestamp")
+            sla_dict = None
+            if agent_ip and ts:
+                try:
+                    if isinstance(ts, str):
+                        ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    else:
+                        ts_dt = ts
+                    if ts_dt.tzinfo is None:
+                        from datetime import timezone
+                        ts_dt = ts_dt.replace(tzinfo=timezone.utc)
+                    sla_state = sla_service.compute_sla_for_alert(db, agent_ip, ts_dt)
+                    sla_dict = sla_state.to_dict()
+                except Exception:
+                    # SLA 计算失败不影响告警主体返回
+                    sla_dict = None
             formatted_alerts.append({
                 "id": alert.get("id") or alert.get("_id"),
                 "timestamp": alert.get("timestamp") or alert.get("@timestamp"),
@@ -80,10 +99,12 @@ async def list_alerts(
                 "agent": {
                     "id": alert.get("agent", {}).get("id"),
                     "name": alert.get("agent", {}).get("name"),
-                    "ip": alert.get("agent", {}).get("ip")
+                    "ip": agent_ip
                 },
                 "location": alert.get("location"),
-                "full_log": alert.get("full_log")
+                "full_log": alert.get("full_log"),
+                # === 治本方案：SLA 注入 ===
+                "sla": sla_dict,
             })
 
         return {
@@ -95,6 +116,30 @@ async def list_alerts(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询告警失败: {str(e)}")
+
+
+@router.get("/sla-config")
+async def get_sla_config():
+    """返回 5 档业务影响的 SLA 配置（治本方案 · 2026-09-14）。
+
+    前端用此端点渲染 SLA 设置页 / 详情页 SLA 倒计时颜色映射。
+    配置源：app.core.criticality.BUSINESS_IMPACT_SLA（与评分/SLA 联动使用）
+    """
+    from app.core.criticality import (
+        BUSINESS_IMPACT_SLA, BUSINESS_IMPACT_LABELS, BUSINESS_IMPACT_COLORS,
+    )
+    return {
+        "items": [
+            {
+                "business_impact": code,
+                "label": BUSINESS_IMPACT_LABELS[code],
+                "color": BUSINESS_IMPACT_COLORS[code],
+                **cfg,
+            }
+            for code, cfg in BUSINESS_IMPACT_SLA.items()
+        ],
+        "default_business_impact": "normal",
+    }
 
 
 @router.get("/statistics")

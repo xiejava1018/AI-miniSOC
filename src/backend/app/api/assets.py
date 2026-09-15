@@ -42,7 +42,10 @@ async def list_assets(
     asset_ip: Optional[str] = None,
     name: Optional[str] = None,
     asset_type: Optional[str] = None,
-    criticality: Optional[str] = None,
+    criticality: Optional[str] = Query(None, description="DEPRECATED: 兼容 4 档 critical/high/medium/low，等价于 data_sensitivity 反向派生"),
+    business_impact: Optional[str] = Query(None, description="业务影响 5 档 core/important/normal/auxiliary/ignorable"),
+    data_sensitivity: Optional[str] = Query(None, description="数据敏感度 5 档 extreme/high/medium/low/negligible"),
+    protection_level: Optional[str] = Query(None, description="等保等级 5 档 level_5~level_1"),
     asset_status: Optional[str] = None,
     network_zone: Optional[str] = None,
     data_source: Optional[str] = None,
@@ -50,6 +53,7 @@ async def list_assets(
     db: Session = Depends(get_db)
 ):
     """获取资产列表"""
+    from app.core.criticality import legacy_criticality_from_data_sensitivity
     query = db.query(Asset)
 
     # 筛选条件
@@ -60,7 +64,22 @@ async def list_assets(
     if asset_type:
         query = query.filter(Asset.asset_type == asset_type)
     if criticality:
-        query = query.filter(Asset.criticality == criticality)
+        # DEPRECATED 兼容：旧 criticality 筛选自动转 5 档 data_sensitivity 筛选
+        legacy_to_new = {
+            "critical": "extreme",
+            "high":     "high",
+            "medium":   "medium",
+            "low":      "low",
+        }
+        new_val = legacy_to_new.get(criticality)
+        if new_val:
+            query = query.filter(Asset.data_sensitivity == new_val)
+    if business_impact:
+        query = query.filter(Asset.business_impact == business_impact)
+    if data_sensitivity:
+        query = query.filter(Asset.data_sensitivity == data_sensitivity)
+    if protection_level:
+        query = query.filter(Asset.protection_level == protection_level)
     if asset_status:
         query = query.filter(Asset.asset_status == asset_status)
     if network_zone:
@@ -82,7 +101,7 @@ async def list_assets(
     # 分页
     assets = query.offset(skip).limit(limit).all()
 
-    # 手动转换为响应格式
+    # 手动转换为响应格式（三维度 + criticality 兼容垫片）
     items = []
     for asset in assets:
         items.append(AssetResponse(
@@ -91,7 +110,12 @@ async def list_assets(
             asset_ip=asset.asset_ip,
             public_ip=asset.public_ip,
             asset_type=asset.asset_type,
-            criticality=asset.criticality,
+            # === 治本方案三维度 ===
+            business_impact=asset.business_impact,
+            data_sensitivity=asset.data_sensitivity,
+            protection_level=asset.protection_level,
+            # criticality：兼容垫片（从 data_sensitivity 派生）
+            criticality=asset.criticality or legacy_criticality_from_data_sensitivity(asset.data_sensitivity),
             owner=asset.owner,
             business_unit=asset.business_unit,
             asset_description=asset.asset_description,
@@ -244,6 +268,8 @@ async def get_asset_overview(db: Session = Depends(get_db)):
 @router.get("/{asset_id}/", response_model=AssetResponse)
 async def get_asset(asset_id: str, db: Session = Depends(get_db)):
     """获取单个资产详情"""
+    from app.core.criticality import legacy_criticality_from_data_sensitivity
+
     try:
         asset_id_uuid = uuid.UUID(asset_id)
     except ValueError:
@@ -254,7 +280,11 @@ async def get_asset(asset_id: str, db: Session = Depends(get_db)):
     if not asset:
         raise HTTPException(status_code=404, detail="资产不存在")
 
-    return AssetResponse.model_validate(asset)
+    # 响应填充 criticality 兼容垫片（从 data_sensitivity 派生）
+    resp = AssetResponse.model_validate(asset)
+    if resp.criticality is None:
+        resp.criticality = legacy_criticality_from_data_sensitivity(asset.data_sensitivity)
+    return resp
 
 
 @router.get("/{asset_id}/summary")
@@ -285,36 +315,61 @@ async def get_asset_summary(asset_id: str, db: Session = Depends(get_db)):
 async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
     """创建资产"""
     from app.services.audit_log_service import AuditLogService
-    from app.core.auth import get_current_user
-    from fastapi import Request
+    from app.core.criticality import (
+        LEGACY_CRITICALITY_MAP, legacy_criticality_from_data_sensitivity,
+    )
 
-    # 可选：检查IP是否已存在，如果存在则返回已存在的资产（而不是阻止创建）
-    # 这里我们允许创建重复IP的资产，因为不同资产可能使用相同IP（比如内网IP复用）
-    # 如果需要严格唯一性，可以取消注释以下代码：
-    # existing = db.query(Asset).filter(Asset.asset_ip == asset_data.asset_ip).first()
-    # if existing:
-    #     raise HTTPException(status_code=400, detail="该IP地址已存在")
+    payload = asset_data.model_dump()
 
-    # 创建资产
-    asset = Asset(**asset_data.model_dump())
+    # 治本方案：旧 criticality 字段不独立存；如未显式提供三维度但给了 criticality，则从旧值推导
+    legacy_crit = payload.pop("criticality", None)
+    if legacy_crit and (
+        payload.get("data_sensitivity") in (None, "medium")
+        or payload.get("business_impact") in (None, "normal")
+    ):
+        mapping = LEGACY_CRITICALITY_MAP.get(legacy_crit)
+        if mapping:
+            # 只在三维度未显式给定（或为默认值）时用旧值推导
+            if payload.get("data_sensitivity") in (None, "medium"):
+                payload["data_sensitivity"] = mapping["data_sensitivity"]
+            if payload.get("business_impact") in (None, "normal"):
+                payload["business_impact"] = mapping["business_impact"]
+            if payload.get("protection_level") in (None, "level_2"):
+                payload["protection_level"] = mapping["protection_level"]
+    # criticality 仍写 DB（保留 6 个月过渡），但仅作为审计轨迹
+    if legacy_crit:
+        payload["criticality"] = legacy_crit
+    elif payload.get("data_sensitivity"):
+        payload["criticality"] = legacy_criticality_from_data_sensitivity(payload["data_sensitivity"])
+
+    asset = Asset(**payload)
     db.add(asset)
     db.commit()
     db.refresh(asset)
 
-    # 记录审计日志（在后台任务中，避免延迟响应）
+    # 记录审计日志
     audit_service = AuditLogService(db)
     audit_service.create_audit_log(
-        user_id=None,  # 从上下文获取
-        username="system",  # 临时使用
+        user_id=None,
+        username="system",
         action="CREATE",
         resource_type="asset",
-        resource_id=None,  # 资产ID是UUID，resource_id字段是BigInteger，不传
+        resource_id=None,
         resource_name=asset.name or asset.asset_ip,
-        new_values={"asset_ip": asset.asset_ip, "asset_type": asset.asset_type},
+        new_values={
+            "asset_ip": asset.asset_ip,
+            "asset_type": asset.asset_type,
+            "business_impact": asset.business_impact,
+            "data_sensitivity": asset.data_sensitivity,
+            "protection_level": asset.protection_level,
+        },
         status="success"
     )
 
-    return AssetResponse.model_validate(asset)
+    resp = AssetResponse.model_validate(asset)
+    if resp.criticality is None:
+        resp.criticality = legacy_criticality_from_data_sensitivity(asset.data_sensitivity)
+    return resp
 
 
 @router.put("/{asset_id}", response_model=AssetResponse)
@@ -322,6 +377,9 @@ async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
 async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Depends(get_db)):
     """更新资产"""
     from app.services.audit_log_service import AuditLogService
+    from app.core.criticality import (
+        LEGACY_CRITICALITY_MAP, legacy_criticality_from_data_sensitivity,
+    )
 
     try:
         asset_id_uuid = uuid.UUID(asset_id)
@@ -333,10 +391,25 @@ async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Dep
     if not asset:
         raise HTTPException(status_code=404, detail="资产不存在")
 
-    # 保存旧值用于审计日志
-    old_values = {}
     update_data = asset_data.model_dump(exclude_unset=True)
 
+    # 治本方案：旧 criticality 字段作为审计轨迹，如同时给了 criticality 而三维度未变，自动同步
+    legacy_crit = update_data.pop("criticality", None)
+    if legacy_crit is not None:
+        mapping = LEGACY_CRITICALITY_MAP.get(legacy_crit)
+        # 如果请求没明确给三维度，从旧值推导（保持 6 个月过渡期写入兼容）
+        if mapping and "business_impact" not in update_data and "data_sensitivity" not in update_data:
+            update_data["business_impact"] = mapping["business_impact"]
+            update_data["data_sensitivity"] = mapping["data_sensitivity"]
+            update_data["protection_level"] = mapping["protection_level"]
+        # criticality 仍保留为审计字段
+        update_data["criticality"] = legacy_crit
+    # 同步 criticality（与 data_sensitivity 保持一致）保证读时派生不漂移
+    elif "data_sensitivity" in update_data:
+        update_data["criticality"] = legacy_criticality_from_data_sensitivity(update_data["data_sensitivity"])
+
+    # 保存旧值用于审计日志
+    old_values = {}
     for field in update_data.keys():
         old_value = getattr(asset, field, None)
         if old_value is not None:
@@ -357,14 +430,20 @@ async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Dep
             username="system",
             action="UPDATE",
             resource_type="asset",
-            resource_id=None,  # 资产ID是UUID，resource_id字段是BigInteger，不传
+            resource_id=None,
             resource_name=asset.name or asset.asset_ip,
             old_values=old_values if old_values else None,
             new_values=update_data,
             status="success"
         )
 
-    return AssetResponse.model_validate(asset)
+    # v1 (§7.2.5 F10)：返回时重载业务系统名称
+    sys_names = [link.system.name for link in (asset.business_links or []) if link.system]
+    resp = AssetResponse.model_validate(asset)
+    resp.business_system_names = sys_names
+    if resp.criticality is None:
+        resp.criticality = legacy_criticality_from_data_sensitivity(asset.data_sensitivity)
+    return resp
 
 
 @router.delete("/{asset_id}")

@@ -39,7 +39,6 @@ class Asset(Base):
     asset_description = Column(Text)
     asset_status = Column(String)
     status_updated_at = Column(DateTime(timezone=True))
-    parent_id = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -53,12 +52,58 @@ class Asset(Base):
     name = Column(String(255))
     mac_address = Column(MACADDR)
     asset_type = Column(String(50), default="other")
-    # 决策1（2026-08-15）：criticality 统一四档 critical/high/medium/low（存量 'normal' 已回填 'medium'）
-    # 前端展示经字典 asset_criticality 中文化（严重/高/中/低），与 vulnerability_ai.CRITICALITY_SCORES 对齐
-    criticality = Column(String(20), default="medium")
+    # === 重要性三维分解（治本方案 · 2026-09-14）===========================
+    # 第一性原理（ISO 27005 / NIST SP 800-30 / 等保 2.0）：
+    #   业务影响(BIA) + 数据敏感度(CIA) + 等保等级
+    # 三个维度独立、各 5 档、互不重叠。详见 app/core/criticality.py。
+    #
+    # business_impact：业务影响维度（5 档 core/important/normal/auxiliary/ignorable）
+    #   - 驱动：处置 SLA、推送优先级、应急响应
+    #   - 不进风险评分公式
+    business_impact = Column(
+        String(20),
+        nullable=False,
+        default="normal",
+        server_default="normal",
+        comment="业务影响 5 档 core/important/normal/auxiliary/ignorable，详见 app/core/criticality.py",
+    )
+    # data_sensitivity：数据敏感度（CIA 维度，5 档 extreme/high/medium/low/negligible）
+    #   - 驱动：风险评分加权因子（F1.1 替代原 criticality 加权）
+    #   - 与 vulnerability_ai/asset_risk 消费的口径一致
+    data_sensitivity = Column(
+        String(20),
+        nullable=False,
+        default="medium",
+        server_default="medium",
+        comment="数据敏感度 5 档 extreme/high/medium/low/negligible，进风险评分",
+    )
+    # protection_level：等保等级（5 档 level_5~level_1，合规锚点）
+    #   - 业务系统有则资产继承；无则默认 level_2
+    protection_level = Column(
+        String(20),
+        nullable=False,
+        default="level_2",
+        server_default="level_2",
+        comment="等保等级 5 档 level_5~level_1，合规报告/等保检查用",
+    )
+
+    # criticality：DEPRECATED（2026-09-14 起 6 个月过渡期）
+    # 保留为 read-only alias，写入路径已关闭。外部读时自动从 data_sensitivity 派生。
+    # 6 个月后（约 2027-03-14）由迁移 op.drop_column 清除。
+    criticality = Column(
+        String(20),
+        default="medium",
+        comment="DEPRECATED: 改用 business_impact + data_sensitivity + protection_level 三维度，读时自动从 data_sensitivity 派生",
+    )
     owner = Column(String(255))
     business_unit = Column(String(255))
     wazuh_agent_id = Column(String(100))
+
+    # P3/F3.2 §7.0 WO-0e（2026-09-13）：parent_id 已由迁移 t3u4v5w6x7y8 改为
+    # UUID + FK self-reference（虚拟机/容器→宿主机）。模型侧必须同步声明，
+    # 否则 alembic autogenerate 会把 DB 里现有的 UUID 列当新增、产生 drop+recreate。
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("soc_assets.id", ondelete="SET NULL"), nullable=True)
+
 
     # 合规 + 应急联系字段(详情页 v2 引入)
     data_classification = Column(String(20), default="internal")  # public/internal/confidential/secret

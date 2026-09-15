@@ -72,7 +72,12 @@ DEFAULT_RULES: dict = {
         "cap": 100,
     },
     "importance": {
-        "criticality": {"critical": 100, "high": 70, "medium": 40, "low": 20},
+        # 治本方案 2026-09-14：资产重要性改用 data_sensitivity（5 档 CIA 维度）加权
+        # 业务影响（business_impact）不进评分公式，只进 SLA / 推送优先级
+        # criticality 列保留为 deprecated 兼容垫片，读时自动从 data_sensitivity 派生
+        "data_sensitivity": {"extreme": 100, "high": 75, "medium": 50, "low": 25, "negligible": 10},
+        # 旧 criticality 4 档映射（保留供 6 个月过渡期读取旧库存量）
+        "criticality": {"critical": 100, "high": 75, "medium": 50, "low": 25},
         "data_classification_bonus": {"secret": 15, "confidential": 10, "internal": 0, "public": 0},
     },
     "summary": {
@@ -360,15 +365,36 @@ class AssetRiskService:
                 "inputs": {"window_days": cfg["window_days"], "priority_counts": counts}}
 
     def _score_importance(self, asset: Asset, rules: dict) -> dict:
+        """重要性维度评分（治本方案 · 2026-09-14）：
+        用 data_sensitivity（5 档 CIA）替代原 criticality（4 档）。
+
+        - business_impact 不进评分公式，仅进 SLA / 推送优先级
+        - criticality 列保留为 deprecated 兼容垫片（与 data_sensitivity 同步）
+        - 双轨回退：优先读 data_sensitivity；如果资产仅有 criticality（极少见，迁移边界），自动从 criticality 推导
+        """
+        from app.core.criticality import (
+            DATA_SENSITIVITY_RISK_WEIGHT, legacy_criticality_from_data_sensitivity,
+            LEGACY_CRITICALITY_MAP,
+        )
         cfg = rules["importance"]
-        crit = (asset.criticality or "medium").lower()
-        base = cfg["criticality"].get(crit, cfg["criticality"]["medium"])
+        # 1. 优先读 data_sensitivity
+        ds = (asset.data_sensitivity or "").lower() or None
+        crit = (asset.criticality or "").lower() or None
+        # 双轨回退：data_sensitivity 缺失但 criticality 有 → 从 criticality 推 data_sensitivity
+        if not ds and crit:
+            mapping = LEGACY_CRITICALITY_MAP.get(crit, {})
+            ds = mapping.get("data_sensitivity")
+        # 默认 medium（与 DB DEFAULT 一致）
+        ds = ds or "medium"
+        # 用新 5 档权重
+        base = DATA_SENSITIVITY_RISK_WEIGHT.get(ds, cfg.get("data_sensitivity", {}).get(ds, 50))
         dc = (asset.data_classification or "internal").lower()
         bonus = cfg["data_classification_bonus"].get(dc, 0)
         score = min(100, base + bonus)
-        reasons = [f"重要性 {crit}" + (f"，数据分级 {dc}（+{bonus}）" if bonus else "")]
+        reasons = [f"数据敏感度 {ds}" + (f"，数据分级 {dc}（+{bonus}）" if bonus else "")]
         return {"score": score, "data_gap": False, "reasons": reasons,
-                "inputs": {"criticality": crit, "data_classification": dc}}
+                "inputs": {"data_sensitivity": ds, "data_classification": dc,
+                           "criticality_legacy": crit}}
 
     # ---------- 聚合 ----------
 
