@@ -22,6 +22,7 @@
 | [AI / LLM / F2.x](#ai--llm--f2x) | 4 | L2 复合查询、变更影响分析、报告生成、W0 评测集 |
 | [配置中心](#配置中心) | 3 | 数据源走 DB、配置审计合并、过期文档评审 |
 | [业务系统管理](#业务系统管理) | 4 | F9 CRUD、菜单、对齐角色页、负责人/部门/电话 |
+| [资产字段 / 数据模型](#资产字段--数据模型) | 1 | network_zone 5→8 值改造、merge 双 head、字典 seed + backfill 脚本 |
 | [告警分级 / 风险评分](#告警分级--风险评分) | 3 | alert_levels 全项目唯一、Top 10 D7 vs F1.1 口径澄清、rising 修复 |
 | [数据补齐地基 P0](#数据补齐地基-p0) | 1 | F9/F10/F11、parent_id 模型对齐、后端冷启动 8s+ |
 | [采集器 / 僵尸进程 / 凭证](#采集器--僵尸进程--凭证) | 1 | tplink asyncio.run 循环错位、wazuh yaml 不展开 ${VAR} |
@@ -85,6 +86,10 @@
 ## 业务系统管理
 
 （见"菜单 / UI / icon"中的 4 条业务系统记录）
+
+## 资产字段 / 数据模型
+
+- **2026-XX-XX：network_zone 5→8 值改造** — 公网/DMZ/生产/办公/开发/管理网/隔离区/未分类；alembic merge 双 head（628109e83308）；字典 seed 8 值 + 历史 intranet/other 合并；backfill 脚本 5 条高置信度二次回填规则；`other` 不可信统一 `unknown`；云服务器按角色选（SLB=public/ECS=dmz or production/蜜罐=isolated/堡垒机=management）
 
 ## 告警分级 / 风险评分
 

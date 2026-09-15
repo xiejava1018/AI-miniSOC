@@ -15,8 +15,8 @@
 | 事实 | 当前值 | 来源 |
 |---|---|---|
 | 业务表数 | 66（全部 `soc_` 前缀） | `Base.metadata` |
-| alembic 迁移文件 | 62 | `alembic/versions/` |
-| **alembic heads** | **2 个**（`r4s5t6u7v8w9`, `v7w8x9y0z1a2`） | `alembic heads` |
+| alembic 迁移文件 | 63 | `alembic/versions/` |
+| **alembic heads** | **1 个**（`628109e83308`，2026-XX-XX 由 network_zone 改造合并双 head） | `alembic heads` |
 | 顶级菜单 | 11 个 | `soc_menus WHERE parent_id IS NULL` |
 | X1 角色 | admin / operator / viewer / auditor（+ 历史 user/readonly/test_role） | `soc_roles` |
 | Wazuh URL | https://192.168.0.40:55000 | `.env` |
@@ -27,7 +27,7 @@
 | 测试 DB | `AI-miniSOC-db_test`（独立库） | `TEST_DATABASE_URL` |
 
 **关键警告**：
-- **alembic 是 2 个 head**——CLAUDE.md 老版本一直说"单 head 线性"是过期的。**升级前必须先确认哪个是真正要追的 head**，或先 merge 迁移线。
+- **alembic 已合并为单 head `628109e83308`**（2026-XX-XX network_zone 改造时合并原 `r4s5t6u7v8w9` + `v7w8x9y0z1a2`）。CLAUDE.md 老版本说"双 head"是过期的，新迁移直接挂这个唯一 head 下游即可。
 - 部署时**本地 Mac 的 `.env` ≠ 生产服务器 `.env`**——前者连远端 testdb，后者连 102 本机生产库。改 env 必须两处都改。
 
 **如何更新本快照**：
