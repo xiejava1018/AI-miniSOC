@@ -17,7 +17,7 @@
   精确 IP 表优先（用于"同私网段但不同云商"的撞段区分），
   其次 CIDR 前缀表，最后兜底 'default'。
 
-命名规范：小写 + 连字符；云商-VPC段 / 地点-用途 / vps-公网IP。
+命名规范：小写 + 连字符；lan-用途（内网）/ 云商-VPC段 / vps-公网IP。
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ _EXACT: dict[str, str] = {
 
 # CIDR 前缀 → segment（按前缀长度降序匹配无所谓，前缀互不重叠）
 _PREFIX: list[tuple[str, str]] = [
-    ("192.168.0.",   "hq-lan"),        # 内网主段（TP-Link 主网）
-    ("192.168.199.", "hq-lan-199"),    # 内网次段（独立广播域，访客/次 SSID）
+    ("192.168.0.",   "lan-main"),      # 内网主段（TP-Link 主网）
+    ("192.168.199.", "lan-199"),       # 内网次段（独立广播域，访客/次 SSID）
     ("172.18.",      "aliyun-172.18"), # 阿里云 VPC（两台 ECS 确认同 VPC）
 ]
 

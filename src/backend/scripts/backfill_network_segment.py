@@ -7,9 +7,9 @@ network_segment 回填脚本（2026-XX-XX，配合 network_zone 8 值改造）
 76 台资产 network_segment 全是 'default'，多网段环境（内网 + 多云）下
 唯一约束 (network_segment, asset_ip) 的区分能力完全没用上。
 
-命名规范（与用户确认，2026-XX-XX）：
-  hq-lan                内网主段 192.168.0.0/24（TP-Link 主网）
-  hq-lan-199            内网次段 192.168.199.0/24（独立广播域，访客/次 SSID）
+命名规范（与用户确认，2026-XX-XX；同日 hq-lan 系更名为 lan-main 系）：
+  lan-main              内网主段 192.168.0.0/24（TP-Link 主网）
+  lan-199               内网次段 192.168.199.0/24（独立广播域，访客/次 SSID）
   aliyun-172.18         阿里云 VPC 172.18.x（两台 ECS 确认同 VPC）
   volc-172.16           火山引擎 VPC 172.16.x（lavm 前缀命名规则）
   vps-202.189.23.82     自建 VPS（私网 172.16.0.51 与火山引擎撞段，按公网 IP 区分）
@@ -47,10 +47,10 @@ DRY_RUN = "--dry-run" in sys.argv
 # 规则必须与 app/services/network_segment.py 的 _EXACT/_PREFIX 保持一致——
 # 那里是唯一规则来源（sync handler 增量同步也用它），本脚本只做存量批量回填。
 RULES = [
-    ("内网主段 192.168.0.0/24", "hq-lan",
-     "asset_ip LIKE '192.168.0.%' AND network_segment != 'hq-lan'", {}),
-    ("内网次段 192.168.199.0/24", "hq-lan-199",
-     "asset_ip LIKE '192.168.199.%' AND network_segment != 'hq-lan-199'", {}),
+    ("内网主段 192.168.0.0/24", "lan-main",
+     "asset_ip LIKE '192.168.0.%' AND network_segment != 'lan-main'", {}),
+    ("内网次段 192.168.199.0/24", "lan-199",
+     "asset_ip LIKE '192.168.199.%' AND network_segment != 'lan-199'", {}),
     ("阿里云 VPC 172.18.x", "aliyun-172.18",
      "asset_ip LIKE '172.18.%' AND network_segment != 'aliyun-172.18'", {}),
     ("火山引擎 VPC 172.16.0.10", "volc-172.16",
