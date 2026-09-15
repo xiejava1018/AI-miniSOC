@@ -45,6 +45,9 @@ export interface GraphLink {
   evidence: Record<string, any>
   sourceLabel: string
   updated: string | null
+  firstSeen?: string | null
+  lastSeen?: string | null
+  sources?: string[]
 }
 
 export interface GraphCenter {

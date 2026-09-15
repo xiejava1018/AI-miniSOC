@@ -99,8 +99,16 @@ async def lifespan(app: FastAPI):
     start_scanner_watchdog()
     start_central_scan_scheduler()
     # P5 资产知识图谱：5 个 builder + 过期边清理（@track_task 包装，框架接管调度）
-    from app.services.graph.scheduler import start_graph_builders
-    await start_graph_builders()
+    # v1.5 补上环境变量开关：设为 "false" 可在主 event loop 不被同步 builder
+    # 阻塞的场景下启动后端（例如没数据、调试 API、手动跑 builder）。
+    import os as _os
+    if _os.environ.get("GRAPH_BUILDERS_ENABLED", "true").lower() == "true":
+        from app.services.graph.scheduler import start_graph_builders
+        await start_graph_builders()
+    else:
+        logging.getLogger(__name__).info(
+            "GRAPH_BUILDERS_ENABLED=false, 跳过 graph scheduler 启动（API 可用，builder 不跑）"
+        )
     try:
         yield
     finally:

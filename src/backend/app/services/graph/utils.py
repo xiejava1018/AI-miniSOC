@@ -220,6 +220,7 @@ def upsert_edge(
     last_seen: Optional[datetime] = None,
     expires_at: Optional[datetime] = None,
     first_seen: Optional[datetime] = None,
+    _now: Optional[datetime] = None,  # v1.6: 允许传入 now 避免每条边都 new
 ) -> None:
     """幂等 upsert 一条边（以 (src_key, dst_key, rel_type) 为唯一键）。
 
@@ -231,7 +232,7 @@ def upsert_edge(
     sources = sources or []
     last_seen_by_source = last_seen_by_source or {}
     evidence = evidence or {}
-    now = datetime.now(timezone.utc)
+    now = _now or datetime.now(timezone.utc)
 
     # 检查是否存在
     existing = (
@@ -245,21 +246,33 @@ def upsert_edge(
     )
 
     if existing is None:
-        edge = GraphEdge(
-            src_key=src_key,
-            dst_key=dst_key,
-            rel_type=rel_type,
-            direction=direction,
-            weight=weight,
-            confidence=confidence,
-            sources=sources,
-            last_seen_by_source=last_seen_by_source,
-            evidence=evidence,
-            first_seen=first_seen or now,
-            last_seen=last_seen or now,
-            expires_at=expires_at,
+        # v1.6 修复：改用 pg_insert ON CONFLICT DO NOTHING 替代 db.add。
+        # 原版 db.add() 在同 session 重复 add 同一 (src, dst, rel) 时，
+        # flush 触发 unique 冲突而非去重。
+        # DO NOTHING 让 DB 处理冲突，再 SELECT 看是否需要 UPDATE。
+        stmt = (
+            pg_insert(GraphEdge)
+            .values(
+                src_key=src_key,
+                dst_key=dst_key,
+                rel_type=rel_type,
+                direction=direction,
+                weight=weight,
+                confidence=confidence,
+                sources=sources,
+                last_seen_by_source=last_seen_by_source,
+                evidence=evidence,
+                first_seen=first_seen or now,
+                last_seen=last_seen or now,
+                expires_at=expires_at,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["src_key", "dst_key", "rel_type"]
+            )
         )
-        db.add(edge)
+        db.execute(stmt)
+        # ON CONFLICT 跳过后，existing 还是 None；如果上面真的写入了，
+        # 我们就跳出（合并留给下次重建）
         return
 
     # 已存在：合并

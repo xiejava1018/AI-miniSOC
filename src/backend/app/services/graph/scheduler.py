@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 from app.core.database import SessionLocal
 from app.services.graph import delete_expired_edges
@@ -51,13 +53,107 @@ FIRST_RUN_DELAY = 60                     # 启动后 60s 首次跑
 
 _tasks: list[asyncio.Task] = []
 
+# 全进程 builder 串行锁（2026-09-14 v1.8 修订）：
+# 必须用 **threading.Lock 且在工作线程内获取**，不能用 asyncio.Semaphore——
+# @track_task 的 timeout 会 cancel 协程，asyncio 锁会随 cancel 提前释放，
+# 但 asyncio.to_thread 的工作线程不可中断、仍在写库，导致下一个 builder 进临界区，
+# 两个全量重建在 soc_graph_nodes 上行锁互等（Lock/transactionid）。
+# threading.Lock 随线程生命周期严格持有：前一个线程不结束，后一个拿不到锁。
+_builder_thread_lock = threading.Lock()
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class _BuilderBusy(RuntimeError):
+    """另一个 builder 正在跑（非阻塞获取锁失败）。"""
+
+
+def _run_builder_in_thread(
+    fn: Callable[[], dict], name: str, *, wait: bool = True
+) -> dict:
+    """在线程工作函数内部串行获取锁 + 创建/提交/回滚/关闭独立 Session（**同步**）。
+
+    关键：
+      - threading.Lock 在工作线程内获取，不被 asyncio cancel 提前释放。
+      - Session 也在工作线程里创建并关闭（Session/连接不跨线程共享）。
+      - 成功 commit、异常 rollback、finally close，杜绝 idle in transaction 僵尸。
+
+    Args:
+        wait: True 拿不到锁就阻塞等（HTTP /rebuild 需要拿结果）；
+              False 拿不到立即抛 _BuilderBusy（定时任务本轮跳过，下轮再试）。
+    """
+    if wait:
+        _builder_thread_lock.acquire()
+    elif not _builder_thread_lock.acquire(blocking=False):
+        logger.warning("graph builder [%s] skipped: another builder is running", name)
+        raise _BuilderBusy(name)
+    try:
+        db = SessionLocal()
+        try:
+            result = fn(db)
+            db.commit()
+            return result
+        except Exception:
+            db.rollback()
+            logger.exception("graph builder [%s] failed (rolled back)", name)
+            raise
+        finally:
+            db.close()
+    finally:
+        _builder_thread_lock.release()
+
+
+async def _offload(fn: Callable[[], dict], name: str) -> dict:
+    """定时循环专用 offload。
+
+    - 非阻塞抢锁：另一个 builder 在跑时本轮直接跳过（下轮再试），不堆积。
+    - 异常不抱（返回 error dict），不让 asyncio 循环崩。
+    """
+    return await run_builder_async(fn, name, raise_on_error=False, wait=False)
+
+
+async def run_builder_async(
+    fn: Callable[[], dict], name: str, *,
+    raise_on_error: bool = False, wait: bool = True,
+) -> dict:
+    """对外的 builder offload 入口（调度循环与 HTTP /rebuild 共用）。
+
+    串行保证来自工作线程内的 ``_builder_thread_lock``（threading.Lock），
+    **全进程任意时刻只有一个全量重建事务在跑**。锁在不可中断的工作线程内
+    获取/释放，不会被 @track_task 的 timeout-cancel 提前释放（曾因此导致两个
+    identity builder 并发、在 soc_graph_nodes 行锁互等）。
+
+    Args:
+        fn: 接收 ``db: Session`` 的同步工作函数。
+        name: 日志用名称。
+        wait: True 拿不到锁就等（HTTP 端点要拿结果）；False 抢不到立即返回
+              ``{"skipped": ...}``（定时任务本轮跳过）。
+        raise_on_error: True 时异常向上抛（HTTP 返回 500）；False 返回 error dict。
+    """
+    logger.info("graph builder [%s] queued (offloaded to thread, wait=%s)", name, wait)
+    t0 = _utcnow()
+    try:
+        result = await asyncio.to_thread(_run_builder_in_thread, fn, name, wait=wait)
+        logger.info("graph builder [%s] done in %.1fs", name,
+                    (_utcnow() - t0).total_seconds())
+        return result
+    except _BuilderBusy:
+        return {"skipped": "another builder is running"}
+    except Exception as exc:
+        logger.error("graph builder [%s] failed after %.1fs: %s",
+                     name, (_utcnow() - t0).total_seconds(), exc)
+        if raise_on_error:
+            raise
+        return {"error": exc.__class__.__name__}
+
+
 # ---------------------------------------------------------------------------
 # 6 个单跑任务（@track_task 包装，提供给手动触发 + asyncio 循环复用）
+#
+# v1.8（2026-09-13）：所有同步 builder 代码经 asyncio.to_thread 在线程池跑，
+# 不再阻塞 uvicorn 单 worker event loop；事务在工作线程内 commit/rollback。
 # ---------------------------------------------------------------------------
 
 
@@ -67,19 +163,14 @@ def _utcnow() -> datetime:
     task_type="scheduled",
     schedule_expr="@every 1h",
     expected_interval_s=IDENTITY_INTERVAL_S,
-    timeout_s=300,
+    timeout_s=900,
 )
 async def rebuild_identity_task() -> dict:
     """身份关系边构建（login_to / login_from / session_on / external_access / owned_by）"""
-    db = SessionLocal()
-    try:
-        builder = IdentityGraphBuilder(db, window_days=30)
-        stats = builder.rebuild_all()
-        update_progress(stage="done", percent=100)
-        logger.info("rebuild_identity_task done: %s", stats)
-        return stats
-    finally:
-        db.close()
+    return await _offload(
+        lambda db: IdentityGraphBuilder(db, window_days=30).rebuild_all(),
+        "identity",
+    )
 
 
 @track_task(
@@ -91,16 +182,14 @@ async def rebuild_identity_task() -> dict:
     timeout_s=900,
 )
 async def rebuild_asset_port_vuln_task() -> dict:
-    """资产-端口-漏洞边构建（has_port / has_vuln / port_has_vuln）"""
-    db = SessionLocal()
-    try:
-        builder = AssetPortVulnBuilder(db)
-        stats = builder.rebuild_all()
-        update_progress(stage="done", percent=100)
-        logger.info("rebuild_asset_port_vuln_task done: %s", stats)
-        return stats
-    finally:
-        db.close()
+    """资产-端口-漏洞边构建（has_port / has_vuln / port_has_vuln）。
+
+    每日任务用 wait=True：撞车时排队等锁，保证当天必跑（而不是 skip 后等明天）。
+    """
+    return await run_builder_async(
+        lambda db: AssetPortVulnBuilder(db).rebuild_all(),
+        "asset_port_vuln", wait=True,
+    )
 
 
 @track_task(
@@ -109,19 +198,17 @@ async def rebuild_asset_port_vuln_task() -> dict:
     task_type="scheduled",
     schedule_expr="@daily 04:00",
     expected_interval_s=24 * 3600,
-    timeout_s=600,
+    timeout_s=900,
 )
 async def rebuild_topology_task() -> dict:
-    """拓扑推断边构建（same_segment / shared_tag）"""
-    db = SessionLocal()
-    try:
-        builder = TopologyBuilder(db)
-        stats = builder.rebuild_all()
-        update_progress(stage="done", percent=100)
-        logger.info("rebuild_topology_task done: %s", stats)
-        return stats
-    finally:
-        db.close()
+    """拓扑推断边构建（same_segment / shared_tag）。
+
+    每日任务 wait=True（当天必跑）；实测 73 台资产产生 ~2863 条推断边，
+    单边 upsert 串行约 6 分钟，timeout 放宽到 900s。
+    """
+    return await run_builder_async(
+        lambda db: TopologyBuilder(db).rebuild_all(), "topology", wait=True,
+    )
 
 
 @track_task(
@@ -134,15 +221,7 @@ async def rebuild_topology_task() -> dict:
 )
 async def rebuild_alert_group_task() -> dict:
     """告警簇聚合边构建（alerted_on / co_alerted）"""
-    db = SessionLocal()
-    try:
-        builder = AlertGroupBuilder(db)
-        stats = builder.rebuild_all()
-        update_progress(stage="done", percent=100)
-        logger.info("rebuild_alert_group_task done: %s", stats)
-        return stats
-    finally:
-        db.close()
+    return await _offload(lambda db: AlertGroupBuilder(db).rebuild_all(), "alert_group")
 
 
 @track_task(
@@ -155,15 +234,7 @@ async def rebuild_alert_group_task() -> dict:
 )
 async def rebuild_manual_task() -> dict:
     """人工登记关系校验（belongs_to_system / runs_on / owned_by / system_owned_by）"""
-    db = SessionLocal()
-    try:
-        builder = ManualRelationBuilder(db)
-        stats = builder.rebuild_all()
-        update_progress(stage="done", percent=100)
-        logger.info("rebuild_manual_task done: %s", stats)
-        return stats
-    finally:
-        db.close()
+    return await _offload(lambda db: ManualRelationBuilder(db).rebuild_all(), "manual")
 
 
 @track_task(
@@ -176,15 +247,13 @@ async def rebuild_manual_task() -> dict:
 )
 async def cleanup_expired_edges_task() -> dict:
     """删除 expires_at < now() 的边（观测类边按窗口衰减淘汰）"""
-    db = SessionLocal()
-    try:
+    def _work(db) -> dict:
         deleted = delete_expired_edges(db)
-        db.commit()
         update_progress(stage="done", percent=100)
         logger.info("cleanup_expired_edges_task deleted=%d", deleted)
         return {"deleted": deleted}
-    finally:
-        db.close()
+
+    return await _offload(_work, "cleanup_expired")
 
 
 # ---------------------------------------------------------------------------
@@ -208,18 +277,23 @@ async def _interval_loop(task_fn, interval_s: int, name: str) -> None:
 
 
 async def _daily_loop(task_fn, hour: int, minute: int, name: str) -> None:
-    """每天指定时刻跑：先首跑 + 等到下一个 hour:minute，再每天跑。"""
+    """每天指定时刻跑：等到下一个 hour:minute，再每天跑。
+
+    v1.8 修复：原 ``target.replace(day=now.day+1)`` 在月末会抛 ValueError，
+    改用 timedelta(days=1) 跨月安全。
+    """
     logger.info("graph loop [%s] started, cron=%02d:%02d", name, hour, minute)
     while True:
         try:
             now = _utcnow()
-            # 计算下次执行时刻
             target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if target <= now:
-                target = target.replace(day=now.day + 1)  # 明天
+                target = target + timedelta(days=1)  # 明天（跨月安全）
             wait_s = (target - now).total_seconds()
             await asyncio.sleep(wait_s)
             await task_fn()
+            # 跑完后再睡到明天同一时刻
+            await asyncio.sleep(1)
         except asyncio.CancelledError:
             logger.info("graph loop [%s] cancelled", name)
             raise

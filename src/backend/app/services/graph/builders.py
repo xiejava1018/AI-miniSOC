@@ -86,8 +86,16 @@ class AssetPortVulnBuilder:
         self.db = db
 
     def rebuild_all(self) -> dict:
-        """重建资产-端口-漏洞三类边。返回 {"created", "updated", "deleted"}。"""
+        """重建资产-端口-漏洞三类边。返回 {"created", "updated", "deleted"}。
+
+        v1.1 优化（修 N+1）：一次 batch 加载 asset/vuln dict，避免 3521 条 AssetVulnerability
+        每条 4 次 db.query 的 N+1 问题（曾导致 seed 跑 6+ 分钟不返回）。
+        """
         stats = {"created": 0, "updated": 0, "deleted": 0, "scanned": 0}
+
+        # 0. 一次性 batch 加载 Asset / Vulnerability 的 id→obj 映射（关键 N+1 修复）
+        asset_by_id = {a.id: a for a in self.db.query(Asset).all()}
+        vuln_by_id = {v.id: v for v in self.db.query(Vulnerability).all()}
 
         # 1. has_port：asset → port
         ports = (
@@ -101,7 +109,7 @@ class AssetPortVulnBuilder:
             port_node = f"port:{p.asset_ip}:{p.port}/{p.protocol}"
 
             ensure_node(
-                self.db, asset_node, "asset", self._asset_label(p.asset_id),
+                self.db, asset_node, "asset", self._asset_label_from_obj(asset_by_id.get(p.asset_id)),
                 ref_table="soc_assets", ref_id=str(p.asset_id),
             )
             ensure_node(
@@ -137,15 +145,16 @@ class AssetPortVulnBuilder:
             .all()
         )
         for av in vuln_links:
-            asset_node = f"asset:{av.asset_id}"
-            vuln = self.db.query(Vulnerability).filter(Vulnerability.id == av.vulnerability_id).first()
-            if not vuln:
+            asset = asset_by_id.get(av.asset_id)
+            vuln = vuln_by_id.get(av.vulnerability_id)
+            if not asset or not vuln:
                 continue
+            asset_node = f"asset:{asset.id}"
             vuln_node = f"vuln:{vuln.id}"
 
             ensure_node(
-                self.db, asset_node, "asset", self._asset_label(av.asset_id),
-                ref_table="soc_assets", ref_id=str(av.asset_id),
+                self.db, asset_node, "asset", self._asset_label_from_obj(asset),
+                ref_table="soc_assets", ref_id=str(asset.id),
             )
             ensure_node(
                 self.db, vuln_node, "vulnerability", f"{vuln.cve_id} ({vuln.cvss_score})",
@@ -171,7 +180,7 @@ class AssetPortVulnBuilder:
             )
 
             # 同时补 port_has_vuln 边（按 IP+port 找端口节点）
-            asset = self.db.query(Asset).filter(Asset.id == av.asset_id).first()
+            # asset 已从 batch 加载，不用再 db.query
             if asset and asset.asset_ip:
                 # 找匹配的端口（vuln 通过 soc_asset_ports.vulnerabilities JSONB 关联）
                 port_rows = (
@@ -209,9 +218,16 @@ class AssetPortVulnBuilder:
         return stats
 
     def _asset_label(self, asset_id) -> str:
+        """旧 API 兼容；新代码优先用 _asset_label_from_obj。"""
         a = self.db.query(Asset).filter(Asset.id == asset_id).first()
         if not a:
             return f"asset:{asset_id}"
+        return f"{a.name or 'unknown'} ({a.asset_ip or '?'})"
+
+    def _asset_label_from_obj(self, a) -> str:
+        """优化版：接受已加载的 Asset 对象，避免 N+1。"""
+        if not a:
+            return "asset:unknown"
         return f"{a.name or 'unknown'} ({a.asset_ip or '?'})"
 
 
@@ -239,6 +255,11 @@ class IdentityGraphBuilder:
         """重建身份相关所有 D2 类边。
 
         返回 ``{"events_seen": N, "bindings_seen": N, "account_person_seen": N}``。
+
+        v1.5 优化（修 N+1）：
+        一次性 batch 加载所有 IP→Asset 映射、所有 account→asset 绑定，
+        避免 6 万条 IdentityEvent 每条都做 2~3 次 db.query（曾导致 builder 跑 10+ 分钟
+        并锁住 uvicorn 主 event loop）。
         """
         stats = {
             "events_seen": 0,
@@ -250,7 +271,23 @@ class IdentityGraphBuilder:
         }
         since = _utcnow() - timedelta(days=self.window_days)
 
+        # === 0. 批量预加载：避免 N+1 ===
+        # 0.1 资产按 IP 建索引（resolve_asset_or_ip_node 一次查完所有 IP）
+        asset_by_ip: dict[str, Asset] = {
+            a.asset_ip: a
+            for a in self.db.query(Asset).filter(Asset.asset_ip.isnot(None)).all()
+        }
+        # 0.2 资产按 id 建索引（_asset_label_from_obj 用）
+        asset_by_id: dict[str, Asset] = {str(a.id): a for a in asset_by_ip.values()}
+        # 0.3 account 字符串 -> 绑定的所有 asset_id（owned_by 用）
+        bindings_by_account: dict[str, set[str]] = {}
+        for b in self.db.query(IdentityBinding).filter(
+            IdentityBinding.asset_id.isnot(None)
+        ).all():
+            bindings_by_account.setdefault(b.account, set()).add(str(b.asset_id))
+
         # ---- 1. login_to + login_from：从 soc_identity_events 聚合 ----
+        logger.info("IdentityGraphBuilder step1: query events (window=%dd)", self.window_days)
         events = (
             self.db.query(IdentityEvent)
             .filter(IdentityEvent.ts >= since)
@@ -258,28 +295,43 @@ class IdentityGraphBuilder:
             .filter(IdentityEvent.dst_ip.isnot(None))
             .all()
         )
+        logger.info("IdentityGraphBuilder step1: got %d events", len(events))
         # 按 (account, dst_ip) / (src_ip, dst_ip) 聚合
         login_to_agg: dict[tuple[str, str], dict] = {}
         login_from_agg: dict[tuple[str, str], dict] = {}
         external_agg: dict[tuple[str, str], dict] = {}
+        # 节点去重集（避免重复 ensure_node 调用，节省 N 倍 RTT）
+        # 关键：同一 node_key 只能存一份（即使 type 也只能一个）
+        # bug 修复 v1.6：之前用 (node_key, type) 作 dict key，导致
+        # `asset:xxx` 同时被识别为 asset 和 ip 时重复入库。
+        seen_nodes: dict[str, dict] = {}  # node_key -> node dict
 
         for e in events:
             stats["events_seen"] += 1
-            dst_node = resolve_asset_or_ip_node(self.db, e.dst_ip)
+            # 使用预加载的 ip→asset 索引（O(1)），避免 N+1
+            asset_for_dst = asset_by_ip.get(e.dst_ip)
+            dst_node = (
+                f"asset:{asset_for_dst.id}" if asset_for_dst else f"ip:{e.dst_ip}"
+            )
             ts = e.ts or _utcnow()
 
-            # account 节点
+            # account 节点（去重，不立即 INSERT）
             account_node = f"account:{e.account.lower()}"
-            ensure_node(
-                self.db, account_node, "account", e.account,
-                ref_table="soc_identity_events", ref_id=str(e.id),
-                props={"account": e.account, "last_event_ts": ts.isoformat()},
-                props_synced_at=ts,
-            )
-            ensure_node(
-                self.db, dst_node, dst_node.split(":", 1)[0],
-                self._label_for_node(dst_node),
-            )
+            if account_node not in seen_nodes:
+                seen_nodes[account_node] = {
+                    "node_key": account_node, "node_type": "account",
+                    "label": e.account,
+                    "ref_table": "soc_identity_events", "ref_id": str(e.id),
+                    "props": {"account": e.account, "last_event_ts": ts.isoformat()},
+                    "props_synced_at": ts,
+                }
+            # dst 节点（去重：同一 node_key 只存一份）
+            if dst_node not in seen_nodes:
+                dst_kind = dst_node.split(":", 1)[0]
+                seen_nodes[dst_node] = {
+                    "node_key": dst_node, "node_type": dst_kind,
+                    "label": self._label_for_node(dst_node),
+                }
 
             # login_to（account → dst）
             key = (account_node, dst_node)
@@ -298,14 +350,19 @@ class IdentityGraphBuilder:
 
             # login_from（src_ip → dst）—— src_ip 可能未纳管
             if e.src_ip:
-                src_node = f"ip:{e.src_ip}" if not self._is_managed_ip(e.src_ip) \
-                    else f"asset:{self._asset_id_for_ip(e.src_ip)}"
-                ensure_node(
-                    self.db, src_node, "ip", e.src_ip,
-                    props={"ip": e.src_ip, "is_external": is_external_ip(e.src_ip)},
+                # 使用预加载的 ip→asset 索引
+                asset_for_src = asset_by_ip.get(e.src_ip)
+                src_node = (
+                    f"asset:{asset_for_src.id}" if asset_for_src
+                    else f"ip:{e.src_ip}"
                 )
-                ensure_node(self.db, dst_node, dst_node.split(":", 1)[0],
-                            self._label_for_node(dst_node))
+                if src_node not in seen_nodes:
+                    src_kind = src_node.split(":", 1)[0]
+                    seen_nodes[src_node] = {
+                        "node_key": src_node, "node_type": src_kind,
+                        "label": e.src_ip,
+                        "props": {"ip": e.src_ip, "is_external": is_external_ip(e.src_ip)},
+                    }
 
                 if is_external_ip(e.src_ip):
                     key = (src_node, dst_node)
@@ -326,8 +383,20 @@ class IdentityGraphBuilder:
                     agg["last_seen"] = max(agg["last_seen"], ts)
                     agg["first_seen"] = min(agg["first_seen"], ts)
 
+        # 批量写入节点（关键优化：6 万 events 聚合后节点去重为几千个）
+        logger.info("IdentityGraphBuilder step1.5: ensure_nodes_batch %d nodes", len(seen_nodes))
+        if seen_nodes:
+            ensure_nodes_batch(self.db, seen_nodes.values())
+        self.db.flush()
+        logger.info("IdentityGraphBuilder step1.5: nodes flushed")
         # 写入 login_to 边
-        for (src, dst), agg in login_to_agg.items():
+        logger.info("IdentityGraphBuilder step1.6: write %d login_to edges", len(login_to_agg))
+        from datetime import datetime, timezone as _tz
+        _t_now = datetime.now(_tz.utc)
+        for i, ((src, dst), agg) in enumerate(login_to_agg.items()):
+            if i % 20 == 0 and i > 0:
+                logger.info("IdentityGraphBuilder login_to: %d/%d", i, len(login_to_agg))
+                self.db.flush()
             upsert_edge(
                 self.db, src, dst, "login_to",
                 weight=1.0, confidence=0.9,
@@ -343,11 +412,16 @@ class IdentityGraphBuilder:
                 first_seen=agg["first_seen"],
                 last_seen=agg["last_seen"],
                 expires_at=make_expires_at("login_to", agg["last_seen"]),
+                _now=_t_now,
             )
             stats["login_to_built"] += 1
-
+        self.db.flush()
         # 写入 login_from 边
-        for (src, dst), agg in login_from_agg.items():
+        logger.info("IdentityGraphBuilder step1.7: write %d login_from edges", len(login_from_agg))
+        for i, ((src, dst), agg) in enumerate(login_from_agg.items()):
+            if i % 20 == 0 and i > 0:
+                logger.info("IdentityGraphBuilder login_from: %d/%d", i, len(login_from_agg))
+                self.db.flush()
             upsert_edge(
                 self.db, src, dst, "login_from",
                 weight=1.0, confidence=0.8,
@@ -361,11 +435,16 @@ class IdentityGraphBuilder:
                 first_seen=agg["first_seen"],
                 last_seen=agg["last_seen"],
                 expires_at=make_expires_at("login_from", agg["last_seen"]),
+                _now=_t_now,
             )
             stats["login_from_built"] += 1
-
+        self.db.flush()
         # 写入 external_access 边
-        for (src, dst), agg in external_agg.items():
+        logger.info("IdentityGraphBuilder step1.8: write %d external_access edges", len(external_agg))
+        for i, ((src, dst), agg) in enumerate(external_agg.items()):
+            if i % 20 == 0 and i > 0:
+                logger.info("IdentityGraphBuilder external: %d/%d", i, len(external_agg))
+                self.db.flush()
             upsert_edge(
                 self.db, src, dst, "external_access",
                 weight=1.0, confidence=0.7,
@@ -379,42 +458,60 @@ class IdentityGraphBuilder:
                 first_seen=agg["first_seen"],
                 last_seen=agg["last_seen"],
                 expires_at=make_expires_at("external_access", agg["last_seen"]),
+                _now=_t_now,
             )
             stats["external_access_built"] += 1
+        self.db.flush()
+        logger.info("IdentityGraphBuilder step1 done: %d login_to, %d login_from, %d external",
+                    stats["login_to_built"], stats["login_from_built"], stats["external_access_built"])
 
         # ---- 2. session_on：从 soc_identity_bindings（90 天窗口） ----
+        logger.info("IdentityGraphBuilder step2: query bindings")
         bindings = (
             self.db.query(IdentityBinding)
             .filter(IdentityBinding.asset_id.isnot(None))
             .all()
         )
+        # v1.6: 批量节点去重 + 批量边写入
+        seen_nodes2: dict[str, dict] = {}
+        session_edges: list[dict] = []
         for b in bindings:
             account_node = f"account:{b.account.lower()}"
-            ensure_node(
-                self.db, account_node, "account", b.account,
-                ref_table="soc_identity_bindings", ref_id=str(b.id),
-            )
+            if account_node not in seen_nodes2:
+                seen_nodes2[account_node] = {
+                    "node_key": account_node, "node_type": "account",
+                    "label": b.account,
+                    "ref_table": "soc_identity_bindings", "ref_id": str(b.id),
+                }
             asset_node = f"asset:{b.asset_id}"
-            ensure_node(
-                self.db, asset_node, "asset", self._asset_label(b.asset_id),
-                ref_table="soc_assets", ref_id=str(b.asset_id),
-            )
-            upsert_edge(
-                self.db, account_node, asset_node, "session_on",
-                weight=1.0, confidence=0.9,
-                sources=["wazuh"],
-                last_seen_by_source={"wazuh": (b.last_seen or _utcnow()).isoformat()},
-                evidence={
+            if asset_node not in seen_nodes2:
+                seen_nodes2[asset_node] = {
+                    "node_key": asset_node, "node_type": "asset",
+                    "label": self._asset_label_from_obj(asset_by_id.get(b.asset_id)),
+                    "ref_table": "soc_assets", "ref_id": str(b.asset_id),
+                }
+            session_edges.append({
+                "src_key": account_node, "dst_key": asset_node, "rel_type": "session_on",
+                "weight": 1.0, "confidence": 0.9, "sources": ["wazuh"],
+                "last_seen_by_source": {"wazuh": (b.last_seen or _utcnow()).isoformat()},
+                "evidence": {
                     "table": "soc_identity_bindings",
-                    "id": str(b.id),
-                    "logins": b.logins,
-                    "ip": b.ip,
+                    "id": str(b.id), "logins": b.logins, "ip": b.ip,
                 },
-                first_seen=b.first_seen or _utcnow(),
-                last_seen=b.last_seen or _utcnow(),
-                expires_at=make_expires_at("session_on", b.last_seen or _utcnow()),
-            )
+                "first_seen": b.first_seen or _utcnow(),
+                "last_seen": b.last_seen or _utcnow(),
+                "expires_at": make_expires_at("session_on", b.last_seen or _utcnow()),
+                "_now": _t_now,
+            })
             stats["session_on_built"] += 1
+        if seen_nodes2:
+            ensure_nodes_batch(self.db, seen_nodes2.values())
+        for i, e in enumerate(session_edges):
+            if i % 50 == 0 and i > 0:
+                self.db.flush()
+            upsert_edge(self.db, **e)
+        self.db.flush()
+        logger.info("IdentityGraphBuilder step2 done: %d session_on", stats["session_on_built"])
 
         # ---- 3. owned_by：通过 soc_account_person → owned_by 边（asset）----
         ap_rows = (
@@ -428,18 +525,12 @@ class IdentityGraphBuilder:
                 self.db, person_node, "person", f"user#{ap.user_id}",
                 ref_table="soc_users", ref_id=str(ap.user_id),
             )
-            # 找该账号登录的所有资产
-            asset_ids = (
-                self.db.query(IdentityBinding.asset_id)
-                .filter(IdentityBinding.account == ap.account)
-                .filter(IdentityBinding.asset_id.isnot(None))
-                .distinct()
-                .all()
-            )
-            for (aid,) in asset_ids:
+            # 使用预加载的 bindings_by_account 索引（避免每账号再查 IdentityBinding）
+            asset_ids = bindings_by_account.get(ap.account, set())
+            for aid in asset_ids:
                 asset_node = f"asset:{aid}"
                 ensure_node(
-                    self.db, asset_node, "asset", self._asset_label(aid),
+                    self.db, asset_node, "asset", self._asset_label_from_obj(asset_by_id.get(aid)),
                     ref_table="soc_assets", ref_id=str(aid),
                 )
                 upsert_edge(
@@ -464,8 +555,9 @@ class IdentityGraphBuilder:
         for a in assets_with_owner:
             asset_node = f"asset:{a.id}"
             person_node = f"person:{a.owner_id}"
+            # 用 _asset_label_from_obj 拿已加载的 Asset 对象
             ensure_node(
-                self.db, asset_node, "asset", self._asset_label(a.id),
+                self.db, asset_node, "asset", self._asset_label_from_obj(a),
                 ref_table="soc_assets", ref_id=str(a.id),
             )
             ensure_node(
@@ -526,6 +618,12 @@ class IdentityGraphBuilder:
     def _asset_id_for_ip(self, ip: str) -> str:
         a = self.db.query(Asset).filter(Asset.asset_ip == ip).first()
         return str(a.id) if a else ip
+
+    def _asset_label_from_obj(self, a) -> str:
+        """从已加载的 Asset 对象生成 label，避免 N+1。"""
+        if not a:
+            return "asset:unknown"
+        return f"{a.name or 'unknown'} ({a.asset_ip or '?'})"
 
 
 # ---------------------------------------------------------------------------
@@ -869,12 +967,32 @@ class ManualRelationBuilder:
 # ---------------------------------------------------------------------------
 
 
-def run_all_builders(db: Session) -> dict:
-    """依次跑全部 5 个 builder，返回合并统计。"""
+def run_all_builders(db: Session, only: Optional[str] = None) -> dict:
+    """依次跑全部 5 个 builder，返回合并统计。
+
+    v1.5 修复：每个 builder 跑完后立即 commit（避免长事务锁住其他 session
+    或 SIGTERM 后在 PG 端留下僵尸事务）。每个 builder 异常时也回滚自身事务
+    以保护下个 builder 跑。
+
+    v1.8（2026-09-13）：新增 ``only`` 参数，支持只跑单个 builder
+    （asset_port_vuln / identity / topology / alert_group / manual）。
+    """
+    all_builders = [
+        ("asset_port_vuln", AssetPortVulnBuilder),
+        ("identity", IdentityGraphBuilder),
+        ("topology", TopologyBuilder),
+        ("alert_group", AlertGroupBuilder),
+        ("manual", ManualRelationBuilder),
+    ]
+    if only and only != "all":
+        all_builders = [(n, c) for n, c in all_builders if n == only]
     out: dict = {}
-    out["asset_port_vuln"] = AssetPortVulnBuilder(db).rebuild_all()
-    out["identity"] = IdentityGraphBuilder(db).rebuild_all()
-    out["topology"] = TopologyBuilder(db).rebuild_all()
-    out["alert_group"] = AlertGroupBuilder(db).rebuild_all()
-    out["manual"] = ManualRelationBuilder(db).rebuild_all()
+    for name, cls in all_builders:
+        try:
+            out[name] = cls(db).rebuild_all()
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("run_all_builders: %s failed", name)
+            out[name] = {"error": "see logs"}
     return out

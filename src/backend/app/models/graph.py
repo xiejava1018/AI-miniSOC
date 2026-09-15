@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     BigInteger, CheckConstraint, Column, DateTime, ForeignKey, Integer,
-    Numeric, String, Text, UniqueConstraint,
+    Numeric, String, Text, UniqueConstraint, text as sa_text,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -54,7 +54,11 @@ class GraphNode(Base):
     ref_table = Column(String(64))
     ref_id = Column(Text)
     label = Column(Text, nullable=False)
-    props = Column(JSONB, nullable=False, server_default=func.text("'{}'::jsonb"))
+    # 注：必须用 sa.text("'{}'::jsonb") 而非 func.text("...")。
+    #   func.text 会让 SQLAlchemy 编译成 DEFAULT text('{}'::jsonb)，
+    #   外层 text() 函数包裹后 PG 不再识别为 JSONB cast，导致建表失败。
+    #   sa.text 输出裸表达式 DEFAULT '{}'::jsonb，PG 直接接受。
+    props = Column(JSONB, nullable=False, server_default=sa_text("'{}'::jsonb"))
     props_synced_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False,
@@ -102,10 +106,10 @@ class GraphEdge(Base):
     direction = Column(String(16), nullable=False, default="directed")
     weight = Column(Numeric(5, 3), nullable=False, default=1.0)
     confidence = Column(Numeric(4, 3), nullable=False, default=1.0)
-    sources = Column(JSONB, nullable=False, server_default=func.text("'[]'::jsonb"))
+    sources = Column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
     last_seen_by_source = Column(JSONB, nullable=False,
-                                 server_default=func.text("'{}'::jsonb"))
-    evidence = Column(JSONB, nullable=False, server_default=func.text("'{}'::jsonb"))
+                                 server_default=sa_text("'{}'::jsonb"))
+    evidence = Column(JSONB, nullable=False, server_default=sa_text("'{}'::jsonb"))
     first_seen = Column(DateTime(timezone=True))
     last_seen = Column(DateTime(timezone=True), index=True)
     expires_at = Column(DateTime(timezone=True))

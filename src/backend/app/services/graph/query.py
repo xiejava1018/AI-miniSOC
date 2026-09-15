@@ -116,9 +116,9 @@ def get_neighbors(
     # 3. 递归 CTE：BFS（带环检测 + 深度上限）
     sql = text(f"""
         WITH RECURSIVE impact AS (
-            SELECT :center_key::text AS node_key,
+            SELECT CAST(:center_key AS text) AS node_key,
                    0 AS depth,
-                   ARRAY[:center_key]::text[] AS path
+                   ARRAY[CAST(:center_key AS text)] AS path
             UNION ALL
             SELECT e.dst_key,
                    i.depth + 1,
@@ -168,13 +168,16 @@ def get_neighbors(
     nodes_by_key = {r["node_key"]: r for r in nodes_rows}
 
     # 5. 拉边：所有触及节点的内部边（限定方向、置信度）
+    # 注意：表必须带别名 e——type_filter_sql 用的是 e.rel_type（与递归 CTE 同名），
+    # 曾漏写别名导致 depth=1&include_inferred=false 时报
+    # "missing FROM-clause entry for table e"（500）。
     edges_sql = text(f"""
-        SELECT * FROM soc_graph_edges
-        WHERE src_key = ANY(:ks) AND dst_key = ANY(:ks)
-          AND confidence >= :min_conf
-          AND (expires_at IS NULL OR expires_at > now())
+        SELECT * FROM soc_graph_edges e
+        WHERE e.src_key = ANY(:ks) AND e.dst_key = ANY(:ks)
+          AND e.confidence >= :min_conf
+          AND (e.expires_at IS NULL OR e.expires_at > now())
           {type_filter_sql}
-        ORDER BY confidence DESC, last_seen DESC NULLS LAST
+        ORDER BY e.confidence DESC, e.last_seen DESC NULLS LAST
         LIMIT :edge_limit
     """)
     edge_params = {
@@ -265,7 +268,7 @@ def find_paths(
                    p.depth + 1,
                    p.path || e.dst_key,
                    p.edge_ids || e.id,
-                   p.cost + e.weight,
+                   (p.cost + e.weight)::numeric(5,3),
                    LEAST(p.min_conf, e.confidence),
                    e.rel_type
             FROM soc_graph_edges e
@@ -598,8 +601,8 @@ def vuln_chokepoints(
     for crown in crown_assets:
         sql = text("""
             WITH RECURSIVE reach AS (
-                SELECT :crown::text AS node_key, 0 AS depth,
-                       ARRAY[:crown]::text[] AS path
+                SELECT CAST(:crown AS text) AS node_key, 0 AS depth,
+                       ARRAY[CAST(:crown AS text)] AS path
                 UNION ALL
                 SELECT e.dst_key, r.depth + 1, r.path || e.dst_key
                 FROM soc_graph_edges e
@@ -841,6 +844,9 @@ def _format_graph_edge(row) -> dict:
         "evidence": row.get("evidence") or {},
         "sourceLabel": _source_label(row.get("sources") or []),
         "updated": row["updated_at"].isoformat() if row.get("updated_at") else None,
+        "firstSeen": row["first_seen"].isoformat() if row.get("first_seen") else None,
+        "lastSeen": row["last_seen"].isoformat() if row.get("last_seen") else None,
+        "sources": list(row.get("sources") or []),
     }
 
 

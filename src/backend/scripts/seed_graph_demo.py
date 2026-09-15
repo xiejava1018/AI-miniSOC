@@ -156,23 +156,27 @@ def _seed_assets(db) -> dict[str, Asset]:
 
 
 def _seed_ports(db, assets: dict[str, Asset]) -> None:
+    # 修复：_seed_assets 返回的是 ip→Asset 字典，DEMO_PORTS 是 hostname→ports
+    # 所以先构造 hostname→Asset 反查（也可理解为"按 hostname 取已存在 Asset"）
+    assets_by_name = {a.name: a for a in assets.values()}
     for name, ports in DEMO_PORTS.items():
-        for ip, n, atype, crit, _ in DEMO_ASSETS:
-            if n == name:
-                a = assets[ip]
-                for port, proto, service in ports:
-                    p = (
-                        db.query(AssetPort)
-                        .filter_by(asset_id=a.id, port=port, protocol=proto)
-                        .first()
-                    )
-                    if not p:
-                        p = AssetPort(
-                            asset_id=a.id, asset_ip=a.asset_ip,
-                            port=port, protocol=proto, state="open",
-                            service=service,
-                        )
-                        db.add(p)
+        a = assets_by_name.get(name)
+        if not a:
+            logger.warning("seed: 找不到演示资产 %s，跳过端口", name)
+            continue
+        for port, proto, service in ports:
+            p = (
+                db.query(AssetPort)
+                .filter_by(asset_id=a.id, port=port, protocol=proto)
+                .first()
+            )
+            if not p:
+                p = AssetPort(
+                    asset_id=a.id, asset_ip=a.asset_ip,
+                    port=port, protocol=proto, state="open",
+                    service=service,
+                )
+                db.add(p)
     db.commit()
 
 
@@ -215,7 +219,8 @@ def _seed_business_systems(db, assets: dict[str, Asset]) -> None:
             db.flush()
         systems[code] = s
 
-    # 资产 → 业务系统归属
+    # 修复：assets 是 ip→Asset 字典，这里按 hostname 反查
+    assets_by_name = {a.name: a for a in assets.values()}
     asset_to_system = {
         "srv-soc-01": "soc-platform",
         "srv-wazuh-01": "soc-platform",
@@ -224,8 +229,11 @@ def _seed_business_systems(db, assets: dict[str, Asset]) -> None:
         "app-gateway-01": "core-biz",
         "app-business-01": "core-biz",
     }
-    for ip, sys_code in asset_to_system.items():
-        a = assets[ip]
+    for asset_name, sys_code in asset_to_system.items():
+        a = assets_by_name.get(asset_name)
+        if not a:
+            logger.warning("seed: 找不到演示资产 %s，跳过业务归属", asset_name)
+            continue
         s = systems[sys_code]
         ab = db.query(AssetBusiness).filter_by(
             asset_id=a.id, system_id=s.id
@@ -237,6 +245,7 @@ def _seed_business_systems(db, assets: dict[str, Asset]) -> None:
 
 
 def _seed_tags(db, assets: dict[str, Asset]) -> None:
+    # 修复：assets 是 ip→Asset 字典，这里按 hostname 查所以先转一份
     asset_by_name = {a.name: a for a in assets.values()}
     for asset_name, tags in DEMO_TAGS.items():
         a = asset_by_name.get(asset_name)

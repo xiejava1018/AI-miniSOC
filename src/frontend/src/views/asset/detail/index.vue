@@ -14,8 +14,15 @@
             <ElTag v-if="assetDetail.asset_status" :type="statusTagType" effect="dark" size="small">
               {{ statusLabelMap[assetDetail.asset_status] || assetDetail.asset_status || '--' }}
             </ElTag>
-            <ElTag v-if="assetDetail.criticality" :type="criticalityTagType" effect="plain" size="small">
-              {{ criticalityLabelMap[assetDetail.criticality] || assetDetail.criticality || '--' }}
+            <!-- === 治本方案 2026-09-14：重要性头部标签改三维度 === -->
+            <ElTag v-if="assetDetail.business_impact" type="danger" effect="plain" size="small">
+              BIA {{ BUSINESS_IMPACT_LABEL[assetDetail.business_impact] || assetDetail.business_impact }}
+            </ElTag>
+            <ElTag v-if="assetDetail.data_sensitivity" type="warning" effect="plain" size="small">
+              CIA {{ DATA_SENSITIVITY_LABEL[assetDetail.data_sensitivity] || assetDetail.data_sensitivity }}
+            </ElTag>
+            <ElTag v-if="assetDetail.protection_level" type="info" effect="plain" size="small">
+              {{ PROTECTION_LEVEL_LABEL[assetDetail.protection_level] || assetDetail.protection_level }}
             </ElTag>
             <ElTag v-if="assetDetail.data_source" type="info" effect="plain" size="small">
               {{ dataSourceLabelMap[assetDetail.data_source] || assetDetail.data_source || '--' }}
@@ -44,6 +51,34 @@
           <span v-else>--</span>
         </ElDescriptionsItem>
         <ElDescriptionsItem label="业务单元">{{ assetDetail.business_unit || '--' }}</ElDescriptionsItem>
+        <!-- === 治本方案 2026-09-14：三维度重要性 === -->
+        <ElDescriptionsItem label="业务影响">
+          <ElTag v-if="assetDetail.business_impact" type="danger" effect="plain" size="small">
+            {{ BUSINESS_IMPACT_LABEL[assetDetail.business_impact] || assetDetail.business_impact }}
+          </ElTag>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="数据敏感度">
+          <ElTag v-if="assetDetail.data_sensitivity" type="warning" effect="plain" size="small">
+            {{ DATA_SENSITIVITY_LABEL[assetDetail.data_sensitivity] || assetDetail.data_sensitivity }}
+          </ElTag>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="等保等级">
+          <ElTag v-if="assetDetail.protection_level" type="info" effect="plain" size="small">
+            {{ PROTECTION_LEVEL_LABEL[assetDetail.protection_level] || assetDetail.protection_level }}
+          </ElTag>
+          <span v-else>--</span>
+        </ElDescriptionsItem>
+        <ElDescriptionsItem label="归属业务系统">
+          <template v-if="assetDetail.business_system_names && assetDetail.business_system_names.length">
+            <ElTag v-for="n in assetDetail.business_system_names" :key="n" size="small" effect="plain" class="mr-1">{{ n }}</ElTag>
+          </template>
+          <span v-else class="text-placeholder">未关联</span>
+        </ElDescriptionsItem>
+        <!-- v1 (§7.2.5 F10)：归属外键（空表示未用外键体系，仅走 owner 字符串） -->
+        <ElDescriptionsItem label="责任人 ID">{{ assetDetail.owner_id ?? '--' }}</ElDescriptionsItem>
+        <ElDescriptionsItem label="部门 ID">{{ assetDetail.department_id ?? '--' }}</ElDescriptionsItem>
         <ElDescriptionsItem label="操作系统">
           {{ assetDetail.os_name ? `${assetDetail.os_name} ${assetDetail.os_version || ''}`.trim() : '--' }}
         </ElDescriptionsItem>
@@ -759,6 +794,11 @@
   import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ArrowLeft, Refresh, Plus, Box, Warning, Document, InfoFilled } from '@element-plus/icons-vue'
+  import {
+    BUSINESS_IMPACT_LABEL,
+    DATA_SENSITIVITY_LABEL,
+    PROTECTION_LEVEL_LABEL,
+  } from '@/constants/criticality'
   import { FormInstance, ElMessageBox, ElMessage } from 'element-plus'
   import { getAssetVulnerabilities, createIncidentFromVulnerability } from '@/api/vulnerabilities'
   import { runScan, getScanTask, getScannerAgents } from '@/api/scan'

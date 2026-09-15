@@ -271,14 +271,35 @@
             </ElFormItem>
           </ElCol>
           <ElCol :span="12">
-            <ElFormItem label="重要性" prop="criticality">
-              <ElSelect v-model="formData.criticality" placeholder="请选择重要性" style="width: 100%">
-                <ElOption
-                  v-for="opt in criticalityOptions"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
+            <ElFormItem label="业务影响" prop="business_impact">
+              <ElSelect v-model="formData.business_impact" placeholder="业务影响" style="width: 100%">
+                <ElOption label="核心业务" value="core" />
+                <ElOption label="重要业务" value="important" />
+                <ElOption label="一般业务" value="normal" />
+                <ElOption label="辅助支撑" value="auxiliary" />
+                <ElOption label="可忽略" value="ignorable" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="数据敏感度" prop="data_sensitivity">
+              <ElSelect v-model="formData.data_sensitivity" placeholder="数据敏感度" style="width: 100%">
+                <ElOption label="极高" value="extreme" />
+                <ElOption label="高" value="high" />
+                <ElOption label="中" value="medium" />
+                <ElOption label="低" value="low" />
+                <ElOption label="可公开" value="negligible" />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
+            <ElFormItem label="等保等级" prop="protection_level">
+              <ElSelect v-model="formData.protection_level" placeholder="等保等级" style="width: 100%">
+                <ElOption label="等保五级" value="level_5" />
+                <ElOption label="等保四级" value="level_4" />
+                <ElOption label="等保三级" value="level_3" />
+                <ElOption label="等保二级" value="level_2" />
+                <ElOption label="等保一级" value="level_1" />
               </ElSelect>
             </ElFormItem>
           </ElCol>
@@ -519,19 +540,29 @@
             )
         },
         {
-          prop: 'criticality',
-          label: '重要性',
+          // === 治本方案 2026-09-14：重要性列改为三维度标签组合 ===
+          prop: 'data_sensitivity',
+          label: '业务影响 / 数据敏感度 / 等保',
           align: 'center',
-          width: 80,
+          minWidth: 220,
           formatter: (row: any) => {
-            const label = criticalityLabelMap.value[row.criticality]
-            return label
-              ? h(
-                  resolveComponent('ElTag'),
-                  { type: (criticalityColorMap.value[row.criticality] as any) || 'info', effect: 'light' },
-                  { default: () => label }
-                )
-              : '--'
+            // 5 档枚举中文
+            const BIA: Record<string, string> = { core: '核心', important: '重要', normal: '一般', auxiliary: '辅助', ignorable: '可忽略' }
+            const CIA: Record<string, string> = { extreme: '极高', high: '高', medium: '中', low: '低', negligible: '公开' }
+            const PL: Record<string, string> = { level_5: '五级', level_4: '四级', level_3: '三级', level_2: '二级', level_1: '一级' }
+            const BIA_TYPE: Record<string, string> = { core: 'danger', important: 'danger', normal: 'warning', auxiliary: 'info', ignorable: 'info' }
+            const CIA_TYPE: Record<string, string> = { extreme: 'danger', high: 'danger', medium: 'warning', low: 'info', negligible: 'info' }
+            return h('div', { style: 'display:flex; gap:4px; justify-content:center; flex-wrap:wrap;' }, [
+              h(resolveComponent('ElTag'),
+                { type: BIA_TYPE[row.business_impact] || 'info', size: 'small', effect: 'plain' },
+                { default: () => `BIA ${BIA[row.business_impact] || row.business_impact || '--'}` }),
+              h(resolveComponent('ElTag'),
+                { type: CIA_TYPE[row.data_sensitivity] || 'info', size: 'small', effect: 'plain' },
+                { default: () => `CIA ${CIA[row.data_sensitivity] || row.data_sensitivity || '--'}` }),
+              h(resolveComponent('ElTag'),
+                { type: 'info', size: 'small', effect: 'plain' },
+                { default: () => PL[row.protection_level] || row.protection_level || '--' }),
+            ])
           }
         },
         {
@@ -663,7 +694,11 @@
     network_segment: 'default',
     network_zone: 'other',
     asset_type: 'other',
-    criticality: 'medium',
+    // === 治本方案 2026-09-14：三维度默认值 ===
+    business_impact: 'normal',
+    data_sensitivity: 'medium',
+    protection_level: 'level_2',
+    criticality: 'medium',  // DEPRECATED 兼容垫片
     asset_status: '',
     owner: '',
     business_unit: '',
@@ -702,13 +737,52 @@
       options: assetTypeOptions.value
     },
     {
-      label: '重要性',
-      key: 'criticality',
+      // === 治本方案 2026-09-14：业务影响维度 ===
+      label: '业务影响',
+      key: 'business_impact',
       type: 'select',
       span: 6,
       clearable: true,
-      placeholder: '请选择重要性',
-      options: criticalityOptions.value
+      placeholder: '业务影响',
+      options: [
+        { label: '核心业务', value: 'core' },
+        { label: '重要业务', value: 'important' },
+        { label: '一般业务', value: 'normal' },
+        { label: '辅助支撑', value: 'auxiliary' },
+        { label: '可忽略', value: 'ignorable' }
+      ]
+    },
+    {
+      // === 治本方案 2026-09-14：数据敏感度维度 ===
+      label: '数据敏感度',
+      key: 'data_sensitivity',
+      type: 'select',
+      span: 6,
+      clearable: true,
+      placeholder: '数据敏感度',
+      options: [
+        { label: '极高', value: 'extreme' },
+        { label: '高', value: 'high' },
+        { label: '中', value: 'medium' },
+        { label: '低', value: 'low' },
+        { label: '可公开', value: 'negligible' }
+      ]
+    },
+    {
+      // === 治本方案 2026-09-14：等保等级维度 ===
+      label: '等保等级',
+      key: 'protection_level',
+      type: 'select',
+      span: 6,
+      clearable: true,
+      placeholder: '等保等级',
+      options: [
+        { label: '等保五级', value: 'level_5' },
+        { label: '等保四级', value: 'level_4' },
+        { label: '等保三级', value: 'level_3' },
+        { label: '等保二级', value: 'level_2' },
+        { label: '等保一级', value: 'level_1' }
+      ]
     },
     {
       label: '网络区域',
@@ -749,7 +823,7 @@
     { label: 'IP地址', prop: 'asset_ip' },
     { label: 'MAC地址', prop: 'mac_address' },
     { label: '资产类型', prop: 'asset_type' },
-    { label: '重要性', prop: 'criticality' },
+    { label: '业务影响 / 数据敏感度 / 等保', prop: 'data_sensitivity' },
     { label: '网络区域', prop: 'network_zone' },
     { label: '状态', prop: 'asset_status' },
     { label: '操作系统', prop: 'os_name' },
@@ -782,7 +856,11 @@
       formData.network_segment = row.network_segment || 'default'
       formData.network_zone = row.network_zone || 'other'
       formData.asset_type = row.asset_type || 'other'
-      formData.criticality = row.criticality || 'medium'
+      // === 治本方案：三维度回填 ===
+      formData.business_impact = row.business_impact || 'normal'
+      formData.data_sensitivity = row.data_sensitivity || 'medium'
+      formData.protection_level = row.protection_level || 'level_2'
+      formData.criticality = row.criticality || 'medium'  // 兼容垫片
       formData.asset_status = row.asset_status || ''
       formData.owner = row.owner || ''
       formData.business_unit = row.business_unit || ''
@@ -798,6 +876,10 @@
       formData.network_segment = 'default'
       formData.network_zone = 'other'
       formData.asset_type = 'other'
+      // === 治本方案：三维度默认值 ===
+      formData.business_impact = 'normal'
+      formData.data_sensitivity = 'medium'
+      formData.protection_level = 'level_2'
       formData.criticality = 'medium'
       formData.asset_status = ''
       formData.owner = ''

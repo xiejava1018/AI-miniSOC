@@ -32,17 +32,12 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import require_role
 from app.core.database import get_db
+from app.api.deps import get_current_user
 from app.models import Asset, User
 from app.services.graph import (
     delete_expired_edges,
 )
-from app.services.graph.builders import (
-    AlertGroupBuilder,
-    AssetPortVulnBuilder,
-    IdentityGraphBuilder,
-    ManualRelationBuilder,
-    TopologyBuilder,
-)
+from app.services.graph.builders import run_all_builders
 from app.services.graph.query import (
     find_paths,
     get_neighbors,
@@ -261,6 +256,7 @@ class RelationRequest(BaseModel):
 async def post_relation(
     body: RelationRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """人工登记一条关系边（D1/D4 类）。"""
     # 自动确保 src / dst 节点存在（若不存在则创建 minimal 节点）
@@ -304,28 +300,26 @@ class RebuildRequest(BaseModel):
               dependencies=[Depends(require_role("admin", "operator"))])
 async def post_rebuild(
     body: RebuildRequest,
-    db: Session = Depends(get_db),
 ):
-    """同步触发重建；异步可通过 task_execution 包装。"""
-    stats: dict = {}
-    try:
-        if body.builder in ("all", "asset_port_vuln"):
-            stats["asset_port_vuln"] = AssetPortVulnBuilder(db).rebuild_all()
-        if body.builder in ("all", "identity"):
-            stats["identity"] = IdentityGraphBuilder(db).rebuild_all()
-        if body.builder in ("all", "topology"):
-            stats["topology"] = TopologyBuilder(db).rebuild_all()
-        if body.builder in ("all", "alert_group"):
-            stats["alert_group"] = AlertGroupBuilder(db).rebuild_all()
-        if body.builder in ("all", "manual"):
-            stats["manual"] = ManualRelationBuilder(db).rebuild_all()
+    """触发重建（v1.8：重活丢到线程池，独立 Session，不阻塞 event loop）。
+
+    原实现直接在 async 端点里同步跑全量 builder，会长时间卡死 uvicorn 单 worker
+    导致所有接口超时。现统一走 scheduler.run_builder_async（asyncio.to_thread +
+    独立 Session + 全进程共享信号量），与定时任务互斥，避免两个全量重建并发锁表。
+    """
+    from app.services.graph.scheduler import run_builder_async
+
+    def _work(db) -> dict:
+        stats = run_all_builders(db, only=body.builder)
         # 清理过期边
-        expired = delete_expired_edges(db)
-        stats["expired_deleted"] = expired
-        db.commit()
+        stats["expired_deleted"] = delete_expired_edges(db)
+        return stats
+
+    try:
+        stats = await run_builder_async(_work, f"rebuild:{body.builder}",
+                                        raise_on_error=True)
     except Exception as exc:
         logger.exception("rebuild failed")
-        db.rollback()
         raise HTTPException(status_code=500, detail=f"重建失败: {exc.__class__.__name__}")
 
     return {"code": 200, "msg": "ok", "data": {"builder": body.builder, "stats": stats}}

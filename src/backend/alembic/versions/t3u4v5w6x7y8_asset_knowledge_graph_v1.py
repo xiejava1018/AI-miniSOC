@@ -88,8 +88,10 @@ def upgrade() -> None:
         DO $$
         BEGIN
             -- 若已是 UUID 类型则跳过 ALTER TYPE
+            -- 兼容 SQLAlchemy String（character varying）和历史 text 两种声明
             IF (SELECT data_type FROM information_schema.columns
-                WHERE table_name = 'soc_assets' AND column_name = 'parent_id') = 'text' THEN
+                WHERE table_name = 'soc_assets' AND column_name = 'parent_id')
+                IN ('character varying', 'text') THEN
                 ALTER TABLE soc_assets
                     ALTER COLUMN parent_id TYPE UUID USING parent_id::uuid;
             END IF;
@@ -148,9 +150,10 @@ def upgrade() -> None:
     bind.execute(sa.text(
         """
         CREATE TABLE IF NOT EXISTS soc_asset_business (
-            asset_id  UUID NOT NULL REFERENCES soc_assets(id) ON DELETE CASCADE,
-            system_id UUID NOT NULL REFERENCES soc_business_systems(id) ON DELETE CASCADE,
-            role      TEXT,
+            asset_id   UUID NOT NULL REFERENCES soc_assets(id) ON DELETE CASCADE,
+            system_id  UUID NOT NULL REFERENCES soc_business_systems(id) ON DELETE CASCADE,
+            role       TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             PRIMARY KEY (asset_id, system_id)
         )
         """
