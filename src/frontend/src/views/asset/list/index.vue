@@ -917,6 +917,8 @@
 
   // “是否由业务系统联动填充”（手动改过 select 后置 false，不再覆盖人工选择）
   const inheritFromBusinessSystem = ref(true)
+  // 编辑弹窗打开时的原始业务系统关联快照（syncBusinessSystemLinks 的 current 基准）
+  const originalBusinessSystemIds = ref<string[]>([])
 
   // 搜索配置
   const searchItems = computed<SearchFormItem[]>(() => [
@@ -1415,15 +1417,16 @@
   /**
    * 同步资产 ↔ 业务系统 关联。
    * - add：全部 desiredSystemIds 都是新增 → 逐个 link。
-   * - edit：计算当前集合 (formData.business_system_ids，是 showDialog 回填的 row 值)
+   * - edit：计算原始集合 (originalBusinessSystemIds，showDialog 时快照)
    *         与目标集合 (desiredSystemIds) 的差集，分别 unlink / link。
    * 返回 { failures: string[] }，给出失败的系统名（用于 warning 提示）。
    */
   async function syncBusinessSystemLinks(assetId: string, desiredSystemIds: string[]) {
     const failures: string[] = []
     const desired = new Set(desiredSystemIds)
-    // formData.business_system_ids 是“资产原已关联的系统”（showDialog('edit', row) 时回填自 row.business_system_ids）
-    const currentIds: string[] = formData.business_system_ids || []
+    // 不能用 formData.business_system_ids 当 current——它是 ElSelect v-model，
+    // 用户的选择已经改了它（与 desired 同源），diff 恒为空、link 永不执行（本次 bug）。
+    const currentIds: string[] = originalBusinessSystemIds.value || []
     const current = new Set(currentIds)
 
     const toUnlink = [...current].filter((id) => !desired.has(id))

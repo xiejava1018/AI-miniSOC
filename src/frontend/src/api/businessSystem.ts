@@ -87,21 +87,20 @@ export function getBusinessSystemAssets(systemId: string) {
   })
 }
 
-/** 资产-业务系统 关联（admin only） */
+/** 资产-业务系统 关联（admin only）
+ * 注意：不弹 showSuccessMessage——资产表单会批量 link/unlink 多个系统，
+ * N 次“关联成功”提示会刷屏；由调用方统一提示。
+ */
 export function linkAssetToBusinessSystem(assetId: string, systemId: string, role?: string) {
   return request.post({
     url: `${BS_BASE}/assets/${assetId}/systems`,
-    data: { system_id: systemId, role: role || null },
-    showSuccessMessage: true,
-    successMessage: '关联成功'
+    data: { system_id: systemId, role: role || null }
   })
 }
 
-/** 资产-业务系统 解绑（admin only） */
+/** 资产-业务系统 解绑（admin only）。同 link：不弹提示，由调用方统一处理。 */
 export function unlinkAssetFromBusinessSystem(assetId: string, systemId: string) {
   return request.del({
-    url: `${BS_BASE}/assets/${assetId}/systems/${systemId}`,
-    showSuccessMessage: true,
-    successMessage: '解除关联成功'
+    url: `${BS_BASE}/assets/${assetId}/systems/${systemId}`
   })
 }
