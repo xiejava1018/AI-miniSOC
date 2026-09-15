@@ -191,8 +191,8 @@ def _migrate_network_zone_dict(db: Session):
         ("dmz",        2),
         ("production", 3),
         ("office",     4),
-        ("management", 5),
-        ("dev",        6),
+        ("dev",        5),
+        ("management", 6),
         ("isolated",   7),
         ("unknown",    8),
     ]
