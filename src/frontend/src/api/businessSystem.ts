@@ -76,7 +76,7 @@ export function deleteBusinessSystem(id: string) {
   return request.del({
     url: `${BS_BASE}/${id}`,
     showSuccessMessage: true,
-    successMessage: '删除业务系统成功'
+    successMessage: '删除成功'
   })
 }
 

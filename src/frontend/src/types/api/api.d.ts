@@ -202,6 +202,7 @@ declare namespace Api {
       owner_id?: number | null
       department_id?: number | null
       business_system_names?: string[] | null
+      business_system_ids?: string[] | null
     }
 
     /** 资产搜索参数 */

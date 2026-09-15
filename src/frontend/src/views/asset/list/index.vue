@@ -10,9 +10,13 @@
           clearable
           @keyup.enter="handleAsk"
         />
-        <ElButton type="primary" :loading="askLoading" @click="handleAsk" v-ripple>AI 查询</ElButton>
+        <ElButton type="primary" :loading="askLoading" @click="handleAsk" v-ripple
+          >AI 查询</ElButton
+        >
         <ElDropdown trigger="click" @command="replayAsk">
-          <ElButton v-ripple>历史<ElIcon><ArrowDown /></ElIcon></ElButton>
+          <ElButton v-ripple
+            >历史<ElIcon><ArrowDown /></ElIcon
+          ></ElButton>
           <template #dropdown>
             <ElDropdownMenu>
               <ElDropdownItem v-for="h in askHistoryList" :key="h.session_id" :command="h.title">
@@ -42,7 +46,9 @@
             >
               {{ askParamLabel(k as string, v) }}
             </ElTag>
-            <ElButton size="small" type="primary" plain @click="applyAskToSearch">在列表中筛选</ElButton>
+            <ElButton size="small" type="primary" plain @click="applyAskToSearch"
+              >在列表中筛选</ElButton
+            >
           </div>
         </template>
         <template v-else-if="askResult.intent === 'template'">
@@ -70,19 +76,27 @@
                 <span class="stat-key">{{ k }}</span>
                 <span class="stat-val">{{ v }}</span>
               </div>
-              <ElEmpty v-if="!Object.keys(askResult.stats).length" description="无分组数据" :image-size="48" />
+              <ElEmpty
+                v-if="!Object.keys(askResult.stats).length"
+                description="无分组数据"
+                :image-size="48"
+              />
             </div>
             <!-- 覆盖率必须与统计结果同屏，不能只给分子 -->
             <div v-if="coverageRatio !== null" class="ai-query-coverage">
               <ElProgress
                 :percentage="coverageRatio"
-                :status="coverageRatio >= 90 ? 'success' : coverageRatio >= 60 ? 'warning' : 'exception'"
+                :status="
+                  coverageRatio >= 90 ? 'success' : coverageRatio >= 60 ? 'warning' : 'exception'
+                "
                 :stroke-width="10"
                 style="max-width: 320px"
               />
               <span class="coverage-text">
-                数据覆盖率 {{ coverageRatio }}%
-                （{{ askResult.coverage?.counted }}/{{ askResult.coverage?.total }} 台有该字段）
+                数据覆盖率 {{ coverageRatio }}% （{{ askResult.coverage?.counted }}/{{
+                  askResult.coverage?.total
+                }}
+                台有该字段）
               </span>
             </div>
           </div>
@@ -107,7 +121,12 @@
                 <span class="bucket-num">{{ askResult.alerts.buckets.low }}</span>
               </div>
               <div class="bucket is-total">
-                <span class="bucket-label">合计（{{ askResult.alerts.buckets.window_days || askResult.alerts.days }} 天）</span>
+                <span class="bucket-label"
+                  >合计（{{
+                    askResult.alerts.buckets.window_days || askResult.alerts.days
+                  }}
+                  天）</span
+                >
                 <span class="bucket-num">{{ askResult.alerts.buckets.total }}</span>
               </div>
             </div>
@@ -138,7 +157,9 @@
                 label="匹配端口"
                 min-width="120"
               >
-                <template #default="{ row }">{{ (row.matched_ports || []).join('、') || '—' }}</template>
+                <template #default="{ row }">{{
+                  (row.matched_ports || []).join('、') || '—'
+                }}</template>
               </ElTableColumn>
               <ElTableColumn
                 v-if="askResult.template_id === 'offline_since'"
@@ -177,8 +198,12 @@
         <div v-else-if="askResult.intent === 'invalid_params'" class="ai-query-notice is-warn">
           {{ askResult.summary || askResult.message }}
         </div>
-        <div v-else-if="askResult.intent === 'unsupported'" class="ai-query-notice">{{ askResult.summary || askResult.message }}</div>
-        <div v-else-if="askResult.intent === 'unavailable'" class="ai-query-notice is-warn">{{ askResult.message }}</div>
+        <div v-else-if="askResult.intent === 'unsupported'" class="ai-query-notice">{{
+          askResult.summary || askResult.message
+        }}</div>
+        <div v-else-if="askResult.intent === 'unavailable'" class="ai-query-notice is-warn">{{
+          askResult.message
+        }}</div>
       </div>
     </ElCard>
 
@@ -200,7 +225,9 @@
         <template #left>
           <ElButton @click="showDialog('add')" v-ripple>添加资产</ElButton>
           <ElButton type="warning" @click="handleSyncWazuh" v-ripple>Wazuh同步</ElButton>
-          <ElButton type="danger" plain :loading="riskScoring" @click="handleBatchScore" v-ripple>风险评分</ElButton>
+          <ElButton type="danger" plain :loading="riskScoring" @click="handleBatchScore" v-ripple
+            >风险评分</ElButton
+          >
         </template>
       </ArtTableHeader>
 
@@ -258,9 +285,39 @@
 
         <!-- 第二档：业务分类（决定告警/事件处置优先级） -->
         <ElRow :gutter="20">
+          <ElCol :span="24">
+            <ElFormItem label="业务系统" prop="business_system_ids">
+              <ElSelect
+                v-model="formData.business_system_ids"
+                multiple
+                filterable
+                clearable
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="可多选；选中后自动按“最严”档带入下方三维度"
+                style="width: 100%"
+                :loading="loadingBusinessSystems"
+                @change="onBusinessSystemsChange"
+              >
+                <ElOption
+                  v-for="o in businessSystemOptions"
+                  :key="o.value"
+                  :value="o.value"
+                  :label="o.label"
+                />
+              </ElSelect>
+            </ElFormItem>
+          </ElCol>
+        </ElRow>
+
+        <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="资产类型" prop="asset_type">
-              <ElSelect v-model="formData.asset_type" placeholder="请选择资产类型" style="width: 100%">
+              <ElSelect
+                v-model="formData.asset_type"
+                placeholder="请选择资产类型"
+                style="width: 100%"
+              >
                 <ElOption
                   v-for="opt in assetTypeOptions"
                   :key="opt.value"
@@ -272,7 +329,12 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="业务影响" prop="business_impact">
-              <ElSelect v-model="formData.business_impact" placeholder="业务影响" style="width: 100%">
+              <ElSelect
+                v-model="formData.business_impact"
+                placeholder="业务影响"
+                style="width: 100%"
+                @change="onThreeDimManualChange"
+              >
                 <ElOption label="核心业务" value="core" />
                 <ElOption label="重要业务" value="important" />
                 <ElOption label="一般业务" value="normal" />
@@ -283,7 +345,12 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="数据敏感度" prop="data_sensitivity">
-              <ElSelect v-model="formData.data_sensitivity" placeholder="数据敏感度" style="width: 100%">
+              <ElSelect
+                v-model="formData.data_sensitivity"
+                placeholder="数据敏感度"
+                style="width: 100%"
+                @change="onThreeDimManualChange"
+              >
                 <ElOption label="极高" value="extreme" />
                 <ElOption label="高" value="high" />
                 <ElOption label="中" value="medium" />
@@ -294,7 +361,12 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="等保等级" prop="protection_level">
-              <ElSelect v-model="formData.protection_level" placeholder="等保等级" style="width: 100%">
+              <ElSelect
+                v-model="formData.protection_level"
+                placeholder="等保等级"
+                style="width: 100%"
+                @change="onThreeDimManualChange"
+              >
                 <ElOption label="等保五级" value="level_5" />
                 <ElOption label="等保四级" value="level_4" />
                 <ElOption label="等保三级" value="level_3" />
@@ -309,7 +381,11 @@
         <ElRow :gutter="20">
           <ElCol :span="12">
             <ElFormItem label="网络区域" prop="network_zone">
-              <ElSelect v-model="formData.network_zone" placeholder="请选择网络区域" style="width: 100%">
+              <ElSelect
+                v-model="formData.network_zone"
+                placeholder="请选择网络区域"
+                style="width: 100%"
+              >
                 <ElOption
                   v-for="opt in networkZoneOptions"
                   :key="opt.value"
@@ -321,7 +397,11 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="状态" prop="asset_status">
-              <ElSelect v-model="formData.asset_status" placeholder="请选择状态" style="width: 100%">
+              <ElSelect
+                v-model="formData.asset_status"
+                placeholder="请选择状态"
+                style="width: 100%"
+              >
                 <ElOption
                   v-for="opt in assetStatusOptions"
                   :key="opt.value"
@@ -426,6 +506,11 @@
     deleteAsset as apiDeleteAsset,
     syncFromWazuh
   } from '@/api/asset'
+  import {
+    fetchBusinessSystemList,
+    linkAssetToBusinessSystem,
+    unlinkAssetFromBusinessSystem
+  } from '@/api/businessSystem'
   import { useDictStore } from '@/store/modules/dict'
   import { FormInstance } from 'element-plus'
   import { ElMessageBox, ElMessage } from 'element-plus'
@@ -434,12 +519,7 @@
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
   import { MagicStick, ArrowDown } from '@element-plus/icons-vue'
-  import {
-    askAssetQuery,
-    getAskHistory,
-    batchScoreRisk,
-    type AskResult
-  } from '@/api/asset'
+  import { askAssetQuery, getAskHistory, batchScoreRisk, type AskResult } from '@/api/asset'
 
   const router = useRouter()
   const dictStore = useDictStore()
@@ -447,6 +527,52 @@
   // 状态变量
   const dialogType = ref('add')
   const dialogVisible = ref(false)
+
+  // ========== 业务系统归属（多对多）==========
+  // 后端故意把“资产基础字段写入”与“资产-业务系统关联”拆为两个入口：
+  //   1) POST/PUT /assets            （addAsset/updateAsset）
+  //   2) POST/DELETE /business-systems/assets/{id}/systems  （link/unlink）
+  // 这里选 businessSystemOptions 并在提交时同步计算增删集合。
+  interface BusinessSystemOption {
+    value: string
+    label: string
+    meta: any
+  }
+  const businessSystemOptions = ref<BusinessSystemOption[]>([])
+  // 三维度“从业务系统继承”的严格档位映射（顺序从弱到强）
+  const BIA_RANK: Record<string, number> = {
+    ignorable: 0,
+    auxiliary: 1,
+    normal: 2,
+    important: 3,
+    core: 4
+  }
+  const CIA_RANK: Record<string, number> = { negligible: 0, low: 1, medium: 2, high: 3, extreme: 4 }
+  const PL_RANK: Record<string, number> = {
+    level_1: 0,
+    level_2: 1,
+    level_3: 2,
+    level_4: 3,
+    level_5: 4
+  }
+  const pickStrictest = <K extends 'business_impact' | 'data_sensitivity' | 'protection_level'>(
+    rankMap: Record<string, number>,
+    field: K,
+    candidates: any[]
+  ): string => {
+    let bestRank = -1
+    let bestVal: string = ''
+    for (const sys of candidates) {
+      const v = sys?.[field]
+      if (!v) continue
+      const r = rankMap[v] ?? -1
+      if (r > bestRank) {
+        bestRank = r
+        bestVal = v
+      }
+    }
+    return bestVal
+  }
 
   // 字典派生
   const assetTypeLabelMap = computed(() => dictStore.getLabelMap('asset_type'))
@@ -540,6 +666,29 @@
             )
         },
         {
+          // v1 (§7.2.5 F10)：所属业务系统（后端 list_assets 已返回 business_system_names 数组）
+          prop: 'business_system_names',
+          label: '所属业务系统',
+          align: 'center',
+          minWidth: 160,
+          showOverflowTooltip: true,
+          formatter: (row: any) => {
+            const names: string[] = row.business_system_names || []
+            if (!names.length) return h('span', { class: 'text-placeholder' }, '未关联')
+            return h(
+              'div',
+              { style: 'display:flex; gap:4px; justify-content:center; flex-wrap:wrap;' },
+              names.map((n) =>
+                h(
+                  resolveComponent('ElTag'),
+                  { type: 'info', size: 'small', effect: 'plain' },
+                  { default: () => n }
+                )
+              )
+            )
+          }
+        },
+        {
           // === 治本方案 2026-09-14：重要性列改为三维度标签组合 ===
           prop: 'data_sensitivity',
           label: '业务影响 / 数据敏感度 / 等保',
@@ -547,22 +696,71 @@
           minWidth: 220,
           formatter: (row: any) => {
             // 5 档枚举中文
-            const BIA: Record<string, string> = { core: '核心', important: '重要', normal: '一般', auxiliary: '辅助', ignorable: '可忽略' }
-            const CIA: Record<string, string> = { extreme: '极高', high: '高', medium: '中', low: '低', negligible: '公开' }
-            const PL: Record<string, string> = { level_5: '五级', level_4: '四级', level_3: '三级', level_2: '二级', level_1: '一级' }
-            const BIA_TYPE: Record<string, string> = { core: 'danger', important: 'danger', normal: 'warning', auxiliary: 'info', ignorable: 'info' }
-            const CIA_TYPE: Record<string, string> = { extreme: 'danger', high: 'danger', medium: 'warning', low: 'info', negligible: 'info' }
-            return h('div', { style: 'display:flex; gap:4px; justify-content:center; flex-wrap:wrap;' }, [
-              h(resolveComponent('ElTag'),
-                { type: BIA_TYPE[row.business_impact] || 'info', size: 'small', effect: 'plain' },
-                { default: () => `BIA ${BIA[row.business_impact] || row.business_impact || '--'}` }),
-              h(resolveComponent('ElTag'),
-                { type: CIA_TYPE[row.data_sensitivity] || 'info', size: 'small', effect: 'plain' },
-                { default: () => `CIA ${CIA[row.data_sensitivity] || row.data_sensitivity || '--'}` }),
-              h(resolveComponent('ElTag'),
-                { type: 'info', size: 'small', effect: 'plain' },
-                { default: () => PL[row.protection_level] || row.protection_level || '--' }),
-            ])
+            const BIA: Record<string, string> = {
+              core: '核心',
+              important: '重要',
+              normal: '一般',
+              auxiliary: '辅助',
+              ignorable: '可忽略'
+            }
+            const CIA: Record<string, string> = {
+              extreme: '极高',
+              high: '高',
+              medium: '中',
+              low: '低',
+              negligible: '公开'
+            }
+            const PL: Record<string, string> = {
+              level_5: '五级',
+              level_4: '四级',
+              level_3: '三级',
+              level_2: '二级',
+              level_1: '一级'
+            }
+            const BIA_TYPE: Record<string, string> = {
+              core: 'danger',
+              important: 'danger',
+              normal: 'warning',
+              auxiliary: 'info',
+              ignorable: 'info'
+            }
+            const CIA_TYPE: Record<string, string> = {
+              extreme: 'danger',
+              high: 'danger',
+              medium: 'warning',
+              low: 'info',
+              negligible: 'info'
+            }
+            return h(
+              'div',
+              { style: 'display:flex; gap:4px; justify-content:center; flex-wrap:wrap;' },
+              [
+                h(
+                  resolveComponent('ElTag'),
+                  { type: BIA_TYPE[row.business_impact] || 'info', size: 'small', effect: 'plain' },
+                  {
+                    default: () => `BIA ${BIA[row.business_impact] || row.business_impact || '--'}`
+                  }
+                ),
+                h(
+                  resolveComponent('ElTag'),
+                  {
+                    type: CIA_TYPE[row.data_sensitivity] || 'info',
+                    size: 'small',
+                    effect: 'plain'
+                  },
+                  {
+                    default: () =>
+                      `CIA ${CIA[row.data_sensitivity] || row.data_sensitivity || '--'}`
+                  }
+                ),
+                h(
+                  resolveComponent('ElTag'),
+                  { type: 'info', size: 'small', effect: 'plain' },
+                  { default: () => PL[row.protection_level] || row.protection_level || '--' }
+                )
+              ]
+            )
           }
         },
         {
@@ -572,16 +770,16 @@
           width: 90,
           formatter: (row: any) => {
             if (row.risk_score === null || row.risk_score === undefined) {
-              return h(resolveComponent('ElTag'), { type: 'info', effect: 'plain' }, { default: () => 'N/A' })
+              return h(
+                resolveComponent('ElTag'),
+                { type: 'info', effect: 'plain' },
+                { default: () => 'N/A' }
+              )
             }
             const s = row.risk_score as number
             const type = s >= 80 ? 'danger' : s >= 60 ? 'warning' : s >= 40 ? 'warning' : 'success'
             const effect = s >= 80 ? 'dark' : 'light'
-            return h(
-              resolveComponent('ElTag'),
-              { type, effect },
-              { default: () => `${s}` }
-            )
+            return h(resolveComponent('ElTag'), { type, effect }, { default: () => `${s}` })
           }
         },
         {
@@ -594,7 +792,10 @@
             return label
               ? h(
                   resolveComponent('ElTag'),
-                  { type: (networkZoneColorMap.value[row.network_zone] as any) || 'info', effect: 'light' },
+                  {
+                    type: (networkZoneColorMap.value[row.network_zone] as any) || 'info',
+                    effect: 'light'
+                  },
                   { default: () => label }
                 )
               : '--'
@@ -610,7 +811,10 @@
             return label
               ? h(
                   resolveComponent('ElTag'),
-                  { type: (statusColorMap.value[row.asset_status] as any) || 'info', effect: 'light' },
+                  {
+                    type: (statusColorMap.value[row.asset_status] as any) || 'info',
+                    effect: 'light'
+                  },
                   { default: () => label }
                 )
               : '--'
@@ -692,13 +896,13 @@
     name: '',
     asset_ip: '',
     network_segment: 'default',
-    network_zone: 'other',
+    network_zone: 'unknown', // 8 值方案默认未知，详见 docs/design/network-zone-redesign.md
     asset_type: 'other',
     // === 治本方案 2026-09-14：三维度默认值 ===
     business_impact: 'normal',
     data_sensitivity: 'medium',
     protection_level: 'level_2',
-    criticality: 'medium',  // DEPRECATED 兼容垫片
+    criticality: 'medium', // DEPRECATED 兼容垫片
     asset_status: '',
     owner: '',
     business_unit: '',
@@ -706,8 +910,13 @@
     mac_address: '',
     public_ip: '',
     purchase_date: '',
-    warranty_end: ''
+    warranty_end: '',
+    // 业务系统归属（多选，仅走独立 link/unlink API；不随资产提交）
+    business_system_ids: [] as string[]
   })
+
+  // “是否由业务系统联动填充”（手动改过 select 后置 false，不再覆盖人工选择）
+  const inheritFromBusinessSystem = ref(true)
 
   // 搜索配置
   const searchItems = computed<SearchFormItem[]>(() => [
@@ -823,6 +1032,7 @@
     { label: 'IP地址', prop: 'asset_ip' },
     { label: 'MAC地址', prop: 'mac_address' },
     { label: '资产类型', prop: 'asset_type' },
+    { label: '所属业务系统', prop: 'business_system_names' },
     { label: '业务影响 / 数据敏感度 / 等保', prop: 'data_sensitivity' },
     { label: '网络区域', prop: 'network_zone' },
     { label: '状态', prop: 'asset_status' },
@@ -854,13 +1064,13 @@
       formData.name = row.name || ''
       formData.asset_ip = row.asset_ip || ''
       formData.network_segment = row.network_segment || 'default'
-      formData.network_zone = row.network_zone || 'other'
+      formData.network_zone = row.network_zone || 'unknown'
       formData.asset_type = row.asset_type || 'other'
       // === 治本方案：三维度回填 ===
       formData.business_impact = row.business_impact || 'normal'
       formData.data_sensitivity = row.data_sensitivity || 'medium'
       formData.protection_level = row.protection_level || 'level_2'
-      formData.criticality = row.criticality || 'medium'  // 兼容垫片
+      formData.criticality = row.criticality || 'medium' // 兼容垫片
       formData.asset_status = row.asset_status || ''
       formData.owner = row.owner || ''
       formData.business_unit = row.business_unit || ''
@@ -869,12 +1079,16 @@
       formData.public_ip = row.public_ip || ''
       formData.purchase_date = row.purchase_date || ''
       formData.warranty_end = row.warranty_end || ''
+      // 业务系统归属（后端响应已在 list/get 中返回 ids；add 时跳过）
+      formData.business_system_ids = Array.isArray(row.business_system_ids)
+        ? [...row.business_system_ids]
+        : []
     } else {
       formData.id = ''
       formData.name = ''
       formData.asset_ip = ''
       formData.network_segment = 'default'
-      formData.network_zone = 'other'
+      formData.network_zone = 'unknown' // 8 值方案默认未知
       formData.asset_type = 'other'
       // === 治本方案：三维度默认值 ===
       formData.business_impact = 'normal'
@@ -889,7 +1103,10 @@
       formData.public_ip = ''
       formData.purchase_date = ''
       formData.warranty_end = ''
+      formData.business_system_ids = []
     }
+    // 重置“业务系统→三维度继承”开关（新开窗 = 允许继承）
+    inheritFromBusinessSystem.value = true
 
     nextTick(() => {
       formRef.value?.clearValidate()
@@ -1009,7 +1226,9 @@
     if (p.keywords) searchState.name = p.keywords
     if (p.asset_status) {
       searchState.asset_status =
-        String(p.asset_status).toLowerCase() === 'offline' || p.asset_status === '离线' ? 'offline' : 'online'
+        String(p.asset_status).toLowerCase() === 'offline' || p.asset_status === '离线'
+          ? 'offline'
+          : 'online'
     }
     searchData()
     ElMessage.success('已应用到筛选器并刷新列表')
@@ -1035,7 +1254,60 @@
 
   onMounted(() => {
     loadAskHistory()
+    loadBusinessSystems()
   })
+
+  // ========== 业务系统下拉（与资产表单联动）==========
+  const loadingBusinessSystems = ref(false)
+  async function loadBusinessSystems() {
+    loadingBusinessSystems.value = true
+    try {
+      // 后端 /api/v1/business-systems page_size 上限 le=100，传 100 以获取全部下拉选项；
+      // 若业务系统 >100，后期需要引入“下拉需打开时按关键字查询”（同部门加载模式）。
+      const res: any = await fetchBusinessSystemList({ page: 1, page_size: 100 })
+      const items = res?.data?.items || []
+      businessSystemOptions.value = items.map((s: any) => ({
+        value: s.id,
+        label: s.name,
+        // 缓存三维度原值，给继承逻辑用（避免再次请求业务系统详情）
+        meta: {
+          business_impact: s.business_impact,
+          data_sensitivity: s.data_sensitivity,
+          protection_level: s.protection_level
+        }
+      }))
+    } catch (e) {
+      console.error('[Asset] 加载业务系统列表失败', e)
+    } finally {
+      loadingBusinessSystems.value = false
+    }
+  }
+
+  // 业务系统多选变化 → 取“最严”档带入三维度
+  function onBusinessSystemsChange(ids: string[]) {
+    if (!inheritFromBusinessSystem.value) {
+      // 用户已手动改过三维度，不覆盖人工选择
+      return
+    }
+    const selected = (ids || [])
+      .map((id) => businessSystemOptions.value.find((o) => o.value === id)?.meta)
+      .filter(Boolean)
+    if (!selected.length) {
+      // 清空业务系统 → 保留现有三维度（可能是人工填的）
+      return
+    }
+    const bia = pickStrictest(BIA_RANK, 'business_impact', selected)
+    const cia = pickStrictest(CIA_RANK, 'data_sensitivity', selected)
+    const pl = pickStrictest(PL_RANK, 'protection_level', selected)
+    if (bia) formData.business_impact = bia
+    if (cia) formData.data_sensitivity = cia
+    if (pl) formData.protection_level = pl
+  }
+
+  // 用户手动改三维度 → 关闭继承，避免 watch 反复覆盖
+  function onThreeDimManualChange() {
+    inheritFromBusinessSystem.value = false
+  }
 
   // Wazuh同步
   const handleSyncWazuh = () => {
@@ -1083,46 +1355,114 @@
   const computedRules = computed(() => baseRules)
 
   // 提交
+  // 两步走：
+  //   1) addAsset / updateAsset   —— 资产基础字段（不含业务系统）
+  //   2) linkAssetToBusinessSystem / unlinkAssetFromBusinessSystem
+  // 原因：后端 AssetCreate/AssetUpdate 故意不接 business_system_ids（见 app/schemas/asset.py 注释），
+  // 避免单边顺序错位。业务系统关联是 best-effort：部分失败不阻塞主“添加/更新成功”提示，
+  // 但单独 ElMessage.warning 告知用户哪些系统未关联上。
   const handleSubmit = async () => {
     if (!formRef.value) return
 
     await formRef.value.validate(async (valid) => {
-      if (valid) {
-        try {
-          const submitData = { ...formData }
-          // 清除空字符串字段
-          Object.keys(submitData).forEach((key) => {
-            if ((submitData as any)[key] === '') {
-              delete (submitData as any)[key]
-            }
-          })
-
-          let res
-          if (dialogType.value === 'add') {
-            res = await addAsset(submitData)
-          } else {
-            res = await updateAsset(submitData.id, submitData)
+      if (!valid) return
+      try {
+        const submitData: any = { ...formData }
+        // 清除空字符串字段
+        Object.keys(submitData).forEach((key) => {
+          if (submitData[key] === '') {
+            delete submitData[key]
           }
+        })
+        // 业务系统归属不走资产接口（后端不接 business_system_ids）
+        const desiredSystemIds: string[] = submitData.business_system_ids || []
+        delete submitData.business_system_ids
 
-          // addAsset/updateAsset 已传 keepFullResponse: true，返回 {code, msg, data}
-          if (res.code === 200 || res.code === 201) {
-            ElMessage.success(dialogType.value === 'add' ? '添加成功' : '更新成功')
-            dialogVisible.value = false
-            refreshAll()
-          } else {
-            ElMessage.error(res.msg || (dialogType.value === 'add' ? '添加失败' : '更新失败'))
-          }
-        } catch (err) {
-          console.error('提交出错:', err)
-          ElMessage.error(dialogType.value === 'add' ? '添加失败' : '更新失败')
+        let res
+        if (dialogType.value === 'add') {
+          res = await addAsset(submitData)
+        } else {
+          res = await updateAsset(submitData.id, submitData)
         }
+
+        // addAsset/updateAsset 已传 keepFullResponse: true，返回 {code, msg, data}
+        if (res.code !== 200 && res.code !== 201) {
+          ElMessage.error(res.msg || (dialogType.value === 'add' ? '添加失败' : '更新失败'))
+          return
+        }
+
+        // 资产保存成功 → 同步业务系统关联（仅 edit 需要计算增删集；add 全是 link）
+        const assetId: string = dialogType.value === 'add' ? (res.data?.id ?? '') : submitData.id
+        if (assetId) {
+          const linkReport = await syncBusinessSystemLinks(assetId, desiredSystemIds)
+          if (linkReport.failures.length) {
+            ElMessage.warning(
+              `资产已保存，但 ${linkReport.failures.length} 个业务系统关联失败：${linkReport.failures.join('、')}（admin 才能创建/解除关联）`
+            )
+          }
+        }
+
+        ElMessage.success(dialogType.value === 'add' ? '添加成功' : '更新成功')
+        dialogVisible.value = false
+        refreshAll()
+      } catch (err) {
+        console.error('提交出错:', err)
+        ElMessage.error(dialogType.value === 'add' ? '添加失败' : '更新失败')
       }
     })
+  }
+
+  /**
+   * 同步资产 ↔ 业务系统 关联。
+   * - add：全部 desiredSystemIds 都是新增 → 逐个 link。
+   * - edit：计算当前集合 (formData.business_system_ids，是 showDialog 回填的 row 值)
+   *         与目标集合 (desiredSystemIds) 的差集，分别 unlink / link。
+   * 返回 { failures: string[] }，给出失败的系统名（用于 warning 提示）。
+   */
+  async function syncBusinessSystemLinks(assetId: string, desiredSystemIds: string[]) {
+    const failures: string[] = []
+    const desired = new Set(desiredSystemIds)
+    // formData.business_system_ids 是“资产原已关联的系统”（showDialog('edit', row) 时回填自 row.business_system_ids）
+    const currentIds: string[] = formData.business_system_ids || []
+    const current = new Set(currentIds)
+
+    const toUnlink = [...current].filter((id) => !desired.has(id))
+    const toLink = [...desired].filter((id) => !current.has(id))
+
+    // 并行处理 link/unlink（allSettled 互不影响；failed items 收进 failures 用于 warning）
+    const ops: Array<Promise<void>> = []
+    for (const id of toUnlink) {
+      ops.push(
+        unlinkAssetFromBusinessSystem(assetId, id).catch((e: any) => {
+          console.error('[Asset] unlink 失败', id, e)
+          const name = businessSystemOptions.value.find((o) => o.value === id)?.label || id
+          failures.push(name)
+        })
+      )
+    }
+    for (const id of toLink) {
+      ops.push(
+        linkAssetToBusinessSystem(assetId, id).catch((e: any) => {
+          console.error('[Asset] link 失败', id, e)
+          const name = businessSystemOptions.value.find((o) => o.value === id)?.label || id
+          failures.push(name)
+        })
+      )
+    }
+    await Promise.allSettled(ops)
+    return { failures }
   }
 </script>
 
 <style lang="scss" scoped>
   .asset-list-page {
+    .form-tip {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      margin-left: 8px;
+      line-height: 1.4;
+    }
+
     .ai-query-card {
       margin-bottom: 12px;
 
@@ -1246,12 +1586,16 @@
 
             &.is-critical {
               border-left-color: var(--el-color-danger);
-              .bucket-num { color: var(--el-color-danger); }
+              .bucket-num {
+                color: var(--el-color-danger);
+              }
             }
 
             &.is-high {
               border-left-color: var(--el-color-warning);
-              .bucket-num { color: var(--el-color-warning); }
+              .bucket-num {
+                color: var(--el-color-warning);
+              }
             }
 
             &.is-medium {

@@ -425,6 +425,8 @@
   }
 
   // 删除
+  // 注意：成功提示由 http 拦截器根据 showSuccessMessage 自动弹（"删除成功"），
+  // 这里不再手动 ElMessage.success，避免双提示。失败仍走 catch + 后端 envelope msg。
   const deleteAction = (row: BusinessSystemItem) => {
     ElMessageBox.confirm(
       `确定删除业务系统「${row.name}」吗？将同时解除 ${row.asset_count} 个资产关联。`,
@@ -433,13 +435,8 @@
     )
       .then(async () => {
         try {
-          const resp: any = await deleteBusinessSystem(row.id)
-          if (resp?.code === 200 || resp?.data?.success !== false) {
-            ElMessage.success('删除成功')
-            refresh()
-          } else {
-            ElMessage.error(resp?.msg || '删除失败')
-          }
+          await deleteBusinessSystem(row.id)
+          refresh()
         } catch (err) {
           console.error('删除业务系统出错:', err)
           ElMessage.error('删除失败，请稍后再试')

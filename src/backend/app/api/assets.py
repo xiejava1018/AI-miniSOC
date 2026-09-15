@@ -104,6 +104,10 @@ async def list_assets(
     # 手动转换为响应格式（三维度 + criticality 兼容垫片）
     items = []
     for asset in assets:
+        # v1 (§7.2.5 F10)：与 update_asset 一致，list/get 也带上业务系统名称，供列表/编辑回填。
+        # 与 update_asset 的差别：此处用 inline 收集（不重查 DB）。
+        sys_names = [link.system.name for link in (asset.business_links or []) if link.system]
+        sys_ids = [str(link.system.id) for link in (asset.business_links or []) if link.system]
         items.append(AssetResponse(
             id=str(asset.id),
             name=asset.name,
@@ -139,6 +143,9 @@ async def list_assets(
             warranty_end=asset.warranty_end,
             expected_eol=asset.expected_eol,
             expected_eol_source=asset.expected_eol_source,
+            # 业务系统归属（v1 §7.2.5 F10）：仅展示+编辑回填，不作为写入入口
+            business_system_names=sys_names or None,
+            business_system_ids=sys_ids or None,
         ))
 
     return AssetListResponse(
@@ -284,6 +291,11 @@ async def get_asset(asset_id: str, db: Session = Depends(get_db)):
     resp = AssetResponse.model_validate(asset)
     if resp.criticality is None:
         resp.criticality = legacy_criticality_from_data_sensitivity(asset.data_sensitivity)
+    # v1 (§7.2.5 F10)：详情页业务系统归属（与 update_asset / list_assets 同步，避免“未关联”假阴性）
+    sys_names = [link.system.name for link in (asset.business_links or []) if link.system]
+    sys_ids = [str(link.system.id) for link in (asset.business_links or []) if link.system]
+    resp.business_system_names = sys_names or None
+    resp.business_system_ids = sys_ids or None
     return resp
 
 
