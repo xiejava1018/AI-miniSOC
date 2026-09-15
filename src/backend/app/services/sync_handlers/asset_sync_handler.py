@@ -19,6 +19,7 @@ from app.models.asset import Asset
 from app.models.asset_source import AssetSource
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
+from app.services.network_segment import infer_segment
 from app.services.sync_handlers.base import BaseSyncHandler
 
 logger = logging.getLogger(__name__)
@@ -174,12 +175,27 @@ class AssetSyncHandler(BaseSyncHandler):
         if not asset_ip:
             raise ValueError("缺少 asset_ip 字段")
 
-        network_segment = item.get("network_segment", "default")
+        # segment 优先级：采集器显式上报 > 环境事实表推断（app/services/network_segment.py）
+        # 背景（2026-XX-XX）：存量资产已从 'default' 回填为 hq-lan/aliyun-172.18 等，
+        # 若继续用裸 'default' 查重，(default, ip) 必然 miss → 每 5 分钟批量建重复资产。
+        network_segment = item.get("network_segment") or infer_segment(asset_ip)
 
         existing: Optional[Asset] = db.query(Asset).filter(
             Asset.asset_ip == asset_ip,
             Asset.network_segment == network_segment,
         ).first()
+
+        if not existing:
+            # fallback：按 IP 查全部 segment，防“台账已被人工/回填改成非推断 segment”场景。
+            # 命中规则：
+            #   - 恰好 1 条 → 同一台（IP 全局唯一），走更新；
+            #   - 多条中有 segment == 推断值 → tplink/wazuh 上报的就是那个网段的设备，走更新；
+            #   - 多条且推断值不在其中 → 真多网段同 IP，保持 None 走新建（撞唯一约束会入死信，人工处理）。
+            by_ip = db.query(Asset).filter(Asset.asset_ip == asset_ip).all()
+            if len(by_ip) == 1:
+                existing = by_ip[0]
+            else:
+                existing = next((a for a in by_ip if a.network_segment == network_segment), None)
 
         now = datetime.now(timezone.utc)
 
@@ -189,8 +205,9 @@ class AssetSyncHandler(BaseSyncHandler):
             return self._create_new(source, item, sync_task_id, now, db)
 
     def _create_new(self, source: str, item: dict, sync_task_id, now: datetime, db: Session) -> str:
-        if "network_segment" not in item:
-            item["network_segment"] = "default"
+        # 新建资产的 segment：显式上报优先，否则按环境事实表推断（不再硬编码 'default'）
+        if not item.get("network_segment"):
+            item["network_segment"] = infer_segment(item.get("asset_ip"))
 
         # 8 值方案（详见 docs/design/network-zone-redesign.md）：
         # public/dmz/production/office/dev/management/isolated/unknown
