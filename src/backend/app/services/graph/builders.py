@@ -664,6 +664,15 @@ class TopologyBuilder:
 
         for seg, group in seg_groups.items():
             if len(group) < 2:
+                # 单资产段不建 same_segment 边，但仍 ensure_node 带 props——
+                # 否则该资产经其他 builder（端口/告警）入图时 props 为空，
+                # 前端 rawProps.network_segment / agent_online 取不到值。
+                a = group[0]
+                ensure_node(
+                    self.db, f"asset:{a.id}", "asset", self._label(a),
+                    ref_table="soc_assets", ref_id=str(a.id),
+                    props=self._asset_props(a), props_synced_at=now,
+                )
                 continue
             for i, a in enumerate(group):
                 for b in group[i+1:]:
