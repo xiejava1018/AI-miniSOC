@@ -177,6 +177,11 @@ declare namespace Api {
       network_zone?: string
       asset_ip: string
       asset_type?: string
+      // === 治本方案：三维度重要性（2026-09-14） ===
+      business_impact?: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+      data_sensitivity?: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+      protection_level?: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
+      // criticality：DEPRECATED 兼容垫片
       criticality?: string
       owner?: string
       business_unit?: string
@@ -193,6 +198,10 @@ declare namespace Api {
       status_updated_at?: string
       created_at?: string
       updated_at?: string
+      // v1 (§7.2.5 F10)：归属外键 + 业务系统名称（详情页可选呈现）
+      owner_id?: number | null
+      department_id?: number | null
+      business_system_names?: string[] | null
     }
 
     /** 资产搜索参数 */
@@ -202,6 +211,11 @@ declare namespace Api {
       asset_ip?: string
       name?: string
       asset_type?: string
+      // === 治本方案：三维度筛选 ===
+      business_impact?: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+      data_sensitivity?: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+      protection_level?: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
+      // criticality：DEPRECATED 兼容垫片
       criticality?: string
       asset_status?: string
       network_zone?: string
@@ -216,6 +230,11 @@ declare namespace Api {
       network_zone?: string
       asset_ip?: string
       asset_type?: string
+      // === 治本方案：三维度重要性 ===
+      business_impact?: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+      data_sensitivity?: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+      protection_level?: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
+      // criticality：DEPRECATED 兼容垫片
       criticality?: string
       owner?: string
       business_unit?: string
@@ -379,6 +398,52 @@ declare namespace Api {
   namespace SystemDict {
     interface DictItem {
       id: number
+
+  /** 业务系统管理（v1 §7.0 WO-0a / §7.2.5 F9）*/
+  namespace BusinessSystem {
+    interface BusinessSystemItem {
+      id: string
+      code: string
+      name: string
+      // === 治本方案：三维度重要性（2026-09-14） ===
+      business_impact: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+      data_sensitivity: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+      protection_level: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
+      // criticality：DEPRECATED 兼容垫片（从 data_sensitivity 派生）
+      criticality: 'critical' | 'high' | 'medium' | 'low' | string
+      owner?: string | null
+      owner_id?: number | null
+      owner_contact?: string | null
+      owner_username?: string | null
+      department_id?: number | null
+      department_name?: string | null
+      description?: string | null
+      asset_count: number
+      created_at?: string
+      updated_at?: string
+    }
+
+    interface BusinessSystemPayload {
+      code: string
+      name: string
+      // === 治本方案：三维度重要性 ===
+      business_impact: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+      data_sensitivity: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+      protection_level: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
+      // criticality：DEPRECATED 兼容垫片
+      criticality?: string
+      owner?: string | null
+      owner_contact?: string | null
+      owner_id?: number | null
+      department_id?: number | null
+      description?: string | null
+    }
+
+    interface BusinessSystemSearchParams {
+      page?: number
+      page_size?: number
+      keyword?: string
+    }
       dict_type: string
       dict_code: string
       dict_label: string

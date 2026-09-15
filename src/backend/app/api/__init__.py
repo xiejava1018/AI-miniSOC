@@ -21,7 +21,7 @@ from app.api import (
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph,
     scan_agents, scan_human_agents, scan_tasks,
-    data_sources, config_schemas, ai_providers,
+    data_sources, config_schemas, ai_providers, business_systems,
 )
 from app.core.auth import get_current_user
 from app.core.route_security import enforce_write_default
@@ -121,6 +121,11 @@ include_human_router(
 # 资产知识图谱 v1（G1）：独立前缀 /graph；包含资产邻居、影响面、chokepoint 等端点
 include_human_router(
     api_router, graph.router, prefix="/graph", tags=["资产知识图谱"],
+)
+
+# 业务系统管理（WO-0a 入口；§7.2.5 F9）
+include_human_router(
+    api_router, business_systems.router, prefix="/business-systems", tags=["业务系统管理"],
 )
 
 # 用户管理（含登录态读 + admin 写）
