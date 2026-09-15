@@ -114,11 +114,13 @@ def get_neighbors(
         type_filter_params["excl_types"] = list(INFERRED_TYPES)
 
     # 3. 递归 CTE：BFS（带环检测 + 深度上限）
-    # 截断顺序关键（2026-XX-XX bug 修复）：必须按 BFS 深度优先 LIMIT，
-    # 不能按 node_key 字母序——alertgroup:* 字母序在 asset:* 之前，
-    # 同段资产 depth2 带出的大量告警组会吃光 limit 名额，
-    # 导致 asset/system/port 节点全被截断（前端图谱下拉框全空、links=0）。
-    # DISTINCT ON 要求 ORDER BY 以 node_key 开头，故包一层子查询再按深度排。
+    # 截断顺序关键（2026-XX-XX 两次 bug 修复）：
+    #   ① 必须按 BFS 深度优先 LIMIT（不能按 node_key 字母序，否则 depth2+
+    #      的海量告警组会把 depth0/1 的资产挤出）。
+    #   ② 同一深度内，告警簇（alertgroup:*）排最后——它是资产的附属聚合，
+    #      同深度的拓扑/漏洞/端口/业务系统节点优先保名额。否则种子 1 跳的
+    #      460 告警簇仍会吃光 limit，把 117 个漏洞节点挤掉（字母序碾压）。
+    # DISTINCT ON 要求 ORDER BY 以 node_key 开头，故包一层子查询再排序。
     sql = text(f"""
         WITH RECURSIVE impact AS (
             SELECT CAST(:center_key AS text) AS node_key,
@@ -143,7 +145,9 @@ def get_neighbors(
         )
         SELECT node_key, min_depth
         FROM dedup
-        ORDER BY min_depth, node_key
+        ORDER BY min_depth,
+                 CASE WHEN node_key LIKE 'alertgroup:%' THEN 1 ELSE 0 END,
+                 node_key
         LIMIT :node_limit
     """)
 
