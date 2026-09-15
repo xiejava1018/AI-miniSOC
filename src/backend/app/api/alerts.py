@@ -68,8 +68,10 @@ async def list_alerts(
             alerts = result_data.get("items", []) if isinstance(result_data, dict) else result_data
 
         # 格式化响应
+        # AlertSlaService 是无状态服务（db 随方法参数传入，非构造参数），
+        # 实例化不传参；传了会报 "AlertSlaService() takes no arguments"。
         formatted_alerts = []
-        sla_service = AlertSlaService(db)
+        sla_service = AlertSlaService()
         for alert in alerts:
             agent_ip = alert.get("agent", {}).get("ip")
             ts = alert.get("timestamp") or alert.get("@timestamp")
