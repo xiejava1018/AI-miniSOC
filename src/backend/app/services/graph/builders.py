@@ -654,6 +654,8 @@ class TopologyBuilder:
 
         # ---- same_segment：同一 network_segment 的所有资产两两相连 ----
         assets = self.db.query(Asset).all()
+        # id → Asset 映射（shared_tag 段复用，避免 _label_by_id 的 N+1 查询）
+        assets_by_id: dict = {a.id: a for a in assets}
         # 按 network_segment 分组
         seg_groups: dict[str, list] = {}
         for a in assets:
@@ -668,10 +670,12 @@ class TopologyBuilder:
                     ensure_node(
                         self.db, f"asset:{a.id}", "asset", self._label(a),
                         ref_table="soc_assets", ref_id=str(a.id),
+                        props=self._asset_props(a), props_synced_at=now,
                     )
                     ensure_node(
                         self.db, f"asset:{b.id}", "asset", self._label(b),
                         ref_table="soc_assets", ref_id=str(b.id),
+                        props=self._asset_props(b), props_synced_at=now,
                     )
                     upsert_edge(
                         self.db, f"asset:{a.id}", f"asset:{b.id}", "same_segment",
@@ -699,15 +703,21 @@ class TopologyBuilder:
             unique_ids = list(set(asset_ids))
             for i, aid in enumerate(unique_ids):
                 for bid in unique_ids[i+1:]:
+                    asset_a = assets_by_id.get(aid)
+                    asset_b = assets_by_id.get(bid)
                     ensure_node(
                         self.db, f"asset:{aid}", "asset",
-                        self._label_by_id(aid),
+                        self._label(asset_a) if asset_a else f"asset:{aid}",
                         ref_table="soc_assets", ref_id=str(aid),
+                        props=self._asset_props(asset_a) if asset_a else None,
+                        props_synced_at=now if asset_a else None,
                     )
                     ensure_node(
                         self.db, f"asset:{bid}", "asset",
-                        self._label_by_id(bid),
+                        self._label(asset_b) if asset_b else f"asset:{bid}",
                         ref_table="soc_assets", ref_id=str(bid),
+                        props=self._asset_props(asset_b) if asset_b else None,
+                        props_synced_at=now if asset_b else None,
                     )
                     upsert_edge(
                         self.db, f"asset:{aid}", f"asset:{bid}", "shared_tag",
@@ -729,14 +739,35 @@ class TopologyBuilder:
     def _label(self, a: Asset) -> str:
         return f"{a.name or 'unknown'} ({a.asset_ip or '?'})"
 
-    def _label_by_id(self, aid) -> str:
-        a = self.db.query(Asset).filter(Asset.id == aid).first()
-        return self._label(a) if a else f"asset:{aid}"
+    def _asset_props(self, a: Asset) -> dict:
+        """资产节点 rawProps（前端 graph/index.vue 消费）。
 
-
-# ---------------------------------------------------------------------------
-# Builder 4: AlertGroupBuilder（告警簇 → 资产）
-# ---------------------------------------------------------------------------
+        背景（2026-XX-XX bug）：此前 ensure_node 不传 props，且每日全量重建会
+        把 asset 节点 props 抹成 {}，导致前端「网段/业务系统」下拉框无数据、
+        盲区标记（agent_online）失效。字段与前端读取处一一对应：
+          - ip                节点搜索（rawProps.ip）
+          - network_segment   segmentOptions 下拉
+          - criticality       节点视觉编码（DEPRECATED 兼容垫片，随三维度派生）
+          - business_impact / data_sensitivity / protection_level  三维度
+          - agent_online      盲区标记（asset_status 近似）
+          - biz_systems       bizSystemOptions 备选来源
+        """
+        biz = []
+        try:
+            biz = [link.system.name for link in (a.business_links or []) if link.system]
+        except Exception:
+            biz = []
+        return {
+            "ip": a.asset_ip,
+            "network_segment": a.network_segment or "default",
+            "network_zone": a.network_zone,
+            "criticality": a.criticality,
+            "business_impact": a.business_impact,
+            "data_sensitivity": a.data_sensitivity,
+            "protection_level": a.protection_level,
+            "agent_online": (a.asset_status == "online"),
+            "biz_systems": biz,
+        }
 
 
 class AlertGroupBuilder:

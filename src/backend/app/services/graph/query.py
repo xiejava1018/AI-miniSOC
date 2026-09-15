@@ -114,6 +114,11 @@ def get_neighbors(
         type_filter_params["excl_types"] = list(INFERRED_TYPES)
 
     # 3. 递归 CTE：BFS（带环检测 + 深度上限）
+    # 截断顺序关键（2026-XX-XX bug 修复）：必须按 BFS 深度优先 LIMIT，
+    # 不能按 node_key 字母序——alertgroup:* 字母序在 asset:* 之前，
+    # 同段资产 depth2 带出的大量告警组会吃光 limit 名额，
+    # 导致 asset/system/port 节点全被截断（前端图谱下拉框全空、links=0）。
+    # DISTINCT ON 要求 ORDER BY 以 node_key 开头，故包一层子查询再按深度排。
     sql = text(f"""
         WITH RECURSIVE impact AS (
             SELECT CAST(:center_key AS text) AS node_key,
@@ -130,11 +135,15 @@ def get_neighbors(
               AND e.confidence >= :min_conf
               {type_filter_sql}
               AND (e.expires_at IS NULL OR e.expires_at > now())
+        ),
+        dedup AS (
+            SELECT DISTINCT ON (node_key)
+                   node_key, min(depth) OVER (PARTITION BY node_key) AS min_depth
+            FROM impact
         )
-        SELECT DISTINCT ON (node_key)
-               node_key, min(depth) OVER (PARTITION BY node_key) AS min_depth
-        FROM impact
-        ORDER BY node_key, min_depth
+        SELECT node_key, min_depth
+        FROM dedup
+        ORDER BY min_depth, node_key
         LIMIT :node_limit
     """)
 
