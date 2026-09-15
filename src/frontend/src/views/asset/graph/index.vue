@@ -58,9 +58,18 @@
 
         <div class="fg">
           <h4>快速过滤</h4>
-          <label class="chk"><input type="checkbox" v-model="filterOnlyCritical" @change="applyFilters" /> 仅看核心资产</label>
-          <label class="chk"><input type="checkbox" v-model="filterShowBlind" @change="applyFilters" /> 显示无 agent 盲区</label>
-          <label class="chk"><input type="checkbox" v-model="filterIncludeInferred" @change="applyFilters" /> 显示推断边（灰色）</label>
+          <label class="chk"
+            ><input type="checkbox" v-model="filterOnlyCritical" @change="applyFilters" />
+            仅看核心资产</label
+          >
+          <label class="chk"
+            ><input type="checkbox" v-model="filterShowBlind" @change="applyFilters" /> 显示无 agent
+            盲区</label
+          >
+          <label class="chk"
+            ><input type="checkbox" v-model="filterIncludeInferred" @change="applyFilters" />
+            显示推断边（灰色）</label
+          >
         </div>
 
         <div class="fg">
@@ -87,7 +96,11 @@
             :class="{ dim: !relVisible[rel.value] }"
             @click="toggleRelType(rel.value)"
           >
-            <span class="legend-line" :class="{ dashed: rel.inferred }" :style="{ borderColor: rel.color }"></span>
+            <span
+              class="legend-line"
+              :class="{ dashed: rel.inferred }"
+              :style="{ borderColor: rel.color }"
+            ></span>
             <span class="legend-label">{{ rel.label }}</span>
             <span class="legend-count">{{ countByRelType[rel.value] || 0 }}</span>
           </div>
@@ -97,8 +110,12 @@
       <!-- ======== 中栏：主图 ======== -->
       <section class="graph-area">
         <div class="graph-toolbar">
-          <button :class="{ on: layoutMode === 'force' }" @click="setLayout('force')">力导布局</button>
-          <button :class="{ on: layoutMode === 'circular' }" @click="setLayout('circular')">环形布局</button>
+          <button :class="{ on: layoutMode === 'force' }" @click="setLayout('force')"
+            >力导布局</button
+          >
+          <button :class="{ on: layoutMode === 'circular' }" @click="setLayout('circular')"
+            >环形布局</button
+          >
         </div>
 
         <div ref="chartRef" class="global-chart" v-show="!emptyState"></div>
@@ -136,25 +153,49 @@
         <div class="node-detail">
           <template v-if="selectedNode">
             <div class="nd-title">
-              <span class="node-tag" :class="`cat-${selectedNode.category}`">{{ categoryLabel(selectedNode.category) }}</span>
+              <span class="node-tag" :class="`cat-${selectedNode.category}`">{{
+                categoryLabel(selectedNode.category)
+              }}</span>
               {{ selectedNode.label }}
               <span class="nd-close" @click="selectedNode = null">×</span>
             </div>
             <template v-if="selectedNode.category === 'asset' && selectedAssetDetail">
-              <div class="nd-row"><span>主机名</span><span>{{ selectedAssetDetail.name || '—' }}</span></div>
-              <div class="nd-row"><span>IP</span><span>{{ selectedAssetDetail.ip || '—' }}</span></div>
-              <div class="nd-row"><span>操作系统</span><span>{{ selectedAssetDetail.os || '—' }}</span></div>
-              <div class="nd-row"><span>业务系统</span><span>{{ selectedAssetDetail.biz || '—' }}</span></div>
+              <div class="nd-row"
+                ><span>主机名</span><span>{{ selectedAssetDetail.name || '—' }}</span></div
+              >
+              <div class="nd-row"
+                ><span>IP</span><span>{{ selectedAssetDetail.ip || '—' }}</span></div
+              >
+              <div class="nd-row"
+                ><span>操作系统</span><span>{{ selectedAssetDetail.os || '—' }}</span></div
+              >
+              <div class="nd-row"
+                ><span>业务系统</span><span>{{ selectedAssetDetail.biz || '—' }}</span></div
+              >
               <div class="nd-row">
                 <span>重要性</span>
-                <span><span class="tag" :class="critTagClass(selectedAssetDetail.crit)">{{ severityLabel(selectedAssetDetail.crit) }}</span></span>
+                <span
+                  ><span class="tag" :class="critTagClass(selectedAssetDetail.crit)">{{
+                    severityLabel(selectedAssetDetail.crit)
+                  }}</span></span
+                >
               </div>
-              <div class="nd-row"><span>责任人</span><span>{{ selectedAssetDetail.owner || '未指定' }}</span></div>
-              <ElButton size="small" type="primary" :icon="View" class="nd-btn" @click="goAssetDetail(selectedNode.id)">查看资产详情</ElButton>
+              <div class="nd-row"
+                ><span>责任人</span><span>{{ selectedAssetDetail.owner || '未指定' }}</span></div
+              >
+              <ElButton
+                size="small"
+                type="primary"
+                :icon="View"
+                class="nd-btn"
+                @click="goAssetDetail(selectedNode.id)"
+                >查看资产详情</ElButton
+              >
             </template>
             <template v-else>
               <div class="nd-row" v-for="(val, k) in selectedNode.rawProps" :key="k">
-                <span>{{ k }}</span><span>{{ formatVal(val) }}</span>
+                <span>{{ k }}</span
+                ><span>{{ formatVal(val) }}</span>
               </div>
             </template>
           </template>
@@ -181,7 +222,9 @@
                 <span class="tag tag-red">{{ row.cveId }}</span>
                 <span class="choke-cvss">CVSS {{ row.cvss }}</span>
               </div>
-              <div class="choke-meta">可达关键资产 <b>{{ row.reachableCriticalCount }}</b> 台</div>
+              <div class="choke-meta"
+                >可达关键资产 <b>{{ row.reachableCriticalCount }}</b> 台</div
+              >
             </div>
           </div>
           <div v-else class="choke-empty">无修复阻塞点（运行重建后刷新）</div>
@@ -208,6 +251,7 @@
     type GraphChokepoint
   } from '@/api/graph'
   import { getAssetList } from '@/api/asset'
+  import { fetchBusinessSystemList } from '@/api/businessSystem'
 
   // 节点类型图例（v1.7 对齐原型）
   const NODE_CATEGORIES = [
@@ -294,8 +338,22 @@
     return Array.from(set).sort()
   })
 
-  // 衍生：业务系统选项（从 business_system 节点 + 资产 rawProps.biz_systems 提取去重）
+  // 业务系统下拉选项：从 API 拉全量（过滤器语义——用户要按某个业务系统筛图，
+  // 不该只列“当前子图恰好出现”的系统；默认种子在 lan-main 段时子图无业务系统，
+  // 子图派生会让下拉永远空）。API 失败时 fallback 到子图派生，保底不空。
+  const allBizSystems = ref<string[]>([])
+  async function loadBizSystems() {
+    try {
+      const res: any = await fetchBusinessSystemList({ page: 1, page_size: 100 })
+      allBizSystems.value = (res?.data?.items || []).map((s: any) => s.name).filter(Boolean)
+    } catch (e) {
+      console.error('[graph] 加载业务系统列表失败', e)
+    }
+  }
+
   const bizSystemOptions = computed(() => {
+    if (allBizSystems.value.length) return allBizSystems.value
+    // fallback：子图派生（business_system 节点 label + 资产 rawProps.biz_systems）
     const set = new Set<string>()
     for (const n of nodes.value) {
       if (n.category === 'business_system' && n.label) set.add(n.label)
@@ -337,7 +395,7 @@
   let resizeObserver: ResizeObserver | null = null
 
   onMounted(async () => {
-    await Promise.all([loadGraphStats(), loadChokepoints()])
+    await Promise.all([loadGraphStats(), loadChokepoints(), loadBizSystems()])
     // 全局图需要一个种子资产作为中心：先取资产列表第一个，再拉邻居子图
     let seedKey = firstAssetKey.value
     if (!seedKey) {
@@ -530,14 +588,12 @@
     }
     // 网段过滤
     if (filterSegment.value) {
-      visibleNodes = visibleNodes.filter(
-        (n) => n.rawProps?.network_segment === filterSegment.value
-      )
+      visibleNodes = visibleNodes.filter((n) => n.rawProps?.network_segment === filterSegment.value)
     }
     // 仅看核心资产（criticality=critical/high）
     if (filterOnlyCritical.value) {
       visibleNodes = visibleNodes.filter((n) => {
-        if (n.category !== 'asset') return true  // 非资产节点不受影响
+        if (n.category !== 'asset') return true // 非资产节点不受影响
         const crit = n.rawProps?.criticality
         return crit === 'critical' || crit === 'high'
       })
@@ -552,9 +608,7 @@
     }
     // 推断边过滤
     if (!filterIncludeInferred.value) {
-      visibleLinks = visibleLinks.filter(
-        (l) => !INFERRED_REL_TYPES.includes(l.relType)
-      )
+      visibleLinks = visibleLinks.filter((l) => !INFERRED_REL_TYPES.includes(l.relType))
     }
     // 关系类型图例可见性
     const hiddenRels = Object.entries(relVisible)
@@ -597,17 +651,20 @@
       series: [
         {
           type: 'graph',
-          layout: layoutMode.value,  // v1.7：支持力导/环形切换
+          layout: layoutMode.value, // v1.7：支持力导/环形切换
           roam: true,
           draggable: true,
           large: true,
           largeThreshold: 100,
-          force: layoutMode.value === 'force' ? {
-            repulsion: 420,
-            edgeLength: [70, 140],
-            gravity: 0.08,
-            layoutAnimation: false
-          } : undefined,
+          force:
+            layoutMode.value === 'force'
+              ? {
+                  repulsion: 420,
+                  edgeLength: [70, 140],
+                  gravity: 0.08,
+                  layoutAnimation: false
+                }
+              : undefined,
           circular: layoutMode.value === 'circular' ? { rotateLabel: true } : undefined,
           data: visibleNodes.map((n) => ({
             id: n.id,
@@ -747,8 +804,16 @@
     justify-content: space-between;
     gap: 12px;
     flex-shrink: 0;
-    .page-title { font-size: 18px; font-weight: 600; margin: 0; }
-    .page-desc { font-size: 12px; color: var(--g-text3); margin: 4px 0 0; }
+    .page-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .page-desc {
+      font-size: 12px;
+      color: var(--g-text3);
+      margin: 4px 0 0;
+    }
   }
 
   /* ===== 左中右三栏（原型 .global-body） ===== */
@@ -770,11 +835,22 @@
     padding: 16px;
     overflow-y: auto;
 
-    h4 { font-size: 12px; color: var(--g-text3); font-weight: 500; margin: 0 0 8px; }
-    .fg { margin-bottom: 18px; }
+    h4 {
+      font-size: 12px;
+      color: var(--g-text3);
+      font-weight: 500;
+      margin: 0 0 8px;
+    }
+    .fg {
+      margin-bottom: 18px;
+    }
 
-    :deep(.el-select) { width: 100%; }
-    :deep(.el-input__wrapper) { font-size: 12px; }
+    :deep(.el-select) {
+      width: 100%;
+    }
+    :deep(.el-input__wrapper) {
+      font-size: 12px;
+    }
   }
 
   .chk {
@@ -785,7 +861,10 @@
     color: var(--g-text2);
     margin-bottom: 6px;
     cursor: pointer;
-    input { margin: 0; cursor: pointer; }
+    input {
+      margin: 0;
+      cursor: pointer;
+    }
   }
 
   /* ---- 中栏：主图 ---- */
@@ -832,9 +911,19 @@
     height: fit-content;
     text-align: center;
     color: var(--g-text3);
-    .empty-icon { font-size: 40px; margin-bottom: 8px; }
-    .empty-title { font-size: 14px; color: var(--g-text2); margin: 0 0 4px; }
-    .empty-desc { font-size: 12px; margin: 0 0 12px; }
+    .empty-icon {
+      font-size: 40px;
+      margin-bottom: 8px;
+    }
+    .empty-title {
+      font-size: 14px;
+      color: var(--g-text2);
+      margin: 0 0 4px;
+    }
+    .empty-desc {
+      font-size: 12px;
+      margin: 0 0 12px;
+    }
   }
 
   /* ---- 右栏：统计 + 详情 + 置信度 ---- */
@@ -845,7 +934,12 @@
     padding: 16px;
     overflow-y: auto;
 
-    h4 { font-size: 12px; color: var(--g-text3); font-weight: 500; margin: 0 0 8px; }
+    h4 {
+      font-size: 12px;
+      color: var(--g-text3);
+      font-weight: 500;
+      margin: 0 0 8px;
+    }
   }
 
   .stat-cards {
@@ -858,9 +952,18 @@
     background: var(--g-bg);
     border-radius: 8px;
     padding: 10px;
-    .num { font-size: 20px; font-weight: 500; }
-    .num.danger { color: var(--g-danger); }
-    .lbl { font-size: 11px; color: var(--g-text3); margin-top: 2px; }
+    .num {
+      font-size: 20px;
+      font-weight: 500;
+    }
+    .num.danger {
+      color: var(--g-danger);
+    }
+    .lbl {
+      font-size: 11px;
+      color: var(--g-text3);
+      margin-top: 2px;
+    }
   }
 
   .node-detail {
@@ -877,14 +980,19 @@
     align-items: center;
     gap: 6px;
   }
-  .nd-placeholder { color: var(--g-text2); font-weight: 400; }
+  .nd-placeholder {
+    color: var(--g-text2);
+    font-weight: 400;
+  }
   .nd-close {
     margin-left: auto;
     cursor: pointer;
     color: var(--g-text3);
     font-size: 16px;
     line-height: 1;
-    &:hover { color: var(--g-text); }
+    &:hover {
+      color: var(--g-text);
+    }
   }
   .nd-row {
     display: flex;
@@ -893,9 +1001,16 @@
     font-size: 12px;
     padding: 3px 0;
     color: var(--g-text2);
-    span:last-child { color: var(--g-text); text-align: right; word-break: break-all; }
+    span:last-child {
+      color: var(--g-text);
+      text-align: right;
+      word-break: break-all;
+    }
   }
-  .nd-btn { margin-top: 8px; width: 100%; }
+  .nd-btn {
+    margin-top: 8px;
+    width: 100%;
+  }
 
   .node-tag {
     display: inline-block;
@@ -907,12 +1022,32 @@
   }
 
   /* tag 配色（原型） */
-  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; }
-  .tag-red { background: var(--g-danger-bg); color: var(--g-danger); }
-  .tag-amber { background: var(--g-warn-bg); color: var(--g-warn); }
-  .tag-green { background: var(--g-ok-bg); color: var(--g-ok); }
-  .tag-blue { background: var(--g-primary-bg); color: var(--g-primary); }
-  .tag-gray { background: #f1efe8; color: #5f5e5a; }
+  .tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+  .tag-red {
+    background: var(--g-danger-bg);
+    color: var(--g-danger);
+  }
+  .tag-amber {
+    background: var(--g-warn-bg);
+    color: var(--g-warn);
+  }
+  .tag-green {
+    background: var(--g-ok-bg);
+    color: var(--g-ok);
+  }
+  .tag-blue {
+    background: var(--g-primary-bg);
+    color: var(--g-primary);
+  }
+  .tag-gray {
+    background: #f1efe8;
+    color: #5f5e5a;
+  }
 
   /* 边置信度说明 */
   .conf-legend {
@@ -923,9 +1058,15 @@
   .conf-line {
     display: flex;
     justify-content: space-between;
-    b.ok { color: var(--g-ok); }
-    b.warn { color: var(--g-warn); }
-    b.dim { color: var(--g-text3); }
+    b.ok {
+      color: var(--g-ok);
+    }
+    b.warn {
+      color: var(--g-warn);
+    }
+    b.dim {
+      color: var(--g-text3);
+    }
   }
   .conf-tip {
     margin: 8px 0 0;
@@ -937,8 +1078,14 @@
   }
 
   /* 修复阻塞点 */
-  .choke-section { margin-top: 16px; }
-  .choke-list { display: flex; flex-direction: column; gap: 8px; }
+  .choke-section {
+    margin-top: 16px;
+  }
+  .choke-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
   .choke-item {
     background: var(--g-bg);
     border-radius: 8px;
@@ -950,9 +1097,18 @@
     justify-content: space-between;
     margin-bottom: 2px;
   }
-  .choke-cvss { font-size: 11px; color: var(--g-text3); }
-  .choke-meta { font-size: 11px; color: var(--g-text2); }
-  .choke-empty { font-size: 11px; color: var(--g-text3); }
+  .choke-cvss {
+    font-size: 11px;
+    color: var(--g-text3);
+  }
+  .choke-meta {
+    font-size: 11px;
+    color: var(--g-text2);
+  }
+  .choke-empty {
+    font-size: 11px;
+    color: var(--g-text3);
+  }
 
   /* ===== 图例行（左栏节点/关系类型，原型 .legend-row） ===== */
   .legend-row {
@@ -964,8 +1120,12 @@
     cursor: pointer;
     font-size: 12px;
     color: var(--g-text2);
-    &:hover { background: var(--g-bg); }
-    &.dim { opacity: 0.4; }
+    &:hover {
+      background: var(--g-bg);
+    }
+    &.dim {
+      opacity: 0.4;
+    }
   }
   .legend-dot {
     width: 10px;
@@ -978,8 +1138,15 @@
     height: 0;
     border-top: 2px solid;
     flex-shrink: 0;
-    &.dashed { border-top-style: dashed; }
+    &.dashed {
+      border-top-style: dashed;
+    }
   }
-  .legend-label { flex: 1; }
-  .legend-count { color: var(--g-text3); font-size: 11px; }
+  .legend-label {
+    flex: 1;
+  }
+  .legend-count {
+    color: var(--g-text3);
+    font-size: 11px;
+  }
 </style>
