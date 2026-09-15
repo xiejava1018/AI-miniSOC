@@ -172,10 +172,22 @@ log "===== 更新 backend 依赖 ====="
 cd "$PROJECT_DIR/src/backend"
 ./venv/bin/pip install -q --disable-pip-version-check -r requirements.txt 2>&1 | tail -20 | tee -a "$LOG_FILE"
 
-# ===== 5. Alembic check（不升级）=====
-log "===== alembic check (非阻塞，仅告警) ====="
-# 故意不 set -e（已知 seed script 缺陷），记录 WARNING 即可
-./venv/bin/alembic check 2>&1 | tee -a "$LOG_FILE" || log "WARN: alembic check 失败，模型与迁移不一致（已知问题，DBA 后续手动处理）"
+# ===== 5. Alembic upgrade (自动，升级落后即部署中止回滚) =====
+log "===== alembic upgrade head (自动执行) ====="
+# 生产事故救授（2026-XX-XX）：生产库落后 7 个迁移导致多表/列缺失，多页 500。
+# 原因是 CI/CD 只跑 alembic check 不跑 upgrade。
+# 修复：自动 upgrade head；如果失败，触发 trap 回滚（避免代码上新 schema 落后）。
+# 迁移必须在后端启动前运行（减少“代码新 schema 落后”窗口期）。
+cd "$PROJECT_DIR/src/backend"
+if ! ./venv/bin/alembic upgrade head 2>&1 | tee -a "$LOG_FILE"; then
+    log "ERROR: alembic upgrade head 失败 — 中止部署并触发回滚"
+    exit 5  # trap 会回滚
+fi
+log "alembic upgrade head 完成"
+
+# 迁移后的 check 仍保留为诊断信息（模型 vs 迁移）
+log "===== alembic check (诊断信息，非阻塞) ====="
+./venv/bin/alembic check 2>&1 | tee -a "$LOG_FILE" || log "WARN: alembic check 失败（代码模型与迁移不一致；部署不受影响，但请 DBA 关注）"
 
 # ===== 6. 前端 build =====
 log "===== 前端 build (npx vite build) ====="
@@ -254,8 +266,8 @@ if [[ $HEALTH_OK -ne 1 ]]; then
     exit 5   # trap 会回滚
 fi
 
-# ===== 10. 检查 alembic 落后 =====
-log "===== 检查 alembic 版本 ====="
+# ===== 10. 验证 alembic 与代码同步（升级后重检验） =====
+log "===== 验证 alembic 版本同步 ====="
 DB_NAME=$(grep '^DB_NAME=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
 log "生产 DB: $DB_NAME"
 REMOTE_HEAD=$(cd "$PROJECT_DIR/src/backend" && ./venv/bin/alembic current 2>/dev/null | awk '{print $1}' | head -1)
@@ -263,9 +275,11 @@ LOCAL_HEAD=$(cd "$PROJECT_DIR/src/backend" && ./venv/bin/alembic heads 2>/dev/nu
 log "生产 alembic: $REMOTE_HEAD"
 log "代码 alembic: $LOCAL_HEAD"
 if [[ -n "$LOCAL_HEAD" && -n "$REMOTE_HEAD" && "$REMOTE_HEAD" != "$LOCAL_HEAD" ]]; then
-    log "WARN: 数据库落后于代码 - 需要 DBA 手动跑 alembic upgrade head"
-    log "      $REMOTE_HEAD → $LOCAL_HEAD"
+    log "ERROR: alembic 升级后仍落后 — 数据库与代码不同步（不应发生，但回滚为安全）"
+    log "      $REMOTE_HEAD ≠ $LOCAL_HEAD"
+    exit 6  # trap 会回滚
 fi
+log "alembic 版本同步 OK"
 
 # 成功 - 关闭 trap（不触发回滚）
 trap - ERR INT TERM
