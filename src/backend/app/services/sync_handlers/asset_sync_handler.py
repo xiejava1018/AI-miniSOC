@@ -59,11 +59,66 @@ _SOURCE_HEALTH_INTERVALS = {
 # T4（决策1，2026-08-15）：移除 criticality —— 关键度是业务属性，
 # 只能由安全运营人工维护（资产页/手动提升），采集器无权覆盖；
 # 否则 TP-Link 每 5 分钟推送会把回填后的 medium 覆盖回旧值。
+#
+# network_zone 不在白名单：sync 路径不允许 collector 覆盖该字段。
+# 原因（2026-XX-XX 修复）：tplink/wazuh 老 inventory 上报 intranet/other 这些老 5 值，
+# update 路径会试图覆盖人工回填的合法自定义值（lan-main / lan-199 等），触发 CHECK 冲突。
+# 只在 _create_new 路径以收敛后的 8 值初始化新资产；现有资产 network_zone
+# 始终是人工/迁移/脚本设置的权威值，collector 不动。
 _UPDATABLE_FIELDS = {
     "name", "asset_type", "asset_status", "mac_address",
-    "network_zone", "asset_description",
+    # "network_zone" 故意从白名单移除（见上注释）
+    "asset_description",
     "data_source", "os_name", "os_version", "wazuh_agent_id",
 }
+
+
+# network_zone 收敛映射表（详见 docs/design/network-zone-redesign.md）：
+#   老 5 值 → 8 值映射，防止 tplink / wazuh 老 inventory 上报老枚举值
+#   触发 soc_assets_network_zone_check CHECK 拖选1 冲突。
+#
+#   未在映射表里的非法值返回 None（调用方决策），
+#   以保留人工/脚本手动填过的 lan-main / lan-199 等不在 8 值白名单内的自定义值。
+_OLD_ZONE_TO_NEW = {
+    "intranet":  "production",  # 老 5 值：内网 → 生产内网
+    "dmz":       "dmz",         # 老值仍在 8 值白名单，保持
+    "office":    "office",
+    "management": "management",
+    "other":     "unknown",     # 老任意填兜底 → 未分类（需人工复核）
+}
+
+_NEW_ZONES = frozenset({"public", "dmz", "production", "office", "dev", "management", "isolated", "unknown"})
+
+
+def _normalize_network_zone(value) -> str | None:
+    """同步路径的 network_zone 收敛函数（create + update 都用）。
+
+    策略：
+      - None / 空字符串 → None（调用方不更新该字段）
+      - 已在 8 值白名单 → 原样返回
+      - 老 5 值枚举（intranet/other/...）→ 映射到新 8 值
+      - 其他非空字符串（如用户自定义的 lan-199 / lan-main）→ 原样返回
+        （避免覆盖人工回填过的 lan-main / lan-199 等合法但不在 8 值白名单的值）
+      - 唯一的危险源：collector 上报的、未在映射表、不在白名单、且非空的字符串——
+        这种应该有人工复核，不在 sync 阶段硬收敛（保持数据真实性，依赖 CHECK 拒写入）。
+
+    返回值：
+      - 合法且白名单内的字符串 → 原样
+      - 老 5 值 → 映射后的字符串
+      - None / 空字符串 → None
+      - 非法但非空 → 原样字符串（让 DB CHECK 报拖选1 冲突触发人工干预）
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if s in _NEW_ZONES:
+        return s
+    if s in _OLD_ZONE_TO_NEW:
+        return _OLD_ZONE_TO_NEW[s]
+    # 不在白名单也不在映射表（如用户自定义的 lan-main / lan-199）——原样返回
+    return s
 
 
 class AssetSyncHandler(BaseSyncHandler):
@@ -210,11 +265,13 @@ class AssetSyncHandler(BaseSyncHandler):
             item["network_segment"] = infer_segment(item.get("asset_ip"))
 
         # 8 值方案（详见 docs/design/network-zone-redesign.md）：
-        # public/dmz/production/office/dev/management/isolated/unknown
-        # 同步数据中不合法值（如 wazuh 老 inventory）一律收敛为 unknown 触发人工复核
-        valid_zones = {"public", "dmz", "production", "office", "dev", "management", "isolated", "unknown"}
-        if item.get("network_zone") not in valid_zones:
-            item["network_zone"] = "unknown"
+        # 收敛老 5 值为新 8 值（intranet→production 等），
+        # 白名单内值原样，调用 _normalize_network_zone()。
+        normalized = _normalize_network_zone(item.get("network_zone"))
+        if normalized is not None:
+            item["network_zone"] = normalized
+        else:
+            item.pop("network_zone", None)  # 未上报则不写字段，避免 CHECK 拖选1 冲突
 
         item["last_synced_at"] = now
 
@@ -236,15 +293,7 @@ class AssetSyncHandler(BaseSyncHandler):
         return "created"
 
     def _update_existing(self, asset: Asset, source: str, item: dict, sync_task_id, now: datetime, db: Session) -> str:
-        print(f"[DEBUG] _update_existing called for {asset.asset_ip}")
         changed_fields = []
-
-        print(f"[DEBUG] _UPDATABLE_FIELDS: {_UPDATABLE_FIELDS}")
-        print(f"[DEBUG] item keys: {list(item.keys())}")
-        print(f"[DEBUG] asset.data_source: {getattr(asset, 'data_source', None)}")
-
-        logger.info(f"Updating asset {asset.asset_ip}, item keys: {list(item.keys())}")
-        logger.info(f"Current asset data_source: {getattr(asset, 'data_source', None)}, os_name: {getattr(asset, 'os_name', None)}")
 
         for field in _UPDATABLE_FIELDS:
             new_value = item.get(field)
@@ -255,7 +304,6 @@ class AssetSyncHandler(BaseSyncHandler):
             new_str = str(new_value) if not isinstance(new_value, str) else new_value
             if old_str != new_str:
                 logger.info(f"Field {field}: {old_str} -> {new_str}")
-                print(f"[DEBUG] Updating field {field}: {old_str} -> {new_str}")
                 setattr(asset, field, new_value)
                 changed_fields.append((field, old_str, new_str))
 
