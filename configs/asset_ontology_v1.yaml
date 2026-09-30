@@ -1,0 +1,651 @@
+# AI-miniSOC 资产本体 v1（Asset Ontology v1）
+#
+# 本文件是 AOG-1 工程的起点（OH-1.1 任务）。
+# 配套设计：[docs/design/2026-09-30-资产管理AI能力建设方案.md](../../docs/design/2026-09-30-资产管理AI能力建设方案.md) §AOG-1
+# 决策依据：[docs/sessions/2026-09-30-资产管理规划差距分析.md](../../docs/sessions/2026-09-30-资产管理规划差距分析.md)
+#
+# 设计原则：
+#   1. 自不自创轮子 — STIX 2.1 SCO/SDO 作为标准锚定层，自有扩展层明确标注为 AI-miniSOC 业务语义
+#   2. 可机读 — YAML 1.2 标准，UTF-8 编码
+#   3. Git 可回滚 — 本体演进走 PR + 校验 CI（validate_ontology.py）
+#   4. 强约束 — 公理必须可代码化测试
+#   5. 向 AI 倾斜 — 本体类定义直接驱动 LLM 抽取 Agent（OH-1.7）
+
+ontology:
+  id: asset-ontology
+  version: "1.0.0"
+  generated_at: "2026-09-30"
+  description: "AI-miniSOC 资产本体 v1 — 从台账思维到本体治理的起点"
+  source: "configs/asset_ontology_v1.yaml"
+  authority: "AI-miniSOC"
+
+# ---------------------------------------------------------------------------
+# 标准锚定层（复用 STIX 2.1，不自造）
+# ---------------------------------------------------------------------------
+# 这些类型由 STIX 2.1 定义，本体只做"引用"而非"实现"
+standard_layer:
+  stix_2_1:
+    sco:
+      - ipv4-addr
+      - ipv6-addr
+      - domain-name
+      - mac-addr
+      - url
+      - file
+      - software
+      - network-traffic
+      - user-account
+      - process
+    sdo:
+      - identity
+      - location
+      - vulnerability
+      - observed-data
+      - course-of-action
+      - opinion    # 置信度
+      - report
+    attack_chains:
+      - cve → cwe → capec   # 漏洞成因链
+
+# ---------------------------------------------------------------------------
+# 自有扩展层（AI-miniSOC 云网语境）
+# ---------------------------------------------------------------------------
+
+# ==== 顶层五分法（v1.2 增补）====
+top_level_classes:
+  - id: physical-asset
+    label: "物理资产"
+    description: "物理形态存在的资产"
+    examples: ["机房", "服务器", "网络设备", "工控/IoT 设备"]
+    ai_minisoc_mappings:
+      - model: Asset
+        # sc eens 关系：member_of = child_of[: physical-asset]
+        filter: "asset_type IN ('server', 'network', 'iot', 'physical')"
+
+  - id: digital-asset
+    label: "数字资产"
+    description: "以数字形式存在的资产"
+    examples: ["VM", "容器", "应用", "数据", "API"]
+    ai_minisoc_mappings:
+      - model: Asset
+        filter: "asset_type IN ('vm', 'container', 'application', 'data', 'api')"
+
+  - id: logical-asset
+    label: "逻辑资产"
+    description: "逻辑标识形态的资产"
+    examples: ["IP", "域名", "证书", "端口"]
+    ai_minisoc_mappings:
+      # 暴露面归位的关键锚点
+      - graph_node_type: ip
+      - graph_node_type: domain
+      - graph_node_type: port
+
+  - id: person-asset
+    label: "人员资产"
+    description: "以人作为责任主体的资产"
+    examples: ["管理员", "开发", "第三方运维"]
+    ai_minisoc_mappings:
+      - model: User
+      - graph_node_type: account
+
+  - id: business-asset
+    label: "业务资产"
+    description: "以业务作为单位的资产"
+    examples: ["业务流程", "服务", "产品"]
+    ai_minisoc_mappings:
+      - model: BusinessSystem
+
+# ==== 资产实例（统一实例，兼容现有 soc_assets） ====
+asset_instance:
+  id: asset-instance
+  label: "资产实例"
+  parent: digital-asset  # 主父类
+  ai_minisoc_mappings:
+    - model: Asset
+      primary_key: id  # UUID
+  attributes:
+    # === 身份维 ===
+    - id: uuid
+      type: uuid
+      required: true
+      description: "资产唯一标识（持久标识，不可变）"
+      source: "soc_assets.id"
+
+    - id: source_id
+      type: string
+      description: "外部数据源 ID（多源融合唯一键）"
+      source: "soc_assets.source_id"
+
+    - id: data_source
+      type: enum
+      values: ["manual", "wazuh", "tplink-router", "scanner", "cmdb", "edr"]
+      default: "manual"
+      source: "soc_assets.data_source"
+
+    - id: wazuh_agent_id
+      type: string
+      description: "Wazuh Agent ID"
+      source: "soc_assets.wazuh_agent_id"
+
+    - id: last_synced_at
+      type: timestamp
+      source: "soc_assets.last_synced_at"
+
+    # === 归属维 ===
+    - id: owner_id
+      type: integer
+      description: "所属用户 ID（FK soc_users.id）"
+      source: "soc_assets.owner_id"
+
+    - id: business_unit
+      type: string
+      description: "业务单元"
+      source: "soc_assets.business_unit"
+
+    - id: owner_contact
+      type: string
+      source: "soc_assets.owner_contact"
+
+    # === 重要性（三维度拆分 - commit q9r8s7t6u5v4）===
+    - id: business_impact
+      type: enum
+      values: ["core", "important", "normal", "auxiliary", "ignorable"]
+      description: "BIA 业务影响 5 档"
+      source: "soc_assets.business_impact"
+
+    - id: data_sensitivity
+      type: enum
+      values: ["extreme", "high", "medium", "low", "public"]
+      description: "CIA 数据敏感度 5 档"
+      source: "soc_assets.data_sensitivity"
+
+    - id: protection_level
+      type: enum
+      values: ["level5", "level4", "level3", "level2", "level1"]
+      description: "等保等级"
+      source: "soc_assets.protection_level"
+
+    - id: criticality
+      type: string
+      deprecated: true
+      description: "重要性旧字段（保留为 read-only alias，3 维拆分后不再独立维护）"
+      source: "soc_assets.criticality"
+
+    # === 技术维 ===
+    - id: network_segment
+      type: string
+      required: true
+      default: "default"
+      source: "soc_assets.network_segment"
+
+    - id: network_zone
+      type: string
+      values: ["production", "office", "dmz", "guest", "mgmt", "lan-main", "lan-199", "internet", "unknown"]
+      default: "unknown"
+      source: "soc_assets.network_zone"
+
+    - id: asset_ip
+      type: string
+      required: true
+      source: "soc_assets.asset_ip"
+
+    - id: os_name
+      type: string
+      source: "soc_assets.os_name"
+
+    - id: os_version
+      type: string
+      source: "soc_assets.os_version"
+
+    - id: hardware_info
+      type: jsonb
+      source: "soc_assets.hardware_info"
+
+    - id: asset_type
+      type: string
+      default: "other"
+      source: "soc_assets.asset_type"
+
+    - id: mac_address
+      type: macaddr
+      source: "soc_assets.mac_address"
+
+    # === 暴露维 ===
+    - id: public_ip
+      type: string
+      source: "soc_assets.public_ip"
+
+    - id: exposure_level
+      type: enum
+      values: ["public", "internal", "isolated"]
+      default: "internal"
+      source: "soc_assets.exposure_level"
+
+    # === 数据分级 ===
+    - id: data_classification
+      type: enum
+      values: ["public", "internal", "confidential", "secret"]
+      default: "internal"
+      source: "soc_assets.data_classification"
+
+    # === 风险评分（F1.1 前身 → AHS 升级）===
+    - id: risk_score
+      type: integer
+      range: [0, 100]
+      source: "soc_assets.risk_score"
+
+    - id: score_breakdown
+      type: jsonb
+      description: "风险评分明细 + 证据（OH-2.4 证据链生成器升级）"
+      source: "soc_assets.score_breakdown"
+
+    - id: risk_summary
+      type: text
+      source: "soc_assets.risk_summary"
+
+    - id: risk_scored_at
+      type: timestamp
+      source: "soc_assets.risk_scored_at"
+
+    # === EOL ===
+    - id: purchase_date
+      type: date
+      source: "soc_assets.purchase_date"
+
+    - id: warranty_end
+      type: date
+      source: "soc_assets.warranty_end"
+
+    - id: expected_eol
+      type: date
+      source: "soc_assets.expected_eol"
+
+    - id: expected_eol_source
+      type: enum
+      values: ["preset", "manual"]
+      default: "preset"
+      source: "soc_assets.expected_eol_source"
+
+    # === 生命周期 ===
+    - id: asset_status
+      type: enum
+      values: ["active", "inactive", "offline", "shadow", "decommissioned"]
+      source: "soc_assets.asset_status"
+
+    - id: status_updated_at
+      type: timestamp
+      source: "soc_assets.status_updated_at"
+
+    - id: parent_id
+      type: uuid
+      description: "父资产 ID（VM → 宿主机 / 容器 → Pod）"
+      source: "soc_assets.parent_id"
+
+# ==== 子模型 ====
+sub_models:
+  # AssetComponent — 组件（OSS / 厂商/ 框架/ 依赖）→ SBOM 级
+  - id: asset-component
+    label: "资产组件"
+    description: "SBOM 级组件，用于漏洞匹配与降误报"
+    ai_minisoc_mappings:
+      - model: AssetComponent  # OH-1.4 SQLAlchemy 映射同步
+        status: planned
+    attributes:
+      - id: name
+        type: string
+        required: true
+      - id: version
+        type: string
+      - id: ecosystem
+        type: enum
+        values: ["npm", "pypi", "maven", "deb", "rpm", "docker", "other"]
+
+  # BusinessSystem — 业务系统（等保定级单元）
+  - id: business-system
+    label: "业务系统"
+    ai_minisoc_mappings:
+      - model: BusinessSystem
+    attributes:
+      - id: name
+        type: string
+        required: true
+      - id: protection_level
+        type: enum
+        values: ["level5", "level4", "level3", "level2", "level1"]
+      - id: business_impact
+        type: enum
+        values: ["core", "important", "normal", "auxiliary", "ignorable"]
+      - id: owner_id
+        type: integer
+      - id: business_continuity
+        type: enum
+        values: ["critical", "important", "general"]
+
+  # ExposureSurface — 暴露面（公网 IP/端口/域名 + maps_to 内外网映射）
+  - id: exposure-surface
+    label: "暴露面"
+    ai_minisoc_mappings:
+      - graph_node_type: ip
+      - graph_node_type: domain
+      - graph_node_type: port
+    attributes:
+      - id: public_ip
+        type: string
+      - id: port
+        type: integer
+      - id: protocol
+        type: enum
+        values: ["tcp", "udp"]
+      - id: service
+        type: string
+      - id: maps_to_internal_ip
+        type: string
+        description: "内外网映射（OH-3.4 落图后接入）"
+
+  # Control — 防护措施（v1 仅建模；实际数据源待未来接入）
+  - id: control
+    label: "防护措施"
+    description: "v1 仅建模本体骨架，实际数据源（WAF/堡垒机/4A/IPS/防火墙）AI-miniSOC 现网暂未接入，OH-1.4 同步建表但不预填数据"
+    ai_minisoc_mappings:
+      - model: Control  # OH-1.4 SQLAlchemy 映射同步
+        status: planned
+    attributes:
+      - id: type
+        type: enum
+        values: ["waf", "堡垒机", "4a", "zero-trust", "edr", "ips", "firewall"]
+        note: "AI-miniSOC 现网无 WAF/堡垒机/4A/IPS 等独立防护系统，本字段为本体扩展预留——当前唯一在用的 EDR 角色由 Wazuh agent 承担（见 OH-6.6 复写）"
+      - id: vendor
+        type: string
+
+  # AIAsset — AI 资产（六类）S13 + 16 号 AI 安全台账
+  - id: ai-asset
+    label: "AI 资产"
+    description: "六类 AI 资产本体 (OH-4.7 S13)"
+    ai_minisoc_mappings:
+      - model: AIAsset  # OH-1.4 SQLAlchemy 映射同步
+        status: planned
+    attributes:
+      - id: ai_asset_type
+        type: enum
+        required: true
+        values:
+          - model-asset       # 模型 / LoRA
+          - data-asset        # 训练集 / RAG 知识库
+          - agent-asset       # Agent / Skills / 编排流
+          - tool-asset        # MCP / API / CLI
+          - credential-asset  # API Key / Token / System Prompt
+          - compute-asset     # GPU 集群 / 推理服务
+      - id: vendor
+        type: string
+      - id: version
+        type: string
+
+# ==== AI 资产六类详细 ====
+ai_asset_types:
+  - id: model-asset
+    label: "模型资产"
+    examples: ["基座模型", "微调模型", "LoRA", "量化版"]
+    threats: ["model-extraction", "backdoor"]
+
+  - id: data-asset
+    label: "数据资产"
+    examples: ["训练集", "RAG 知识库", "向量库"]
+    threats: ["data-poisoning", "unauthorized-access"]
+
+  - id: agent-asset
+    label: "智能体资产"
+    examples: ["Agent", "编排流", "Skills/插件"]
+    threats: ["prompt-injection", "privilege-escalation"]
+    note: "tf-soc-agent 的数字员工、Skills 市场、MCP 工具链是现成对象"
+
+  - id: tool-asset
+    label: "工具与接口资产"
+    examples: ["MCP Server", "API/CLI 工具", "函数调用"]
+    threats: ["tool-poisoning", "rce", "call-chain-hijacking"]
+
+  - id: credential-asset
+    label: "凭据与配置资产"
+    examples: ["API Key", "Token", "System Prompt"]
+    threats: ["credential-leak", "prompt-leak"]
+
+  - id: compute-asset
+    label: "算力与环境资产"
+    examples: ["GPU 集群", "推理服务", "镜像"]
+    threats: ["resource-abuse", "escape"]
+
+# ---------------------------------------------------------------------------
+# 关系（v1，14 类）
+# ---------------------------------------------------------------------------
+relations:
+  - id: belongs_to
+    label: "属于"
+    domain: asset-instance
+    range: business-system
+    description: "资产→业务系统（影响面收敛、责任人定位）"
+    ai_minisoc_mappings:
+      - table: soc_asset_business  # model_id <-> system_id
+        status: live
+    properties:
+      - id: weight
+        type: float
+        default: 1.0
+
+  - id: owned_by
+    label: "归所有"
+    domain: asset-instance
+    range: user-account  # STIX SDO
+    ai_minisoc_mappings:
+      - field: soc_assets.owner_id
+
+  - id: operated_by
+    label: "运维责任人"
+    domain: asset-instance
+    range: user-account
+    ai_minisoc_mappings:
+      - table: IdentityBinding
+
+  - id: hosted_on
+    label: "托管于"
+    domain: asset-instance
+    range: asset-instance  # VM → 宿主机
+    ai_minisoc_mappings:
+      - field: soc_assets.parent_id
+
+  - id: contains
+    label: "包含组件"
+    domain: asset-instance
+    range: asset-component
+    description: "SBOM 级漏洞匹配，降误报"
+    status: planned  # OH-1.4 + OH-2.1 同步
+
+  - id: exposes
+    label: "暴露面"
+    domain: asset-instance
+    range: exposure-surface
+    ai_minisoc_mappings:
+      - field: soc_assets.public_ip
+      - table: soc_asset_ports
+
+  - id: maps_to
+    label: "内外网映射"
+    domain: exposure-surface
+    range: asset-instance
+    description: "外网 IP → 内网 IP — 暴露面定位内网资产"
+    status: planned  # OH-3.4 落图
+    ai_minisoc_mappings:
+      - collector: src/collectors/tplink/  # OH-6.1 复写：NAT 表从 TP-Link 路由器扩展采集
+        collector_capability: "TP-Link TL-R479GP-AC NAT 表拉取（HTTP API / syslog，待 P0-H1 启动前验证可拉取性）"
+        edge_type: maps_to
+
+  - id: has_vulnerability
+    label: "有漏洞"
+    domain: asset-instance
+    range: vulnerability  # STIX SDO
+    ai_minisoc_mappings:
+      - service: vulnerability_ai.py
+
+  - id: protected_by
+    label: "受防护"
+    domain: asset-instance
+    range: control
+    status: planned  # OH-1.4 同步
+    note: "AI-miniSOC 现网无独立 WAF/堡垒机/4A/IPS，唯一在用的 EDR 角色由 Wazuh agent 承担（见 OH-6.6 复写）"
+
+  - id: authenticates_to
+    label: "认证到"
+    domain: asset-instance
+    range: user-account
+    ai_minisoc_mappings:
+      - table: IdentityEvent
+
+  - id: depends_on
+    label: "依赖于"
+    domain: asset-instance
+    range: asset-instance
+    description: "依赖图 — 变更影响面、级联风险"
+    status: planned  # OH-4.10 S11
+
+  - id: observed_in
+    label: "出现在告警中"
+    domain: asset-instance
+    range: observed-data  # STIX SDO
+    ai_minisoc_mappings:
+      - table: soc_asset_incidents
+
+  - id: rated_as
+    label: "定级为"
+    domain: asset-instance
+    range: business-system  # 等保定级单元
+    status: planned  # OH-4.4 S4
+
+  - id: same_as
+    label: "同一资产不同视角"
+    domain: asset-instance
+    range: asset-instance
+    description: "多源 ID 关联（持久标识 vs 可变观测）"
+    ai_minisoc_mappings:
+      - service: identity_fusion.py  # OH-3.1
+        properties:
+          - id: fusion_confidence
+            type: float
+            range: [0, 1]
+          - id: fusion_method
+            type: enum
+            values: ["agent_id", "ip_resource", "hostname_norm", "mac_fingerprint", "business_unit"]
+
+  - id: evidenced_by
+    label: "证据源"
+    domain: any  # 任一断言
+    range: observed-data
+    description: "可解释、可审计 — 每项扣分/判断带证据源 + 采集时间 + 置信度"
+    ai_minisoc_mappings:
+      - service: evidence_chain.py  # OH-2.4
+        properties:
+          - id: source
+            type: string
+          - id: observed_at
+            type: timestamp
+          - id: confidence
+            type: float
+            range: [0, 1]
+          - id: evidence_id
+            type: string
+
+# ---------------------------------------------------------------------------
+# 约束公理（v1，5 条）
+# ---------------------------------------------------------------------------
+axioms:
+  - id: axiom-web-ports
+    label: "Web 服务器必须开放 80/443"
+    rule: "If asset_type IN ('web-server', 'nginx', 'apache', 'iis') THEN has_port(80) OR has_port(443)"
+    usage: "类型推断（从 IP 推理为 Web 服务器）"
+    test: "axioms_test.py::test_web_server_ports"
+
+  - id: axiom-system-importance
+    label: "业务系统等级 ≥ 包含资产的最高重要性"
+    rule: "For all business_system B, B.protection_level >= max(contains(B).importance)"
+    usage: "等保一致性、合规自动稽核"
+    test: "axioms_test.py::test_system_importance"
+
+  - id: axiom-agent-tool-allowlist
+    label: "Agent 仅允许调用白名单 MCP"
+    rule: "For all agent-asset A, A.calls ⊆ whitelist(A.credential_scope)"
+    usage: "凭据治理 / Security for AI (对齐 16 号 + LLM06)"
+    test: "axioms_test.py::test_agent_tool_allowlist"
+    status: planned  # 依赖 MCP 网关
+
+  - id: axiom-production-no-high-vuln
+    label: "高危未修复资产不允许入生产"
+    rule: "If asset.network_zone = 'production' THEN NOT has_unfixed_high_vuln(asset)"
+    usage: "合规（S3 + compliance.py 扩展）"
+    test: "axioms_test.py::test_production_no_high_vuln"
+
+  - id: axiom-persistent-vs-observable
+    label: "持久标识不可变，可变观测必须挂到标识上"
+    rule: "For all asset A, A.persistent_keys ⊆ {instance_id, image_digest, agent_id, ci_id, pod_uid} AND A.observable_keys ⊆ attached_observations(A.persistent_id)"
+    usage: "身份治理（identity graph 原则）"
+    test: "axioms_test.py::test_persistent_vs_observable"
+
+# ---------------------------------------------------------------------------
+# 多因子融合权重（v1，身份治理基础）
+# ---------------------------------------------------------------------------
+fusion_weights:
+  description: "多因子加权融合判定（OH-3.1 多因子融合服务）"
+  factors:
+    - id: agent_id
+      weight: 0.35
+      description: "主机 agent_id（最强证据）"
+    - id: ip_resource
+      weight: 0.25
+      description: "内网 IP + 资源池"
+    - id: hostname_norm
+      weight: 0.15
+      description: "主机名归一化"
+    - id: mac_fingerprint
+      weight: 0.15
+      description: "MAC + 指纹"
+    - id: business_unit
+      weight: 0.10
+      description: "业务归属"
+
+  persistent_keys:
+    - instance_id
+    - image_digest
+    - agent_id
+    - ci_id
+    - pod_uid
+
+  observable_keys:
+    - ip
+    - hostname
+    - mac
+    - dns
+    - port
+
+  thresholds:
+    fusion_auto_merge: 0.85  # ≥ 此值自动融合
+    fusion_min: 0.5         # < 此值不入推理层
+
+# ---------------------------------------------------------------------------
+# AHS 权重（资产健康分）
+# ---------------------------------------------------------------------------
+ahs_weights:
+  description: "AHS = 100 − (暴露×w1 + 脆弱×w2 + 威胁×w3 + 合规×w4 + 行为×w5) × 资产关键性系数"
+  # 初期权重可调，按实际数据反哺（OH-7.3 权重学习）
+  weights:
+    exposure: 0.30
+    vulnerability: 0.25
+    threat: 0.20
+    compliance: 0.15
+    behavior: 0.10
+
+# ---------------------------------------------------------------------------
+# 变更日志
+# ---------------------------------------------------------------------------
+changelog:
+  - version: "1.0.0"
+    date: "2026-09-30"
+    changes:
+      - "AI-miniSOC 资产本体 v1 首发"
+      - "5 顶层 + 5 子模型 + 14 关系 + 5 公理 + 6 AI 资产类型"
+      - "OH-1.1 任务产物，AOG-1 工程起点"
