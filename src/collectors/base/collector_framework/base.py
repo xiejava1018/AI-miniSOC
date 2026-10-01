@@ -15,6 +15,9 @@ class DataType(Enum):
     BASELINE = "baseline"
     PORT = "port"
     DISCOVERY = "discovery"
+    # S2 暴露面归位（AOG-6 / OH-6.1）：TP-Link 虚拟服务器（DNAT 端口映射）
+    # 后端路由按字符串 nat_mapping 识别
+    NAT_MAPPING = "nat_mapping"
 
 
 @dataclass

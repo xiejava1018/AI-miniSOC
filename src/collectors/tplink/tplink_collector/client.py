@@ -137,6 +137,76 @@ class TPLinkSLPClient:
         logger.info(f"获取到 {len(hosts)} 台在线设备")
         return hosts
 
+    async def get_nat_rules(self) -> list[dict]:
+        """获取虚拟服务器（DNAT 端口映射）规则列表。
+
+        对应路由器 Web 界面「传输控制 → 虚拟服务器」，
+        固件 API 中承载该数据的端点为 firewall / table=redirect
+        （注意：模块名 virtual_server 虽存在但返回空，是固件遗留空表，实测于 2026-XX）。
+        一次性返回，无分页。
+        """
+        if not self.stok:
+            await self.login()
+
+        url = f"{self.base_url}/stok={self.stok}/ds"
+        resp = await self.client.post(
+            url,
+            json={"method": "get", "firewall": {"table": "redirect"}},
+            headers=self.API_HEADERS,
+        )
+
+        if resp.status_code == 401:
+            self.stok = None
+            return await self.get_nat_rules()
+
+        resp.raise_for_status()
+        data = resp.json()
+
+        if data.get("error_code") != 0:
+            raise APIError(f"获取 NAT 规则失败: {data}")
+
+        rules = []
+        for block in data.get("firewall", {}).get("redirect", []):
+            for _key, rule in block.items():
+                rules.append(self._normalize_nat_rule(rule))
+
+        logger.info(f"获取到 {len(rules)} 条 NAT 规则")
+        return rules
+
+    def _normalize_nat_rule(self, raw: dict) -> dict:
+        """路由器原始 redirect 规则 → nat_mapping 标准格式。
+
+        字段语义（实测固件返回结构）：
+          name              规则备注名
+          enable            on/off
+          if                入口接口（WAN）
+          proto             协议（ALL/TCP/UDP）
+          src_dport         外网端口
+          dest_ip           内网目标 IP
+          dest_port         内网目标端口
+        以下划线/点开头的键为固件元数据（.name/.index/.type），不透传。
+        """
+        proto_raw = (raw.get("proto") or "all").lower()
+        proto = "tcp" if proto_raw == "tcp" else ("udp" if proto_raw == "udp" else "all")
+
+        def _as_int(value):
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        return {
+            "rule_name": raw.get("name") or None,
+            "enabled": raw.get("enable") == "on",
+            "wan_if": raw.get("if") or "WAN",
+            "protocol": proto,
+            "wan_port": _as_int(raw.get("src_dport")),
+            "internal_ip": raw.get("dest_ip"),
+            "internal_port": _as_int(raw.get("dest_port")),
+            # 采集源标识（后端落库可追溯）
+            "source": "tplink-router",
+        }
+
     async def logout(self):
         """退出登录，释放 stok"""
         if self.stok:

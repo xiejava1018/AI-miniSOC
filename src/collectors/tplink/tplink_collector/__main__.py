@@ -71,17 +71,33 @@ def _install_signal_handlers(shutdown: asyncio.Event) -> None:
 async def _collect_and_sync(
     collector: TPLinkCollector, soc_client: MiniSOCClient
 ) -> None:
-    """采集一轮并推送到 AI-miniSOC。"""
+    """采集一轮并推送到 AI-miniSOC。
+
+    一轮内依次推送 asset 与 nat_mapping 两种数据类型
+    （单次 HTTP 仅承载一个 data_type，故分两次 sync；collector.collect
+    各自独立 login/logout，与原有节奏一致）。
+    """
     logger.info("开始采集...")
     result = await collector.collect(DataType.ASSET)
-    logger.info(f"采集完成: {len(result.items)} 条")
+    logger.info(f"资产采集完成: {len(result.items)} 条")
     sync_result = await soc_client.sync(
         source=result.source,
         data_type=result.data_type.value,
         items=result.items,
         metadata=result.metadata,
     )
-    logger.info(f"同步结果: {sync_result}")
+    logger.info(f"资产同步结果: {sync_result}")
+
+    # S2 暴露面：NAT 端口映射（AOG-6 / OH-6.1）
+    nat_result = await collector.collect(DataType.NAT_MAPPING)
+    logger.info(f"NAT 采集完成: {len(nat_result.items)} 条")
+    nat_sync_result = await soc_client.sync(
+        source=nat_result.source,
+        data_type=nat_result.data_type.value,
+        items=nat_result.items,
+        metadata=nat_result.metadata,
+    )
+    logger.info(f"NAT 同步结果: {nat_sync_result}")
 
 
 async def _run_test(

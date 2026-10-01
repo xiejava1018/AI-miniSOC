@@ -74,6 +74,10 @@ from .scanner_models import ScannerTask, ScanTarget, ScanFinding, ScannerAgent
 from .graph import GraphNode, GraphEdge, NetworkLink, AccountPerson
 from .business_system import BusinessSystem, AssetBusiness
 
+# S2 暴露面归位（AOG-6 / OH-6.1）：TL-R479GP-AC NAT 端口映射（虚拟服务器）
+# 设计依据：docs/design/2026-09-30-资产管理AI能力建设方案.md §5.2 / §7.1
+from .nat_mapping import NatMapping
+
 __all__ = [
     "Base",
     "Asset",

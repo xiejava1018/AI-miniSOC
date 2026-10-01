@@ -11,7 +11,7 @@ class TPLinkCollector(BaseCollector):
     """TP-Link 路由器数据采集器"""
 
     source_name = "tplink-router"
-    supported_types = [DataType.ASSET]
+    supported_types = [DataType.ASSET, DataType.NAT_MAPPING]
 
     def __init__(self, host: str, username: str, password: str, port: int = 80):
         self.client = TPLinkSLPClient(host, username, password, port)
@@ -19,6 +19,8 @@ class TPLinkCollector(BaseCollector):
     async def collect(self, data_type: DataType) -> CollectResult:
         if data_type == DataType.ASSET:
             return await self._collect_assets()
+        if data_type == DataType.NAT_MAPPING:
+            return await self._collect_nat_rules()
         raise ValueError(f"不支持的数据类型: {data_type}")
 
     async def _collect_assets(self) -> CollectResult:
@@ -31,6 +33,20 @@ class TPLinkCollector(BaseCollector):
                 data_type=DataType.ASSET,
                 items=hosts,
                 metadata={"host_count": len(hosts)},
+            )
+        finally:
+            await self.client.logout()
+
+    async def _collect_nat_rules(self) -> CollectResult:
+        """采集虚拟服务器（DNAT 端口映射）规则。S2 暴露面归位数据源。"""
+        await self.client.login()
+        try:
+            rules = await self.client.get_nat_rules()
+            return CollectResult(
+                source=self.source_name,
+                data_type=DataType.NAT_MAPPING,
+                items=rules,
+                metadata={"nat_rule_count": len(rules)},
             )
         finally:
             await self.client.logout()
