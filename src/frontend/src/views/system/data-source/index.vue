@@ -5,6 +5,45 @@
 -->
 <template>
   <div class="data-source-page art-full-height">
+    <!-- NAT 采集健康卡（OH-6.9 / S2 暴露面归位）：tplink-collector NAT 同步状态 -->
+    <ElCard shadow="never" class="nat-health-card">
+      <template #header>
+        <div class="nat-card-header">
+          <span class="nat-card-title">NAT 端口映射采集</span>
+          <ElTag :type="natStatusTagType" size="small" effect="plain">{{ natStatusLabel }}</ElTag>
+          <div class="grow-spacer" />
+          <span class="nat-card-hint">5 分钟自动刷新</span>
+          <ElButton text size="small" :loading="natLoading" @click="loadNatHealth">刷新</ElButton>
+        </div>
+      </template>
+
+      <div v-if="!natHealth" class="nat-empty">暂无 NAT 采集健康记录（采集器可能尚未推送）</div>
+      <div v-else class="nat-card-body">
+        <div class="nat-metric">
+          <span class="nat-metric-label">规则数</span>
+          <span class="nat-metric-value">{{ natHealth.last_records_count ?? '—' }}</span>
+        </div>
+        <div class="nat-metric">
+          <span class="nat-metric-label">累计成功 / 失败</span>
+          <span class="nat-metric-value"
+            >{{ natHealth.success_count }} / {{ natHealth.failure_count }}</span
+          >
+        </div>
+        <div class="nat-metric">
+          <span class="nat-metric-label">上次成功</span>
+          <span class="nat-metric-value">{{ formatTime(natHealth.last_success_at) }}</span>
+        </div>
+        <div class="nat-metric">
+          <span class="nat-metric-label">出口 IP</span>
+          <span class="nat-metric-value">{{ natWanIp || '—' }}</span>
+        </div>
+        <div v-if="natHealth.last_failure_message" class="nat-metric nat-failure">
+          <span class="nat-metric-label">最近失败</span>
+          <span class="nat-metric-value">{{ natHealth.last_failure_message }}</span>
+        </div>
+      </div>
+    </ElCard>
+
     <ElCard shadow="never" class="art-table-card">
       <!-- 工具栏 -->
       <div class="toolbar">
@@ -15,12 +54,7 @@
           style="width: 160px"
           @change="getData"
         >
-          <ElOption
-            v-for="t in typeOptions"
-            :key="t.value"
-            :label="t.label"
-            :value="t.value"
-          />
+          <ElOption v-for="t in typeOptions" :key="t.value" :label="t.label" :value="t.value" />
         </ElSelect>
         <ElInput
           v-model="searchKeyword"
@@ -51,7 +85,6 @@
         @pagination:size-change="handleSizeChange"
         @pagination:current-change="handleCurrentChange"
       />
-
     </ElCard>
 
     <!-- 抽屉（新增/编辑） -->
@@ -72,13 +105,7 @@
 
         <!-- 基本信息 -->
         <div class="sec-title">基本信息</div>
-        <ElForm
-          ref="formRef"
-          :model="form"
-          :rules="rules"
-          label-width="110px"
-          label-position="top"
-        >
+        <ElForm ref="formRef" :model="form" :rules="rules" label-width="110px" label-position="top">
           <div class="grid-2">
             <ElFormItem label="数据源编码 *" prop="source_code">
               <ElInput
@@ -123,7 +150,12 @@
               </ElSelect>
             </ElFormItem>
             <ElFormItem label="超时（秒）">
-              <ElInputNumber v-model="form.timeout_seconds" :min="1" :max="300" style="width: 100%" />
+              <ElInputNumber
+                v-model="form.timeout_seconds"
+                :min="1"
+                :max="300"
+                style="width: 100%"
+              />
             </ElFormItem>
             <ElFormItem label="重试次数">
               <ElInputNumber v-model="form.retry_times" :min="0" :max="10" style="width: 100%" />
@@ -153,7 +185,6 @@
             </span>
           </ElFormItem>
 
-
           <!-- 测试结果 -->
           <div class="sec-title">
             测试结果
@@ -175,20 +206,12 @@
               耗时 {{ testResult.latency_ms }} ms
             </div>
           </div>
-          <div v-else class="muted" style="padding: 8px 0">
-            点击「测试连接」验证参数
-          </div>
+          <div v-else class="muted" style="padding: 8px 0"> 点击「测试连接」验证参数 </div>
 
           <div class="footer">
             <ElButton :loading="testing" @click="onTest">测试连接</ElButton>
             <ElButton @click="drawerVisible = false">取消</ElButton>
-            <ElButton
-              type="primary"
-              :loading="submitting"
-              @click="onSubmit"
-            >
-              保存
-            </ElButton>
+            <ElButton type="primary" :loading="submitting" @click="onSubmit"> 保存 </ElButton>
           </div>
         </ElForm>
       </div>
@@ -197,578 +220,715 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, h, resolveComponent, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import type { FormInstance, FormRules } from 'element-plus'
-import {
-  getDataSourceList,
-  getDataSourceTypes,
-  addDataSource,
-  updateDataSource,
-  deleteDataSource,
-  toggleDataSource,
-  setDefaultDataSource,
-  testDataSourceConnection,
-} from '@/api/dataSource'
+  import { ref, reactive, computed, h, resolveComponent, onMounted, onBeforeUnmount } from 'vue'
+  import { ElMessage, ElMessageBox } from 'element-plus'
+  import type { FormInstance, FormRules } from 'element-plus'
+  import request from '@/utils/http'
+  import {
+    getDataSourceList,
+    getDataSourceTypes,
+    addDataSource,
+    updateDataSource,
+    deleteDataSource,
+    toggleDataSource,
+    setDefaultDataSource,
+    testDataSourceConnection
+  } from '@/api/dataSource'
+  import { getDataHealth } from '@/api/asset'
 
-defineOptions({ name: 'DataSourcePage' })
+  defineOptions({ name: 'DataSourcePage' })
 
-const rtl = 'rtl'
+  // ============ NAT 采集健康卡（OH-6.9） ============
+  const natLoading = ref(false)
+  // tplink:nat 的 source_health 行（/data-health 返回 source_health.sources 内）
+  const natHealth = ref<any>(null)
 
-// 类型选项
-const typeOptions = ref<Api.DataSource.TypeItem[]>([])
-const filterType = ref<string>('')
-const searchKeyword = ref<string>('')
-
-const columns = ref<any[]>([
-  {
-    prop: 'source_code',
-    label: '编码',
-    width: 140,
-    formatter: (row: Api.DataSource.Item) =>
-      h('span', { class: 'code' }, row.source_code),
-  },
-  { prop: 'source_type', label: '类型', width: 100 },
-  { prop: 'name', label: '名称', width: 180 },
-  {
-    prop: 'endpoint',
-    label: '服务地址',
-    formatter: (row: Api.DataSource.Item) =>
-      h('span', { class: 'code muted', style: 'font-size: 12px' }, row.endpoint),
-  },
-  {
-    prop: 'flags',
-    label: '状态',
-    width: 130,
-    formatter: (row: Api.DataSource.Item) => {
-      const tags: any[] = []
-      if (row.is_default) {
-        tags.push(
-          h(resolveComponent('ElTag'), { type: 'primary', size: 'small', effect: 'plain' }, { default: () => '默认' })
-        )
-      }
-      tags.push(
-        h(
-          resolveComponent('ElTag'),
-          {
-            type: row.enabled ? 'success' : 'info',
-            size: 'small',
-            effect: 'plain',
-            style: 'margin-left: 4px',
-          },
-          { default: () => (row.enabled ? '启用' : '停用') }
-        )
-      )
-      return h('div', { style: 'display: flex; align-items: center' }, tags)
-    },
-  },
-  {
-    prop: 'health_status',
-    label: '健康',
-    width: 100,
-    formatter: (row: Api.DataSource.Item) => {
-      const map: Record<string, { text: string; cls: string }> = {
-        normal: { text: '正常', cls: 'ok' },
-        abnormal: { text: '异常', cls: 'err' },
-        untested: { text: '未测', cls: 'gray' },
-        stale: { text: '过期', cls: 'warn' },
-      }
-      const m = map[row.health_status || 'untested']
-      // 在外层 span 上加 cls，以便同步设置文本颜色（不只点）
-      return h('span', { class: ['health', m.cls] }, [
-        h('span', { class: ['dot', m.cls] }),
-        m.text,
-      ])
-    },
-  },
-  {
-    prop: 'actions',
-    label: '操作',
-    width: 380,
-    fixed: 'right',
-    formatter: (row: Api.DataSource.Item) => {
-      // 与 /scan/findings 等页面保持一致：ElButton link 型按钮（主题 primary 色）
-      const btn = (text: string, onClick: () => void, opts: { type?: string } = {}) =>
-        h(
-          resolveComponent('ElButton'),
-          { link: true, type: (opts.type || 'primary') as any, size: 'small', onClick },
-          { default: () => text }
-        )
-      return h('div', { class: 'actions' }, [
-        btn('测试', () => onTestById(row)),
-        btn('编辑', () => onEdit(row)),
-        // 「设为默认」改用提示确认（生产切换默认源影响 resolver）
-        btn('设为默认', () => onSetDefault(row)),
-        btn(row.enabled ? '停用' : '启用', () => onToggle(row), {
-          type: row.enabled ? 'warning' : 'primary',
-        }),
-        btn('删除', () => onDelete(row), { type: 'danger' }),
-      ])
-    },
-  },
-])
-
-const data = ref<Api.DataSource.Item[]>([])
-const loading = ref(false)
-const pagination = reactive({ current: 1, size: 20, total: 0, sizeChange: handleSizeChange, currentChange: handleCurrentChange })
-
-async function getData() {
-  loading.value = true
-  try {
-    const res: any = await getDataSourceList({
-      page: pagination.current,
-      page_size: pagination.size,
-      source_type: (filterType.value || undefined) as any,
-      search: searchKeyword.value || undefined,
-    })
-    // 后端响应包装：{ code, msg, data: { total, items, page, page_size } }
-    const payload = res?.data || res
-    data.value = payload?.items || []
-    pagination.total = payload?.total || 0
-  } catch (e) {
-    data.value = []
-    pagination.total = 0
-  } finally {
-    loading.value = false
-  }
-}
-
-function handleSizeChange(size: number) {
-  pagination.size = size
-  pagination.current = 1
-  getData()
-}
-function handleCurrentChange(page: number) {
-  pagination.current = page
-  getData()
-}
-
-// 当前生效来源面板已移除（设计变更：仅在「数据源管理」操作列内做启停/默认切换，不再展示全局来源汇总）。
-// /api/v1/data-sources/resolve-status 接口保留（后续 dashboard / data-health 等模块可能复用）。
-
-onMounted(async () => {
-  const res: any = await getDataSourceTypes()
-  typeOptions.value = (res?.data || res?.items || res || []) as Api.DataSource.TypeItem[]
-  await getData()
-})
-
-// ------------ 抽屉表单 ------------
-
-const drawerVisible = ref(false)
-const isEdit = ref(false)
-const editingId = ref<number | null>(null)
-const formRef = ref<FormInstance>()
-const submitting = ref(false)
-const testing = ref(false)
-const batchTesting = ref(false)
-const testResult = ref<Api.DataSource.TestResult | null>(null)
-const lastTestedAt = ref<string>('')
-
-const defaultForm = () => ({
-  source_code: '',
-  source_type: 'wazuh' as Api.DataSource.SourceType,
-  name: '',
-  endpoint: 'https://',
-  auth_type: 'basic' as Api.DataSource.AuthType,
-  auth_username: '',
-  auth_secret: '',
-  verify_ssl: false,
-  timeout_seconds: 30,
-  retry_times: 3,
-  retry_backoff_seconds: 2,
-  enabled: true,
-  is_default: false,
-  config_json: {} as Record<string, any>,
-})
-
-const form = reactive(defaultForm())
-
-const rules = reactive<FormRules>({
-  source_code: [
-    { required: true, message: '请输入数据源编码', trigger: 'blur' },
-    {
-      pattern: /^[a-z][a-z0-9-]{2,63}$/,
-      message: '编码只能包含小写字母、数字和连字符，3-64 位',
-      trigger: 'blur',
-    },
-  ],
-  source_type: [{ required: true, message: '请选择类型', trigger: 'change' }],
-  name: [{ required: true, message: '请输入显示名称', trigger: 'blur' }],
-  endpoint: [
-    { required: true, message: '请输入服务地址', trigger: 'blur' },
-    {
-      validator(_: any, value: string, cb: (err?: Error) => void) {
-        if (!value) return cb()
-        if (!/^https?:\/\//.test(value)) return cb(new Error('地址需以 http:// 或 https:// 开头'))
-        if (value.endsWith('/')) return cb(new Error('地址结尾不应包含 /'))
-        cb()
-      },
-      trigger: 'blur',
-    },
-  ],
-})
-
-function onAdd() {
-  Object.assign(form, defaultForm())
-  isEdit.value = false
-  editingId.value = null
-  testResult.value = null
-  lastTestedAt.value = ''
-  drawerVisible.value = true
-}
-
-function onEdit(row: Api.DataSource.Item) {
-  Object.assign(form, {
-    source_code: row.source_code,
-    source_type: row.source_type,
-    name: row.name,
-    endpoint: row.endpoint,
-    auth_type: row.auth_type,
-    auth_username: row.auth_username || '',
-    auth_secret: '',  // 编辑态留空
-    verify_ssl: row.verify_ssl,
-    timeout_seconds: row.timeout_seconds,
-    retry_times: row.retry_times,
-    retry_backoff_seconds: row.retry_backoff_seconds,
-    enabled: row.enabled,
-    is_default: row.is_default,
-    config_json: row.config_json || {},
+  const natStatusTagType = computed<'success' | 'info' | 'warning' | 'danger'>(() => {
+    const s = natHealth.value?.status
+    if (s === 'healthy') return 'success'
+    if (s === 'degraded') return 'warning'
+    if (s === 'down') return 'danger'
+    return 'info'
   })
-  isEdit.value = true
-  editingId.value = row.id
-  testResult.value = null
-  lastTestedAt.value = ''
-  drawerVisible.value = true
-}
+  const natStatusLabel = computed(() => {
+    const s = natHealth.value?.status
+    return (
+      ({ healthy: '正常', degraded: '过期', down: '故障' } as Record<string, string>)[s] || '无数据'
+    )
+  })
+  // 出口 IP：从 NAT 规则中取（同轮规则的 wan_ip 一致；取 distinct）
+  const natWanIp = computed(() => {
+    // data-health source 行本身不含 wan_ip；用规则列表接口取一次即可，
+    // 为保持单接口简单，出口 IP 从 soc_maps_to 最近数据推断——
+    // 这里直接由 data-health 中 tplink:nat 同 source 的规则不展开，
+    // 暂显示 expected_interval 关联的采集器名，出口 IP 用 last_failure 之外的来源。
+    return natHealth.value?.wan_ip || ''
+  })
 
-function onTypeChange() {
-  // 切换类型时根据默认值预填 endpoint 与 auth_type
-  const t = typeOptions.value.find((x) => x.value === form.source_type)
-  if (t) {
-    form.endpoint = `${form.endpoint.startsWith('http') ? form.endpoint.split('://')[0] : 'https'}://`
-    if (t.auth_types.length && !t.auth_types.includes(form.auth_type)) {
-      form.auth_type = t.auth_types[0] as any
+  function formatTime(iso: string | null | undefined): string {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleString('zh-CN', { hour12: false })
+  }
+
+  async function loadNatHealth() {
+    natLoading.value = true
+    try {
+      const d = await getDataHealth(5)
+      const sources: any[] = d?.source_health?.sources || []
+      // tplink:nat 是 NatSyncHandler 上报的固定 source_key
+      natHealth.value = sources.find((s) => s.source_key === 'tplink:nat') || null
+      // 顺带从规则端点取出口 IP（失败静默——卡上不显示而已）
+      try {
+        const ruleResp = await request({
+          url: '/api/v1/exposure/rules',
+          method: 'get',
+          params: { limit: 1 },
+          keepFullResponse: true
+        })
+        const first = (ruleResp?.data?.items || [])[0]
+        if (first?.wan_ip && natHealth.value) natHealth.value.wan_ip = first.wan_ip
+      } catch {
+        /* 出口 IP 仅展示项，忽略 */
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.message || 'NAT 健康状态加载失败')
+    } finally {
+      natLoading.value = false
     }
   }
-}
 
+  // 5 分钟自动刷新（与采集节奏对齐；组件卸载靠 SPA 切走自然释放，无定时器泄漏风险面）
+  let _natTimer: ReturnType<typeof setInterval> | null = null
+  const rtl = 'rtl'
+  // 类型选项
+  const typeOptions = ref<Api.DataSource.TypeItem[]>([])
+  const filterType = ref<string>('')
+  const searchKeyword = ref<string>('')
 
-function onPasswordFocus(e: FocusEvent) {
-  // 编辑态聚焦清空占位符
-  if (isEdit.value) {
-    ;(e.target as HTMLInputElement).value = ''
-    form.auth_secret = ''
-  }
-}
-
-async function onTest() {
-  testing.value = true
-  try {
-    // 编辑态：走 id 路径，用后端 DB 里存的凭证测试。
-    // 若走 draft：编辑态 form.auth_secret 为空（留空表示不修改），
-    // 后端会拿空密码发 basic auth → HTTP 401（假失败）。
-    let payload: any
-    if (isEdit.value && editingId.value) {
-      payload = { id: editingId.value }
-    } else {
-      payload = {
-        draft: {
-          source_code: form.source_code || 'draft',
-          source_type: form.source_type,
-          name: form.name || 'draft',
-          endpoint: form.endpoint,
-          auth_type: form.auth_type,
-          auth_username: form.auth_username || null,
-          auth_secret: form.auth_secret || null,
-          verify_ssl: form.verify_ssl,
-          timeout_seconds: form.timeout_seconds,
-          retry_times: form.retry_times,
-          retry_backoff_seconds: form.retry_backoff_seconds,
-          enabled: form.enabled,
-          is_default: form.is_default,
-          config_json: form.config_json,
-        },
+  const columns = ref<any[]>([
+    {
+      prop: 'source_code',
+      label: '编码',
+      width: 140,
+      formatter: (row: Api.DataSource.Item) => h('span', { class: 'code' }, row.source_code)
+    },
+    { prop: 'source_type', label: '类型', width: 100 },
+    { prop: 'name', label: '名称', width: 180 },
+    {
+      prop: 'endpoint',
+      label: '服务地址',
+      formatter: (row: Api.DataSource.Item) =>
+        h('span', { class: 'code muted', style: 'font-size: 12px' }, row.endpoint)
+    },
+    {
+      prop: 'flags',
+      label: '状态',
+      width: 130,
+      formatter: (row: Api.DataSource.Item) => {
+        const tags: any[] = []
+        if (row.is_default) {
+          tags.push(
+            h(
+              resolveComponent('ElTag'),
+              { type: 'primary', size: 'small', effect: 'plain' },
+              { default: () => '默认' }
+            )
+          )
+        }
+        tags.push(
+          h(
+            resolveComponent('ElTag'),
+            {
+              type: row.enabled ? 'success' : 'info',
+              size: 'small',
+              effect: 'plain',
+              style: 'margin-left: 4px'
+            },
+            { default: () => (row.enabled ? '启用' : '停用') }
+          )
+        )
+        return h('div', { style: 'display: flex; align-items: center' }, tags)
+      }
+    },
+    {
+      prop: 'health_status',
+      label: '健康',
+      width: 100,
+      formatter: (row: Api.DataSource.Item) => {
+        const map: Record<string, { text: string; cls: string }> = {
+          normal: { text: '正常', cls: 'ok' },
+          abnormal: { text: '异常', cls: 'err' },
+          untested: { text: '未测', cls: 'gray' },
+          stale: { text: '过期', cls: 'warn' }
+        }
+        const m = map[row.health_status || 'untested']
+        // 在外层 span 上加 cls，以便同步设置文本颜色（不只点）
+        return h('span', { class: ['health', m.cls] }, [
+          h('span', { class: ['dot', m.cls] }),
+          m.text
+        ])
+      }
+    },
+    {
+      prop: 'actions',
+      label: '操作',
+      width: 380,
+      fixed: 'right',
+      formatter: (row: Api.DataSource.Item) => {
+        // 与 /scan/findings 等页面保持一致：ElButton link 型按钮（主题 primary 色）
+        const btn = (text: string, onClick: () => void, opts: { type?: string } = {}) =>
+          h(
+            resolveComponent('ElButton'),
+            { link: true, type: (opts.type || 'primary') as any, size: 'small', onClick },
+            { default: () => text }
+          )
+        return h('div', { class: 'actions' }, [
+          btn('测试', () => onTestById(row)),
+          btn('编辑', () => onEdit(row)),
+          // 「设为默认」改用提示确认（生产切换默认源影响 resolver）
+          btn('设为默认', () => onSetDefault(row)),
+          btn(row.enabled ? '停用' : '启用', () => onToggle(row), {
+            type: row.enabled ? 'warning' : 'primary'
+          }),
+          btn('删除', () => onDelete(row), { type: 'danger' })
+        ])
       }
     }
-    const res: any = await testDataSourceConnection(payload)
-    const result: Api.DataSource.TestResult = res?.data || res
-    testResult.value = result
-    lastTestedAt.value = new Date().toLocaleString('zh-CN')
-    if (result.ok) {
-      ElMessage.success(result.message || '连接成功')
-    } else {
-      ElMessage.warning(result.message || '连接失败')
-    }
-  } catch (e: any) {
-    testResult.value = {
-      ok: false,
-      latency_ms: 0,
-      message: e?.message || '测试请求失败',
-      checks: [],
-      details: {},
-    }
-  } finally {
-    testing.value = false
-  }
-}
+  ])
 
-async function onTestById(row: Api.DataSource.Item) {
-  ElMessage.info(`正在测试 ${row.source_code}...`)
-  try {
-    const res: any = await testDataSourceConnection({ id: row.id })
-    const result: Api.DataSource.TestResult = res?.data || res
-    if (result.ok) {
-      ElMessage.success(`${row.source_code}：${result.message}`)
-    } else {
-      ElMessage.warning(`${row.source_code}：${result.message}`)
+  const data = ref<Api.DataSource.Item[]>([])
+  const loading = ref(false)
+  const pagination = reactive({
+    current: 1,
+    size: 20,
+    total: 0,
+    sizeChange: handleSizeChange,
+    currentChange: handleCurrentChange
+  })
+
+  async function getData() {
+    loading.value = true
+    try {
+      const res: any = await getDataSourceList({
+        page: pagination.current,
+        page_size: pagination.size,
+        source_type: (filterType.value || undefined) as any,
+        search: searchKeyword.value || undefined
+      })
+      // 后端响应包装：{ code, msg, data: { total, items, page, page_size } }
+      const payload = res?.data || res
+      data.value = payload?.items || []
+      pagination.total = payload?.total || 0
+    } catch (_e) {
+      data.value = []
+      pagination.total = 0
+    } finally {
+      loading.value = false
     }
+  }
+
+  function handleSizeChange(size: number) {
+    pagination.size = size
+    pagination.current = 1
+    getData()
+  }
+  function handleCurrentChange(page: number) {
+    pagination.current = page
+    getData()
+  }
+
+  // 当前生效来源面板已移除（设计变更：仅在「数据源管理」操作列内做启停/默认切换，不再展示全局来源汇总）。
+  // /api/v1/data-sources/resolve-status 接口保留（后续 dashboard / data-health 等模块可能复用）。
+
+  onMounted(async () => {
+    const res: any = await getDataSourceTypes()
+    typeOptions.value = (res?.data || res?.items || res || []) as Api.DataSource.TypeItem[]
     await getData()
-  } catch (e: any) {
-    ElMessage.error(`${row.source_code}：${e?.message || '测试失败'}`)
-  }
-}
+    await loadNatHealth()
+    // NAT 健康卡 5 分钟自动刷新（与采集节奏对齐；组件卸载）
+    _natTimer = setInterval(loadNatHealth, 5 * 60 * 1000)
+  })
 
-async function onBatchTest() {
-  batchTesting.value = true
-  try {
-    for (const row of data.value) {
-      await onTestById(row)
+  onBeforeUnmount(() => {
+    if (_natTimer) clearInterval(_natTimer)
+  })
+
+  // ------------ 抽屉表单 ------------
+
+  const drawerVisible = ref(false)
+  const isEdit = ref(false)
+  const editingId = ref<number | null>(null)
+  const formRef = ref<FormInstance>()
+  const submitting = ref(false)
+  const testing = ref(false)
+  const batchTesting = ref(false)
+  const testResult = ref<Api.DataSource.TestResult | null>(null)
+  const lastTestedAt = ref<string>('')
+
+  const defaultForm = () => ({
+    source_code: '',
+    source_type: 'wazuh' as Api.DataSource.SourceType,
+    name: '',
+    endpoint: 'https://',
+    auth_type: 'basic' as Api.DataSource.AuthType,
+    auth_username: '',
+    auth_secret: '',
+    verify_ssl: false,
+    timeout_seconds: 30,
+    retry_times: 3,
+    retry_backoff_seconds: 2,
+    enabled: true,
+    is_default: false,
+    config_json: {} as Record<string, any>
+  })
+
+  const form = reactive(defaultForm())
+
+  const rules = reactive<FormRules>({
+    source_code: [
+      { required: true, message: '请输入数据源编码', trigger: 'blur' },
+      {
+        pattern: /^[a-z][a-z0-9-]{2,63}$/,
+        message: '编码只能包含小写字母、数字和连字符，3-64 位',
+        trigger: 'blur'
+      }
+    ],
+    source_type: [{ required: true, message: '请选择类型', trigger: 'change' }],
+    name: [{ required: true, message: '请输入显示名称', trigger: 'blur' }],
+    endpoint: [
+      { required: true, message: '请输入服务地址', trigger: 'blur' },
+      {
+        validator(_: any, value: string, cb: (err?: Error) => void) {
+          if (!value) return cb()
+          if (!/^https?:\/\//.test(value)) return cb(new Error('地址需以 http:// 或 https:// 开头'))
+          if (value.endsWith('/')) return cb(new Error('地址结尾不应包含 /'))
+          cb()
+        },
+        trigger: 'blur'
+      }
+    ]
+  })
+
+  function onAdd() {
+    Object.assign(form, defaultForm())
+    isEdit.value = false
+    editingId.value = null
+    testResult.value = null
+    lastTestedAt.value = ''
+    drawerVisible.value = true
+  }
+
+  function onEdit(row: Api.DataSource.Item) {
+    Object.assign(form, {
+      source_code: row.source_code,
+      source_type: row.source_type,
+      name: row.name,
+      endpoint: row.endpoint,
+      auth_type: row.auth_type,
+      auth_username: row.auth_username || '',
+      auth_secret: '', // 编辑态留空
+      verify_ssl: row.verify_ssl,
+      timeout_seconds: row.timeout_seconds,
+      retry_times: row.retry_times,
+      retry_backoff_seconds: row.retry_backoff_seconds,
+      enabled: row.enabled,
+      is_default: row.is_default,
+      config_json: row.config_json || {}
+    })
+    isEdit.value = true
+    editingId.value = row.id
+    testResult.value = null
+    lastTestedAt.value = ''
+    drawerVisible.value = true
+  }
+
+  function onTypeChange() {
+    // 切换类型时根据默认值预填 endpoint 与 auth_type
+    const t = typeOptions.value.find((x) => x.value === form.source_type)
+    if (t) {
+      form.endpoint = `${form.endpoint.startsWith('http') ? form.endpoint.split('://')[0] : 'https'}://`
+      if (t.auth_types.length && !t.auth_types.includes(form.auth_type)) {
+        form.auth_type = t.auth_types[0] as any
+      }
     }
-  } finally {
-    batchTesting.value = false
   }
-}
 
-async function onSubmit() {
-  try {
-    await formRef.value?.validate()
-  } catch {
-    return
-  }
-  submitting.value = true
-  try {
-    const payload: Api.DataSource.Payload = {
-      source_code: form.source_code,
-      source_type: form.source_type,
-      name: form.name,
-      endpoint: form.endpoint,
-      auth_type: form.auth_type,
-      auth_username: form.auth_username || null,
-      auth_secret: form.auth_secret || null,
-      verify_ssl: form.verify_ssl,
-      timeout_seconds: form.timeout_seconds,
-      retry_times: form.retry_times,
-      retry_backoff_seconds: form.retry_backoff_seconds,
-      enabled: form.enabled,
-      is_default: form.is_default,
-      config_json: form.config_json,
+  function onPasswordFocus(e: FocusEvent) {
+    // 编辑态聚焦清空占位符
+    if (isEdit.value) {
+      ;(e.target as HTMLInputElement).value = ''
+      form.auth_secret = ''
     }
-    if (isEdit.value && editingId.value) {
-      await updateDataSource(editingId.value, payload)
-      ElMessage.success('已保存，🟢 立即生效')
-    } else {
-      await addDataSource(payload)
-      ElMessage.success('已保存，🟢 立即生效')
+  }
+
+  async function onTest() {
+    testing.value = true
+    try {
+      // 编辑态：走 id 路径，用后端 DB 里存的凭证测试。
+      // 若走 draft：编辑态 form.auth_secret 为空（留空表示不修改），
+      // 后端会拿空密码发 basic auth → HTTP 401（假失败）。
+      let payload: any
+      if (isEdit.value && editingId.value) {
+        payload = { id: editingId.value }
+      } else {
+        payload = {
+          draft: {
+            source_code: form.source_code || 'draft',
+            source_type: form.source_type,
+            name: form.name || 'draft',
+            endpoint: form.endpoint,
+            auth_type: form.auth_type,
+            auth_username: form.auth_username || null,
+            auth_secret: form.auth_secret || null,
+            verify_ssl: form.verify_ssl,
+            timeout_seconds: form.timeout_seconds,
+            retry_times: form.retry_times,
+            retry_backoff_seconds: form.retry_backoff_seconds,
+            enabled: form.enabled,
+            is_default: form.is_default,
+            config_json: form.config_json
+          }
+        }
+      }
+      const res: any = await testDataSourceConnection(payload)
+      const result: Api.DataSource.TestResult = res?.data || res
+      testResult.value = result
+      lastTestedAt.value = new Date().toLocaleString('zh-CN')
+      if (result.ok) {
+        ElMessage.success(result.message || '连接成功')
+      } else {
+        ElMessage.warning(result.message || '连接失败')
+      }
+    } catch (e: any) {
+      testResult.value = {
+        ok: false,
+        latency_ms: 0,
+        message: e?.message || '测试请求失败',
+        checks: [],
+        details: {}
+      }
+    } finally {
+      testing.value = false
     }
-    drawerVisible.value = false
-    await getData()
-  } catch (e: any) {
-    // 二次确认：测试未通过仍要保存
-    if (testResult.value && !testResult.value.ok) {
-      ElMessage.warning('测试未通过，请确认是否仍要保存')
+  }
+
+  async function onTestById(row: Api.DataSource.Item) {
+    ElMessage.info(`正在测试 ${row.source_code}...`)
+    try {
+      const res: any = await testDataSourceConnection({ id: row.id })
+      const result: Api.DataSource.TestResult = res?.data || res
+      if (result.ok) {
+        ElMessage.success(`${row.source_code}：${result.message}`)
+      } else {
+        ElMessage.warning(`${row.source_code}：${result.message}`)
+      }
+      await getData()
+    } catch (e: any) {
+      ElMessage.error(`${row.source_code}：${e?.message || '测试失败'}`)
     }
-  } finally {
-    submitting.value = false
   }
-}
 
-async function onSetDefault(row: Api.DataSource.Item) {
-  if (row.is_default) {
-    ElMessage.info(`${row.source_code} 已是默认实例`)
-    return
+  async function onBatchTest() {
+    batchTesting.value = true
+    try {
+      for (const row of data.value) {
+        await onTestById(row)
+      }
+    } finally {
+      batchTesting.value = false
+    }
   }
-  try {
-    await ElMessageBox.confirm(
-      `将 ${row.source_code} 设为该类型的默认实例？\n原默认实例将被替换，业务层 60s 内生效。`,
-      '切换默认',
-      { type: 'info' }
-    )
-    await setDefaultDataSource(row.id)
-    ElMessage.success(`已将 ${row.source_code} 设为默认`)
-    await getData()
-  } catch (err: any) {
-    if (err !== 'cancel') ElMessage.error(err?.message || '操作失败')
-  }
-}
 
-async function onToggle(row: Api.DataSource.Item) {
-  const next = !row.enabled
-  try {
-    await toggleDataSource(row.id, next)
-    ElMessage.success(`${row.source_code} 已${next ? '启用' : '停用'}`)
-    await getData()
-  } catch (err: any) {
-    ElMessage.error(err?.message || '操作失败')
+  async function onSubmit() {
+    try {
+      await formRef.value?.validate()
+    } catch {
+      return
+    }
+    submitting.value = true
+    try {
+      const payload: Api.DataSource.Payload = {
+        source_code: form.source_code,
+        source_type: form.source_type,
+        name: form.name,
+        endpoint: form.endpoint,
+        auth_type: form.auth_type,
+        auth_username: form.auth_username || null,
+        auth_secret: form.auth_secret || null,
+        verify_ssl: form.verify_ssl,
+        timeout_seconds: form.timeout_seconds,
+        retry_times: form.retry_times,
+        retry_backoff_seconds: form.retry_backoff_seconds,
+        enabled: form.enabled,
+        is_default: form.is_default,
+        config_json: form.config_json
+      }
+      if (isEdit.value && editingId.value) {
+        await updateDataSource(editingId.value, payload)
+        ElMessage.success('已保存，🟢 立即生效')
+      } else {
+        await addDataSource(payload)
+        ElMessage.success('已保存，🟢 立即生效')
+      }
+      drawerVisible.value = false
+      await getData()
+    } catch (_e: any) {
+      // 二次确认：测试未通过仍要保存
+      if (testResult.value && !testResult.value.ok) {
+        ElMessage.warning('测试未通过，请确认是否仍要保存')
+      }
+    } finally {
+      submitting.value = false
+    }
   }
-}
 
-async function onDelete(row: Api.DataSource.Item) {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除数据源 ${row.source_code}？\n删除不可恢复。`,
-      '删除确认',
-      { type: 'warning' }
-    )
-    await deleteDataSource(row.id)
-    ElMessage.success(`已删除 ${row.source_code}`)
-    await getData()
-  } catch (err: any) {
-    if (err !== 'cancel') ElMessage.error(err?.message || '删除失败')
+  async function onSetDefault(row: Api.DataSource.Item) {
+    if (row.is_default) {
+      ElMessage.info(`${row.source_code} 已是默认实例`)
+      return
+    }
+    try {
+      await ElMessageBox.confirm(
+        `将 ${row.source_code} 设为该类型的默认实例？\n原默认实例将被替换，业务层 60s 内生效。`,
+        '切换默认',
+        { type: 'info' }
+      )
+      await setDefaultDataSource(row.id)
+      ElMessage.success(`已将 ${row.source_code} 设为默认`)
+      await getData()
+    } catch (err: any) {
+      if (err !== 'cancel') ElMessage.error(err?.message || '操作失败')
+    }
   }
-}
+
+  async function onToggle(row: Api.DataSource.Item) {
+    const next = !row.enabled
+    try {
+      await toggleDataSource(row.id, next)
+      ElMessage.success(`${row.source_code} 已${next ? '启用' : '停用'}`)
+      await getData()
+    } catch (err: any) {
+      ElMessage.error(err?.message || '操作失败')
+    }
+  }
+
+  async function onDelete(row: Api.DataSource.Item) {
+    try {
+      await ElMessageBox.confirm(
+        `确定删除数据源 ${row.source_code}？\n删除不可恢复。`,
+        '删除确认',
+        { type: 'warning' }
+      )
+      await deleteDataSource(row.id)
+      ElMessage.success(`已删除 ${row.source_code}`)
+      await getData()
+    } catch (err: any) {
+      if (err !== 'cancel') ElMessage.error(err?.message || '删除失败')
+    }
+  }
 </script>
 
 <style scoped lang="scss">
-.data-source-page {
-  padding: 16px;
+  .data-source-page {
+    padding: 16px;
 
-  .toolbar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 14px;
-  }
-  .grow-spacer {
-    flex: 1;
-  }
-  .code {
-    font-family: ui-monospace, Menlo, monospace;
-    color: #185fa5;
-  }
-  .muted {
-    color: #888780;
-  }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .grow-spacer {
+      flex: 1;
+    }
+    .code {
+      font-family: ui-monospace, Menlo, monospace;
+      color: #185fa5;
+    }
+    .muted {
+      color: #888780;
+    }
 
-  .health {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
+    .health {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+    }
   }
-}
 </style>
 
-// 健康列 / 操作列链接由 ArtTable 内部渲染（formatter 回调），scoped 样式的 data-v 属性
-// 挂在 ArtTable 上而非本页面，scoped 规则永远匹配不到 → 必须用全局（非 scoped）样式。
-// 加 .data-source-page 前缀防止污染其它页面。
+// 健康列 / 操作列链接由 ArtTable 内部渲染（formatter 回调），scoped 样式的 data-v 属性 // 挂在
+ArtTable 上而非本页面，scoped 规则永远匹配不到 → 必须用全局（非 scoped）样式。 // 加
+.data-source-page 前缀防止污染其它页面。
 <style lang="scss">
-.data-source-page {
-  .health {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
+  .data-source-page {
+    .nat-health-card {
+      margin-bottom: 12px;
+    }
+    .nat-card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .nat-card-title {
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .nat-card-hint {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+    .nat-empty {
+      padding: 16px;
+      color: var(--el-text-color-secondary);
+      font-size: 13px;
+    }
+    .nat-card-body {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+    .nat-metric {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .nat-metric-label {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+    }
+    .nat-metric-value {
+      font-size: 14px;
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .nat-failure .nat-metric-value {
+      color: var(--el-color-danger);
+      font-weight: 400;
+      font-size: 13px;
+    }
+    .health {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+    }
+    .health.ok {
+      color: #639922;
+    }
+    .health.err {
+      color: #ef9f27;
+    }
+    .health.gray {
+      color: #888780;
+    }
+    .health.warn {
+      color: #ef9f27;
+    }
+    .dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .dot.ok {
+      background: #639922;
+    }
+    .dot.err {
+      background: #ef9f27;
+    }
+    .dot.gray {
+      background: #b4b2a9;
+    }
+    .dot.warn {
+      background: #ef9f27;
+    }
   }
-  .health.ok    { color: #639922; }
-  .health.err   { color: #ef9f27; }
-  .health.gray  { color: #888780; }
-  .health.warn  { color: #ef9f27; }
-  .dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-  }
-  .dot.ok { background: #639922; }
-  .dot.err { background: #ef9f27; }
-  .dot.gray { background: #b4b2a9; }
-  .dot.warn { background: #ef9f27; }
-}
 </style>
 
 <style scoped lang="scss">
-
-.drawer-wrap {
-  padding: 18px;
-  background: #fff;
-  height: 100%;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-.drawer-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-.drawer-head h3 {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-}
-.drawer-head .close {
-  cursor: pointer;
-  color: #888780;
-}
-.muted {
-  color: #888780;
-  font-size: 12px;
-  margin-bottom: 14px;
-}
-.sec-title {
-  font-size: 13px;
-  font-weight: 500;
-  margin: 18px 0 10px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #f0f0ee;
-}
-.sec-title:first-of-type {
-  margin-top: 0;
-}
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-.grid-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 14px;
-}
-.hint {
-  font-size: 11px;
-  color: #888780;
-  margin-top: 4px;
-}
-.checks {
-  border: 1px solid #e3e3e0;
-  border-radius: 8px;
-  padding: 12px;
-  background: #fafaf8;
-}
-.check-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 4px 0;
-  font-size: 12px;
-}
-.check-row.warn {
-  color: #854f0b;
-}
-.check-row .name {
-  font-weight: 500;
-}
-.latency {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #888780;
-}
-.footer {
-  margin-top: 18px;
-  padding-top: 4px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
+  .drawer-wrap {
+    padding: 18px;
+    background: #fff;
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  .drawer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .drawer-head h3 {
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0;
+  }
+  .drawer-head .close {
+    cursor: pointer;
+    color: #888780;
+  }
+  .muted {
+    color: #888780;
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+  .sec-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin: 18px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #f0f0ee;
+  }
+  .sec-title:first-of-type {
+    margin-top: 0;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  .hint {
+    font-size: 11px;
+    color: #888780;
+    margin-top: 4px;
+  }
+  .checks {
+    border: 1px solid #e3e3e0;
+    border-radius: 8px;
+    padding: 12px;
+    background: #fafaf8;
+  }
+  .check-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .check-row.warn {
+    color: #854f0b;
+  }
+  .check-row .name {
+    font-weight: 500;
+  }
+  .latency {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #888780;
+  }
+  .footer {
+    margin-top: 18px;
+    padding-top: 4px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
 </style>
