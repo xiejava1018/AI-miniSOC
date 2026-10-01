@@ -1003,6 +1003,97 @@ class ManualRelationBuilder:
 
 
 # ---------------------------------------------------------------------------
+# Builder 6: NatMappingBuilder（OH-3.4，S2 暴露面归位）
+# ---------------------------------------------------------------------------
+
+
+class NatMappingBuilder:
+    """构建 maps_to 边：WAN 公网 IP → 内网资产（来自 soc_maps_to）。
+
+    数据源：soc_maps_to（tplink-collector 5min 同步，OH-6.1b）。
+    重建策略：全量重建本 builder 来源的 maps_to 边（先删后建，幂等）——
+    路由器侧删除 NAT 规则后，图谱边随下次重建同步消失（诚实降级）。
+    边不进 EDGE_DECAY_DAYS（持久配置事实永不过期，靠重建对齐）。
+    内网 IP 无对应资产时不建边（资产纳管后自然出现）。
+    """
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def rebuild_all(self) -> dict:
+        from app.models.nat_mapping import NatMapping
+        from app.models.graph import GraphEdge
+
+        stats = {"maps_to_built": 0, "skipped_no_asset": 0, "maps_to_deleted": 0}
+        now = _utcnow()
+
+        # 1. 全量删除旧 maps_to 边（幂等重建；当前该 rel_type 仅本 builder 生产，
+        #    ManualRelation 人工边不走此类型）
+        stats["maps_to_deleted"] = (
+            self.db.query(GraphEdge).filter(GraphEdge.rel_type == "maps_to").delete()
+        )
+
+        # 2. 重建：enabled 规则按 (wan_ip, asset) 分组聚合后再建边——
+        #    多条 NAT 规则指向同一资产（如 192.168.0.18 的 4 条端口映射）
+        #    若逐条 upsert 会被 (src,dst,rel_type) 唯一键合并，evidence
+        #    只剩最后一条规则的端口（信息丢失）；聚合后 evidence.wan_ports
+        #    完整保留全部外网端口（2026-10-01 实测 20 规则→8 边时发现）。
+        from collections import defaultdict
+        rows = self.db.query(NatMapping).filter(NatMapping.enabled.is_(True)).all()
+        grouped: dict[tuple, list] = defaultdict(list)
+        for m in rows:
+            if not m.wan_ip:
+                stats["skipped_no_asset"] += 1
+                continue
+            grouped[(str(m.wan_ip), m.wan_if)].append(m)
+
+        for (wan_ip_str, wan_if), group in grouped.items():
+            wan_node = f"ip:{wan_ip_str}"
+            ensure_node(
+                self.db, wan_node, "ip", wan_ip_str,
+                props={"is_external": True, "wan_if": wan_if},
+                props_synced_at=now,
+            )
+            # 同一 WAN 下按资产再分组（多资产各建各的边）
+            by_asset: dict[str, list] = defaultdict(list)
+            for m in group:
+                asset = (
+                    self.db.query(Asset)
+                    .filter(Asset.asset_ip == str(m.internal_ip))
+                    .first()
+                )
+                if not asset:
+                    stats["skipped_no_asset"] += 1
+                    continue
+                by_asset[str(asset.id)].append((asset, m))
+
+            for asset_id, pairs in by_asset.items():
+                asset, first_m = pairs[0]
+                upsert_edge(
+                    self.db, wan_node, f"asset:{asset_id}", "maps_to",
+                    weight=1.0, confidence=1.0,  # 配置事实，非推断
+                    direction="directed",
+                    sources=["soc_maps_to"],
+                    evidence={
+                        "table": "soc_maps_to",
+                        "wan_ports": [
+                            {"wan_port": m.wan_port, "protocol": m.protocol,
+                             "internal_port": m.internal_port, "rule_name": m.rule_name}
+                            for _, m in pairs
+                        ],
+                        "rule_count": len(pairs),
+                    },
+                    last_seen=max((m.last_seen_at or now) for _, m in pairs),
+                    first_seen=min((m.created_at or now) for _, m in pairs),
+                )
+                stats["maps_to_built"] += 1
+
+        self.db.flush()
+        logger.info("NatMappingBuilder rebuilt: %s", stats)
+        return stats
+
+
+# ---------------------------------------------------------------------------
 # 顶层调度入口（给 scheduler 用）
 # ---------------------------------------------------------------------------
 
@@ -1023,6 +1114,7 @@ def run_all_builders(db: Session, only: Optional[str] = None) -> dict:
         ("topology", TopologyBuilder),
         ("alert_group", AlertGroupBuilder),
         ("manual", ManualRelationBuilder),
+        ("nat_mapping", NatMappingBuilder),  # OH-3.4（S2）：maps_to 边
     ]
     if only and only != "all":
         all_builders = [(n, c) for n, c in all_builders if n == only]

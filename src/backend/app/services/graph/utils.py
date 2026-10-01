@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 D1_TYPES = {
     "has_port", "has_vuln", "port_has_vuln",
     "belongs_to_system", "owned_by", "system_owned_by", "runs_on",
+    "maps_to",  # OH-3.4（S2）：NAT 端口映射，配置事实，攻击者从公网入口边
 }
 D2_TYPES = {
     "login_to", "login_from", "session_on", "external_access",

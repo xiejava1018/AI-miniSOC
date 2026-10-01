@@ -33,12 +33,26 @@ async def sync_data(
 
     根据 data_type 路由到对应的 Handler 处理：
     - asset: 资产同步（去重、增量更新、变更记录）
-    - vulnerability: 漏洞同步（Phase 2）
-    - baseline: 基线同步（Phase 3）
     - port: 端口同步（Phase 4）
+    - discovery: 扫描器发现（P3/F-S1）
+    - nat_mapping: NAT 端口映射（OH-6.1b，S2 暴露面）
     """
     handler = SYNC_HANDLERS.get(request.data_type)
     if not handler:
+        # OH-6.1b：未注册类型拒绝前记 source_health failure——
+        # 否则采集器持续推被拒而 /data-health 全绿（盲区，曾发生在 nat_mapping 上）
+        try:
+            from app.services.source_health import SourceHealthRecorder
+            SourceHealthRecorder(db).record_failure(
+                f"{request.source}:{request.data_type}",
+                source_type=request.source,
+                error=f"unsupported data_type: {request.data_type} "
+                      f"(supported: {', '.join(SYNC_HANDLERS.keys())})"[:1000],
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.debug("record_failure for unsupported data_type failed", exc_info=True)
         raise HTTPException(
             status_code=400,
             detail=f"不支持的数据类型: {request.data_type}，"
