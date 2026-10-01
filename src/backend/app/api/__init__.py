@@ -19,7 +19,7 @@ from app.api import (
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance, asset_reconciliation, data_health, reports, impact_analysis, graph,
+    compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems,
 )
@@ -121,6 +121,12 @@ include_human_router(
 # 资产知识图谱 v1（G1）：独立前缀 /graph；包含资产邻居、影响面、chokepoint 等端点
 include_human_router(
     api_router, graph.router, prefix="/graph", tags=["资产知识图谱"],
+)
+
+# S2 暴露面归位（OH-4.2）：NAT 映射反查/规则列表/资产暴露面
+# router 自带 prefix="/exposure"（含 /assets/{id}/mapping 子路径）
+include_human_router(
+    api_router, exposure.router, tags=["暴露面归位"],
 )
 
 # 业务系统管理（WO-0a 入口；§7.2.5 F9）
