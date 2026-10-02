@@ -351,7 +351,7 @@
     '注: 与 F1.1 风险评分（Asset.risk_score 0–100）不同；F1.1 由 batch-score 落库快照'
 
   const riskRingData = computed(() => {
-    const d = riskOverview.value?.distribution
+    const d = riskOverview.value?.distribution as Record<string, number> | undefined
     if (!d) return []
     return ['critical', 'high', 'medium', 'low', 'na']
       .filter((k) => d[k] > 0)

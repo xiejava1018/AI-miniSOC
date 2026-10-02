@@ -282,14 +282,14 @@
     on_demand: '按需',
     incident_driven: '事件驱动'
   }
-  const TYPE_TAG: Record<string, string> = {
+  const TYPE_TAG: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = {
     weekly: 'primary',
     monthly: 'success',
     on_demand: 'info',
     incident_driven: 'warning'
   }
   const typeLabel = (t: string) => TYPE_LABEL[t] || t
-  const typeTag = (t: string) => TYPE_TAG[t] || 'info'
+  const typeTag = (t: string): 'info' | 'success' | 'warning' | 'danger' | 'primary' => TYPE_TAG[t] || 'info'
 
   const formatTime = (v?: string | null) => {
     if (!v) return ''
@@ -361,8 +361,8 @@
         force_glm: genForm.value.force_glm
       }
       if (genForm.value.report_type === 'on_demand') {
-        body.period_start = new Date(genForm.value.period_start).toISOString()
-        body.period_end = new Date(genForm.value.period_end).toISOString()
+        body.period_start = (genForm.value.period_start ?? new Date()).toISOString()
+        body.period_end = (genForm.value.period_end ?? new Date()).toISOString()
       }
       const res = await generateReport(body)
       const r = res?.data

@@ -99,7 +99,7 @@
             <ElTag
               size="small"
               effect="plain"
-              :type="assetDetail.expected_eol_source === 'manual' ? 'info' : ''"
+              :type="assetDetail.expected_eol_source === 'manual' ? 'info' : undefined"
               class="lc-source-tag"
             >
               {{ assetDetail.expected_eol_source === 'manual' ? '人工指定' : '参考表匹配' }}

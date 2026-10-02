@@ -184,8 +184,8 @@
   const createdKey = ref('')
   const createdAgent = ref<ScannerAgent | null>(null)
 
-  const statusType = (s: string) =>
-    ({ online: 'success', offline: 'danger', unknown: 'info', disabled: 'info' }[s] || 'info')
+  const statusType = (s: string): 'success' | 'danger' | 'info' =>
+    (({ online: 'success', offline: 'danger', unknown: 'info', disabled: 'info' } as Record<string, 'success' | 'danger' | 'info'>)[s] || 'info')
   const statusLabel = (s: string) =>
     ({ online: '在线', offline: '离线', unknown: '未知', disabled: '已停用' }[s] || s)
 

@@ -82,6 +82,8 @@ export interface ScanTask {
   items_failed?: number | null
   error_message?: string | null
   parent_task_id?: string | null
+  /** 目标摘要（后端任务创建时解析）：[{type: 'cidr'|'ip', value: '...'}] */
+  target_summary?: { type: string; value: string }[]
   /** F-S3：本次扫描动了哪些端口（port 任务专用）。老任务 / 未执行完为空数组 */
   affected_ports?: AffectedPort[]
   /** F-S3：本次扫描动了哪些发现（discovery 任务专用）。老任务 / 未执行完为空数组 */

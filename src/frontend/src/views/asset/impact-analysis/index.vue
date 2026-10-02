@@ -420,8 +420,8 @@
   const critLabel = (c: string) =>
     ({ critical: '极重要', high: '重要', medium: '一般', low: '次要' })[c] || c
 
-  const critType = (c: string) =>
-    ({ critical: 'danger', high: 'warning', medium: 'info', low: 'info' })[c] || 'info'
+  const critType = (c: string): 'danger' | 'warning' | 'info' =>
+    (({ critical: 'danger', high: 'warning', medium: 'info', low: 'info' } as Record<string, 'danger' | 'warning' | 'info'>)[c] || 'info')
 
   const runAnalysis = async () => {
     const desc = form.change_description.trim()

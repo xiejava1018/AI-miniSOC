@@ -55,7 +55,8 @@
         :loading="lookupLoading"
         :data="lookupData"
         :columns="lookupColumns"
-        :pagination="false"
+        :pagination="{ current: 1, size: 50, total: lookupData.length }"
+        :pagination-options="{ hideOnSinglePage: true }"
         :table-config="{ rowKey: 'id' }"
         :layout="{ marginTop: 12 }"
         empty-text="输入 WAN IP 反查，或暂未配置 NAT"
@@ -137,7 +138,8 @@
         :loading="assetLookupLoading"
         :data="assetLookupResult.items"
         :columns="assetLookupColumns"
-        :pagination="false"
+        :pagination="{ current: 1, size: 50, total: assetLookupResult.items.length }"
+        :pagination-options="{ hideOnSinglePage: true }"
         :table-config="{ rowKey: 'id' }"
         :layout="{ marginTop: 12 }"
         empty-text="输入资产 ID 查询"
@@ -319,10 +321,11 @@
 
   // 把 useTable 的 wan_ip 搜索参数映射到 rules API 参数 internal_ip（搜索项命名为 wan_ip 仅为 UI 直觉）
   function refresh() {
-    const ip = (searchParams.value as any).wan_ip?.trim()
+    const sp = searchParams as Record<string, any>
+    const ip = sp.wan_ip?.trim()
     // useTable 调 apiFn 时把 searchParams 平摊到 params；
     // 这里通过一次性把 wan_ip 改名为 internal_ip 再传。
-    if (ip) (searchParams.value as any).internal_ip = ip
+    if (ip) sp.internal_ip = ip
     getDataByPage()
   }
   function reset() {
@@ -330,7 +333,7 @@
   }
 
   // 覆盖 useTable 默认 refresh（点一次内容展开时 wan_ip → internal_ip 改名）
-  ;(searchParams.value as any).wan_ip = ''
+  ;(searchParams as Record<string, any>).wan_ip = ''
 
   // ============ ③ 资产对外暴露面映射 ============
   const assetLookupForm = reactive({ asset_id: '' })

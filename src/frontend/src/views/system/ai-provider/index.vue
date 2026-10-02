@@ -289,7 +289,7 @@ const columns = computed(() => [
     prop: 'actions',
     label: '操作',
     width: 300,
-    fixed: 'right',
+    fixed: 'right' as const,
     formatter: (row: any) => {
       const btn = (text: string, onClick: () => void, opts: { type?: string } = {}) =>
         h(

@@ -226,7 +226,7 @@ async function loadSchema() {
     if (it.group_name === DEPRECATED_GROUP || it.editable === false) continue
     countMap[it.category] = (countMap[it.category] || 0) + 1
   }
-  groups.value = Object.keys(countMap).map((c) => ({ category: c, count: countMap[c] }))
+  groups.value = Object.keys(countMap).map((c) => ({ category: c, count: countMap[c] }) as Api.ConfigSchema.Group)
   if (!activeCategory.value && groups.value.length) {
     activeCategory.value = groups.value[0].category
     await loadConfigValues()
@@ -252,7 +252,7 @@ async function loadConfigValues() {
     allItems.value.filter((i) => i.category === activeCategory.value).map((i) => i.key)
   )
   unregisteredItems.value = rows.filter((r: any) => !schemaKeys.has(r.key))
-  for (const k of Object.keys(unregValues)) delete unregValues[k]
+  for (const k of Object.keys(unregValues).map(Number)) delete unregValues[k as unknown as number]
   for (const r of unregisteredItems.value) unregValues[r.id] = String(r.value ?? '')
 }
 

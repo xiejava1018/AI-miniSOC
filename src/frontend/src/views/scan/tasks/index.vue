@@ -470,20 +470,18 @@
     { value: 'cancelled', label: '已取消' }
   ]
 
-  const statusType = (s: string) =>
-    ({ success: 'success', running: 'warning', pending: 'info', failed: 'danger', cancelled: 'info' }[
-      s
-    ] || 'info')
-  const statusLabel = (s: string) =>
-    ({
+  const statusType = (s?: string): 'success' | 'warning' | 'info' | 'danger' =>
+    (({ success: 'success', running: 'warning', pending: 'info', failed: 'danger', cancelled: 'info' } as Record<string, 'success' | 'warning' | 'info' | 'danger'>)[s || ''] || 'info')
+  const statusLabel = (s?: string) =>
+    (({
       pending: '待认领',
       running: '扫描中',
       success: '成功',
       failed: '失败',
       cancelled: '已取消'
-    }[s] || s)
-  const modeLabel = (m: string) =>
-    ({ public: '公网', internal: '内网', ports: '端口' }[m] || m)
+    } as Record<string, string>)[s || ''] || s || '—')
+  const modeLabel = (m?: string) =>
+    (({ public: '公网', internal: '内网', ports: '端口' } as Record<string, string>)[m || ''] || m || '—')
 
   const formatTime = (t?: string | null) => {
     if (!t) return ''
@@ -527,6 +525,7 @@
     runForm.value = {
       mode: 'public',
       targets: '',
+      publicTargets: [],
       assign_mode: 'auto',
       target_scanner_id: null,
       nmap_args: '',

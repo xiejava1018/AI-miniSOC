@@ -277,8 +277,8 @@
     business_unit: ''
   })
 
-  const findingStatusType = (s: string) =>
-    ({ new: 'warning', known: 'info', adopted: 'success', ignored: 'info' }[s] || 'info')
+  const findingStatusType = (s: string): 'warning' | 'info' | 'success' =>
+    (({ new: 'warning', known: 'info', adopted: 'success', ignored: 'info' } as Record<string, 'warning' | 'info' | 'success'>)[s] || 'info')
   const findingStatusLabel = (s: string) =>
     ({ new: '待处置', known: '已知', adopted: '已纳管', ignored: '已忽略' }[s] || s)
 

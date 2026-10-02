@@ -427,8 +427,8 @@
   // 取种子资产：拉资产列表第一个（全局图页初始没有已加载节点）
   async function fetchSeedAssetKey(): Promise<string | null> {
     try {
-      const r = await getAssetList({ page: 1, page_size: 1 })
-      const first = (r.data?.records || r.data?.items || r.data?.list || [])[0]
+      const r: any = await getAssetList({ page: 1, page_size: 1 })
+      const first = (r?.data?.records || r?.data?.items || r?.data?.list || [])[0]
       return first?.id ? `asset:${first.id}` : null
     } catch (e) {
       console.error('fetchSeedAssetKey failed', e)
@@ -633,7 +633,7 @@
     const keptIds = new Set(visibleNodes.map((n) => n.id))
     visibleLinks = visibleLinks.filter((l) => keptIds.has(l.source) && keptIds.has(l.target))
 
-    const option: EChartsOption = {
+    const option = {
       tooltip: {
         formatter: (params: any) => {
           if (params.dataType === 'edge') {

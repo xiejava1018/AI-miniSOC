@@ -7,9 +7,14 @@ export interface BusinessSystemItem {
   code: string
   name: string
   criticality: string
+  // === 治本方案：三维度重要性（2026-09-14，后端 business_systems 实回字段） ===
+  business_impact: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+  data_sensitivity: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+  protection_level: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
   owner?: string | null
   owner_contact?: string | null
   owner_id?: number | null
+  owner_username?: string | null
   department_id?: number | null
   department_name?: string | null
   description?: string | null
@@ -21,7 +26,11 @@ export interface BusinessSystemItem {
 export interface BusinessSystemPayload {
   code: string
   name: string
-  criticality: string
+  criticality?: string
+  // 三维度（创建/编辑必传 business_impact/data_sensitivity/protection_level）
+  business_impact: 'core' | 'important' | 'normal' | 'auxiliary' | 'ignorable' | string
+  data_sensitivity: 'extreme' | 'high' | 'medium' | 'low' | 'negligible' | string
+  protection_level: 'level_5' | 'level_4' | 'level_3' | 'level_2' | 'level_1' | string
   department_id?: number | null
   owner?: string | null
   owner_contact?: string | null

@@ -284,7 +284,7 @@
           params: { limit: 1 },
           keepFullResponse: true
         })
-        const first = (ruleResp?.data?.items || [])[0]
+        const first = ((ruleResp as any)?.data?.items || [])[0]
         if (first?.wan_ip && natHealth.value) natHealth.value.wan_ip = first.wan_ip
       } catch {
         /* 出口 IP 仅展示项，忽略 */

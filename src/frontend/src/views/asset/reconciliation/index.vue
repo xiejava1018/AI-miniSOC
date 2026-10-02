@@ -333,11 +333,11 @@
   }
   const typeLabel = (t: string) => TYPE_LABEL[t] || t
   const statusLabel = (s: string) => STATUS_LABEL[s] || s
-  const typeTag = (t: string) =>
-    ({ shadow: 'danger', offline: 'warning', mismatch: 'info' })[t] || 'info'
-  const statusTag = (s: string) =>
-    ({ pending: 'warning', confirmed: 'primary', ignored: 'info', resolved: 'success' })[s] ||
-    'info'
+  const typeTag = (t: string): 'danger' | 'warning' | 'info' =>
+    (({ shadow: 'danger', offline: 'warning', mismatch: 'info' } as Record<string, 'danger' | 'warning' | 'info'>)[t] || 'info')
+  const statusTag = (s: string): 'warning' | 'primary' | 'info' | 'success' =>
+    (({ pending: 'warning', confirmed: 'primary', ignored: 'info', resolved: 'success' } as Record<string, 'warning' | 'primary' | 'info' | 'success'>)[s] ||
+      'info')
 
   const formatTime = (v?: string | null) => {
     if (!v) return ''

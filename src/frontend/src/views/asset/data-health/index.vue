@@ -269,8 +269,8 @@
     unknown: '未知'
   }
   const srcLabel = (s: string) => SRC_LABEL[s] || s
-  const srcTag = (s: string) =>
-    ({ healthy: 'success', degraded: 'warning', down: 'danger', unknown: 'info' })[s] || 'info'
+  const srcTag = (s: string): 'success' | 'warning' | 'danger' | 'info' =>
+    (({ healthy: 'success', degraded: 'warning', down: 'danger', unknown: 'info' } as Record<string, 'success' | 'warning' | 'danger' | 'info'>)[s] || 'info')
 
   const RECON_STATUS: Record<string, string> = {
     pending: '待处理',

@@ -1433,7 +1433,7 @@
     const toLink = [...desired].filter((id) => !current.has(id))
 
     // 并行处理 link/unlink（allSettled 互不影响；failed items 收进 failures 用于 warning）
-    const ops: Array<Promise<void>> = []
+    const ops: Array<Promise<unknown>> = []
     for (const id of toUnlink) {
       ops.push(
         unlinkAssetFromBusinessSystem(assetId, id).catch((e: any) => {
