@@ -279,9 +279,8 @@
       natHealth.value = sources.find((s) => s.source_key === 'tplink:nat') || null
       // 顺带从规则端点取出口 IP（失败静默——卡上不显示而已）
       try {
-        const ruleResp = await request({
+        const ruleResp = await request.get({
           url: '/api/v1/exposure/rules',
-          method: 'get',
           params: { limit: 1 },
           keepFullResponse: true
         })

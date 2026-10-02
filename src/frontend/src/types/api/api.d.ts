@@ -399,6 +399,39 @@ declare namespace Api {
   namespace SystemDict {
     interface DictItem {
       id: number
+      dict_type: string
+      dict_code: string
+      dict_label: string
+      color?: string | null
+      sort_order: number
+      is_active: boolean
+      is_default: boolean
+      remark?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+
+    interface DictSearchParams {
+      current?: number
+      size?: number
+      page?: number
+      page_size?: number
+      dict_type?: string
+      search?: string
+    }
+
+    interface DictPayload {
+      id?: number
+      dict_type: string
+      dict_code: string
+      dict_label: string
+      color?: string | null
+      sort_order?: number
+      is_active?: boolean
+      is_default?: boolean
+      remark?: string | null
+    }
+  }
 
   /** 业务系统管理（v1 §7.0 WO-0a / §7.2.5 F9）*/
   namespace BusinessSystem {
@@ -444,38 +477,6 @@ declare namespace Api {
       page?: number
       page_size?: number
       keyword?: string
-    }
-      dict_type: string
-      dict_code: string
-      dict_label: string
-      color?: string | null
-      sort_order: number
-      is_active: boolean
-      is_default: boolean
-      remark?: string | null
-      created_at?: string
-      updated_at?: string
-    }
-
-    interface DictSearchParams {
-      current?: number
-      size?: number
-      page?: number
-      page_size?: number
-      dict_type?: string
-      search?: string
-    }
-
-    interface DictPayload {
-      id?: number
-      dict_type: string
-      dict_code: string
-      dict_label: string
-      color?: string | null
-      sort_order?: number
-      is_active?: boolean
-      is_default?: boolean
-      remark?: string | null
     }
   }
 
