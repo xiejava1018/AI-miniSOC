@@ -35,6 +35,14 @@ from app.services.asset_profile._main import (
     compute_coverage, compute_profile_confidence, profile_to_dict, empty_profile,
 )
 
+# re-export AHS 服务（OH-2.2）
+from app.services.asset_profile.ahs_service import (
+    compute_ahs, compute_criticality_factor, apply_ahs_to_profile,
+    AHSResult, DimensionScore,
+    AHS_DIMENSION_WEIGHTS, AHS_MIN_COVERED_DIMENSIONS,
+    CRITICALITY_FACTOR_BIA, CRITICALITY_FACTOR_CIA, CRITICALITY_FACTOR_PROTECTION,
+)
+
 __all__ = [
     # loader 函数
     "load_identity",
@@ -64,4 +72,15 @@ __all__ = [
     "compute_profile_confidence",
     "profile_to_dict",
     "empty_profile",
+    # OH-2.2 AHS
+    "compute_ahs",
+    "compute_criticality_factor",
+    "apply_ahs_to_profile",
+    "AHSResult",
+    "DimensionScore",
+    "AHS_DIMENSION_WEIGHTS",
+    "AHS_MIN_COVERED_DIMENSIONS",
+    "CRITICALITY_FACTOR_BIA",
+    "CRITICALITY_FACTOR_CIA",
+    "CRITICALITY_FACTOR_PROTECTION",
 ]
