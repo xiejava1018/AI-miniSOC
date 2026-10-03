@@ -21,7 +21,7 @@ from app.api import (
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
-    data_sources, config_schemas, ai_providers, business_systems,
+    data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
 )
 from app.core.auth import get_current_user
 from app.core.route_security import enforce_write_default
@@ -116,6 +116,12 @@ include_human_router(
 )
 include_human_router(
     api_router, impact_analysis.router, prefix="/assets", tags=["变更影响分析"],
+)
+
+# 资产统一事件时间线（P0 联邦查询）：GET /assets/{id}/timeline
+# 路径较 assets.router 的 /{asset_id} 更具体，不会被 catch-all 抢匹配（参照窄前缀先注册约定）。
+include_human_router(
+    api_router, asset_timeline.router, prefix="/assets", tags=["资产事件时间线"],
 )
 
 # 资产知识图谱 v1（G1）：独立前缀 /graph；包含资产邻居、影响面、chokepoint 等端点
