@@ -210,6 +210,109 @@
         </ElCard>
       </ElCol>
     </ElRow>
+
+    <!-- 第 4 层：画像完整度（OH-2.5，八维画像层） -->
+    <ElCard v-loading="aggLoading" shadow="never" class="layer-card agg-card">
+      <template #header>
+        <div class="card-head">
+          <span class="t">画像完整度</span>
+          <span class="sub">八维画像层</span>
+          <div class="counter">
+            <ElTag size="small" type="primary" effect="plain">
+              已评估 {{ agg?.computed_assets ?? '—' }} / {{ agg?.total_assets ?? '—' }} 台
+            </ElTag>
+            <ElTag size="small" effect="plain">均分 {{ agg?.aggregate_coverage?.avg_overall_score ?? '—' }}</ElTag>
+            <ElTag size="small" effect="plain">AHS 均分 {{ agg?.aggregate_coverage?.avg_ahs_score ?? '—' }}</ElTag>
+          </div>
+        </div>
+      </template>
+
+      <ElEmpty v-if="!agg || !agg.total_assets" :image-size="60" description="尚无资产可评估" />
+      <template v-else>
+        <ElAlert
+          v-if="agg.truncated"
+          type="info"
+          :closable="false"
+          show-icon
+          class="agg-alert"
+        >
+          <template #title>资产数已达单次评估上限，当前仅覆盖前 {{ agg.computed_assets + agg.error_assets }} 台</template>
+        </ElAlert>
+        <div class="agg-grid">
+          <!-- 左：八维覆盖 -->
+          <div class="agg-col dims">
+            <div class="agg-col-title">八维覆盖（覆盖率 = 覆盖资产 / 已评估）</div>
+            <div v-for="d in agg.dimension_coverage" :key="d.dimension" class="dim-row">
+              <span class="dim-name">{{ dimLabel(d.dimension) }}</span>
+              <ElProgress
+                class="dim-bar"
+                :percentage="Math.round(d.ratio * 100)"
+                :stroke-width="10"
+                :color="ratioColor(d.ratio)"
+              />
+              <span class="dim-meta">{{ d.covered }}/{{ agg.computed_assets }} · 置信 {{ d.avg_confidence.toFixed(2) }}</span>
+            </div>
+          </div>
+
+          <!-- 中：完整度分布 + 状态分布 -->
+          <div class="agg-col hist">
+            <div class="agg-col-title">完整度分布</div>
+            <div v-for="(v, k) in agg.score_distribution" :key="k" class="hist-row">
+              <span class="hist-label">{{ k }}</span>
+              <div class="hist-bar-wrap">
+                <div
+                  class="hist-bar"
+                  :style="{ width: histWidth(v) + '%', background: histColor(String(k)) }"
+                />
+              </div>
+              <span class="hist-count">{{ v }}</span>
+            </div>
+            <div class="agg-col-title state-title">状态分布</div>
+            <div class="state-tags">
+              <ElTag
+                v-for="(v, k) in agg.aggregate_coverage.state_distribution"
+                :key="k"
+                size="small"
+                :type="stateTagType(String(k))"
+                effect="plain"
+              >
+                {{ stateLabel(String(k)) }} {{ v }}
+              </ElTag>
+            </div>
+          </div>
+
+          <!-- 右：缺失维度定位（worst 5） -->
+          <div class="agg-col worst">
+            <div class="agg-col-title">缺失维度定位（完整度最低 5 台）</div>
+            <div
+              v-for="w in agg.worst_assets"
+              :key="w.asset_id"
+              class="worst-row"
+              @click="goAsset(w.asset_id)"
+            >
+              <div class="worst-head">
+                <span class="worst-name">{{ w.asset_name || w.asset_ip || w.asset_id }}</span>
+                <span class="worst-score" :class="scoreClass(w.overall_score)">{{ w.overall_score }}</span>
+              </div>
+              <div class="worst-dims">
+                <template v-if="w.missing_dims.length">
+                  <ElTag
+                    v-for="d in w.missing_dims"
+                    :key="d"
+                    size="small"
+                    type="danger"
+                    effect="plain"
+                  >
+                    {{ dimLabel(d) }}
+                  </ElTag>
+                </template>
+                <span v-else class="worst-full">八维全覆盖</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </ElCard>
   </div>
 </template>
 
@@ -223,13 +326,16 @@
     CircleCloseFilled,
     QuestionFilled
   } from '@element-plus/icons-vue'
-  import { getDataHealth } from '@/api/asset'
+  import { getDataHealth, getAssetCompletenessAggregate } from '@/api/asset'
+  import type { AssetCompletenessAggregate } from '@/api/asset'
 
   defineOptions({ name: 'AssetDataHealth' })
 
   const router = useRouter()
   const loading = ref(false)
   const data = ref<any>(null)
+  const aggLoading = ref(false)
+  const agg = ref<AssetCompletenessAggregate | null>(null)
 
   const counter = computed(
     () => data.value?.source_health?.counter || { healthy: 0, degraded: 0, down: 0, unknown: 0 }
@@ -289,6 +395,67 @@
   }
 
   const goRecon = () => router.push('/assets/reconciliation')
+  const goAsset = (id: string) => router.push(`/assets/detail/${id}`)
+
+  // ===== OH-2.5 画像完整度子卡 =====
+  const DIM_LABEL: Record<string, string> = {
+    identity: '身份',
+    ownership: '归属',
+    technology: '技术',
+    exposure: '暴露',
+    vulnerability: '脆弱',
+    threat: '威胁',
+    compliance: '合规',
+    behavior: '行为'
+  }
+  const dimLabel = (d: string) => DIM_LABEL[d] || d
+
+  const ratioColor = (r: number) => (r >= 0.8 ? '#67c23a' : r >= 0.5 ? '#e6a23c' : '#f56c6c')
+
+  const STATE_LABEL: Record<string, string> = {
+    valid: '完整',
+    partial: '部分覆盖',
+    insufficient_data: '数据不足',
+    error: '计算失败'
+  }
+  const stateLabel = (s: string) => STATE_LABEL[s] || s
+  const stateTagType = (
+    s: string
+  ): 'success' | 'warning' | 'danger' | 'info' | 'primary' =>
+    (({
+      valid: 'success',
+      partial: 'primary',
+      insufficient_data: 'warning',
+      error: 'danger'
+    } as Record<string, 'success' | 'warning' | 'danger' | 'info' | 'primary'>)[s] || 'info')
+
+  const histMax = computed(() => {
+    const vals = Object.values(agg.value?.score_distribution || {})
+    return vals.length ? Math.max(...vals) : 0
+  })
+  const histWidth = (v: number) => (histMax.value ? Math.round((v / histMax.value) * 100) : 0)
+  const histColor = (bucket: string) => {
+    const lo = parseInt(bucket, 10)
+    if (lo >= 81) return '#67c23a'
+    if (lo >= 61) return '#95d475'
+    if (lo >= 41) return '#e6a23c'
+    if (lo >= 21) return '#f89898'
+    return '#f56c6c'
+  }
+  const scoreClass = (s: number) => (s >= 61 ? 'good' : s >= 41 ? 'mid' : 'bad')
+
+  const loadAggregate = async () => {
+    aggLoading.value = true
+    try {
+      const res = await getAssetCompletenessAggregate(100)
+      agg.value = (res?.data as AssetCompletenessAggregate) || null
+    } catch (e: any) {
+      // 完整度子卡失败不阻塞页面主三层，只静默降级
+      agg.value = null
+    } finally {
+      aggLoading.value = false
+    }
+  }
 
   const load = async () => {
     loading.value = true
@@ -302,7 +469,10 @@
     }
   }
 
-  onMounted(load)
+  onMounted(() => {
+    load()
+    loadAggregate()
+  })
 </script>
 
 <style lang="scss" scoped>
@@ -597,6 +767,164 @@
       margin: 6px 0;
       font-size: 12px;
       color: var(--art-text-gray-600);
+    }
+
+    /* ===== OH-2.5 画像完整度子卡 ===== */
+    .agg-card {
+      margin-top: 12px;
+
+      .agg-alert {
+        margin-bottom: 10px;
+      }
+
+      .agg-grid {
+        display: grid;
+        grid-template-columns: minmax(300px, 5fr) minmax(240px, 3fr) minmax(260px, 4fr);
+        gap: 24px;
+
+        @media (width <= 1200px) {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .agg-col-title {
+        margin-bottom: 10px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--art-text-gray-700);
+
+        &.state-title {
+          margin-top: 16px;
+        }
+      }
+
+      /* 左列：八维覆盖 */
+      .dims {
+        .dim-row {
+          display: grid;
+          grid-template-columns: 44px 1fr auto;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 8px;
+
+          .dim-name {
+            font-size: 12px;
+            color: var(--art-text-gray-600);
+          }
+
+          .dim-meta {
+            font-size: 11px;
+            color: var(--art-text-gray-500);
+            white-space: nowrap;
+          }
+        }
+      }
+
+      /* 中列：直方图 + 状态 */
+      .hist {
+        .hist-row {
+          display: grid;
+          grid-template-columns: 52px 1fr 28px;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+
+          .hist-label {
+            font-size: 11px;
+            color: var(--art-text-gray-500);
+            text-align: right;
+          }
+
+          .hist-bar-wrap {
+            height: 12px;
+            overflow: hidden;
+            background: var(--art-gray-200, #f0f2f5);
+            border-radius: 6px;
+
+            .hist-bar {
+              min-width: 2px;
+              height: 100%;
+              border-radius: 6px;
+              transition: width 0.4s ease;
+            }
+          }
+
+          .hist-count {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--art-text-gray-700);
+          }
+        }
+
+        .state-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+      }
+
+      /* 右列：缺失维度定位 */
+      .worst {
+        .worst-row {
+          padding: 8px 10px;
+          margin-bottom: 8px;
+          cursor: pointer;
+          border: 1px solid var(--art-border-light, #e8eaec);
+          border-radius: 8px;
+          transition: all 0.2s;
+
+          &:hover {
+            border-color: var(--el-color-primary-light-5);
+            box-shadow: var(--art-box-shadow-sm, 0 2px 8px rgb(0 0 0 / 6%));
+          }
+
+          .worst-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            .worst-name {
+              overflow: hidden;
+              font-size: 13px;
+              font-weight: 500;
+              color: var(--art-text-gray-800);
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .worst-score {
+              flex-shrink: 0;
+              margin-left: 8px;
+              font-size: 16px;
+              font-weight: 700;
+
+              &.good {
+                color: var(--el-color-success);
+              }
+
+              &.mid {
+                color: var(--el-color-warning);
+              }
+
+              &.bad {
+                color: var(--el-color-danger);
+              }
+            }
+          }
+
+          .worst-dims {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+
+            .worst-full {
+              font-size: 11px;
+              color: var(--el-color-success);
+            }
+          }
+        }
+      }
     }
   }
 </style>

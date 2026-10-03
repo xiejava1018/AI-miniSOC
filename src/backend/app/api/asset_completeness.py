@@ -2,6 +2,8 @@
 
 端点：
   GET /api/v1/assets/{asset_id}/completeness
+  GET /api/v1/assets/completeness/aggregate   （OH-2.5 画像覆盖率看板）
+  GET /api/v1/assets/completeness/batch
 
 输入：asset_id
 输出：
@@ -211,6 +213,183 @@ def _assemble_response(profile, ahs_result, chain) -> dict:
         "evidence_timeline": [e.to_dict() for e in chain.timeline] if chain else [],
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+# ---------------------------------------------------------------------------
+# 聚合端点（OH-2.5 画像覆盖率看板）
+# ---------------------------------------------------------------------------
+
+# 八维顺序（与 DIMENSIONS 保持一致，仅作展示顺序用）
+_AGG_DIMENSIONS = (
+    "identity", "ownership", "technology", "exposure",
+    "vulnerability", "threat", "compliance", "behavior",
+)
+
+# overall_score 直方图桶（左闭右开；末桶右端闭合）
+_SCORE_BUCKETS = ((0, 20), (21, 40), (41, 60), (61, 80), (81, 100))
+
+
+def _bucket_label(score: int) -> str:
+    """overall_score → 桶标签（如 '41-60'）；越界归入最近桶。"""
+    for lo, hi in _SCORE_BUCKETS:
+        if lo <= score <= hi:
+            return f"{lo}-{hi}"
+    return f"{_SCORE_BUCKETS[-1][0]}-{_SCORE_BUCKETS[-1][1]}" if score > _SCORE_BUCKETS[-1][1] else f"{_SCORE_BUCKETS[0][0]}-{_SCORE_BUCKETS[0][1]}"
+
+
+def _aggregate_responses(entries: list[dict]) -> dict:
+    """聚合多个完整度响应 → 看板汇总（纯函数，无 DB 依赖）。
+
+    参数 entries：每项 =
+      {
+        "asset_id", "asset_name", "asset_ip", "asset_type",
+        "response": <_assemble_response 结果 dict 或 {"state": "error", ...}>,
+      }
+
+    输出结构（OH-2.5 看板直接消费）：
+    {
+      "total_assets", "computed_assets", "error_assets",
+      "aggregate_coverage": {
+        "avg_overall_score", "avg_profile_confidence", "avg_ahs_score",
+        "state_distribution": {valid/partial/insufficient_data/error: n},
+      },
+      "dimension_coverage": [
+        {"dimension", "covered", "missing", "ratio", "avg_confidence"}, ...
+      ],
+      "score_distribution": {"0-20": n, ..., "81-100": n},
+      "worst_assets": [  # 按 overall_score 升序的前 5（缺失维度定位入口）
+        {"asset_id", "asset_name", "asset_ip", "asset_type",
+         "overall_score", "state", "missing_dims"}, ...
+      ],
+    }
+    """
+    total = len(entries)
+    computed: list[dict] = []
+    errors = 0
+    state_distribution: dict[str, int] = {}
+    score_distribution = {f"{lo}-{hi}": 0 for lo, hi in _SCORE_BUCKETS}
+
+    # 维度累计器
+    dim_covered = {d: 0 for d in _AGG_DIMENSIONS}
+    dim_conf_sum = {d: 0.0 for d in _AGG_DIMENSIONS}
+
+    for entry in entries:
+        resp = entry.get("response") or {}
+        state = str(resp.get("state", "unknown"))
+        state_distribution[state] = state_distribution.get(state, 0) + 1
+        if state == "error":
+            errors += 1
+            continue
+        computed.append(entry)
+
+        score = int(resp.get("overall_score") or 0)
+        score_distribution[_bucket_label(score)] += 1
+
+        dims = resp.get("dimensions") or {}
+        for d in _AGG_DIMENSIONS:
+            dinfo = dims.get(d)
+            if dinfo and dinfo.get("covered"):
+                dim_covered[d] += 1
+                dim_conf_sum[d] += float(dinfo.get("confidence") or 0.0)
+
+    computed_n = len(computed)
+
+    # 均值（仅 computed，不含 error）
+    def _avg(getter) -> float:
+        vals = [getter(e["response"]) for e in computed]
+        return round(sum(vals) / len(vals), 2) if vals else 0.0
+
+    aggregate_coverage = {
+        "avg_overall_score": _avg(lambda r: float(r.get("overall_score") or 0)),
+        "avg_profile_confidence": round(
+            sum(float(e["response"].get("profile_confidence") or 0) for e in computed) / computed_n, 4
+        ) if computed_n else 0.0,
+        "avg_ahs_score": _avg(lambda r: float(r.get("ahs_score") or 0)),
+        "state_distribution": state_distribution,
+    }
+
+    dimension_coverage = []
+    for d in _AGG_DIMENSIONS:
+        cov = dim_covered[d]
+        dimension_coverage.append({
+            "dimension": d,
+            "covered": cov,
+            "missing": computed_n - cov,
+            "ratio": round(cov / computed_n, 4) if computed_n else 0.0,
+            "avg_confidence": round(dim_conf_sum[d] / cov, 4) if cov else 0.0,
+        })
+
+    # worst_assets：computed 按 overall_score 升序前 5；缺失维度一键定位
+    def _missing_dims(resp: dict) -> list[str]:
+        dims = resp.get("dimensions") or {}
+        return [d for d in _AGG_DIMENSIONS if not (dims.get(d) or {}).get("covered")]
+
+    ranked = sorted(computed, key=lambda e: int(e["response"].get("overall_score") or 0))
+    worst_assets = [
+        {
+            "asset_id": e.get("asset_id"),
+            "asset_name": e.get("asset_name"),
+            "asset_ip": e.get("asset_ip"),
+            "asset_type": e.get("asset_type"),
+            "overall_score": int(e["response"].get("overall_score") or 0),
+            "state": e["response"].get("state"),
+            "missing_dims": _missing_dims(e["response"]),
+        }
+        for e in ranked[:5]
+    ]
+
+    return {
+        "total_assets": total,
+        "computed_assets": computed_n,
+        "error_assets": errors,
+        "aggregate_coverage": aggregate_coverage,
+        "dimension_coverage": dimension_coverage,
+        "score_distribution": score_distribution,
+        "worst_assets": worst_assets,
+    }
+
+
+@router.get("/completeness/aggregate")
+async def get_completeness_aggregate(
+    limit: int = Query(
+        100,
+        ge=1,
+        le=300,
+        description="最多评估的资产数（按 id 升序）；当前基线 73 资产默认全部覆盖",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """全库画像覆盖率聚合（OH-2.5 画像覆盖率看板）。
+
+    对每个资产跑 OH-2.1 builder → 汇总八维覆盖 / 均分 / 状态分布 /
+    score 直方图 / worst 5（缺失维度定位入口）。
+    """
+    assets = db.query(Asset).order_by(Asset.id).limit(limit).all()
+
+    entries: list[dict] = []
+    for asset in assets:
+        entry = {
+            "asset_id": str(asset.id),
+            "asset_name": asset.name,
+            "asset_ip": asset.asset_ip,
+            "asset_type": asset.asset_type,
+        }
+        try:
+            profile = build_profile(db, asset)
+            ahs = compute_ahs(profile)
+            profile = apply_ahs_to_profile(profile, ahs)
+            chain = build_evidence_chain(profile)
+            entry["response"] = _assemble_response(profile, ahs, chain)
+        except Exception as e:
+            logger.warning(f"[completeness/aggregate] {asset.id} failed: {e}")
+            entry["response"] = {"state": "error", "error": str(e)}
+        entries.append(entry)
+
+    result = _aggregate_responses(entries)
+    result["computed_at"] = datetime.now(timezone.utc).isoformat()
+    result["truncated"] = len(assets) >= limit  # 提示前端可能未覆盖全部资产
+    return result
 
 
 # ---------------------------------------------------------------------------

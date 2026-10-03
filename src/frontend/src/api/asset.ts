@@ -932,6 +932,45 @@ export interface AssetCompletenessBatchResponse {
   total: number
 }
 
+/** OH-2.5 画像覆盖率看板：维度覆盖行 */
+export interface AssetCompletenessAggregateDim {
+  dimension: string
+  covered: number
+  missing: number
+  ratio: number
+  avg_confidence: number
+}
+
+/** OH-2.5 画像覆盖率看板：worst 5 资产（缺失维度定位入口） */
+export interface AssetCompletenessWorstAsset {
+  asset_id: string
+  asset_name?: string | null
+  asset_ip?: string | null
+  asset_type?: string | null
+  overall_score: number
+  state?: string | null
+  missing_dims: string[]
+}
+
+/** OH-2.5 画像覆盖率看板：全库聚合响应 */
+export interface AssetCompletenessAggregate {
+  total_assets: number
+  computed_assets: number
+  error_assets: number
+  aggregate_coverage: {
+    avg_overall_score: number
+    avg_profile_confidence: number
+    avg_ahs_score: number
+    state_distribution: Record<string, number>
+  }
+  dimension_coverage: AssetCompletenessAggregateDim[]
+  score_distribution: Record<string, number>
+  worst_assets: AssetCompletenessWorstAsset[]
+  computed_at?: string
+  /** 资产数达到 limit 上限时为 true，提示可能未覆盖全部 */
+  truncated?: boolean
+}
+
 /** 单资产完整度评分卡（OH-UI.4）
  * 后端: GET /api/v1/assets/{asset_id}/completeness
  */
@@ -953,6 +992,19 @@ export const getAssetCompletenessBatch = (
   return httpClient.get({
     url: `${API_PREFIX}/completeness/batch`,
     params: { asset_ids: assetIds.join(',') },
+    keepFullResponse: true
+  })
+}
+
+/** 全库画像覆盖率聚合（OH-2.5 画像覆盖率看板）
+ * 后端: GET /api/v1/assets/completeness/aggregate?limit=100
+ */
+export const getAssetCompletenessAggregate = (
+  limit = 100
+): Promise<Http.BaseResponse<AssetCompletenessAggregate>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/completeness/aggregate`,
+    params: { limit },
     keepFullResponse: true
   })
 }
