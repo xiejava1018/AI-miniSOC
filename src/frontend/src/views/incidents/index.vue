@@ -211,7 +211,7 @@ const resetFilter = () => {
   fetchList()
 }
 
-const showDetail = async (row: IncidentItem) => {
+const showDetail = async (row: any) => {
   drawerVisible.value = true
   detailLoading.value = true
   detail.value = null

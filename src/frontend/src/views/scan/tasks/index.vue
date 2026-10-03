@@ -572,7 +572,7 @@
     }
   }
 
-  const cancel = async (row: ScanTask) => {
+  const cancel = async (row: any) => {
     try {
       await cancelScanTask(row.task_uuid)
       ElMessage.success('已取消')
@@ -582,7 +582,7 @@
     }
   }
 
-  const remove = async (row: ScanTask) => {
+  const remove = async (row: any) => {
     try {
       await deleteScanTask(row.task_uuid)
       ElMessage.success('任务已删除（发现数据保留）')
@@ -602,7 +602,7 @@
     const id8 = detail.value.task_uuid.slice(0, 8)
     return `任务详情 ${id8}…  · ${modeLabel(detail.value.mode)}  ·  ${statusLabel(detail.value.status)}`
   })
-  const openDetail = async (row: ScanTask) => {
+  const openDetail = async (row: any) => {
     detail.value = row  // 先用列表行的粗略数据
     detailVisible.value = true
     detailLoading.value = true

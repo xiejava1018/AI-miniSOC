@@ -236,7 +236,7 @@
   const saving = ref(false)
   const form = ref({ title: '', content: '', category: 'troubleshooting', tagsInput: '' })
 
-  const openDialog = (row?: KnowledgeItem) => {
+  const openDialog = (row?: any) => {
     editing.value = row || null
     form.value = {
       title: row?.title || '',
@@ -278,7 +278,7 @@
   }
 
   // ---------- 验证 / 删除 / AI 提取 ----------
-  const handleValidate = async (row: KnowledgeItem) => {
+  const handleValidate = async (row: any) => {
     const res = await validateKnowledge(row.id)
     if (res.code === 200) {
       ElMessage.success('已验证（置信度提升至 90）')
@@ -286,7 +286,7 @@
     }
   }
 
-  const handleDelete = (row: KnowledgeItem) => {
+  const handleDelete = (row: any) => {
     ElMessageBox.confirm(`确定删除知识「${row.title}」？`, '删除确认', { type: 'warning' })
       .then(async () => {
         const res = await deleteKnowledge(row.id)

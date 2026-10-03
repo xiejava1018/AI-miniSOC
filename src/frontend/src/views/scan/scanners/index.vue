@@ -221,7 +221,7 @@
     formVisible.value = true
   }
 
-  const openEdit = (row: ScannerAgent) => {
+  const openEdit = (row: any) => {
     editing.value = row
     form.value = {
       name: row.name,
@@ -274,7 +274,7 @@
     }
   }
 
-  const rotateKey = async (row: ScannerAgent) => {
+  const rotateKey = async (row: any) => {
     try {
       const res = await updateScannerAgent(row.scanner_id, { rotate_key: true })
       if (res.api_key) {
@@ -290,7 +290,7 @@
     }
   }
 
-  const removeAgent = async (row: ScannerAgent) => {
+  const removeAgent = async (row: any) => {
     try {
       await deleteScannerAgent(row.scanner_id)
       ElMessage.success('已注销')

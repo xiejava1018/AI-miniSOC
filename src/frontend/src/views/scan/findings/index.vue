@@ -316,7 +316,7 @@
     loadFindings()
   }
 
-  const openAdopt = (row: ScanFinding) => {
+  const openAdopt = (row: any) => {
     adoptTarget.value = row
     adoptForm.value = {
       asset_name: row.os_guess ? `${row.os_guess}-${row.asset_ip}` : '',
@@ -347,7 +347,7 @@
     }
   }
 
-  const ignore = async (row: ScanFinding) => {
+  const ignore = async (row: any) => {
     try {
       await ignoreFinding(row.id)
       ElMessage.success('已忽略')
@@ -357,7 +357,7 @@
     }
   }
 
-  const unignore = async (row: ScanFinding) => {
+  const unignore = async (row: any) => {
     try {
       await unignoreFinding(row.id)
       ElMessage.success('已解除忽略')
@@ -367,7 +367,7 @@
     }
   }
 
-  const remove = async (row: ScanFinding) => {
+  const remove = async (row: any) => {
     try {
       await deleteFinding(row.id)
       ElMessage.success('已删除')
