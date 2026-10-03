@@ -118,6 +118,8 @@ asset_instance:
 
     - id: data_source
       type: enum
+      # 现网实际取值（live）：manual / wazuh / tplink-router（见 app/models/asset.py）
+      # 前瞻取值（planned，暂无对应数据源）：scanner / cmdb / edr（EDR 角色现由 Wazuh agent 承担）
       values: ["manual", "wazuh", "tplink-router", "scanner", "cmdb", "edr"]
       default: "manual"
       source: "soc_assets.data_source"
@@ -146,7 +148,7 @@ asset_instance:
       type: string
       source: "soc_assets.owner_contact"
 
-    # === 重要性（三维度拆分 - commit q9r8s7t6u5v4）===
+    # === 重要性（三维度拆分 - commit c52fb86）===
     - id: business_impact
       type: enum
       values: ["core", "important", "normal", "auxiliary", "ignorable"]
