@@ -43,6 +43,13 @@ from app.services.asset_profile.ahs_service import (
     CRITICALITY_FACTOR_BIA, CRITICALITY_FACTOR_CIA, CRITICALITY_FACTOR_PROTECTION,
 )
 
+# re-export 证据链（OH-2.4）
+from app.services.asset_profile.evidence_chain import (
+    build_evidence_chain, build_evidence_chain_from_ahs_result,
+    EvidenceChain, EvidenceEntry, EvidenceChainSummary,
+    group_by_source, group_by_dimension, filter_by_confidence,
+)
+
 __all__ = [
     # loader 函数
     "load_identity",
@@ -83,4 +90,13 @@ __all__ = [
     "CRITICALITY_FACTOR_BIA",
     "CRITICALITY_FACTOR_CIA",
     "CRITICALITY_FACTOR_PROTECTION",
+    # OH-2.4 证据链
+    "build_evidence_chain",
+    "build_evidence_chain_from_ahs_result",
+    "EvidenceChain",
+    "EvidenceEntry",
+    "EvidenceChainSummary",
+    "group_by_source",
+    "group_by_dimension",
+    "filter_by_confidence",
 ]
