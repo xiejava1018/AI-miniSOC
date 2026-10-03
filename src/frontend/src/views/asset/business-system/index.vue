@@ -14,6 +14,38 @@
 -->
 <template>
   <div class="business-system-page art-full-height" id="table-full-screen">
+    <!-- 绑定覆盖率 KPI（设计 §8.1 T7 · 北极星 H1「关联资产覆盖率 ≥60%」度量） -->
+    <ElRow v-if="kpi" :gutter="12" class="kpi-row">
+      <ElCol :span="6">
+        <ElCard shadow="never" class="kpi-card">
+          <div class="kpi-label">业务系统数</div>
+          <div class="kpi-value">{{ kpi.systems_count }}</div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="6">
+        <ElCard shadow="never" class="kpi-card">
+          <div class="kpi-label">已关联资产 / 总资产</div>
+          <div class="kpi-value">{{ kpi.linked_assets }} / {{ kpi.total_assets }}</div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="6">
+        <ElCard shadow="never" class="kpi-card">
+          <div class="kpi-label">关联资产覆盖率（目标 ≥60%）</div>
+          <div class="kpi-value" :class="{ 'kpi-warn': kpi.coverage_rate < 60 }">
+            {{ kpi.coverage_rate }}%
+          </div>
+        </ElCard>
+      </ElCol>
+      <ElCol :span="6">
+        <ElCard shadow="never" class="kpi-card">
+          <div class="kpi-label">定级状态（未定级 / 建议待确认）</div>
+          <div class="kpi-value" :class="{ 'kpi-warn': kpi.unrated > 0 }">
+            {{ kpi.unrated }} / {{ kpi.suggested_pending }}
+          </div>
+        </ElCard>
+      </ElCol>
+    </ElRow>
+
     <!-- 搜索栏 -->
     <ArtSearchBar
       v-model="searchParams"
@@ -29,7 +61,6 @@
           <ElButton @click="showDialog('add')">新建业务系统</ElButton>
         </template>
       </ArtTableHeader>
-
       <!-- 表格 -->
       <ArtTable
         :loading="loading"
@@ -136,12 +167,112 @@
           </div>
         </template>
       </ElDialog>
+
+      <!-- 资产明细抽屉（设计 §8.1 T3：业务系统侧查看/编辑成员资产与架构角色） -->
+      <ElDrawer
+        v-model="assetsDrawerVisible"
+        :title="`成员资产 · ${assetsDrawerSystem?.name || ''}`"
+        size="70%"
+      >
+        <ElTable :data="assetsDrawerRows" v-loading="assetsDrawerLoading" border stripe>
+          <ElTableColumn prop="name" label="资产名称" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.name || '--' }}</template>
+          </ElTableColumn>
+          <ElTableColumn prop="asset_ip" label="IP" width="130" show-overflow-tooltip />
+          <ElTableColumn label="业务影响" width="90" align="center">
+            <template #default="{ row }">
+              <ElTag size="small" effect="plain" :type="(BUSINESS_IMPACT_TYPE as any)[row.business_impact] || 'info'">
+                {{ BUSINESS_IMPACT_LABEL[row.business_impact] || row.business_impact || '--' }}
+              </ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="数据敏感度" width="90" align="center">
+            <template #default="{ row }">
+              <ElTag size="small" effect="plain" :type="(DATA_SENSITIVITY_TYPE as any)[row.data_sensitivity] || 'info'">
+                {{ DATA_SENSITIVITY_LABEL[row.data_sensitivity] || row.data_sensitivity || '--' }}
+              </ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="等保等级" width="120" align="center">
+            <template #default="{ row }">
+              <ElTag size="small" effect="plain" :type="(PROTECTION_LEVEL_TYPE as any)[row.protection_level] || 'info'">
+                {{ PROTECTION_LEVEL_LABEL[row.protection_level] || row.protection_level }}
+              </ElTag>
+              <!-- 来源徽标：承=跟随系统就高继承 -->
+              <ElTag v-if="row.protection_level_source === 'inherited'" size="small" type="warning" effect="light" class="ml-1">承</ElTag>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="架构角色" width="150" align="center">
+            <template #default="{ row }">
+              <ElSelect
+                :model-value="row.role"
+                size="small"
+                placeholder="未指定"
+                clearable
+                @change="(v: any) => handleRoleChange(row, v)"
+              >
+                <ElOption v-for="o in roleOptions" :key="o.value" :value="o.value" :label="o.label" />
+              </ElSelect>
+            </template>
+          </ElTableColumn>
+        </ElTable>
+      </ElDrawer>
+
+      <!-- 定级建议弹窗（设计 §8.1 T6 UI：S4 红线——建议仅供参考，采纳=显式人工确认） -->
+      <ElDialog v-model="suggestVisible" title="等保定级建议（辅助定级 · 只建议不裁决）" width="620px">
+        <div v-loading="suggestLoading" class="suggest-body">
+          <template v-if="suggestBasis">
+          <div class="suggest-result">
+            建议等级：
+            <ElTag size="large" :type="(PROTECTION_LEVEL_TYPE as any)[suggestBasis.suggested_level] || 'info'">
+              {{ PROTECTION_LEVEL_LABEL[suggestBasis.suggested_level] }}
+            </ElTag>
+            <ElTag v-if="suggestFilingHint" size="small" type="info" effect="plain" class="ml-2">
+              {{ suggestFilingHint }}
+            </ElTag>
+          </div>
+          <ElAlert type="warning" :closable="false" class="suggest-note">
+            {{ suggestBasis?.matrix_inputs?.approximation_note }}
+          </ElAlert>
+          <ElDescriptions :column="2" border size="small" class="suggest-desc">
+            <ElDescriptionsItem label="受侵害客体（代理）">
+              {{ suggestBasis?.matrix_inputs?.victim_object_label }}
+            </ElDescriptionsItem>
+            <ElDescriptionsItem label="侵害程度（代理）">
+              {{ suggestBasis?.matrix_inputs?.harm_degree_label }}
+            </ElDescriptionsItem>
+            <ElDescriptionsItem label="数据敏感度 →">
+              {{ DATA_SENSITIVITY_LABEL[suggestBasis?.matrix_inputs?.proxies?.data_sensitivity] }}
+            </ElDescriptionsItem>
+            <ElDescriptionsItem label="业务影响 →">
+              {{ BUSINESS_IMPACT_LABEL[suggestBasis?.matrix_inputs?.proxies?.business_impact] }}
+            </ElDescriptionsItem>
+            <ElDescriptionsItem label="成员资产数">
+              {{ suggestBasis?.evidence?.asset_count ?? 0 }}
+            </ElDescriptionsItem>
+            <ElDescriptionsItem label="公网暴露资产">
+              {{ suggestBasis?.evidence?.public_exposed_assets ?? 0 }}
+            </ElDescriptionsItem>
+          </ElDescriptions>
+          <div class="suggest-actions">
+            <ElButton
+              type="primary"
+              :disabled="suggestAdopted"
+              @click="handleAdoptSuggestion"
+            >
+              {{ suggestAdopted ? '已采纳（等级已确认）' : '采纳建议（确认等级）' }}
+            </ElButton>
+            <span class="suggest-hint">采纳后按「就高」联动成员资产等级（人工设定的资产不受影响）</span>
+          </div>
+          </template>
+        </div>
+      </ElDialog>
     </ElCard>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref, reactive, h, resolveComponent, nextTick, onMounted } from 'vue'
+  import { ref, reactive, computed, h, resolveComponent, nextTick, onMounted } from 'vue'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import type { FormInstance, FormRules } from 'element-plus'
   import request from '@/utils/http'
@@ -150,7 +281,12 @@
     createBusinessSystem,
     updateBusinessSystem,
     deleteBusinessSystem,
-    type BusinessSystemItem
+    getBusinessSystemAssets,
+    suggestProtectionLevel,
+    fetchCoverageKpi,
+    patchAssetBusinessRole,
+    type BusinessSystemItem,
+    type CoverageKpi
   } from '@/api/businessSystem'
   import { useTable } from '@/composables/useTable'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
@@ -317,13 +453,21 @@
           prop: 'protection_level',
           label: '等保等级',
           align: 'center',
-          width: 90,
+          width: 110,
           formatter: (row: BusinessSystemItem) =>
-            h(
-              resolveComponent('ElTag'),
-              { type: PROTECTION_LEVEL_TYPE[row.protection_level] || 'info', size: 'small', effect: 'plain' },
-              { default: () => PROTECTION_LEVEL_LABEL[row.protection_level] || row.protection_level }
-            )
+            h('div', { style: 'display:flex; align-items:center; justify-content:center; gap:4px;' }, [
+              h(
+                resolveComponent('ElTag'),
+                { type: PROTECTION_LEVEL_TYPE[row.protection_level] || 'info', size: 'small', effect: 'plain' },
+                { default: () => PROTECTION_LEVEL_LABEL[row.protection_level] || row.protection_level }
+              ),
+              // 定级状态徽标（设计 §8.1 T7）：unrated=灰 / suggested=橙 / confirmed=绿
+              row.rating_status === 'confirmed'
+                ? h(resolveComponent('ElTag'), { type: 'success', size: 'small', effect: 'light' }, { default: () => '已确认' })
+                : row.rating_status === 'suggested'
+                  ? h(resolveComponent('ElTag'), { type: 'warning', size: 'small', effect: 'light' }, { default: () => '建议中' })
+                  : h(resolveComponent('ElTag'), { type: 'info', size: 'small', effect: 'light' }, { default: () => '未定级' })
+            ])
         },
         {
           prop: 'department_name',
@@ -359,7 +503,7 @@
           prop: 'operation',
           label: '操作',
           align: 'center',
-          width: 160,
+          width: 300,
           fixed: 'right',
           formatter: (row: BusinessSystemItem) =>
             h('div', { class: 'operation-column-container' }, [
@@ -367,6 +511,16 @@
                 type: 'edit',
                 style: 'margin-right: 8px;',
                 onClick: () => showDialog('edit', row)
+              }),
+              h(ArtButtonTable, {
+                text: '资产',
+                style: 'margin-right: 8px;',
+                onClick: () => openAssetsDrawer(row)
+              }),
+              h(ArtButtonTable, {
+                text: '定级建议',
+                style: 'margin-right: 8px;',
+                onClick: () => handleSuggest(row)
               }),
               h(ArtButtonTable, {
                 type: 'delete',
@@ -424,25 +578,127 @@
     })
   }
 
-  // 删除
+  // 删除（设计 §8.1 T8 · D9 防护：非空系统需 force=true 二次确认）
   // 注意：成功提示由 http 拦截器根据 showSuccessMessage 自动弹（"删除成功"），
   // 这里不再手动 ElMessage.success，避免双提示。失败仍走 catch + 后端 envelope msg。
   const deleteAction = (row: BusinessSystemItem) => {
+    const hasAssets = row.asset_count > 0
     ElMessageBox.confirm(
-      `确定删除业务系统「${row.name}」吗？将同时解除 ${row.asset_count} 个资产关联。`,
+      hasAssets
+        ? `业务系统「${row.name}」下有 ${row.asset_count} 个资产关联。\n删除将解除全部关联并重算成员资产等级（人工设定的保留现值）。确定继续？`
+        : `确定删除业务系统「${row.name}」吗？`,
       '删除确认',
-      { confirmButtonText: '确定删除', cancelButtonText: '取消', type: 'warning' }
+      { confirmButtonText: hasAssets ? '确认删除（force）' : '确定删除', cancelButtonText: '取消', type: 'warning' }
     )
       .then(async () => {
         try {
-          await deleteBusinessSystem(row.id)
+          // 后端 D9：有成员时必须带 force=true，否则 400
+          await deleteBusinessSystem(row.id, hasAssets)
           refresh()
-        } catch (err) {
+          loadKpi()
+        } catch (err: any) {
           console.error('删除业务系统出错:', err)
-          ElMessage.error('删除失败，请稍后再试')
+          ElMessage.error(err?.response?.data?.msg || err?.message || '删除失败，请稍后再试')
         }
       })
       .catch(() => {})
+  }
+
+  // ===== 绑定覆盖率 KPI（设计 §8.1 T7）=====
+  const kpi = ref<CoverageKpi | null>(null)
+  async function loadKpi() {
+    try {
+      kpi.value = await fetchCoverageKpi()
+    } catch (e) {
+      console.error('[BS] 加载覆盖率 KPI 失败', e)
+    }
+  }
+
+  // ===== 资产明细抽屉（设计 §8.1 T3）=====
+  const assetsDrawerVisible = ref(false)
+  const assetsDrawerLoading = ref(false)
+  const assetsDrawerSystem = ref<BusinessSystemItem | null>(null)
+  const assetsDrawerRows = ref<any[]>([])
+
+  // role 选项（dict_type='asset_business_role'，迁移 d8e9f0a1b2c3 种子；
+  // 本地映射零额外请求——字典项与后端 ASSET_BUSINESS_ROLE_VALUES 一致）
+  const roleOptions = [
+    { value: 'web', label: 'Web 层' },
+    { value: 'app', label: '应用层' },
+    { value: 'db', label: '数据层' },
+    { value: 'mq', label: '消息队列' },
+    { value: 'cache', label: '缓存层' },
+    { value: 'gateway', label: '网关接入' },
+    { value: 'lb', label: '负载均衡' },
+    { value: 'other', label: '其他' }
+  ]
+
+  async function openAssetsDrawer(row: BusinessSystemItem) {
+    assetsDrawerSystem.value = row
+    assetsDrawerVisible.value = true
+    assetsDrawerLoading.value = true
+    try {
+      const res: any = await getBusinessSystemAssets(row.id)
+      assetsDrawerRows.value = Array.isArray(res) ? res : res?.data || []
+    } catch (e) {
+      console.error('[BS] 加载成员资产失败', e)
+      assetsDrawerRows.value = []
+    } finally {
+      assetsDrawerLoading.value = false
+    }
+  }
+
+  async function handleRoleChange(row: any, role: string | null) {
+    if (!assetsDrawerSystem.value) return
+    try {
+      await patchAssetBusinessRole(row.asset_id, assetsDrawerSystem.value.id, role)
+      row.role = role
+      ElMessage.success('架构角色已更新')
+    } catch (err: any) {
+      console.error('[BS] 更新角色失败', err)
+      ElMessage.error(err?.response?.data?.msg || '角色更新失败')
+    }
+  }
+
+  // ===== 定级建议（设计 §8.1 T6 UI）=====
+  const suggestVisible = ref(false)
+  const suggestLoading = ref(false)
+  const suggestBasis = ref<Record<string, any> | null>(null)
+  const suggestFilingHint = ref('')
+  const suggestSystem = ref<BusinessSystemItem | null>(null)
+  const suggestAdopted = computed(() => suggestSystem.value?.rating_status === 'confirmed')
+
+  async function handleSuggest(row: BusinessSystemItem) {
+    suggestSystem.value = row
+    suggestVisible.value = true
+    suggestLoading.value = true
+    suggestBasis.value = null
+    try {
+      const res: any = await suggestProtectionLevel(row.id)
+      suggestBasis.value = res?.suggestion_basis || res || null
+      suggestFilingHint.value = suggestBasis.value?.filing_hint || ''
+    } catch (e) {
+      console.error('[BS] 定级建议失败', e)
+      ElMessage.error('定级建议生成失败')
+    } finally {
+      suggestLoading.value = false
+    }
+  }
+
+  // 采纳建议 = 显式人工确认（S4 红线）：PUT protection_level → 后端置 confirmed + 就高传播
+  async function handleAdoptSuggestion() {
+    if (!suggestSystem.value || !suggestBasis.value) return
+    const level = suggestBasis.value.suggested_level
+    try {
+      await updateBusinessSystem(suggestSystem.value.id, { protection_level: level })
+      ElMessage.success(`已确认等级「${PROTECTION_LEVEL_LABEL[level] || level}」，成员资产已按就高联动`)
+      suggestVisible.value = false
+      refresh()
+      loadKpi()
+    } catch (err) {
+      console.error('[BS] 采纳建议失败', err)
+      ElMessage.error('采纳失败，请稍后再试')
+    }
   }
 
   // 提交（三维度全部发送，criticality 字段不发送，由后端自动从 data_sensitivity 派生）
@@ -480,7 +736,10 @@
     })
   }
 
-  onMounted(loadDepartments)
+  onMounted(() => {
+    loadDepartments()
+    loadKpi()
+  })
 </script>
 
 <style lang="scss" scoped>
@@ -494,6 +753,52 @@
       font-size: 12px;
       color: var(--el-text-color-secondary);
       margin-left: 8px;
+    }
+    // KPI 卡（设计 §8.1 T7）
+    .kpi-row {
+      margin-bottom: 12px;
+    }
+    .kpi-card {
+      :deep(.el-card__body) {
+        padding: 12px 16px;
+      }
+      .kpi-label {
+        font-size: 12px;
+        color: var(--el-text-color-secondary);
+        margin-bottom: 4px;
+      }
+      .kpi-value {
+        font-size: 22px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .kpi-warn {
+        color: var(--el-color-warning);
+      }
+    }
+    // 定级建议弹窗（设计 §8.1 T6 UI）
+    .suggest-body {
+      .suggest-result {
+        display: flex;
+        align-items: center;
+        font-size: 15px;
+        margin-bottom: 12px;
+      }
+      .suggest-note {
+        margin-bottom: 12px;
+      }
+      .suggest-desc {
+        margin-bottom: 16px;
+      }
+      .suggest-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        .suggest-hint {
+          font-size: 12px;
+          color: var(--el-text-color-secondary);
+        }
+      }
     }
   }
 </style>

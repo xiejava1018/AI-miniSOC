@@ -361,18 +361,35 @@
           </ElCol>
           <ElCol :span="12">
             <ElFormItem label="等保等级" prop="protection_level">
-              <ElSelect
-                v-model="formData.protection_level"
-                placeholder="等保等级"
-                style="width: 100%"
-                @change="onThreeDimManualChange"
-              >
-                <ElOption label="等保五级" value="level_5" />
-                <ElOption label="等保四级" value="level_4" />
-                <ElOption label="等保三级" value="level_3" />
-                <ElOption label="等保二级" value="level_2" />
-                <ElOption label="等保一级" value="level_1" />
-              </ElSelect>
+              <!-- Phase 1 修复：定级对象是业务系统（GB/T 22240），资产等级应为派生值。
+                   选中业务系统且继承开 → 锁定 + 就高档带入；「改为人工设定」显式解锁（覆盖场景，如跨系统共用设备单独定级）。 -->
+              <div style="display: flex; align-items: center; width: 100%; gap: 8px">
+                <ElSelect
+                  v-model="formData.protection_level"
+                  placeholder="等保等级"
+                  style="flex: 1"
+                  :disabled="plLocked"
+                  @change="onProtectionLevelManualChange"
+                >
+                  <ElOption label="等保五级" value="level_5" />
+                  <ElOption label="等保四级" value="level_4" />
+                  <ElOption label="等保三级" value="level_3" />
+                  <ElOption label="等保二级" value="level_2" />
+                  <ElOption label="等保一级" value="level_1" />
+                </ElSelect>
+                <ElTag v-if="plLocked" size="small" type="warning" effect="plain" class="pl-lock-tag">
+                  继承·就高
+                </ElTag>
+                <ElButton
+                  v-if="plLocked"
+                  link
+                  type="primary"
+                  size="small"
+                  @click="handleUnlockPl"
+                >
+                  改为人工设定
+                </ElButton>
+              </div>
             </ElFormItem>
           </ElCol>
         </ElRow>
@@ -758,7 +775,15 @@
                   resolveComponent('ElTag'),
                   { type: 'info', size: 'small', effect: 'plain' },
                   { default: () => PL[row.protection_level] || row.protection_level || '--' }
-                )
+                ),
+                // 等级来源徽标（设计 §8.2）：承=跟随业务系统就高继承（propagation 引擎写入）
+                row.protection_level_source === 'inherited'
+                  ? h(
+                      resolveComponent('ElTag'),
+                      { type: 'warning', size: 'small', effect: 'light' },
+                      { default: () => '承' }
+                    )
+                  : null
               ]
             )
           }
@@ -917,6 +942,13 @@
 
   // “是否由业务系统联动填充”（手动改过 select 后置 false，不再覆盖人工选择）
   const inheritFromBusinessSystem = ref(true)
+  // Phase 1 修复：等保等级独立锁定态——与 BIA/CIA 继承开关解耦。
+  // 定级对象是业务系统（GB/T 22240），资产等级应为派生值；锁定态下只随“就高”联动，
+  // 人工解锁后才允许自由选择（覆盖场景：跨系统共用设备单独定级）。
+  const plLocked = computed(
+    () => inheritPlFromBusinessSystem.value && formData.business_system_ids.length > 0
+  )
+  const inheritPlFromBusinessSystem = ref(true)
   // 编辑弹窗打开时的原始业务系统关联快照（syncBusinessSystemLinks 的 current 基准）
   const originalBusinessSystemIds = ref<string[]>([])
 
@@ -1109,6 +1141,10 @@
     }
     // 重置“业务系统→三维度继承”开关（新开窗 = 允许继承）
     inheritFromBusinessSystem.value = true
+    // 等保等级锁定态（Phase 1）：已挂业务系统的资产默认锁定（跟随就高）；
+    // 未挂系统的资产无继承来源，直接开放人工选择。不再盲目重置为 true——
+    // 防止“只想加挂系统”的例行编辑静默覆盖人工定级。
+    inheritPlFromBusinessSystem.value = formData.business_system_ids.length > 0
 
     nextTick(() => {
       formRef.value?.clearValidate()
@@ -1285,28 +1321,59 @@
     }
   }
 
-  // 业务系统多选变化 → 取“最严”档带入三维度
+  // 业务系统多选变化 → BIA/CIA 取“最严”档带入；等保等级独立锁定态只升不降
   function onBusinessSystemsChange(ids: string[]) {
-    if (!inheritFromBusinessSystem.value) {
-      // 用户已手动改过三维度，不覆盖人工选择
-      return
-    }
     const selected = (ids || [])
       .map((id) => businessSystemOptions.value.find((o) => o.value === id)?.meta)
       .filter(Boolean)
-    if (!selected.length) {
-      // 清空业务系统 → 保留现有三维度（可能是人工填的）
-      return
+
+    // BIA/CIA：沿用“继承开关”语义（手动改过后不覆盖人工选择）
+    if (inheritFromBusinessSystem.value && selected.length) {
+      const bia = pickStrictest(BIA_RANK, 'business_impact', selected)
+      const cia = pickStrictest(CIA_RANK, 'data_sensitivity', selected)
+      if (bia) formData.business_impact = bia
+      if (cia) formData.data_sensitivity = cia
     }
-    const bia = pickStrictest(BIA_RANK, 'business_impact', selected)
-    const cia = pickStrictest(CIA_RANK, 'data_sensitivity', selected)
-    const pl = pickStrictest(PL_RANK, 'protection_level', selected)
-    if (bia) formData.business_impact = bia
-    if (cia) formData.data_sensitivity = cia
-    if (pl) formData.protection_level = pl
+
+    // 等保等级：锁定态下取“就高”，只升不降——降档是合规姿态变化，
+    // 必须走显式人工路径（解锁后自行选择），不能是选框移除系统的静默副作用。
+    if (inheritPlFromBusinessSystem.value) {
+      if (!selected.length) return // 清空系统 → 保留现值（来源已消失，留人工复核）
+      const pl = pickStrictest(PL_RANK, 'protection_level', selected)
+      if (!pl) return
+      const currentRank = PL_RANK[formData.protection_level] ?? 0
+      const incomingRank = PL_RANK[pl] ?? 0
+      if (incomingRank > currentRank) {
+        formData.protection_level = pl
+      } else if (incomingRank < currentRank && pl !== formData.protection_level) {
+        ElMessage.info(
+          `所属业务系统最高档为「${PL_LABEL[pl] || pl}」，当前值更高，已保留（如需降档请解锁后人工选择）`
+        )
+      }
+    }
   }
 
-  // 用户手动改三维度 → 关闭继承，避免 watch 反复覆盖
+  // 等保等级锁定的标签文案映射（与 ElOption 文案同源）
+  const PL_LABEL: Record<string, string> = {
+    level_5: '等保五级',
+    level_4: '等保四级',
+    level_3: '等保三级',
+    level_2: '等保二级',
+    level_1: '等保一级'
+  }
+
+  // 用户显式解锁等保等级 → 转人工设定（此后不再跟随业务系统就高联动）
+  function handleUnlockPl() {
+    inheritPlFromBusinessSystem.value = false
+    ElMessage.warning('等保等级已切换为人工设定，此后不再跟随业务系统联动')
+  }
+
+  // 解锁态下用户手动改等保等级（@change）——锁定态不可能触发（disabled）
+  function onProtectionLevelManualChange() {
+    inheritPlFromBusinessSystem.value = false
+  }
+
+  // 用户手动改 BIA/CIA → 关闭对应继承，避免 watch 反复覆盖（等保等级不动，独立开关）
   function onThreeDimManualChange() {
     inheritFromBusinessSystem.value = false
   }
@@ -1459,6 +1526,12 @@
 
 <style lang="scss" scoped>
   .asset-list-page {
+    // Phase 1：等保等级锁定标签（继承·就高）——不换行、不撑高表单行
+    .pl-lock-tag {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
     .form-tip {
       font-size: 12px;
       color: var(--el-text-color-secondary);
