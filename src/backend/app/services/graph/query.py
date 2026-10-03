@@ -29,6 +29,7 @@ from app.services.graph.coverage import (
     compute_topology_coverage,
     is_attack_path_eligible,
 )
+from app.services.graph.perf import observe
 from app.services.graph.utils import (
     ATTACK_EDGE_TYPES,
     INFERRED_TYPES,
@@ -55,6 +56,7 @@ def _utcnow() -> datetime:
 # ---------------------------------------------------------------------------
 
 
+@observe("neighbors")
 def get_neighbors(
     db: Session,
     center_node_key: str,
@@ -236,6 +238,7 @@ def get_neighbors(
 # ---------------------------------------------------------------------------
 
 
+@observe("paths")
 def find_paths(
     db: Session,
     src_key: str,
@@ -364,6 +367,7 @@ def find_paths(
 # ---------------------------------------------------------------------------
 
 
+@observe("impact_scope")
 def impact_scope(
     db: Session,
     target_keys: list[str],
@@ -564,6 +568,7 @@ def _count_warning(db: Session, code: str, asset_ids: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 
+@observe("vuln_chokepoints")
 def vuln_chokepoints(
     db: Session,
     *,

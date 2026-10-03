@@ -7,6 +7,8 @@
   POST /impact-scope                       影响面
   GET  /vuln-chokepoints                   修复阻塞点
   GET  /stats                              全图统计
+  GET  /perf                               OH-3.6 4 类查询 P95 性能看板
+  POST /perf/reset                         OH-3.6 重置 perf 采样（admin）
   POST /relations                          人工登记关系
   POST /rebuild                            触发重建
 
@@ -38,6 +40,7 @@ from app.services.graph import (
     delete_expired_edges,
 )
 from app.services.graph.builders import run_all_builders
+from app.services.graph.perf import slow_queries, snapshot as perf_snapshot
 from app.services.graph.query import (
     find_paths,
     get_neighbors,
@@ -217,6 +220,49 @@ async def get_graph_stats(
     """节点/边数、按类型分布、按置信度分布、覆盖率、健康度。"""
     result = graph_stats(db)
     return {"code": 200, "msg": "ok", "data": result}
+
+
+# ---------------------------------------------------------------------------
+# ⑤b GET /api/v1/graph/perf（OH-3.6：4 类查询 P95 性能看板 + 最近慢查询）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/perf", summary="图谱查询 P95 时延看板（OH-3.6）")
+async def get_graph_perf(
+    recent_slow_limit: int = Query(10, ge=1, le=50,
+                                   description="最近慢查询返回条数（默认 10）"),
+    _user: User = Depends(get_current_user),
+    _viewer: Any = Depends(require_role("viewer", "operator", "admin", "auditor")),
+):
+    """返回 4 类图查询的 P50/P95/max/avg/slow_count 滑动窗口统计 + 最近慢查询列表。
+
+    设计依据：
+      - 跟踪表 §五 T-3 环形缓冲必须线程安全 → 后端 ``perf.py`` 用 ``threading.Lock``
+      - 窗口大小 200（防内存爆炸；与 graph_stats 一致不持久化）
+      - OH-3.7 慢查询告警 = 复用本端点的 ``slow_count`` 字段 + ring buffer
+      - OH-3.8 扩容触发线 = 复用 ``p95_ms`` + ``samples`` 字段
+
+    端点权限：viewer+ 只读（OH-UI 同样规范）；写操作走 builder/admin
+    """
+    snap = perf_snapshot()
+    slow = slow_queries(max_n=recent_slow_limit)
+    return {"code": 200, "msg": "ok", "data": {
+        "snapshot": snap,
+        "recent_slow": slow,
+    }}
+
+
+@router.post("/perf/reset", summary="重置图谱 perf 采样（OH-3.6 测试 / OH-3.8 扩容基线）")
+async def post_graph_perf_reset(
+    _user: User = Depends(require_role("admin")),
+):
+    """清空滑动窗口 + 慢查询 ring buffer；admin 限定。
+
+    设计依据：OH-3.8 扩容触发后需清零重新基线，否则老样本污染新窗口
+    """
+    from app.services.graph.perf import reset as perf_reset
+    perf_reset()
+    return {"code": 200, "msg": "ok", "data": {"reset": True}}
 
 
 # ---------------------------------------------------------------------------

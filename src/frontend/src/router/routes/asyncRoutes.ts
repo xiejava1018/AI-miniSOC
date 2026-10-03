@@ -225,6 +225,16 @@ export const asyncRoutes: AppRouteRecord[] = [
           keepAlive: false,
           isHideTab: true
         }
+      },
+      {
+        path: 'graph/perf-dashboard',
+        name: 'AssetGraphPerf',
+        component: RoutesAlias.AssetGraphPerf,
+        meta: {
+          title: '图谱性能看板',
+          keepAlive: true,
+          roles: ['R_SUPER', 'R_ADMIN']
+        }
       }
     ]
   },

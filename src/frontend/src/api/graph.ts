@@ -239,3 +239,49 @@ export const postGraphRebuild = (
     keepFullResponse: true
   })
 }
+
+// ============ OH-3.6 图谱 P95 性能看板 ============
+
+export type GraphQueryType = 'neighbors' | 'paths' | 'impact_scope' | 'vuln_chokepoints'
+
+export interface GraphPerfSnapshot {
+  window_size: number
+  samples: Record<GraphQueryType, number>
+  p50_ms: Record<GraphQueryType, number>
+  p95_ms: Record<GraphQueryType, number>
+  max_ms: Record<GraphQueryType, number>
+  avg_ms: Record<GraphQueryType, number>
+  slow_count: Record<GraphQueryType, number>
+  slow_threshold_ms: number
+}
+
+export interface GraphSlowQuery {
+  latency_ms: number
+  query_type: GraphQueryType
+  asset_key: string | null
+  ts: number
+}
+
+export interface GraphPerfResponse {
+  snapshot: GraphPerfSnapshot
+  recent_slow: GraphSlowQuery[]
+}
+
+/** GET /graph/perf — 图谱 4 类查询 P95 性能看板 */
+export const getGraphPerf = (
+  recentSlowLimit = 10
+): Promise<Http.BaseResponse<GraphPerfResponse>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/perf`,
+    params: { recent_slow_limit: recentSlowLimit },
+    keepFullResponse: true
+  })
+}
+
+/** POST /graph/perf/reset — 清空 perf 采样（admin） */
+export const postGraphPerfReset = (): Promise<Http.BaseResponse<{ reset: boolean }>> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/perf/reset`,
+    keepFullResponse: true
+  })
+}
