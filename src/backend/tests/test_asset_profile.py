@@ -206,10 +206,10 @@ class TestComputeCoverage:
     def test_empty_profile(self):
         ep = empty_profile("a1")
         cov = compute_coverage(ep)
-        assert cov.covered_dimensions == 0
-        assert cov.total_dimensions == 8
-        assert cov.coverage_ratio == 0.0
-        assert set(cov.missing_dimensions) == set(DIMENSIONS)
+        assert cov.covered == 0
+        assert cov.total == 8
+        assert cov.ratio == 0.0
+        assert set(cov.missing) == set(DIMENSIONS)
 
     def test_full_profile(self):
         p = AssetProfile(
@@ -224,9 +224,9 @@ class TestComputeCoverage:
             behavior=AssetBehavior(profile_date="2026-10-03", evidence=[_ev()]),
         )
         cov = compute_coverage(p)
-        assert cov.covered_dimensions == 8
-        assert cov.coverage_ratio == 1.0
-        assert cov.missing_dimensions == []
+        assert cov.covered == 8
+        assert cov.ratio == 1.0
+        assert cov.missing == []
 
     def test_partial_profile(self):
         p = AssetProfile(
@@ -236,9 +236,9 @@ class TestComputeCoverage:
             technology=AssetTechnology(os_name="Linux", evidence=[_ev()]),
         )
         cov = compute_coverage(p)
-        assert cov.covered_dimensions == 3
-        assert cov.coverage_ratio == 0.375
-        assert set(cov.missing_dimensions) == {"exposure", "vulnerability", "threat", "compliance", "behavior"}
+        assert cov.covered == 3
+        assert cov.ratio == 0.375
+        assert set(cov.missing) == {"exposure", "vulnerability", "threat", "compliance", "behavior"}
 
     def test_dimension_without_evidence_ignored(self):
         """evidence 为空时即使有字段也不算覆盖（避免误报）。"""
@@ -248,7 +248,7 @@ class TestComputeCoverage:
             ownership=AssetOwnership(owner="z"),    # 无 evidence
         )
         cov = compute_coverage(p)
-        assert cov.covered_dimensions == 0
+        assert cov.covered == 0
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +301,7 @@ class TestComputeConfidence:
         """覆盖但 evidence 全空时（理论上不应发生，因 _has_meaningful_data 已拦截），
         主动构造一个 fake coverage，验证降级到 0.5 折。"""
         p = AssetProfile(asset_id="fake")
-        cov = CoverageInfo(covered_dimensions=4, missing_dimensions=[], coverage_ratio=0.5)
+        cov = CoverageInfo(covered=4, missing=[], ratio=0.5)
         p = AssetProfile(asset_id=p.asset_id, coverage=cov)
         assert compute_profile_confidence(p) == 0.25  # 0.5 × 0.5
 
@@ -316,7 +316,7 @@ class TestProfileToDict:
         d = profile_to_dict(empty_profile("a1"))
         # datetime → ISO string
         assert isinstance(d["built_at"], str)
-        assert isinstance(d["coverage"]["covered_dimensions"], int)
+        assert isinstance(d["coverage"]["covered"], int)
         # JSON safe: round-trip
         json_str = json.dumps(d, ensure_ascii=False)
         assert "asset_id" in json_str
@@ -366,7 +366,7 @@ class TestEmptyProfile:
 
     def test_coverage_zero(self):
         cov = compute_coverage(empty_profile("a1"))
-        assert cov.coverage_ratio == 0.0
+        assert cov.ratio == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -394,19 +394,19 @@ class TestDimensions:
 class TestCoverageInfo:
     def test_defaults(self):
         c = CoverageInfo()
-        assert c.total_dimensions == 8
-        assert c.covered_dimensions == 0
-        assert c.missing_dimensions == []
-        assert c.coverage_ratio == 0.0
+        assert c.total == 8
+        assert c.covered == 0
+        assert c.missing == []
+        assert c.ratio == 0.0
 
     def test_with_values(self):
         c = CoverageInfo(
-            covered_dimensions=5,
-            missing_dimensions=["behavior", "compliance", "threat"],
-            coverage_ratio=0.625,
+            covered=5,
+            missing=["behavior", "compliance", "threat"],
+            ratio=0.625,
         )
-        assert c.covered_dimensions == 5
-        assert len(c.missing_dimensions) == 3
+        assert c.covered == 5
+        assert len(c.missing) == 3
 
 
 # ---------------------------------------------------------------------------

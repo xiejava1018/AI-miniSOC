@@ -202,10 +202,10 @@ DIMENSIONS = (
 class CoverageInfo:
     """画像覆盖度统计。"""
 
-    total_dimensions: int = 8
-    covered_dimensions: int = 0          # 非 None 维数
-    missing_dimensions: List[str] = field(default_factory=list)
-    coverage_ratio: float = 0.0          # covered / total
+    total: int = 8
+    covered: int = 0                       # 非 None 维数
+    missing: List[str] = field(default_factory=list)
+    ratio: float = 0.0                     # covered / total
 
 
 @dataclass(frozen=True)
@@ -263,10 +263,10 @@ def compute_coverage(profile: AssetProfile) -> CoverageInfo:
             missing.append(name)
     ratio = covered / len(DIMENSIONS) if DIMENSIONS else 0.0
     return CoverageInfo(
-        total_dimensions=len(DIMENSIONS),
-        covered_dimensions=covered,
-        missing_dimensions=missing,
-        coverage_ratio=round(ratio, 4),
+        total=len(DIMENSIONS),
+        covered=covered,
+        missing=missing,
+        ratio=round(ratio, 4),
     )
 
 
@@ -334,7 +334,7 @@ def compute_profile_confidence(profile: AssetProfile) -> float:
     - 范围 [0, 1]
     """
     cov = profile.coverage
-    if cov.covered_dimensions == 0:
+    if cov.covered == 0:
         return 0.0
     dim_objects = (
         profile.identity, profile.ownership, profile.technology, profile.exposure,
@@ -350,9 +350,9 @@ def compute_profile_confidence(profile: AssetProfile) -> float:
             dim_avg_sum += sum(conf_values) / len(conf_values)
             counted += 1
     if counted == 0:
-        return round(cov.coverage_ratio * 0.5, 4)  # 覆盖但无证据 → 给 0.5 折
+        return round(cov.ratio * 0.5, 4)  # 覆盖但无证据 → 给 0.5 折
     dim_avg = dim_avg_sum / counted
-    return round(cov.coverage_ratio * dim_avg, 4)
+    return round(cov.ratio * dim_avg, 4)
 
 
 # ---------------------------------------------------------------------------
