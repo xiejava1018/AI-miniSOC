@@ -22,6 +22,7 @@ from app.api import (
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
+    asset_completeness,
 )
 from app.core.auth import get_current_user
 from app.core.route_security import enforce_write_default
@@ -127,6 +128,11 @@ include_human_router(
 # 资产知识图谱 v1（G1）：独立前缀 /graph；包含资产邻居、影响面、chokepoint 等端点
 include_human_router(
     api_router, graph.router, prefix="/graph", tags=["资产知识图谱"],
+)
+
+# 资产完整度评分卡（OH-UI.4）：GET /assets/{id}/completeness + /completeness/batch
+include_human_router(
+    api_router, asset_completeness.router, prefix="/assets", tags=["资产完整度"],
 )
 
 # S2 暴露面归位（OH-4.2）：NAT 映射反查/规则列表/资产暴露面
