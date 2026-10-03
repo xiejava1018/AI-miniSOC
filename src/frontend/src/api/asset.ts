@@ -836,3 +836,103 @@ export const analyzeChangeImpact = (payload: ImpactAnalysisPayload): Promise<any
     timeout: 180000
   })
 }
+
+// ─────────────────────────────────────────────
+// OH-UI.5 八维画像 + AHS + 证据链完整度评分卡
+// ─────────────────────────────────────────────
+
+/** 八维画像是否覆盖（来自 OH-2.1 compute_coverage） */
+export interface AssetDimensionCoverage {
+  covered: boolean
+  evidence_count: number
+  confidence: number
+}
+
+/** 证据链摘要（来自 OH-2.4 build_evidence_chain summary） */
+export interface AssetEvidenceSummary {
+  total_evidence: number
+  sources: string[]
+  dimensions: string[]
+  avg_confidence: number
+  earliest_observed_at: string | null
+  latest_observed_at: string | null
+  timespan_hours: number | null
+}
+
+/** 画像覆盖度（来自 OH-2.1 CoverageInfo） */
+export interface AssetCoverageInfo {
+  total: number
+  covered: number
+  missing: string[]
+  ratio: number
+}
+
+/** 资产完整度评分卡响应（消费 OH-UI.4 /api/v1/assets/{id}/completeness） */
+export interface AssetCompleteness {
+  asset_id: string
+  /** 综合完整度 0-100（coverage.ratio × 100） */
+  overall_score: number
+  /** 整体状态: valid / partial / insufficient_data / error */
+  state: string
+  /** AHS 健康分 0-100（来自 OH-2.2 compute_ahs） */
+  ahs_score: number
+  /** AHS 状态: valid / insufficient_data / ahs_not_computed */
+  ahs_state: string
+  /** 画像置信度 [0,1]（来自 OH-2.1 compute_profile_confidence） */
+  profile_confidence: number
+  /** 八维明细 */
+  dimensions: Record<string, AssetDimensionCoverage>
+  /** 覆盖度 */
+  coverage: AssetCoverageInfo
+  /** 证据链摘要 */
+  evidence_summary: AssetEvidenceSummary
+  /** 计算时间 ISO */
+  computed_at: string
+  /** 错误信息（仅 state=error 时有） */
+  error?: string
+}
+
+/** 批量完整度响应项 */
+export interface AssetCompletenessBatchItem {
+  asset_id: string
+  overall_score?: number
+  state: string
+  ahs_score?: number
+  ahs_state?: string
+  profile_confidence?: number
+  dimensions?: Record<string, AssetDimensionCoverage>
+  coverage?: AssetCoverageInfo
+  evidence_summary?: AssetEvidenceSummary
+  computed_at?: string
+  error?: string
+}
+
+export interface AssetCompletenessBatchResponse {
+  items: AssetCompletenessBatchItem[]
+  total: number
+}
+
+/** 单资产完整度评分卡（OH-UI.4）
+ * 后端: GET /api/v1/assets/{asset_id}/completeness
+ */
+export const getAssetCompleteness = (
+  assetId: string
+): Promise<Http.BaseResponse<AssetCompleteness>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${assetId}/completeness`,
+    keepFullResponse: true
+  })
+}
+
+/** 批量资产完整度评分卡（最多 50 个）
+ * 后端: GET /api/v1/assets/completeness/batch?asset_ids=...
+ */
+export const getAssetCompletenessBatch = (
+  assetIds: string[]
+): Promise<Http.BaseResponse<AssetCompletenessBatchResponse>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/completeness/batch`,
+    params: { asset_ids: assetIds.join(',') },
+    keepFullResponse: true
+  })
+}

@@ -688,4 +688,80 @@ declare namespace Api {
       end_date?: string
     }
   }
+
+  // ─────────────────────────────────────────────
+  // OH-UI.5 八维画像 + AHS + 证据链（消费 OH-2.1/2.2/2.4 + OH-UI.4）
+  // ─────────────────────────────────────────────
+
+  namespace AssetCompleteness {
+    /** 八维画像是否覆盖（来自 OH-2.1 compute_coverage） */
+    interface DimensionCoverage {
+      covered: boolean
+      evidence_count: number
+      confidence: number
+    }
+
+    /** 证据链摘要（来自 OH-2.4 build_evidence_chain summary） */
+    interface EvidenceSummary {
+      total_evidence: number
+      sources: string[]
+      dimensions: string[]
+      avg_confidence: number
+      earliest_observed_at: string | null
+      latest_observed_at: string | null
+      timespan_hours: number | null
+    }
+
+    /** 画像覆盖度（来自 OH-2.1 CoverageInfo） */
+    interface CoverageInfo {
+      total: number
+      covered: number
+      missing: string[]
+      ratio: number
+    }
+
+    /** 资产完整度评分卡响应（消费 OH-UI.4） */
+    interface Result {
+      asset_id: string
+      /** 综合完整度 0-100（coverage.ratio × 100） */
+      overall_score: number
+      /** 整体状态: valid / partial / insufficient_data / error */
+      state: string
+      /** AHS 健康分 0-100 */
+      ahs_score: number
+      /** AHS 状态 */
+      ahs_state: string
+      /** 画像置信度 [0,1] */
+      profile_confidence: number
+      /** 八维明细 */
+      dimensions: Record<string, DimensionCoverage>
+      /** 覆盖度 */
+      coverage: CoverageInfo
+      /** 证据链摘要 */
+      evidence_summary: EvidenceSummary
+      /** 计算时间 ISO */
+      computed_at: string
+      error?: string
+    }
+
+    /** 批量完整度响应项 */
+    interface BatchItem {
+      asset_id: string
+      overall_score?: number
+      state: string
+      ahs_score?: number
+      ahs_state?: string
+      profile_confidence?: number
+      dimensions?: Record<string, DimensionCoverage>
+      coverage?: CoverageInfo
+      evidence_summary?: EvidenceSummary
+      computed_at?: string
+      error?: string
+    }
+
+    interface BatchResponse {
+      items: BatchItem[]
+      total: number
+    }
+  }
 }

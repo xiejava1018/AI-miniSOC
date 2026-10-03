@@ -251,6 +251,56 @@
       <ElEmpty v-else-if="!riskLoading" description="尚未评分，可到资产列表页点击“风险评分”" :image-size="60" />
     </ElCard>
 
+    <!-- ========== OH-UI.5 八维画像 + AHS + 证据链卡 ========== -->
+    <ElCard shadow="never" class="profile-card" v-loading="completenessLoading">
+      <template #header>
+        <div class="card-header">
+          <span class="title">八维画像与健康评分</span>
+          <div class="card-header-right">
+            <span v-if="completeness?.computed_at" class="profile-card__meta">
+              计算于 {{ formatTime(completeness.computed_at) }}
+            </span>
+            <ElButton size="small" text :icon="Refresh" :loading="completenessLoading" @click="loadCompleteness">刷新</ElButton>
+          </div>
+        </div>
+      </template>
+
+      <div v-if="completeness">
+        <!-- 上排：AHS 健康分 + 八维覆盖 -->
+        <div class="profile-card__top">
+          <div class="profile-card__ahs">
+            <div class="profile-card__ahs-title">
+              AHS 健康评分
+              <ElTag
+                :type="completeness.ahs_state === 'valid' ? 'success' : 'warning'"
+                size="small"
+                effect="plain"
+                class="ml-1"
+              >
+                {{ ahsStateLabel(completeness.ahs_state) }}
+              </ElTag>
+            </div>
+            <AHSRing
+              :score="completeness.ahs_score"
+              :state="completeness.ahs_state"
+              :breakdown="ahsBreakdown"
+              :size="160"
+            />
+          </div>
+          <div class="profile-card__dims">
+            <ProfileCard
+              :dimensions="profileDimensions"
+              :coverage-ratio="completeness.coverage?.ratio ?? 0"
+              :profile-confidence="completeness.profile_confidence"
+              :dim-size="72"
+              :clickable="false"
+            />
+          </div>
+        </div>
+      </div>
+      <ElEmpty v-else-if="!completenessLoading" description="画像服务暂不可用，请检查后端 OH-UI.4 接口" :image-size="60" />
+    </ElCard>
+
     <!-- Tab 区域 -->
     <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
@@ -665,6 +715,32 @@
         <ElTabPane label="关系图谱" name="relation-graph">
           <RelationGraphTab :asset-id="assetDetail.id" />
         </ElTabPane>
+
+        <!-- 8. OH-UI.5 八维画像 -->
+        <ElTabPane label="八维画像" name="profile">
+          <div class="profile-tab">
+            <ProfileCard
+              v-if="completeness"
+              :dimensions="profileDimensions"
+              :coverage-ratio="completeness.coverage?.ratio ?? 0"
+              :profile-confidence="completeness.profile_confidence"
+              :dim-size="86"
+              :clickable="false"
+            />
+            <ElEmpty v-else description="画像服务暂不可用" />
+          </div>
+        </ElTabPane>
+
+        <!-- 9. OH-UI.5 证据链 -->
+        <ElTabPane label="证据链" name="evidence-chain">
+          <EvidenceChainPanel
+            v-if="completeness"
+            :summary="completeness.evidence_summary || null"
+            :timeline="(completeness as any).evidence_timeline || []"
+            :loading="completenessLoading"
+          />
+          <ElEmpty v-else description="画像服务暂不可用" />
+        </ElTabPane>
       </ElTabs>
     </ElCard>
 
@@ -821,9 +897,13 @@
   import { getHighRiskPort, type PortRisk } from '@/constants/highRiskPorts'
   import MetricCard from './components/MetricCard.vue'
   import RelationGraphTab from './components/RelationGraphTab.vue'
+  import AHSRing from './components/AHSRing.vue'
+  import ProfileCard from './components/ProfileCard.vue'
+  import EvidenceChainPanel from './components/EvidenceChainPanel.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
   import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, getAssetSecuritySummary, type AssetRiskDetail, type SecuritySummaryResult } from '@/api/asset'
   import { overrideAssetEol, clearAssetEol } from '@/api/asset'
+  import { getAssetCompleteness, type AssetCompleteness } from '@/api/asset'
 
   const route = useRoute()
   const router = useRouter()
@@ -1656,6 +1736,84 @@
     }
   }
 
+  // ========== OH-UI.5 八维画像 + AHS + 证据链 ==========
+  const completenessLoading = ref(false)
+  const completeness = ref<AssetCompleteness | null>(null)
+
+  const ahsBreakdown = computed(() => {
+    const c = completeness.value
+    if (!c) return []
+    // 后端 /completeness 返回的是覆盖度权重。
+    // AHS 真正的扣分推导是以 OH-2.2 AHSResult 为原始信息，此处仅用 coverage confidence 作为粗估提示
+    const dims = c.dimensions || {}
+    return [
+      { key: 'exposure', label: '暴露', rawScore: dimConfidencePct(dims['exposure']), weight: 0.20 },
+      { key: 'vulnerability', label: '脆弱', rawScore: dimConfidencePct(dims['vulnerability']), weight: 0.25 },
+      { key: 'threat', label: '威胁', rawScore: dimConfidencePct(dims['threat']), weight: 0.25 },
+      { key: 'compliance', label: '合规', rawScore: dimConfidencePct(dims['compliance']), weight: 0.15 },
+      { key: 'behavior', label: '行为', rawScore: dimConfidencePct(dims['behavior']), weight: 0.15 }
+    ].map(d => ({
+      ...d,
+      dataGap: d.rawScore === 0 && (!dims[d.key] || (dims[d.key]?.evidence_count ?? 0) === 0)
+    }))
+  })
+
+  function dimConfidencePct(dim?: Api.AssetCompleteness.DimensionCoverage): number {
+    if (!dim || (dim.evidence_count ?? 0) === 0) return 0
+    return Math.round((dim.confidence ?? 0) * 100)
+  }
+
+  const DIMENSION_LABELS: Record<string, string> = {
+    identity: '身份',
+    ownership: '归属',
+    technology: '技术',
+    exposure: '暴露',
+    vulnerability: '脆弱',
+    threat: '威胁',
+    compliance: '合规',
+    behavior: '行为'
+  }
+
+  const profileDimensions = computed(() => {
+    const c = completeness.value
+    if (!c) return []
+    return Object.entries(c.dimensions || {}).map(([key, info]) => ({
+      key: key as any,
+      label: DIMENSION_LABELS[key] || key,
+      status: !info.evidence_count ? 'missing' : (info.confidence >= 0.8 ? 'covered' : 'partial'),
+      evidence_count: info.evidence_count || 0,
+      confidence: info.confidence || 0
+    }))
+  })
+
+  const loadCompleteness = async () => {
+    if (!assetId.value) return
+    completenessLoading.value = true
+    try {
+      const res = await getAssetCompleteness(assetId.value)
+      const r: any = res
+      if (r?.code === 200 && r.data) {
+        completeness.value = r.data
+      } else {
+        completeness.value = null
+      }
+    } catch {
+      completeness.value = null
+    } finally {
+      completenessLoading.value = false
+    }
+  }
+
+  const AHS_STATE_LABELS: Record<string, string> = {
+    valid: '已计算',
+    insufficient_data: '数据不足',
+    ahs_not_computed: '未计算'
+  }
+  function ahsStateLabel(s: string | null | undefined): string {
+    if (!s) return '—'
+    return AHS_STATE_LABELS[s] ?? s
+  }
+
   /** 刷新 = 按需生成摘要（POST refresh-summary），而非重新 GET 已存数据 */
   const handleRefreshRisk = async () => {
     if (!assetId.value) return
@@ -1763,6 +1921,7 @@
     loadPorts()
     loadTags()
     loadDataSources()
+    loadCompleteness()
   })
 
   onBeforeUnmount(() => {
@@ -1807,6 +1966,51 @@
   }
 
   .asset-detail-page {
+    // ============ OH-UI.5 八维画像卡 ============
+    .profile-card {
+      .card-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .profile-card__meta {
+        font-size: 12px;
+        color: var(--el-text-color-secondary, #606266);
+      }
+
+      .profile-card__top {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .profile-card__ahs-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--el-text-color-primary, #303133);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .ml-1 {
+          margin-left: 4px;
+        }
+      }
+
+      .profile-tab {
+        padding: 12px 0;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .profile-card__top {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
     // ============ P3/F1.1 资产风险卡 ============
     .risk-card {
       .card-header-right {
