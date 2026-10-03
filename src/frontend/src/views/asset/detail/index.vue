@@ -251,60 +251,58 @@
       <ElEmpty v-else-if="!riskLoading" description="尚未评分，可到资产列表页点击“风险评分”" :image-size="60" />
     </ElCard>
 
-    <!-- ========== OH-UI.5 八维画像 + AHS + 证据链卡 ========== -->
-    <ElCard shadow="never" class="profile-card" v-loading="completenessLoading">
-      <template #header>
-        <div class="card-header">
-          <span class="title">八维画像与健康评分</span>
-          <div class="card-header-right">
-            <span v-if="completeness?.computed_at" class="profile-card__meta">
-              计算于 {{ formatTime(completeness.computed_at) }}
-            </span>
-            <ElButton size="small" text :icon="Refresh" :loading="completenessLoading" @click="loadCompleteness">刷新</ElButton>
-          </div>
-        </div>
-      </template>
-
-      <div v-if="completeness">
-        <!-- 上排：AHS 健康分 + 八维覆盖 -->
-        <div class="profile-card__top">
-          <div class="profile-card__ahs">
-            <div class="profile-card__ahs-title">
-              AHS 健康评分
-              <ElTag
-                :type="completeness.ahs_state === 'valid' ? 'success' : 'warning'"
-                size="small"
-                effect="plain"
-                class="ml-1"
-              >
-                {{ ahsStateLabel(completeness.ahs_state) }}
-              </ElTag>
-            </div>
-            <AHSRing
-              :score="completeness.ahs_score"
-              :state="completeness.ahs_state"
-              :breakdown="ahsBreakdown"
-              :size="160"
-            />
-          </div>
-          <div class="profile-card__dims">
-            <ProfileCard
-              :dimensions="profileDimensions"
-              :coverage-ratio="completeness.coverage?.ratio ?? 0"
-              :profile-confidence="completeness.profile_confidence"
-              :dim-size="72"
-              :clickable="false"
-            />
-          </div>
-        </div>
-      </div>
-      <ElEmpty v-else-if="!completenessLoading" description="画像服务暂不可用，请检查后端 OH-UI.4 接口" :image-size="60" />
-    </ElCard>
-
     <!-- Tab 区域 -->
     <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
-        <!-- 1. 应用清单(M3: OpenSearch states-inventory-packages 直查) -->
+        <!-- 1. OH-UI.5 八维画像 + AHS 健康评分 -->
+        <ElTabPane label="八维画像" name="profile">
+          <div class="profile-tab" v-loading="completenessLoading">
+            <div v-if="completeness">
+              <!-- 顶部条：AHS + 覆盖 + 计算时间 -->
+              <div class="profile-tab__header">
+                <ElButton size="small" text :icon="Refresh" :loading="completenessLoading" @click="loadCompleteness">刷新</ElButton>
+              </div>
+
+              <!-- AHS 健康评分 -->
+              <div class="profile-tab__ahs">
+                <div class="profile-tab__ahs-title">
+                  AHS 健康评分
+                  <ElTag
+                    :type="completeness.ahs_state === 'valid' ? 'success' : 'warning'"
+                    size="small"
+                    effect="plain"
+                    class="ml-1"
+                  >
+                    {{ ahsStateLabel(completeness.ahs_state) }}
+                  </ElTag>
+                  <span v-if="completeness.computed_at" class="profile-tab__meta">
+                    计算于 {{ formatTime(completeness.computed_at) }}
+                  </span>
+                </div>
+                <AHSRing
+                  :score="completeness.ahs_score"
+                  :state="completeness.ahs_state"
+                  :breakdown="ahsBreakdown"
+                  :size="180"
+                />
+              </div>
+
+              <!-- 八维覆盖 -->
+              <div class="profile-tab__dims">
+                <ProfileCard
+                  :dimensions="profileDimensions"
+                  :coverage-ratio="completeness.coverage?.ratio ?? 0"
+                  :profile-confidence="completeness.profile_confidence"
+                  :dim-size="86"
+                  :clickable="false"
+                />
+              </div>
+            </div>
+            <ElEmpty v-else-if="!completenessLoading" description="画像服务暂不可用，请检查后端 OH-UI.4 接口" :image-size="60" />
+          </div>
+        </ElTabPane>
+
+        <!-- 2. 应用清单(M3: OpenSearch states-inventory-packages 直查) -->
         <ElTabPane label="应用清单" name="applications">
           <template v-if="!hasWazuhAgent">
             <ElEmpty description="该资产无 Wazuh Agent，应用清单数据不适用">
@@ -716,21 +714,6 @@
           <RelationGraphTab :asset-id="assetDetail.id" />
         </ElTabPane>
 
-        <!-- 8. OH-UI.5 八维画像 -->
-        <ElTabPane label="八维画像" name="profile">
-          <div class="profile-tab">
-            <ProfileCard
-              v-if="completeness"
-              :dimensions="profileDimensions"
-              :coverage-ratio="completeness.coverage?.ratio ?? 0"
-              :profile-confidence="completeness.profile_confidence"
-              :dim-size="86"
-              :clickable="false"
-            />
-            <ElEmpty v-else description="画像服务暂不可用" />
-          </div>
-        </ElTabPane>
-
         <!-- 9. OH-UI.5 证据链 -->
         <ElTabPane label="证据链" name="evidence-chain">
           <EvidenceChainPanel
@@ -1029,7 +1012,7 @@
 
   // Tab - 默认进 ports(Phase 1 唯一有数据的 Tab)
   // Phase 3 接入应用数据后,改回默认 applications(设计文档 §4.2)
-  const activeTab = ref('ports')
+  const activeTab = ref('profile')
 
   // ========== 安全摘要 ==========
   const summaryLoading = ref(false)
@@ -1966,27 +1949,21 @@
   }
 
   .asset-detail-page {
-    // ============ OH-UI.5 八维画像卡 ============
-    .profile-card {
-      .card-header-right {
+    // ============ OH-UI.5 八维画像 Tab ============
+    .profile-tab {
+      padding: 12px 0;
+
+      &__header {
         display: flex;
-        align-items: center;
-        gap: 8px;
+        justify-content: flex-end;
+        margin-bottom: 12px;
       }
 
-      .profile-card__meta {
-        font-size: 12px;
-        color: var(--el-text-color-secondary, #606266);
+      &__ahs {
+        margin-bottom: 24px;
       }
 
-      .profile-card__top {
-        display: grid;
-        grid-template-columns: 360px 1fr;
-        gap: 24px;
-        align-items: stretch;
-      }
-
-      .profile-card__ahs-title {
+      &__ahs-title {
         font-size: 14px;
         font-weight: 500;
         color: var(--el-text-color-primary, #303133);
@@ -2000,14 +1977,15 @@
         }
       }
 
-      .profile-tab {
-        padding: 12px 0;
+      &__meta {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--el-text-color-secondary, #606266);
+        font-weight: normal;
       }
-    }
 
-    @media (max-width: 1280px) {
-      .profile-card__top {
-        grid-template-columns: 1fr !important;
+      &__dims {
+        margin-top: 16px;
       }
     }
 
