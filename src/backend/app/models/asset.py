@@ -87,6 +87,17 @@ class Asset(Base):
         server_default="level_2",
         comment="等保等级 5 档 level_5~level_1，合规报告/等保检查用",
     )
+    # protection_level_source（设计 §4.1 · 2026-10-03）：等级来源标记。
+    #   inherited = 跟随业务系统就高传播（传播引擎只碰这类资产）
+    #   manual    = 人工裁定，传播引擎跳过（覆盖场景：跨系统共用设备单独定级）
+    # 详见 docs/design/2026-10-03-业务系统资产模型与定级继承设计.md §5
+    protection_level_source = Column(
+        String(12),
+        nullable=False,
+        default="manual",
+        server_default="manual",
+        comment="等级来源 inherited/manual，传播引擎见 services/protection_level_propagation.py",
+    )
 
     # criticality：DEPRECATED（2026-09-14 起 6 个月过渡期）
     # 保留为 read-only alias，写入路径已关闭。外部读时自动从 data_sensitivity 派生。

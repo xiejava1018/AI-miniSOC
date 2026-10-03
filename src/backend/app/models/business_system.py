@@ -55,6 +55,26 @@ class BusinessSystem(Base):
         server_default="level_2",
         comment="等保等级 5 档，资产继承此值",
     )
+    # === 定级备案 S4 Phase 0 字段（设计 §4.2 · 2026-10-03）==================
+    # 建议/确认分离（D6）：建议引擎只写 suggested_*，永不直接写 protection_level；
+    # 确认动作显式人工触发（PUT protection_level 或未来确认工作台）。
+    suggested_protection_level = Column(
+        String(20),
+        comment="建议引擎输出的等保等级（待人工确认；S4 红线：系统只建议不裁决）",
+    )
+    suggestion_basis = Column(
+        JSONB,
+        comment="建议依据 JSONB：矩阵两维 + 代理近似声明 + 成员证据（可解释性）",
+    )
+    rating_status = Column(
+        String(20),
+        nullable=False,
+        default="unrated",
+        server_default="unrated",
+        comment="定级状态 unrated/suggested/confirmed",
+    )
+    rating_confirmed_by = Column(String(100), comment="定级确认人（用户名）")
+    rating_confirmed_at = Column(DateTime(timezone=True), comment="定级确认时间")
     # criticality：DEPRECATED（6 个月过渡期）
     criticality = Column(
         String(20),
@@ -93,6 +113,12 @@ class BusinessSystem(Base):
             "business_impact": self.business_impact,
             "data_sensitivity": self.data_sensitivity,
             "protection_level": self.protection_level,
+            # 定级备案 S4 Phase 0（设计 §4.2）
+            "suggested_protection_level": self.suggested_protection_level,
+            "suggestion_basis": self.suggestion_basis,
+            "rating_status": self.rating_status or "unrated",
+            "rating_confirmed_by": self.rating_confirmed_by,
+            "rating_confirmed_at": self.rating_confirmed_at.isoformat() if self.rating_confirmed_at else None,
             # criticality：派生字段（deprecated alias 读时自动计算，写入关闭）
             "criticality": self.criticality or legacy_criticality_from_data_sensitivity(self.data_sensitivity),
             "owner_id": self.owner_id,

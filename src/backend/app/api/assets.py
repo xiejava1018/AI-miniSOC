@@ -146,6 +146,8 @@ async def list_assets(
             # 业务系统归属（v1 §7.2.5 F10）：仅展示+编辑回填，不作为写入入口
             business_system_names=sys_names or None,
             business_system_ids=sys_ids or None,
+            # 等级来源徽标（设计 §4.1）
+            protection_level_source=asset.protection_level_source or "manual",
         ))
 
     return AssetListResponse(
@@ -426,6 +428,13 @@ async def update_asset(asset_id: str, asset_data: AssetUpdate, db: Session = Dep
         old_value = getattr(asset, field, None)
         if old_value is not None:
             old_values[field] = str(old_value) if not isinstance(old_value, (int, float, str, bool)) else old_value
+
+    # 等保等级来源翻转（设计 §5.3 v2）：值有实质变化才翻 manual。
+    # 前端 handleSubmit 全量提交 formData——例行编辑（只改资产名）也会带上
+    # protection_level，若按「payload 含字段即翻转」会让 inherited 资产
+    # 在任何例行编辑后都变成 manual，传播机制形同虚设。此处用 DB 现值比较。
+    if "protection_level" in update_data and update_data["protection_level"] != asset.protection_level:
+        asset.protection_level_source = "manual"
 
     # 更新字段
     for field, value in update_data.items():

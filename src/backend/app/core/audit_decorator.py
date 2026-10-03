@@ -93,6 +93,21 @@ def log_audit(
 
                         if get_resource_id:
                             resource_id = get_resource_id(result, kwargs)
+                            # soc_audit_logs.resource_id 是 BigInteger——UUID 字符串会
+                            # INSERT 报 InvalidTextRepresentation 并把整个 session 打进
+                            # PendingRollback（业务事务跟着回滚）。UUID 资源标识改落
+                            # resource_name，resource_id 只收整数。
+                            if isinstance(resource_id, str):
+                                resource_id_int: Optional[int] = None
+                                try:
+                                    resource_id_int = int(resource_id)
+                                except (TypeError, ValueError):
+                                    resource_id_int = None
+                                if resource_id_int is None:
+                                    resource_name = resource_name or resource_id
+                                    resource_id = None
+                                else:
+                                    resource_id = resource_id_int
                         if get_resource_name:
                             resource_name = get_resource_name(result, kwargs)
                         if get_old_values:

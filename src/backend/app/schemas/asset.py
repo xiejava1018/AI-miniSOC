@@ -211,6 +211,9 @@ class AssetResponse(AssetBase):
     business_system_names: Optional[list[str]] = None
     # 业务系统 ID 列表（仅供列表/编辑回填“已关联的系统”；后端不接写入，关联走独立 API）
     business_system_ids: Optional[list[str]] = None
+    # 等保等级来源（设计 §4.1 · T4）：inherited=跟随业务系统就高 / manual=人工设定。
+    # 只读——source 只能由传播引擎或资产 PUT 的值变化检测写，不开放前端直写。
+    protection_level_source: Optional[str] = None
     # criticality：DEPRECATED 兼容垫片（API 序列化时由 to_response 钩子从 data_sensitivity 派生，
     # 6 个月内外部脚本可继续读；前端建议改用三维度字段）
 

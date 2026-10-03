@@ -25,6 +25,11 @@ from app.core.criticality import (
 # code 限制：英文/数字/中划线下划线，便于作资源标识与菜单 path 派生
 _CODE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{1,49}$")
 
+# 资产在业务系统中的架构角色（D8 枚举化 · 设计 §4.3；字典 dict_type='asset_business_role'）
+ASSET_BUSINESS_ROLE_VALUES = (
+    "web", "app", "db", "mq", "cache", "gateway", "lb", "other",
+)
+
 
 class BusinessSystemBase(BaseModel):
     """业务系统基础字段（Create/Update 共享校验）"""
@@ -178,7 +183,7 @@ class BusinessSystemUpdate(BaseModel):
 
 
 class BusinessSystemResponse(BaseModel):
-    """业务系统响应（含三维度 + criticality 兼容垫片）"""
+    """业务系统响应（含三维度 + criticality 兼容垫片 + 定级状态 S4）"""
     id: str = Field(..., description="UUID")
     code: str
     name: str
@@ -188,6 +193,12 @@ class BusinessSystemResponse(BaseModel):
     protection_level: str
     # criticality：deprecated 兼容垫片（读时从 data_sensitivity 派生）
     criticality: str = Field(..., description="DEPRECATED: 兼容垫片，从 data_sensitivity 派生")
+    # 定级备案 S4 Phase 0（设计 §4.2）——前端 rating 徽标 / 建议采纳用
+    suggested_protection_level: Optional[str] = None
+    suggestion_basis: Optional[dict] = None
+    rating_status: str = "unrated"
+    rating_confirmed_by: Optional[str] = None
+    rating_confirmed_at: Optional[datetime] = None
     # 关联展示
     department_id: Optional[int] = None
     department_name: Optional[str] = None
@@ -217,8 +228,44 @@ class BusinessSystemListResponse(BaseModel):
 class AssetBusinessLinkCreate(BaseModel):
     """为某资产关联一个业务系统"""
     system_id: str = Field(..., description="业务系统 UUID")
-    role: Optional[str] = Field(None, max_length=50,
-                                description="web/app/db/mq/cache/gateway 等架构角色")
+    role: Optional[str] = Field(
+        None, max_length=50,
+        description=f"架构角色枚举（可空=未指定）：{list(ASSET_BUSINESS_ROLE_VALUES)}",
+    )
+    # 设计 §5.2 D4：link 时的等级继承语义
+    #   None（默认/旧调用）= 仅当资产已是 inherited 才重算（存量兼容，零行为变化）
+    #   True  = 传播系统等级并置 inherited（新建资产表单路径用，对齐前端 pickStrictest）
+    #   False = 永不传播（显式保留资产人工值）
+    inherit: Optional[bool] = Field(
+        None,
+        description="是否传播等保等级：None=仅 inherited 资产重算；true=强制继承；false=不传播",
+    )
+
+    @field_validator("role")
+    @classmethod
+    def _role_enum(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None  # 空 = 未指定（存量 NULL 兼容）
+        if v not in ASSET_BUSINESS_ROLE_VALUES:
+            raise ValueError(f"role 必须为 {list(ASSET_BUSINESS_ROLE_VALUES)} 之一")
+        return v
+
+
+class AssetBusinessRoleUpdate(BaseModel):
+    """只改关联的 role（PATCH 语义；设计 §7 T2）"""
+    role: Optional[str] = Field(
+        None, max_length=50,
+        description=f"架构角色：{list(ASSET_BUSINESS_ROLE_VALUES)}；传空清除",
+    )
+
+    @field_validator("role")
+    @classmethod
+    def _role_enum(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
+        if v not in ASSET_BUSINESS_ROLE_VALUES:
+            raise ValueError(f"role 必须为 {list(ASSET_BUSINESS_ROLE_VALUES)} 之一")
+        return v
 
 
 class AssetBusinessLinkResponse(BaseModel):
