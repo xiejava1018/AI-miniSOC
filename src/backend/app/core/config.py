@@ -125,6 +125,12 @@ class Settings(BaseSettings):
     PUSH_SCHEDULER_ENABLED: bool = True
     PUSH_SCHEDULER_INTERVAL_MINUTES: int = 30  # 巡检周期（最小 5 分钟）
 
+    # OH-3.7 图谱慢查询告警（Session #11）
+    GRAPH_PERF_MONITOR_ENABLED: bool = True  # 是否启动后台告警监控
+    GRAPH_PERF_MONITOR_INTERVAL_SECONDS: int = 60  # 巡检周期（秒；最小 30s）
+    GRAPH_PERF_ALERT_SUSTAINED_ROUNDS: int = 3  # 连续 N 轮 P95 超阈才告警（防抖）
+    GRAPH_PERF_ALERT_WINDOW_MIN_SAMPLES: int = 30  # 滑窗样本不足此值时不告警（防冷启误报）
+
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

@@ -78,6 +78,10 @@ from .business_system import BusinessSystem, AssetBusiness
 # 设计依据：docs/design/2026-09-30-资产管理AI能力建设方案.md §5.2 / §7.1
 from .nat_mapping import NatMapping
 
+# OH-3.7 图谱 P95 性能告警：ORM 模型与 alembic c7d8e9f10a2b 同步，
+# 保证 Base.metadata.create_all 在测试库也能建出该表。
+from .graph_perf_alert import SOCGraphPerfAlert
+
 __all__ = [
     "Base",
     "Asset",
@@ -147,4 +151,8 @@ __all__ = [
     "AccountPerson",
     "BusinessSystem",
     "AssetBusiness",
+    # S2 暴露面归位（AOG-6 / OH-6.1）
+    "NatMapping",
+    # OH-3.7 图谱 P95 性能告警
+    "SOCGraphPerfAlert",
 ]

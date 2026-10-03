@@ -9,6 +9,8 @@
   GET  /stats                              全图统计
   GET  /perf                               OH-3.6 4 类查询 P95 性能看板
   POST /perf/reset                         OH-3.6 重置 perf 采样（admin）
+  GET  /perf/alerts                        OH-3.7 图谱慢查询告警事件列表
+  POST /perf/alerts/run                    OH-3.7 手动触发一轮告警评估
   POST /relations                          人工登记关系
   POST /rebuild                            触发重建
 
@@ -263,6 +265,83 @@ async def post_graph_perf_reset(
     from app.services.graph.perf import reset as perf_reset
     perf_reset()
     return {"code": 200, "msg": "ok", "data": {"reset": True}}
+
+
+# ---------------------------------------------------------------------------
+# ⑤b OH-3.7 图谱慢查询告警事件列表
+# ---------------------------------------------------------------------------
+
+
+@router.get("/perf/alerts", summary="图谱慢查询告警事件列表（OH-3.7）")
+async def get_graph_perf_alerts(
+    only_unresolved: bool = True,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role("viewer", "operator", "admin", "auditor")),
+):
+    """列出 soc_graph_perf_alerts 事件。
+
+    only_unresolved=True 默认只看未解决（看板首屏）；False 看历史。
+    viewer+ 可读（与 perf 看板同级权限）。
+    """
+    from sqlalchemy import text
+
+    limit = max(1, min(int(limit), 200))
+    where_clause = "WHERE resolved = FALSE" if only_unresolved else ""
+
+    rows = db.execute(
+            text(
+                f"""
+                SELECT id, alert_type, query_type, severity, triggered_at,
+                       window_size, p50_ms, p95_ms, max_ms, slow_count,
+                       threshold_ms, message, resolved, resolved_at,
+                       metadata, created_at
+                FROM soc_graph_perf_alerts
+                {where_clause}
+                ORDER BY triggered_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit},
+        ).all()
+
+    items = []
+    for r in rows:
+        items.append(
+            {
+                "id": str(r[0]),
+                "alert_type": r[1],
+                "query_type": r[2],
+                "severity": r[3],
+                "triggered_at": r[4].isoformat() if r[4] else None,
+                "window_size": int(r[5]),
+                "p50_ms": float(r[6]),
+                "p95_ms": float(r[7]),
+                "max_ms": float(r[8]),
+                "slow_count": int(r[9]),
+                "threshold_ms": float(r[10]),
+                "message": r[11],
+                "resolved": bool(r[12]),
+                "resolved_at": r[13].isoformat() if r[13] else None,
+                "metadata": r[14] if isinstance(r[14], dict) else {},
+                "created_at": r[15].isoformat() if r[15] else None,
+            }
+        )
+    return {"code": 200, "msg": "ok", "data": {"items": items, "total": len(items)}}
+
+
+@router.post("/perf/alerts/run", summary="手动触发一轮告警评估（OH-3.7 测试 / 排障）")
+async def post_graph_perf_alerts_run(
+    _user: User = Depends(require_role("admin", "operator")),
+):
+    """立即跑一轮 evaluate_once()，不等 threshold 检查后定时。
+
+    operator 限定：现场调试需要；admin 也可。
+    """
+    from app.services.graph.slow_query_monitor import evaluate_once
+
+    result = await evaluate_once()
+    return {"code": 200, "msg": "ok", "data": result}
 
 
 # ---------------------------------------------------------------------------

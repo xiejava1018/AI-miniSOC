@@ -41,6 +41,11 @@ from app.services.push_scheduler import (
     start_push_scheduler,
     stop_push_scheduler,
 )
+# OH-3.7 图谱慢查询告警（Session #11）
+from app.services.graph.slow_query_monitor import (
+    start_graph_perf_monitor,
+    stop_graph_perf_monitor,
+)
 # P3 资产扫描：scanner watchdog + 中央调度（final.md §8）
 from app.services.scanner_watchdog_scheduler import (
     start_scanner_watchdog,
@@ -95,6 +100,8 @@ async def lifespan(app: FastAPI):
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
     start_push_scheduler()
+    # OH-3.7 图谱慢查询告警
+    start_graph_perf_monitor()
     # P3 资产扫描：L1+L2 在线检测（每 60s）+ 每天 03:00/04:00 自动建任务
     start_scanner_watchdog()
     start_central_scan_scheduler()
@@ -121,6 +128,7 @@ async def lifespan(app: FastAPI):
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
         await stop_push_scheduler()
+        await stop_graph_perf_monitor()
         # P3 资产扫描：shutdown
         await stop_central_scan_scheduler()
         await stop_scanner_watchdog()
