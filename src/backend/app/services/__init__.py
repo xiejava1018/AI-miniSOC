@@ -10,6 +10,12 @@ from .audit_service import AuditService
 from .encryption_service import EncryptionService
 from .user_service import UserService
 from .agent_process_manager import AgentProcessManager, AgentProcess, AgentProcessState
+from .asset_profile import (
+    AssetProfile, AssetIdentity, AssetOwnership, AssetTechnology, AssetExposure,
+    AssetVulnerability, AssetThreat, AssetCompliance, AssetBehavior,
+    EvidenceItem, CoverageInfo, DIMENSIONS,
+    compute_coverage, compute_profile_confidence, profile_to_dict, empty_profile,
+)
 
 __all__ = [
     "WazuhClient",
@@ -23,4 +29,20 @@ __all__ = [
     "AgentProcessManager",
     "AgentProcess",
     "AgentProcessState",
+    "AssetProfile",
+    "AssetIdentity",
+    "AssetOwnership",
+    "AssetTechnology",
+    "AssetExposure",
+    "AssetVulnerability",
+    "AssetThreat",
+    "AssetCompliance",
+    "AssetBehavior",
+    "EvidenceItem",
+    "CoverageInfo",
+    "DIMENSIONS",
+    "compute_coverage",
+    "compute_profile_confidence",
+    "profile_to_dict",
+    "empty_profile",
 ]
