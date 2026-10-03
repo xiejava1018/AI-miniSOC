@@ -859,6 +859,24 @@ export interface AssetEvidenceSummary {
   timespan_hours: number | null
 }
 
+/** 单条证据（来自 OH-2.4 EvidenceEntry.to_dict()） */
+export interface AssetEvidenceEntry {
+  /** sha256(asset_id + source + observed_at)[:12] */
+  evidence_id: string
+  /** 归属维度 */
+  dimension: string
+  /** ORM 表名 */
+  source: string
+  /** ISO 时间串 */
+  observed_at: string
+  /** [0, 1] */
+  confidence: number
+  /** 行号 / commit / doc 引用 */
+  reference: string | null
+  /** 自由文本 */
+  note: string | null
+}
+
 /** 画像覆盖度（来自 OH-2.1 CoverageInfo） */
 export interface AssetCoverageInfo {
   total: number
@@ -903,6 +921,8 @@ export interface AssetCompletenessBatchItem {
   dimensions?: Record<string, AssetDimensionCoverage>
   coverage?: AssetCoverageInfo
   evidence_summary?: AssetEvidenceSummary
+  /** OH-UI.5+ 补充：证据链时间线，默认 dedup_by_source 后每 ORM 表最新一条 */
+  evidence_timeline?: AssetEvidenceEntry[]
   computed_at?: string
   error?: string
 }

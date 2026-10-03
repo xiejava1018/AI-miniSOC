@@ -249,6 +249,48 @@ class TestEvidenceSummary:
 
 
 # ---------------------------------------------------------------------------
+# evidence_timeline 透传（OH-UI.5+ 补充）
+# ---------------------------------------------------------------------------
+
+class TestEvidenceTimeline:
+    def test_timeline_present_with_evidence(self):
+        """完整画像 + 有 evidence → timeline 返回 EvidenceEntry.to_dict() 列表。"""
+        p = _profile_full()
+        ahs = compute_ahs(p)
+        p_with_ahs = apply_ahs_to_profile(p, ahs)
+        chain = build_evidence_chain(p_with_ahs)
+        resp = _assemble_response(p_with_ahs, ahs, chain)
+        timeline = resp["evidence_timeline"]
+        assert isinstance(timeline, list)
+        assert len(timeline) >= 1
+        # EvidenceEntry.to_dict() 必备字段
+        first = timeline[0]
+        for k in ("evidence_id", "dimension", "source", "observed_at", "confidence"):
+            assert k in first, f"timeline entry missing key: {k}"
+        assert isinstance(first["confidence"], float)
+        assert 0 <= first["confidence"] <= 1
+        # evidence_id 12 字符 sha256[:12]
+        assert len(first["evidence_id"]) == 12
+
+    def test_timeline_empty_when_chain_none(self):
+        """chain=None → timeline=[]（不报错）。"""
+        p = _profile_full()
+        ahs = compute_ahs(p)
+        p_with_ahs = apply_ahs_to_profile(p, ahs)
+        resp = _assemble_response(p_with_ahs, ahs, chain=None)
+        assert resp["evidence_timeline"] == []
+
+    def test_timeline_empty_when_no_evidence(self):
+        """空画像 → timeline=[]。"""
+        p = _profile_empty()
+        ahs = compute_ahs(p)
+        p_with_ahs = apply_ahs_to_profile(p, ahs)
+        chain = build_evidence_chain(p_with_ahs)
+        resp = _assemble_response(p_with_ahs, ahs, chain)
+        assert resp["evidence_timeline"] == []
+
+
+# ---------------------------------------------------------------------------
 # AHS / profile_confidence 透传
 # ---------------------------------------------------------------------------
 

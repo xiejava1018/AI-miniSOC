@@ -204,6 +204,11 @@ def _assemble_response(profile, ahs_result, chain) -> dict:
             "ratio": coverage_ratio,
         },
         "evidence_summary": evidence_summary,
+        # OH-UI.5+ 透传证据链时间线（之前仅生成未暴霁前端）。
+        # 每条含 evidence_id / dimension / source / observed_at / confidence / reference / note。
+        # 默认已 dedup_by_source=True，每 ORM 表最新一条；总 size 约 100B × N entries。
+        # 单资产 < 10 KB，批量端点 ≤ 50 个总 < 50 KB，不影响列表性能。
+        "evidence_timeline": [e.to_dict() for e in chain.timeline] if chain else [],
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
 

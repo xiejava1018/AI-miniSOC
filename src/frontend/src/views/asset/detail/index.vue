@@ -298,6 +298,17 @@
                   />
                 </div>
               </div>
+
+              <!-- 证据说明（Session #7.1：八维画像与证据链合并，默认折叠） -->
+              <ElCollapse v-model="evidenceExpanded" class="profile-tab__evidence">
+                <ElCollapseItem title="证据说明（点击展开）" name="evidence">
+                  <EvidenceChainPanel
+                    :summary="completeness.evidence_summary || null"
+                    :timeline="completeness.evidence_timeline || []"
+                    :loading="completenessLoading"
+                  />
+                </ElCollapseItem>
+              </ElCollapse>
             </div>
             <ElEmpty v-else-if="!completenessLoading" description="画像服务暂不可用，请检查后端 OH-UI.4 接口" :image-size="60" />
           </div>
@@ -715,16 +726,8 @@
           <RelationGraphTab :asset-id="assetDetail.id" />
         </ElTabPane>
 
-        <!-- 9. OH-UI.5 证据链 -->
-        <ElTabPane label="证据链" name="evidence-chain">
-          <EvidenceChainPanel
-            v-if="completeness"
-            :summary="completeness.evidence_summary || null"
-            :timeline="(completeness as any).evidence_timeline || []"
-            :loading="completenessLoading"
-          />
-          <ElEmpty v-else description="画像服务暂不可用" />
-        </ElTabPane>
+        <!-- 9. OH-UI.5 证据链（Session #7.1：合并入「八维画像」Tab，此处保留为跳转错位跳转错位后退 -->
+        <ElTabPane label="证据链" name="evidence-chain" v-if="false" />
       </ElTabs>
     </ElCard>
 
@@ -1723,6 +1726,8 @@
   // ========== OH-UI.5 八维画像 + AHS + 证据链 ==========
   const completenessLoading = ref(false)
   const completeness = ref<AssetCompleteness | null>(null)
+  /** 证据说明折叠状态：默认收起（避免首屏冗长） */
+  const evidenceExpanded = ref<string[]>([])
 
   const ahsBreakdown = computed(() => {
     const c = completeness.value
@@ -1976,11 +1981,12 @@
       &__ahs {
         display: flex;
         flex-direction: column;
-        gap: 12px;
-        padding: 16px;
+        gap: 16px;
+        padding: 20px;
         background: var(--el-fill-color-blank, #fff);
         border: 1px solid var(--el-border-color-lighter, #ebeef5);
         border-radius: 6px;
+        min-width: 0;
       }
 
       &__ahs-title {
@@ -1990,6 +1996,7 @@
         display: flex;
         align-items: center;
         gap: 6px;
+        margin-bottom: 4px;
 
         .ml-1 {
           margin-left: 4px;
@@ -2004,6 +2011,32 @@
     @media (max-width: 1280px) {
       .profile-tab__layout {
         grid-template-columns: 1fr !important;
+      }
+    }
+
+    // ============ Session #7.1 证据说明折叠区 ============
+    .profile-tab__evidence {
+      margin-top: 24px;
+      border-top: 1px solid var(--el-border-color-lighter);
+      padding-top: 16px;
+
+      // ElCollapse 默认加 border → 去掉边框融入详情卡
+      :deep(.el-collapse) {
+        border: none;
+        border-top: none;
+        border-bottom: none;
+      }
+      :deep(.el-collapse-item__header) {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--el-text-color-primary);
+        padding-left: 4px;
+      }
+      :deep(.el-collapse-item__wrap) {
+        border-bottom: none;
+      }
+      :deep(.el-collapse-item__content) {
+        padding-bottom: 8px;
       }
     }
 

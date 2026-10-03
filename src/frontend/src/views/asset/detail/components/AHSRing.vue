@@ -5,7 +5,7 @@
 -->
 <template>
   <div class="ahs-ring" :class="stateClass">
-    <!-- 左侧大环 -->
+    <!-- 顶部大环 -->
     <div class="ahs-ring__main">
       <svg :width="size" :height="size" :viewBox="`0 0 ${size} ${size}`">
         <!-- 背景环 -->
@@ -55,7 +55,7 @@
       <div class="ahs-ring__label">{{ stateLabel }}</div>
     </div>
 
-    <!-- 右侧 5 维构成条 -->
+    <!-- 下方 5 维构成条 -->
     <div class="ahs-ring__breakdown" v-if="breakdown.length">
       <div
         v-for="d in breakdown"
@@ -166,8 +166,9 @@ function dimColor(score: number): string {
 <style scoped lang="scss">
 .ahs-ring {
   display: flex;
-  gap: 24px;
-  align-items: center;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
 
   &__main {
     display: flex;
@@ -194,7 +195,6 @@ function dimColor(score: number): string {
   }
 
   &__breakdown {
-    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -209,7 +209,7 @@ function dimColor(score: number): string {
 
 .ahs-dim-row {
   display: grid;
-  grid-template-columns: 100px 36px 1fr;
+  grid-template-columns: 60px 36px 1fr;
   gap: 12px;
   align-items: center;
   font-size: 13px;
@@ -240,11 +240,5 @@ function dimColor(score: number): string {
   font-family: var(--el-font-family-monospace, monospace);
   text-align: center;
   letter-spacing: 0.3px;
-}
-
-@media (max-width: 768px) {
-  .ahs-ring {
-    flex-direction: column;
-  }
 }
 </style>

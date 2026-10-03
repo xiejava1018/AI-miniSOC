@@ -712,6 +712,24 @@ declare namespace Api {
       timespan_hours: number | null
     }
 
+    /** 单条证据（来自 OH-2.4 EvidenceEntry.to_dict()） */
+    interface EvidenceEntry {
+      /** sha256(asset_id + source + observed_at)[:12] */
+      evidence_id: string
+      /** 归属维度：identity/ownership/technology/exposure/vulnerability/threat/compliance/behavior/ahs */
+      dimension: string
+      /** ORM 表名 */
+      source: string
+      /** ISO 时间串 */
+      observed_at: string
+      /** [0, 1] */
+      confidence: number
+      /** 行号 / commit / doc 引用 */
+      reference: string | null
+      /** 自由文本 */
+      note: string | null
+    }
+
     /** 画像覆盖度（来自 OH-2.1 CoverageInfo） */
     interface CoverageInfo {
       total: number
@@ -739,6 +757,8 @@ declare namespace Api {
       coverage: CoverageInfo
       /** 证据链摘要 */
       evidence_summary: EvidenceSummary
+      /** 证据链时间线（OH-UI.5+ 补充）：默认 dedup_by_source=True 后每 ORM 表最新一条 */
+      evidence_timeline: EvidenceEntry[]
       /** 计算时间 ISO */
       computed_at: string
       error?: string
@@ -755,6 +775,8 @@ declare namespace Api {
       dimensions?: Record<string, DimensionCoverage>
       coverage?: CoverageInfo
       evidence_summary?: EvidenceSummary
+      /** OH-UI.5+ 补充 */
+      evidence_timeline?: EvidenceEntry[]
       computed_at?: string
       error?: string
     }
