@@ -1,0 +1,39 @@
+# AI-miniSOC 图谱扩容触发线配置（OH-3.8）
+#
+# 阈值策略：边数 / P95 任一越界 → 触发扩容告警
+# - 边数超阈值：图谱规模失控风险（前端查询/Builder 全链路变慢）
+# - P95 超阈值：当前容量下查询性能已劣化，需要水平/垂直扩容
+#
+# 配套设计：[docs/design/2026-09-30-资产管理AI能力建设-实施方案.md](../../docs/design/2026-09-30-资产管理AI能力建设-实施方案.md) OH-3.8
+# 配套代码：app/services/graph/capacity_check.py
+#
+# 触发行为：
+#  - 写入 audit_log（hash 链）作为永久存证
+#  - 通过 NotificationService 给所有 admin 推送 WS + 站内通知
+#  - 钉钉 webhook：当前项目无独立钉钉通道，接口预留（capacity_check.notify_admin）
+#    后续如有钉钉集成只需在 notify_admin 内增加 POST webhook 即可，配置无需改
+
+# 是否启用扩容巡检（main.py lifespan 启动时读取）
+enabled: true
+
+# 巡检周期（秒；最小 30s，避免对 DB 造成高频查询）
+interval_seconds: 300  # 5 分钟
+
+# 冷却期（秒）：同一阈值方向告警，冷却期内不重复触发（防抖动）
+cooldown_seconds: 1800  # 30 分钟
+
+# 边数阈值（达到或超过触发）
+edges_threshold: 10000
+
+# P95 阈值（毫秒；任一 query_type 的 P95 ≥ 此值触发）
+p95_threshold_ms: 500.0
+
+# 通知接收人：role_codes 取此列表任一角色的所有用户
+notify_role_codes:
+  - admin
+
+# 通知 type（落入 soc_notifications.type 列；前端按 type 过滤）
+notification_type: graph_capacity_alert
+
+# 链接（点进通知后跳转；与 routesAlias 对齐）
+notification_link: "/#/asset/graph/perf-dashboard/index"

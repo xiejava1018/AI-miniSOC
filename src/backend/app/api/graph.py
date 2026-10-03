@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import re
+import asyncio
 from typing import Any, Optional
 from uuid import UUID
 
@@ -341,6 +342,62 @@ async def post_graph_perf_alerts_run(
     from app.services.graph.slow_query_monitor import evaluate_once
 
     result = await evaluate_once()
+    return {"code": 200, "msg": "ok", "data": result}
+
+
+# ---------------------------------------------------------------------------
+# ⑤c OH-3.8 图谱扩容触发线状态
+# ---------------------------------------------------------------------------
+
+
+@router.get("/capacity/status", summary="图谱扩容触发线状态（OH-3.8）")
+async def get_graph_capacity_status(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_role("viewer", "operator", "admin", "auditor")),
+):
+    """返回当前图谱规模 + P95 滑窗 + 阈值对比（不触发告警，只读）。
+
+    viewer+ 可读：与 perf 看板同级权限，供容量面板展示用。
+    """
+    from app.services.graph.capacity_check import (
+        evaluate_thresholds,
+        load_config,
+        probe_capacity,
+    )
+
+    cfg = load_config()
+    probe = probe_capacity(db)
+    evaluations = evaluate_thresholds(probe, cfg)
+    return {
+        "code": 200,
+        "msg": "ok",
+        "data": {
+            "probe": probe,
+            "evaluations": evaluations,
+            "thresholds": {
+                "edges_threshold": cfg.edges_threshold,
+                "p95_threshold_ms": cfg.p95_threshold_ms,
+                "interval_seconds": cfg.interval_seconds,
+                "cooldown_seconds": cfg.cooldown_seconds,
+            },
+            "enabled": cfg.enabled,
+        },
+    }
+
+
+@router.post("/capacity/run", summary="手动触发一轮扩容巡检（OH-3.8 测试 / 排障）")
+async def post_graph_capacity_run(
+    _user: User = Depends(require_role("admin", "operator")),
+):
+    """立即跑一轮 capacity_check.evaluate_once()，不等定时。
+
+    operator 限定：现场调试 + 扩容验证；admin 也可。
+    """
+    from app.services.graph.capacity_check import evaluate_once
+
+    # emit=False：端点用于排障/预览评估结果，不实际推通知/写 audit log
+    import functools as _ft
+    result = await asyncio.to_thread(_ft.partial(evaluate_once, emit=False))
     return {"code": 200, "msg": "ok", "data": result}
 
 
