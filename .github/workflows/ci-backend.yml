@@ -80,6 +80,13 @@ jobs:
         continue-on-error: true
         # 注: alembic check 当前在某些迁移上会失败（种子数据），作为 warning 继续
 
+      - name: 本体校验 (OH-1.3, blocks on error)
+        run: |
+          PYTHONPATH=src/backend python scripts/validate_ontology.py --strict
+        # 阻塞式：本体破坏 = 后续依赖全部下环，立刻拦住
+        # 本任务仅校验结构 + 必填字段 + 公理 rule/test 存在，
+        # 不校验语义（语义校验需运行 LLM，由 OH-1.7 单独任务承担）
+
       - name: 初始化测试库 schema (Base.metadata.create_all + 手工补列)
         working-directory: src/backend
         run: |
