@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-miniSOC 资产管理 AI 能力建设 · UI 原型</title>
+<style>
+  :root{
+    --c-primary:#409EFF; --c-bg:#F5F7FA; --c-panel:#fff; --c-border:#E4E7ED;
+    --c-text:#303133; --c-text2:#909399; --c-text3:#C0C4CC;
+    --c-critical:#F56C6C; --c-high:#E6A23C; --c-medium:#F0C020; --c-low:#67C23A;
+    --c-conf-high:#67C23A; --c-conf-mid:#409EFF; --c-conf-low:#C0C4CC;
+    --shadow:0 2px 12px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--c-bg);color:var(--c-text);font-size:14px}
+  .app{display:flex;min-height:100vh}
+  /* sidebar */
+  .sidebar{width:218px;background:#fff;border-right:1px solid var(--c-border);display:flex;flex-direction:column;flex-shrink:0}
+  .logo{padding:16px 18px;font-weight:700;font-size:15px;border-bottom:1px solid var(--c-border);display:flex;align-items:center;gap:8px}
+  .logo .dot{width:9px;height:9px;border-radius:50%;background:var(--c-primary)}
+  .nav{padding:8px 0;overflow:auto;flex:1}
+  .nav-group{padding:10px 14px 4px;font-size:12px;color:var(--c-text2);font-weight:600;letter-spacing:.5px}
+  .nav-item{padding:9px 16px 9px 26px;cursor:pointer;display:flex;align-items:center;gap:8px;border-left:3px solid transparent;color:var(--c-text)}
+  .nav-item:hover{background:var(--c-bg)}
+  .nav-item.active{background:#ECF5FF;border-left-color:var(--c-primary);color:var(--c-primary);font-weight:600}
+  .nav-item .tag{margin-left:auto;font-size:10px;padding:1px 6px;border-radius:8px;background:var(--c-bg);color:var(--c-text2)}
+  .nav-item .tag.new{background:#fdf0ed;color:var(--c-critical)}
+  .nav-item .tag.enh{background:#fdf6ec;color:var(--c-high)}
+  /* main */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:54px;background:#fff;border-bottom:1px solid var(--c-border);display:flex;align-items:center;padding:0 20px;gap:14px}
+  .topbar .crumb{color:var(--c-text2)}
+  .topbar .crumb b{color:var(--c-text)}
+  .topbar .sp{flex:1}
+  .topbar .btn{border:1px solid var(--c-border);background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer;color:var(--c-text)}
+  .topbar .btn.primary{background:var(--c-primary);color:#fff;border-color:var(--c-primary)}
+  .topbar .ic{width:30px;height:30px;border-radius:50%;background:var(--c-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+  .infobar{background:#ECF5FF;border-bottom:1px solid #d9ecff;color:#2d6fdb;font-size:12px;padding:6px 20px;display:flex;gap:6px;align-items:center;line-height:1.5}
+  .infobar b{color:#1f4fa8}
+  .content{padding:18px 22px;overflow:auto;flex:1}
+  .screen{display:none}
+  .screen.active{display:block}
+  .phead{display:flex;align-items:center;margin-bottom:14px;gap:10px}
+  .phead h2{font-size:18px;font-weight:600}
+  .phead .sub{color:var(--c-text2);font-size:12px}
+  .phead .sp{flex:1}
+  /* cards */
+  .card{background:var(--c-panel);border:1px solid var(--c-border);border-radius:10px;box-shadow:var(--shadow);padding:16px}
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:repeat(3,1fr)} .g4{grid-template-columns:repeat(4,1fr)}
+  .muted{color:var(--c-text2)} .small{font-size:12px}
+  .badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .b-green{background:#eef9ec;color:#529b2e} .b-blue{background:#eef4ff;color:#2d6fdb}
+  .b-gray{background:#f4f4f5;color:#909399} .b-red{background:#fef0f0;color:#cf3b3b} .b-orange{background:#fdf6ec;color:#c47a13}
+  /* rings */
+  .ringwrap{display:flex;align-items:center;gap:14px}
+  .ring{position:relative;width:78px;height:78px}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px}
+  .ringlabel{font-size:11px;color:var(--c-text2);margin-top:6px;text-align:center}
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--c-border)}
+  th{color:var(--c-text2);font-weight:600;background:#fafafa}
+  tr:hover td{background:#fcfdff}
+  .minibar{height:8px;border-radius:4px;background:#ebeef5;overflow:hidden;min-width:90px;display:inline-block}
+  .minibar i{display:block;height:100%;border-radius:4px}
+  /* graph */
+  .graphwrap{position:relative;background:#0f1b2d;border-radius:10px;overflow:hidden}
+  .graphwrap svg{display:block;width:100%;height:420px}
+  .legend{position:absolute;left:14px;bottom:14px;background:rgba(255,255,255,.92);border-radius:8px;padding:8px 12px;font-size:11px;line-height:1.8}
+  .legend i{display:inline-block;width:22px;height:0;border-top-width:3px;border-top-style:solid;vertical-align:middle;margin-right:6px}
+  .drawer{position:absolute;top:0;right:0;width:300px;height:100%;background:#fff;box-shadow:-4px 0 16px rgba(0,0,0,.18);padding:16px;display:none}
+  .drawer.show{display:block}
+  .drawer h4{margin-bottom:10px}
+  .kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--c-border)}
+  /* evidence */
+  .ev{display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--c-border)}
+  .ev .n{width:22px;height:22px;border-radius:50%;background:var(--c-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+  /* workbench */
+  .wbbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .pill{border:1px solid var(--c-border);background:#fff;border-radius:16px;padding:4px 12px;cursor:pointer}
+  .pill.on{background:var(--c-primary);color:#fff;border-color:var(--c-primary)}
+  .chk{width:16px;height:16px}
+  /* workspace */
+  .ws{display:grid;grid-template-columns:200px 1fr;gap:14px;height:calc(100vh - 160px)}
+  .ws .tools{background:#fff;border:1px solid var(--c-border);border-radius:10px;padding:10px}
+  .tool{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px}
+  .tool.on{background:#ECF5FF;color:var(--c-primary);font-weight:600}
+  .chat{background:#fff;border:1px solid var(--c-border);border-radius:10px;display:flex;flex-direction:column}
+  .chat .msgs{flex:1;padding:16px;overflow:auto}
+  .msg{padding:10px 14px;border-radius:10px;margin-bottom:12px;max-width:80%;line-height:1.6}
+  .msg.u{background:#ECF5FF;margin-left:auto}
+  .msg.a{background:#f4f4f5}
+  .chat .input{border-top:1px solid var(--c-border);padding:10px;display:flex;gap:8px}
+  .chat .input input{flex:1;border:1px solid var(--c-border);border-radius:8px;padding:8px 12px;outline:none}
+  .floatbtn{border:1px solid var(--c-border);background:#fff;border-radius:8px;padding:7px 12px;cursor:pointer}
+  .floatbtn.primary{background:var(--c-primary);color:#fff;border-color:var(--c-primary)}
+  .step{display:flex;align-items:center;gap:8px;padding:10px 0}
+  .step .dot{width:26px;height:26px;border-radius:50%;background:#ebeef5;color:var(--c-text2);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+  .step.done .dot{background:var(--c-low);color:#fff}
+  .step.cur .dot{background:var(--c-primary);color:#fff}
+  .step .ln{flex:1;height:2px;background:#ebeef5}
+  .step.done .ln{background:var(--c-low)}
+  .flagn{font-size:10px;padding:1px 6px;border-radius:8px;background:#f4f4f5;color:#909399}
+  /* ontology view */
+  .g5{grid-template-columns:repeat(5,1fr)}
+  .ont{display:grid;grid-template-columns:280px 1fr;gap:14px;align-items:start}
+  .ont .tree{background:#fff;border:1px solid var(--c-border);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow);max-height:calc(100vh - 210px);overflow:auto}
+  .tree .tnode{padding:5px 0;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px}
+  .tree .tnode:hover{color:var(--c-primary)}
+  .tree ul{list-style:none;padding-left:16px;border-left:1px dashed var(--c-border);margin-left:6px}
+  .tree .cnt{color:var(--c-text3);font-size:11px;margin-left:auto;padding-left:8px}
+  .tree .badge{margin-left:auto;font-size:10px}
+  .dimrow{display:flex;align-items:center;gap:10px;padding:7px 0}
+  .dimrow .name{width:74px;color:var(--c-text2);font-size:12px;flex-shrink:0}
+  .ci{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--c-border)}
+  .ci:last-child{border-bottom:0}
+  .ci .ico{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+  .ci .pass{background:#eef9ec;color:#529b2e} .ci .fail{background:#fef0f0;color:#cf3b3b} .ci .na{background:#f4f4f5;color:#909399}
+  .tree h4{margin:0 0 8px}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="logo"><span class="dot"></span> AI-miniSOC · 资产中心</div>
+    <div class="nav" id="nav">
+      <div class="nav-group">资产中心（已有分组 · 增强）</div>
+      <div class="nav-item active" data-s="overview">总览 <span class="tag enh">增强</span></div>
+      <div class="nav-item" data-s="list">资产列表 <span class="tag enh">增强</span></div>
+      <div class="nav-item" data-s="detail">资产详情 <span class="tag enh">增强</span></div>
+      <div class="nav-item" data-s="graph">资产图谱 <span class="tag enh">已有·攻击路径增强</span></div>
+      <div class="nav-item" data-s="bizsys">业务系统 <span class="tag enh">已有·AI增强</span></div>
+      <div class="nav-item" data-s="compliance">合规 / 定级备案 <span class="tag enh">已有·S4增强</span></div>
+      <div class="nav-item" data-s="datahealth">数据健康 <span class="tag enh">已有·完整度子卡</span></div>
+      <div class="nav-item" data-s="impact">变更影响 <span class="tag enh">已有·S11增强</span></div>
+      <div class="nav-item" data-s="recon">资产稽核 <span class="tag enh">已有·S10闭环</span></div>
+
+      <div class="nav-group">数据治理（新增分组 · 最少）</div>
+      <div class="nav-item" data-s="workbench">确认工作台 <span class="tag new">新建</span></div>
+      <div class="nav-item" data-s="ontology">本体视图 <span class="tag new">新建</span></div>
+
+      <div class="nav-group">推理分析（最少）</div>
+      <div class="nav-item" data-s="exposure">暴露面分析 <span class="tag new">新建·叠加层</span></div>
+      <div class="nav-item" data-s="attack">ATT&CK 映射 <span class="tag new">新建·叠加层</span></div>
+
+      <div class="nav-group">数字员工（新增分组）</div>
+      <div class="nav-item" data-s="workspace">工作空间 <span class="tag new">新建</span></div>
+
+      <div class="nav-group">系统管理（已有 · 增强）</div>
+      <div class="nav-item" data-s="aiasset">AI 资产视图 <span class="tag enh">并入 AI 模型管理</span></div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="crumb">资产中心 › <b id="crumb">总览</b></div>
+      <div class="sp"></div>
+      <button class="btn">🔄 刷新</button>
+      <button class="btn">⤓ 导出</button>
+      <button class="btn primary">⚙ 配置</button>
+      <div class="ic">XJ</div>
+    </div>
+    <div class="infobar">📐 <b>原型范围（v2 融合结论）</b>：以现有菜单为骨架，<b>升级已有 9 页</b> + 仅 <b>5 个真正新增</b>（确认工作台 / 数字员工工作空间 / 本体视图 / 暴露面 / ATT&CK，后两者优先做叠加层），避免重复建设。</div>
+    <div class="content">
+
+      <!-- ===== 资产图谱 ===== -->
+      <section class="screen" id="s-graph">
+        <div class="phead"><h2>资产图谱</h2><span class="sub">力导向图 · 边按置信度三档渲染 · 攻击路径高亮</span>
+          <div class="sp"></div>
+          <button class="btn">攻击路径</button><button class="btn">暴露面</button><button class="btn">仅高置信</button>
+        </div>
+        <p class="muted small" style="margin:-4px 0 12px">本页为现有 <code>asset/graph</code> 的<b>增强</b>（非新建）：复用其力导布局、置信度三档、边覆盖率与可达性引擎（<code>getVulnChokepoints</code>），仅新增「攻击路径可视化 / 暴露面+ATT&CK 叠加层 / 高置信聚焦」。不重复建设。</p>
+        <div class="grid g4" style="margin-bottom:14px">
+          <div class="card"><div class="muted small">关联资产覆盖率</div><b style="font-size:22px">62%</b> <span class="b-green">▲ 8%</span></div>
+          <div class="card"><div class="muted small">owner 填充率</div><b style="font-size:22px">41%</b> <span class="b-green">▲ 12%</span></div>
+          <div class="card"><div class="muted small">边覆盖率</div><b style="font-size:22px">58%</b></div>
+          <div class="card"><div class="muted small">无 agent 盲区</div><b style="font-size:22px;color:var(--c-critical)">9</b> <span class="b-red">台</span></div>
+        </div>
+        <div class="graphwrap">
+          <svg viewBox="0 0 900 420">
+            <!-- edges -->
+            <line x1="160" y1="120" x2="380" y2="90" stroke="#67C23A" stroke-width="3"/>
+            <line x1="380" y1="90" x2="600" y2="140" stroke="#409EFF" stroke-width="3"/>
+            <line x1="600" y1="140" x2="760" y2="250" stroke="#C0C4CC" stroke-width="2" stroke-dasharray="6 5"/>
+            <line x1="380" y1="90" x2="300" y2="300" stroke="#67C23A" stroke-width="3"/>
+            <line x1="300" y1="300" x2="560" y2="320" stroke="#409EFF" stroke-width="3"/>
+            <line x1="160" y1="120" x2="300" y2="300" stroke="#C0C4CC" stroke-width="2" stroke-dasharray="6 5"/>
+            <!-- attack path (red highlighted) -->
+            <path d="M60 60 L160 120 L380 90 L600 140 L760 250" fill="none" stroke="#F56C6C" stroke-width="4" stroke-dasharray="2 0"/>
+            <text x="110" y="48" fill="#F56C6C" font-size="11" font-weight="700">攻击路径</text>
+            <!-- nodes -->
+            <g><circle cx="60" cy="60" r="20" fill="#E6A23C"/><text x="60" y="64" font-size="10" text-anchor="middle" fill="#fff">外网</text></g>
+            <g><circle cx="160" cy="120" r="22" fill="#409EFF"/><text x="160" y="124" font-size="10" text-anchor="middle" fill="#fff">NAT</text></g>
+            <g><circle cx="380" cy="90" r="24" fill="#409EFF"/><text x="380" y="94" font-size="10" text-anchor="middle" fill="#fff">防火墙</text></g>
+            <g><circle cx="600" cy="140" r="26" fill="#67C23A"/><text x="600" y="144" font-size="10" text-anchor="middle" fill="#fff">主机</text></g>
+            <g><circle cx="760" cy="250" r="22" fill="#F56C6C"/><text x="760" y="254" font-size="10" text-anchor="middle" fill="#fff">核心库</text></g>
+            <g><circle cx="300" cy="300" r="22" fill="#909399"/><text x="300" y="304" font-size="10" text-anchor="middle" fill="#fff">终端</text></g>
+            <g><circle cx="560" cy="320" r="20" fill="#E6A23C"/><text x="560" y="324" font-size="10" text-anchor="middle" fill="#fff">业务</text></g>
+            <g><circle cx="430" cy="220" r="16" fill="#F56C6C"/><text x="430" y="224" font-size="9" text-anchor="middle" fill="#fff">漏洞</text></g>
+          </svg>
+          <div class="legend">
+            <div><i style="border-top-color:#67C23A"></i>置信度 ≥0.9 已验证</div>
+            <div><i style="border-top-color:#409EFF"></i>0.6–0.9 规则归一</div>
+            <div><i style="border-top-color:#C0C4CC"></i>&lt;0.6 推断(虚线,不入攻击路径)</div>
+            <div><i style="border-top-color:#F56C6C"></i>攻击路径</div>
+          </div>
+          <div class="drawer" id="drawer">
+            <h4>节点详情 · 主机 192.168.0.30</h4>
+            <div class="kv"><span>类型</span><span>服务器</span></div>
+            <div class="kv"><span>业务系统</span><span>CRM 系统</span></div>
+            <div class="kv"><span>责任人</span><span>张三</span></div>
+            <div class="kv"><span>AHS</span><span class="b-green">82 / 100</span></div>
+            <div class="kv"><span>关系边</span><span>23 条</span></div>
+            <div style="margin-top:12px;display:flex;gap:8px">
+              <button class="floatbtn primary">定位</button><button class="floatbtn">定责</button>
+            </div>
+          </div>
+        </div>
+        <p class="small muted" style="margin-top:10px">点击节点查看抽屉详情；「攻击路径」红色高亮外网→NAT→防火墙→主机→核心库，每跳显示置信度。</p>
+      </section>
+
+      <!-- ===== 资产详情 ===== -->
+      <section class="screen" id="s-detail">
+        <div class="phead"><h2>资产详情 · 192.168.0.30 (Wazuh SIEM)</h2>
+          <div class="sp"></div>
+          <button class="btn">编辑</button><button class="btn">确认归属</button><button class="btn">定位图谱</button>
+        </div>
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;gap:24px;flex-wrap:wrap" class="small">
+            <span>IP <b>192.168.0.30</b></span><span>类型 <b>服务器</b></span>
+            <span>OS <b>Ubuntu 22.04</b></span><span>责任人 <b>张三</b></span>
+            <span>业务系统 <b>CRM 系统</b></span><span>部门 <b>研发中心</b></span>
+            <span>暴露级别 <span class="b-orange">中</span></span>
+          </div>
+        </div>
+        <div class="grid g4" style="margin-bottom:14px">
+          <div class="card"><div class="muted small">八维完整度</div><b style="font-size:22px">88%</b></div>
+          <div class="card"><div class="muted small">AHS 资产健康分</div>
+            <div class="ringwrap"><div class="ring"><svg width="78" height="78"><circle cx="39" cy="39" r="32" stroke="#ebeef5" stroke-width="8" fill="none"/><circle cx="39" cy="39" r="32" stroke="#67C23A" stroke-width="8" fill="none" stroke-dasharray="201" stroke-dashoffset="36"/></svg><div class="val">82</div></div></div>
+          </div>
+          <div class="card"><div class="muted small">关联告警</div><b style="font-size:22px;color:var(--c-high)">48</b></div>
+          <div class="card"><div class="muted small">关系边</div><b style="font-size:22px">23</b></div>
+        </div>
+        <div class="card">
+          <h4 style="margin-bottom:12px">八维画像</h4>
+          <div class="grid g4">
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#67C23A" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="15"/></svg><div class="val" style="font-size:14px">90</div></div><div><div style="font-weight:600">①归属</div><div class="small muted">owner✓ biz✓</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#409EFF" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="30"/></svg><div class="val" style="font-size:14px">80</div></div><div><div style="font-weight:600">②重要性</div><div class="small muted">业务影响高</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#E6A23C" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="60"/></svg><div class="val" style="font-size:14px">60</div></div><div><div style="font-weight:600">③暴露</div><div class="small muted">外网可达</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#F56C6C" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="45"/></svg><div class="val" style="font-size:14px">70</div></div><div><div style="font-weight:600">④脆弱</div><div class="small muted">CVE 12 · KEV 1</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#409EFF" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="30"/></svg><div class="val" style="font-size:14px">80</div></div><div><div style="font-weight:600">⑤威胁</div><div class="small muted">告警 48</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#67C23A" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="22"/></svg><div class="val" style="font-size:14px">85</div></div><div><div style="font-weight:600">⑥合规</div><div class="small muted">等保 3 级</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#C0C4CC" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="120"/></svg><div class="val" style="font-size:14px">20</div></div><div><div style="font-weight:600">⑦行为</div><div class="small muted">H2 补齐</div></div></div>
+            <div class="ringwrap"><div class="ring"><svg width="60" height="60"><circle cx="30" cy="30" r="24" stroke="#ebeef5" stroke-width="7" fill="none"/><circle cx="30" cy="30" r="24" stroke="#67C23A" stroke-width="7" fill="none" stroke-dasharray="150" stroke-dashoffset="34"/></svg><div class="val" style="font-size:14px">78</div></div><div><div style="font-weight:600">⑧关系</div><div class="small muted">边 23</div></div></div>
+          </div>
+          <div class="card" style="margin-top:14px;background:#fafafa">
+            <div class="small muted">AHS 构成 · 重要性40% 脆弱30% 威胁20% 暴露10%（hover 出公式）</div>
+            <div style="display:flex;gap:6px;margin-top:8px">
+              <span class="minibar" style="width:40%"><i style="width:82%;background:#67C23A"></i></span>
+              <span class="minibar" style="width:30%"><i style="width:70%;background:#F56C6C"></i></span>
+              <span class="minibar" style="width:20%"><i style="width:80%;background:#409EFF"></i></span>
+              <span class="minibar" style="width:10%"><i style="width:60%;background:#E6A23C"></i></span>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h4 style="margin-bottom:10px">证据链（该资产 AI 结论可追溯）</h4>
+          <div class="ev"><span class="n">1</span><div><b>归属判定</b> owner=张三 <span class="badge b-green">置信 0.82</span><div class="small muted">来源：soc_identity_events 登录频次（root/admin 最多）</div></div></div>
+          <div class="ev"><span class="n">2</span><div><b>重要性</b> 业务影响=高 <span class="badge b-blue">置信 0.9</span><div class="small muted">来源：criticality.py 三维度 + 业务系统 crown jewel 标记</div></div></div>
+          <div class="ev"><span class="n">3</span><div><b>脆弱性</b> CVE-2024-xxxx KEV=1 <span class="badge b-red">紧急</span><div class="small muted">来源：Wazuh 持续扫描 + CISA KEV 交集</div></div></div>
+        </div>
+      </section>
+
+      <!-- ===== 确认工作台 ===== -->
+      <section class="screen" id="s-workbench">
+        <div class="phead"><h2>确认工作台</h2><span class="sub">只展示置信度 &lt;0.7 的推断候选 · 人只复核低置信项</span>
+          <div class="sp"></div>
+          <button class="btn primary">重新推断</button><button class="btn">批量确认</button><button class="btn">忽略低置信</button>
+        </div>
+        <div class="wbbar">
+          <span class="pill on">全部 23</span><span class="pill">owner 14</span><span class="pill">业务系统 7</span><span class="pill">部门 2</span>
+          <span class="pill">置信度 &lt;0.7</span><span class="pill">状态:待确认</span>
+        </div>
+        <div class="card" style="padding:0">
+          <table>
+            <thead><tr><th style="width:30px"><input type="checkbox" class="chk"></th><th>资产</th><th>属性</th><th>候选值</th><th>置信度</th><th>规则</th><th>证据</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" class="chk"></td><td>192.168.0.5</td><td>owner</td><td>张三</td><td><span class="badge b-green">0.82</span></td><td>登录频次</td><td>src_ip×12</td><td><button class="floatbtn primary">确认</button> <button class="floatbtn">修正</button></td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>192.168.0.7</td><td>业务系统</td><td>CRM 系统</td><td><span class="badge b-blue">0.65</span></td><td>主机名前缀</td><td>h-CRM-*</td><td><button class="floatbtn primary">确认</button> <button class="floatbtn">修正</button></td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>192.168.0.9</td><td>owner</td><td>李四</td><td><span class="badge b-blue">0.61</span></td><td>工单驱动</td><td>变更单#882</td><td><button class="floatbtn primary">确认</button> <button class="floatbtn">修正</button></td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>192.168.0.12</td><td>部门</td><td>研发中心</td><td><span class="badge b-gray">0.55</span></td><td>级联派生</td><td>owner=张三</td><td><button class="floatbtn primary">确认</button> <button class="floatbtn">修正</button></td></tr>
+              <tr><td><input type="checkbox" class="chk"></td><td>192.168.0.15</td><td>业务系统</td><td>OA 系统</td><td><span class="badge b-blue">0.68</span></td><td>agent 组</td><td>wazuh-grp-oa</td><td><button class="floatbtn primary">确认</button> <button class="floatbtn">修正</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="small muted">进度：已确认 <b class="b-green">15</b> / 待确认 <b>23</b> / 忽略 <b class="b-gray">2</b> ｜ 高置信(≥0.9)已自动落库，不推人复核</div>
+          <div class="minibar" style="width:100%;margin-top:8px"><i style="width:62%;background:#67C23A"></i></div>
+        </div>
+      </section>
+
+      <!-- 完整度评分卡已并入「数据健康」子 Tab（v2 融合：升级已有页，不独立成页） -->
+
+      <!-- ===== 数字员工工作空间 ===== -->
+      <section class="screen" id="s-workspace">
+        <div class="phead"><h2>数字员工工作空间</h2><span class="sub">八工具统一入口 · 每次调用返回证据链 + 置信度</span></div>
+        <div class="ws">
+          <div class="tools">
+            <div class="muted small" style="margin-bottom:6px">工具</div>
+            <div class="tool on">● 资产问答</div>
+            <div class="tool">● 融合助手</div>
+            <div class="tool">● 稽核助手</div>
+            <div class="tool">● 优先级助手</div>
+            <div class="tool">● 修复助手</div>
+            <div class="tool">● 验证助手</div>
+            <div class="muted small" style="margin:10px 0 6px">历史会话</div>
+            <div class="small muted">· 192.168.0.30 暴露面<br>· CRM 归属复核</div>
+          </div>
+          <div class="chat">
+            <div class="msgs">
+              <div class="msg u">192.168.0.30 暴露面如何？</div>
+              <div class="msg a">该资产经 NAT 映射外网可达（置信 0.92），建议优先收敛 443 端口。以下是证据链：
+                <div class="card" style="margin-top:8px;background:#fafafa">
+                  <div class="ev"><span class="n">1</span><div>NAT 映射 192.168.0.30:443 → 公网IP <span class="badge b-green">0.92</span></div></div>
+                  <div class="ev"><span class="n">2</span><div>Wazuh 规则 WZ-2043 外连告警 <span class="badge b-blue">0.88</span></div></div>
+                  <div class="ev"><span class="n">3</span><div>资产类型=服务器 + 业务=核心 <span class="badge b-green">0.90</span></div></div>
+                </div>
+              </div>
+              <div class="msg u">采纳并转工单</div>
+              <div class="msg a">已生成整改工单 #T-2043，并定位到图谱节点。</div>
+            </div>
+            <div class="input">
+              <input value="针对该暴露面生成收敛方案">
+              <button class="floatbtn primary">发送</button>
+              <button class="floatbtn">采纳</button>
+              <button class="floatbtn">转工单</button>
+              <button class="floatbtn">定位图谱</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== AI 资产视图（并入 AI 模型管理，增强示意，非独立新页） ===== -->
+      <section class="screen" id="s-aiasset">
+        <div class="phead"><h2>AI 资产视图</h2><span class="sub">并入「系统管理 › AI 模型管理」，非独立新页</span></div>
+        <div class="card">
+          <p class="muted">在已有 <code>system/ai-provider</code>（561 行，多 Provider 配置、场景路由、连接测试）基础上<strong>新增「AI 资产视图」</strong>：把模型 / Agent / MCP / Key 作为图实体展示，发现未纳管（影子）AI 调用。不新建顶层分组。</p>
+          <div class="grid g3" style="margin-top:12px">
+            <div class="card"><div class="muted small">纳管 AI 资产</div><b style="font-size:22px">37</b></div>
+            <div class="card"><div class="muted small">影子 AI 发现</div><b style="font-size:22px;color:var(--c-high)">5</b></div>
+            <div class="card"><div class="muted small">待处置</div><b style="font-size:22px;color:var(--c-critical)">3</b></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 六步整改闭环已并入「资产稽核 / 对账」升级（v2 融合：升级已有页，不独立成页） -->
+
+      <!-- ===== 资产总览（已有·增强） ===== -->
+      <section class="screen active" id="s-overview">
+        <div class="phead"><h2>资产总览</h2><span class="sub">已有页面（dashboard/console 1351 行）· 增强，非重建</span></div>
+        <div class="card">
+          <p class="muted">已有页面（含 KPI 六卡、我的待办、AI 洞察）。本次为<strong>增强</strong>而非重建：</p>
+          <ul class="small muted" style="margin:8px 0 0 18px;line-height:1.9;list-style:disc">
+            <li>右上角挂「完整度评分卡」迷你卡（关联覆盖率 / owner 填充率 / 边覆盖率 / 盲区数），点击跳数据健康页；</li>
+            <li>AI 洞察增强：覆盖率小标签 + Top 非噪声簇研判建议回显证据链；</li>
+            <li>我的待办接入确认工作台候选、整改工单、本体 CI 校验结果。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== 资产列表（已有·增强） ===== -->
+      <section class="screen" id="s-list">
+        <div class="phead"><h2>资产列表</h2><span class="sub">已有页面 · 已内嵌 S9 资产问答</span></div>
+        <div class="card">
+          <p class="muted">已有页面（已内嵌 <code>askAssetQuery</code> 问答）。增强点：</p>
+          <ul class="small muted" style="margin:8px 0 0 18px;line-height:1.9;list-style:disc">
+            <li>列增加「八维完整度%」「AHS 分」「归属状态（已归属 / 待确认 / 缺失）」；</li>
+            <li>顶部「待确认归属」一键进确认工作台；行操作「确认归属」开抽屉；</li>
+            <li>复用现有问答入口，不重建对话。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== 业务系统（已有·AI 增强） ===== -->
+      <section class="screen" id="s-bizsys">
+        <div class="phead"><h2>业务系统管理</h2><span class="sub">已有页面（499 行）· AI 增强，非重建</span></div>
+        <div class="card">
+          <p class="muted">页面已上线（<code>asset/business-system</code>，三维度重要性 CRUD）。本次为<strong>AI 增强</strong>：</p>
+          <ul class="small muted" style="margin:8px 0 0 18px;line-height:1.9;list-style:disc">
+            <li>关联资产 / 责任人<strong>自动建议</strong>（接图谱 <code>belongs_to</code>）；</li>
+            <li>三维度重要性<strong>自动建议</strong>（用 <code>criticality.py</code> 反推）；</li>
+            <li>显示该业务系统对 AHS 的贡献权重；缺失属性一键触发确认工作台。</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== 合规 / 定级备案（已有·S4 增强） ===== -->
+      <section class="screen" id="s-compliance">
+        <div class="phead"><h2>合规 / 定级备案（辅助定级）</h2><span class="sub">已有页面（931 行，已 AI 化）· S4 增强</span></div>
+        <p class="muted" style="margin:0 0 12px">页面已上线（<code>asset/compliance</code>，含 AI 整改建议 + 覆盖率/达标率同屏 + 判定证据 + 规则引擎判定）。本次接入八维⑦合规维与 <code>rated_as/filed_as</code>：</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <div class="card"><div class="muted small">已建议等保等级</div><b style="font-size:22px">23</b></div>
+          <div class="card"><div class="muted small">待人工确认</div><b style="font-size:22px;color:var(--c-primary)">7</b></div>
+          <div class="card"><div class="muted small">最高等保</div><b style="font-size:22px">三级</b></div>
+        </div>
+        <div class="card" style="padding:0">
+          <table>
+            <thead><tr><th>资产</th><th>IP</th><th>建议等保</th><th>状态</th></tr></thead>
+            <tbody>
+              <tr><td>Wazuh SIEM</td><td>192.168.0.30</td><td>三级</td><td><span class="badge b-blue">建议中</span></td></tr>
+              <tr><td>核心交换机</td><td>192.168.0.2</td><td>三级</td><td><span class="badge b-blue">建议中</span></td></tr>
+              <tr><td>OA 应用</td><td>192.168.0.50</td><td>二级</td><td><span class="badge b-green">已确认</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted" style="margin-top:10px">Phase 0 仅做辅助定级：系统只建议不裁决，建议结果走确认工作台。</p>
+      </section>
+
+      <!-- ===== 数据健康（已有·完整度子卡） ===== -->
+      <section class="screen" id="s-datahealth">
+        <div class="phead"><h2>数据健康</h2><span class="sub">已有页面（602 行）· 新增「完整度评分卡」子 Tab</span></div>
+        <p class="muted" style="margin:0 0 12px">页面已上线（源健康 / 死信 / 台账稽核三层，含 <code>confirmed</code> 确认态）。本次在页内<strong>新增「完整度评分卡」子 Tab</strong>（原独立页已并入，避免页爆炸）：</p>
+        <div class="grid g4" style="margin-bottom:14px">
+          <div class="card"><div class="muted small">业务系统归属率</div><b style="font-size:22px">62%</b><div class="minibar" style="margin-top:6px;width:100%"><i style="width:62%;background:#409EFF"></i></div></div>
+          <div class="card"><div class="muted small">owner 填充率</div><b style="font-size:22px">41%</b><div class="minibar" style="margin-top:6px;width:100%"><i style="width:41%;background:#67C23A"></i></div></div>
+          <div class="card"><div class="muted small">边覆盖率</div><b style="font-size:22px">58%</b><div class="minibar" style="margin-top:6px;width:100%"><i style="width:58%;background:#E6A23C"></i></div></div>
+          <div class="card"><div class="muted small">无 agent 盲区</div><b style="font-size:22px;color:var(--c-critical)">9</b><div class="small muted">目标 核心 0</div></div>
+        </div>
+        <div class="grid g2">
+          <div class="card"><h4>近 30 天完整度趋势</h4>
+            <svg viewBox="0 0 400 160" style="width:100%;height:160px">
+              <polyline points="0,130 40,120 80,115 120,100 160,90 200,82 240,70 280,60 320,50 360,42 400,35" fill="none" stroke="#409EFF" stroke-width="3"/>
+              <line x1="0" y1="20" x2="400" y2="20" stroke="#F56C6C" stroke-width="1.5" stroke-dasharray="4 4"/>
+              <text x="320" y="15" fill="#F56C6C" font-size="10">目标 100%</text>
+            </svg>
+          </div>
+          <div class="card"><h4>各业务系统完整度排行</h4>
+            <table><thead><tr><th>业务系统</th><th>完整度</th></tr></thead>
+            <tbody>
+              <tr><td>核心库</td><td><span class="minibar"><i style="width:90%;background:#67C23A"></i></span> 90%</td></tr>
+              <tr><td>CRM 系统</td><td><span class="minibar"><i style="width:75%;background:#409EFF"></i></span> 75%</td></tr>
+              <tr><td>OA 系统</td><td><span class="minibar"><i style="width:55%;background:#E6A23C"></i></span> 55%</td></tr>
+              <tr><td>SOC 平台</td><td><span class="minibar"><i style="width:40%;background:#F56C6C"></i></span> 40%</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== 变更影响（已有·S11 增强） ===== -->
+      <section class="screen" id="s-impact">
+        <div class="phead"><h2>变更影响预测</h2><span class="sub">已有页面（634 行）· 接入图谱拓扑</span></div>
+        <div class="card">
+          <p class="muted">页面已上线（<code>asset/impact-analysis</code>，变更前问答、AI 解读、维护窗口建议）。本次接入图谱拓扑（<code>get_impact_scope</code>），AI 解读基于真实边覆盖增强。</p>
+        </div>
+      </section>
+
+      <!-- ===== 资产稽核（已有·S10 闭环） ===== -->
+      <section class="screen" id="s-recon">
+        <div class="phead"><h2>资产稽核 / 对账</h2><span class="sub">已有页面（694 行）· S10 六步闭环载体</span></div>
+        <div class="card">
+          <p class="muted">页面已上线（<code>asset/reconciliation</code>，规则判定 + AI 稽核报告 + 可信度依据）。本次升级为整改闭环载体：</p>
+          <ul class="small muted" style="margin:8px 0 0 18px;line-height:1.9;list-style:disc">
+            <li>稽核差异 → 一键生成事件 / 工单；</li>
+            <li>六步闭环（发现→画像→定责→处置→验证→复盘）可视化；</li>
+            <li>与任务中心打通，状态可回查。</li>
+          </ul>
+          <div class="step done" style="margin-top:12px"><div class="dot">1</div>发现 <span class="small muted">告警/推断触发</span><div class="ln"></div></div>
+          <div class="step done"><div class="dot">2</div>画像 <span class="small muted">八维+AHS</span><div class="ln"></div></div>
+          <div class="step cur"><div class="dot">3</div>定责 <span class="small muted">确认工作台</span><div class="ln"></div></div>
+          <div class="step"><div class="dot">4</div>处置 <span class="small muted">工单流转</span><div class="ln"></div></div>
+          <div class="step"><div class="dot">5</div>验证 <span class="small muted">复测/reopen</span><div class="ln"></div></div>
+          <div class="step"><div class="dot">6</div>复盘 <span class="small muted">优先级反馈</span></div>
+        </div>
+      </section>
+
+      <!-- ===== 暴露面分析（真正新增·优先叠加层） ===== -->
+      <section class="screen" id="s-exposure">
+        <div class="phead"><h2>暴露面分析</h2><span class="sub">真正新增（5 之一）· 优先作为资产详情/图谱叠加层</span></div>
+        <div class="card">
+          <p class="muted">资产 / 网段对外暴露面（端口 / 服务 / 公网映射）视图。设计纪律：<strong>优先在资产详情或资产图谱内做叠加层</strong>，仅在迭代受阻时才独立成页（避免页爆炸）。</p>
+        </div>
+      </section>
+
+      <!-- ===== ATT&CK 映射（真正新增·优先叠加层） ===== -->
+      <section class="screen" id="s-attack">
+        <div class="phead"><h2>ATT&CK 映射</h2><span class="sub">真正新增（5 之一）· 优先作为图谱叠加层</span></div>
+        <div class="card">
+          <p class="muted">告警 / 漏洞 → ATT&CK 技术映射。设计纪律：<strong>优先并入资产图谱作为叠加层</strong>，仅在迭代受阻时才独立成页。</p>
+        </div>
+      </section>
+
+      <!-- ===== 本体视图（真正新增） ===== -->
+      <section class="screen" id="s-ontology">
+        <div class="phead"><h2>本体视图 / 资产对齐</h2><span class="sub">真正新增（5 之一）· 本体树 + 单资产维度对齐 + CI 校验（AOG-1）</span>
+          <div class="sp"></div>
+          <select class="btn" style="padding:6px 10px"><option>192.168.0.30 · Wazuh SIEM</option><option>192.168.0.2 · 核心交换机</option><option>192.168.0.12 · OA 应用</option><option>192.168.0.50 · 门户系统</option></select>
+          <button class="btn primary">运行 CI</button>
+        </div>
+
+        <div class="grid g5" style="margin-bottom:14px">
+          <div class="card" style="text-align:center"><div class="muted small">顶层类</div><b style="font-size:22px">5</b></div>
+          <div class="card" style="text-align:center"><div class="muted small">子模型</div><b style="font-size:22px">5</b></div>
+          <div class="card" style="text-align:center"><div class="muted small">关系</div><b style="font-size:22px">14</b></div>
+          <div class="card" style="text-align:center"><div class="muted small">公理</div><b style="font-size:22px">5</b></div>
+          <div class="card" style="text-align:center"><div class="muted small">资产对齐完整度</div><b style="font-size:22px;color:var(--c-primary)">71%</b></div>
+        </div>
+
+        <div class="ont">
+          <!-- 左：本体树 -->
+          <div class="tree">
+            <h4>本体树 · asset-ontology v1.0.0</h4>
+            <ul style="padding-left:0;border:0;margin-left:0">
+              <li><div class="tnode">📦 顶层五分法 <span class="cnt">5</span></div>
+                <ul>
+                  <li><div class="tnode">物理资产 <span class="cnt">physical-asset</span></div></li>
+                  <li><div class="tnode">数字资产 <span class="cnt">digital-asset</span></div>
+                    <ul>
+                      <li><div class="tnode">资产实例 <span class="badge b-blue">60+ 属性</span></div></li>
+                      <li><div class="tnode">资产组件 <span class="badge b-gray">planned</span></div></li>
+                    </ul>
+                  </li>
+                  <li><div class="tnode">逻辑资产 <span class="cnt">logical-asset</span></div></li>
+                  <li><div class="tnode">人员资产 <span class="cnt">person-asset</span></div></li>
+                  <li><div class="tnode">业务资产 <span class="cnt">business-asset</span></div>
+                    <ul><li><div class="tnode">业务系统 <span class="badge b-blue">live</span></div></li></ul>
+                  </li>
+                </ul>
+              </li>
+              <li><div class="tnode">🧩 子模型 <span class="cnt">5</span></div>
+                <ul>
+                  <li><div class="tnode">暴露面 <span class="badge b-blue">live</span></div></li>
+                  <li><div class="tnode">防护措施 <span class="badge b-gray">planned</span></div></li>
+                  <li><div class="tnode">AI 资产 <span class="badge b-gray">planned</span></div>
+                    <ul><li><div class="tnode">模型/数据/智能体/工具/凭据/算力 <span class="cnt">6</span></div></li></ul>
+                  </li>
+                </ul>
+              </li>
+              <li><div class="tnode">🔗 关系 <span class="cnt">14</span></div></li>
+              <li><div class="tnode">⚖️ 公理 <span class="cnt">5</span></div></li>
+            </ul>
+          </div>
+
+          <!-- 右：单资产对齐 + CI -->
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card">
+              <h4>192.168.0.30 · Wazuh SIEM — 维度对齐</h4>
+              <div class="dimrow"><span class="name">身份维</span><span class="minibar" style="flex:1"><i style="width:100%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">100%</span></div>
+              <div class="dimrow"><span class="name">归属维</span><span class="minibar" style="flex:1"><i style="width:60%;background:var(--c-high)"></i></span><span class="small muted" style="width:42px;text-align:right">60%</span></div>
+              <div class="dimrow"><span class="name">重要性</span><span class="minibar" style="flex:1"><i style="width:100%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">100%</span></div>
+              <div class="dimrow"><span class="name">技术维</span><span class="minibar" style="flex:1"><i style="width:90%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">90%</span></div>
+              <div class="dimrow"><span class="name">暴露维</span><span class="minibar" style="flex:1"><i style="width:50%;background:var(--c-high)"></i></span><span class="small muted" style="width:42px;text-align:right">50%</span></div>
+              <div class="dimrow"><span class="name">数据分级</span><span class="minibar" style="flex:1"><i style="width:100%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">100%</span></div>
+              <div class="dimrow"><span class="name">风险评分</span><span class="minibar" style="flex:1"><i style="width:80%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">80%</span></div>
+              <div class="dimrow"><span class="name">生命周期</span><span class="minibar" style="flex:1"><i style="width:100%;background:var(--c-low)"></i></span><span class="small muted" style="width:42px;text-align:right">100%</span></div>
+            </div>
+            <div class="grid g2">
+              <div class="card">
+                <h4>缺失 / 待补属性</h4>
+                <table><thead><tr><th>维度</th><th>缺失项</th><th>建议来源</th></tr></thead>
+                  <tbody>
+                    <tr><td>归属维</td><td>owner_contact</td><td>工单驱动</td></tr>
+                    <tr><td>暴露维</td><td>public_ip / exposure</td><td>TP-Link 采集</td></tr>
+                    <tr><td>技术维</td><td>mac_address</td><td>Wazuh agent</td></tr>
+                    <tr><td>—</td><td>criticality(旧)</td><td>已弃用→忽略</td></tr>
+                  </tbody></table>
+              </div>
+              <div class="card">
+                <h4>CI 校验 · validate_ontology.py</h4>
+                <div class="ci"><span class="ico pass">✓</span><div style="flex:1"><b>公理·Web 端口</b><div class="small muted">Web 服务器须开放 80/443</div></div><span class="badge b-green">通过</span></div>
+                <div class="ci"><span class="ico pass">✓</span><div style="flex:1"><b>公理·系统重要度</b><div class="small muted">业务系统等级 ≥ 资产最高</div></div><span class="badge b-green">通过</span></div>
+                <div class="ci"><span class="ico fail">✕</span><div style="flex:1"><b>公理·生产无高危</b><div class="small muted">存在 1 个未修复高危漏洞</div></div><span class="badge b-red">失败</span></div>
+                <div class="ci"><span class="ico pass">✓</span><div style="flex:1"><b>公理·持久/可变</b><div class="small muted">持久标识不可变</div></div><span class="badge b-green">通过</span></div>
+                <div class="ci"><span class="ico na">–</span><div style="flex:1"><b>公理·Agent 白名单</b><div class="small muted">依赖 MCP 网关（planned）</div></div><span class="badge b-gray">不适用</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const nav = document.getElementById('nav');
+  const crumb = document.getElementById('crumb');
+  const titles = {overview:'总览',list:'资产列表',detail:'资产详情',graph:'资产图谱',bizsys:'业务系统',compliance:'合规 / 定级备案',datahealth:'数据健康',impact:'变更影响',recon:'资产稽核',workbench:'确认工作台',ontology:'本体视图',exposure:'暴露面分析',attack:'ATT&CK 映射',workspace:'数字员工工作空间',aiasset:'AI 资产视图'};
+  nav.addEventListener('click', e=>{
+    const item = e.target.closest('.nav-item'); if(!item) return;
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    item.classList.add('active');
+    const s = item.dataset.s;
+    document.querySelectorAll('.screen').forEach(sc=>sc.classList.remove('active'));
+    const t = document.getElementById('s-'+s); if(t) t.classList.add('active');
+    crumb.textContent = titles[s]||s;
+    window.scrollTo(0,0);
+  });
+  // graph node drawer demo
+  document.querySelector('#s-graph .graphwrap svg').addEventListener('click', ()=>{
+    document.getElementById('drawer').classList.toggle('show');
+  });
+</script>
+</body>
+</html>
