@@ -258,44 +258,45 @@
         <ElTabPane label="八维画像" name="profile">
           <div class="profile-tab" v-loading="completenessLoading">
             <div v-if="completeness">
-              <!-- 顶部条：AHS + 覆盖 + 计算时间 -->
+              <!-- 顶部条：计算时间 + 刷新按钮 -->
               <div class="profile-tab__header">
+                <span v-if="completeness.computed_at" class="profile-tab__meta">
+                  计算于 {{ formatTime(completeness.computed_at) }}
+                </span>
                 <ElButton size="small" text :icon="Refresh" :loading="completenessLoading" @click="loadCompleteness">刷新</ElButton>
               </div>
 
-              <!-- AHS 健康评分 -->
-              <div class="profile-tab__ahs">
-                <div class="profile-tab__ahs-title">
-                  AHS 健康评分
-                  <ElTag
-                    :type="completeness.ahs_state === 'valid' ? 'success' : 'warning'"
-                    size="small"
-                    effect="plain"
-                    class="ml-1"
-                  >
-                    {{ ahsStateLabel(completeness.ahs_state) }}
-                  </ElTag>
-                  <span v-if="completeness.computed_at" class="profile-tab__meta">
-                    计算于 {{ formatTime(completeness.computed_at) }}
-                  </span>
+              <!-- 左 AHS 环 + 右 八维网格 -->
+              <div class="profile-tab__layout">
+                <div class="profile-tab__ahs">
+                  <div class="profile-tab__ahs-title">
+                    AHS 健康评分
+                    <ElTag
+                      :type="completeness.ahs_state === 'valid' ? 'success' : 'warning'"
+                      size="small"
+                      effect="plain"
+                      class="ml-1"
+                    >
+                      {{ ahsStateLabel(completeness.ahs_state) }}
+                    </ElTag>
+                  </div>
+                  <AHSRing
+                    :score="completeness.ahs_score"
+                    :state="completeness.ahs_state"
+                    :breakdown="ahsBreakdown"
+                    :size="200"
+                  />
                 </div>
-                <AHSRing
-                  :score="completeness.ahs_score"
-                  :state="completeness.ahs_state"
-                  :breakdown="ahsBreakdown"
-                  :size="180"
-                />
-              </div>
 
-              <!-- 八维覆盖 -->
-              <div class="profile-tab__dims">
-                <ProfileCard
-                  :dimensions="profileDimensions"
-                  :coverage-ratio="completeness.coverage?.ratio ?? 0"
-                  :profile-confidence="completeness.profile_confidence"
-                  :dim-size="86"
-                  :clickable="false"
-                />
+                <div class="profile-tab__dims">
+                  <ProfileCard
+                    :dimensions="profileDimensions"
+                    :coverage-ratio="completeness.coverage?.ratio ?? 0"
+                    :profile-confidence="completeness.profile_confidence"
+                    :dim-size="86"
+                    :clickable="false"
+                  />
+                </div>
               </div>
             </div>
             <ElEmpty v-else-if="!completenessLoading" description="画像服务暂不可用，请检查后端 OH-UI.4 接口" :image-size="60" />
@@ -1955,19 +1956,37 @@
 
       &__header {
         display: flex;
-        justify-content: flex-end;
-        margin-bottom: 12px;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      &__meta {
+        font-size: 12px;
+        color: var(--el-text-color-secondary, #606266);
+      }
+
+      &__layout {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        gap: 32px;
+        align-items: stretch;
       }
 
       &__ahs {
-        margin-bottom: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 16px;
+        background: var(--el-fill-color-blank, #fff);
+        border: 1px solid var(--el-border-color-lighter, #ebeef5);
+        border-radius: 6px;
       }
 
       &__ahs-title {
         font-size: 14px;
         font-weight: 500;
         color: var(--el-text-color-primary, #303133);
-        margin-bottom: 12px;
         display: flex;
         align-items: center;
         gap: 6px;
@@ -1977,15 +1996,14 @@
         }
       }
 
-      &__meta {
-        margin-left: auto;
-        font-size: 12px;
-        color: var(--el-text-color-secondary, #606266);
-        font-weight: normal;
-      }
-
       &__dims {
-        margin-top: 16px;
+        min-width: 0;
+      }
+    }
+
+    @media (max-width: 1280px) {
+      .profile-tab__layout {
+        grid-template-columns: 1fr !important;
       }
     }
 
