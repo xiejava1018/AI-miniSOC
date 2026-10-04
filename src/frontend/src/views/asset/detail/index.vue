@@ -726,6 +726,11 @@
           <RelationGraphTab :asset-id="assetDetail.id" />
         </ElTabPane>
 
+        <!-- 8. OH-P0.T4 统一事件时间线（PG/OpenSearch/Loki 联邦） -->
+        <ElTabPane label="事件时间线" name="timeline" lazy>
+          <TimelineTab :asset-id="assetDetail.id" />
+        </ElTabPane>
+
         <!-- 9. OH-UI.5 证据链（Session #7.1：合并入「八维画像」Tab，此处保留为跳转错位跳转错位后退 -->
         <ElTabPane label="证据链" name="evidence-chain" v-if="false" />
       </ElTabs>
@@ -887,6 +892,7 @@
   import AHSRing from './components/AHSRing.vue'
   import ProfileCard from './components/ProfileCard.vue'
   import EvidenceChainPanel from './components/EvidenceChainPanel.vue'
+  import TimelineTab from './components/TimelineTab.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
   import { getAssetRisk, getAssetRiskHistory, refreshAssetRiskSummary, getAssetSecuritySummary, type AssetRiskDetail, type SecuritySummaryResult } from '@/api/asset'
   import { overrideAssetEol, clearAssetEol } from '@/api/asset'

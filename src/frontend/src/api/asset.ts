@@ -904,6 +904,8 @@ export interface AssetCompleteness {
   coverage: AssetCoverageInfo
   /** 证据链摘要 */
   evidence_summary: AssetEvidenceSummary
+  /** OH-UI.5+ 证据链时间线（dedup_by_source 后每 ORM 表最新一条） */
+  evidence_timeline?: AssetEvidenceEntry[]
   /** 计算时间 ISO */
   computed_at: string
   /** 错误信息（仅 state=error 时有） */
@@ -1005,6 +1007,63 @@ export const getAssetCompletenessAggregate = (
   return httpClient.get({
     url: `${API_PREFIX}/completeness/aggregate`,
     params: { limit },
+    keepFullResponse: true
+  })
+}
+
+// ========== 资产统一事件时间线（OH-P0.T4 · 底座 P0） ==========
+
+/** 事件类型（对齐后端 federation.schemas.EventType） */
+export type AssetTimelineEventType =
+  | 'alert'
+  | 'log'
+  | 'change'
+  | 'vuln'
+  | 'identity'
+  | 'behavior'
+
+export interface AssetTimelineEvent {
+  event_id: string
+  ts: string
+  source: string
+  event_type: AssetTimelineEventType
+  asset_anchor: string
+  asset_id?: string | null
+  severity?: number | null
+  summary: string
+  payload: Record<string, any>
+  raw_ref: string
+}
+
+export interface AssetTimelineResponse {
+  asset_id: string
+  events: AssetTimelineEvent[]
+  next_cursor?: string | null
+  /** 各数据源状态：source key -> ok/degraded/unavailable */
+  source_status: Record<string, string>
+  coverage_note: string
+}
+
+export interface AssetTimelineParams {
+  start?: string
+  end?: string
+  types?: AssetTimelineEventType[]
+  limit?: number
+  cursor?: string
+}
+
+/** 资产统一事件时间线（后端 GET /api/v1/assets/{id}/timeline） */
+export const getAssetTimeline = (
+  assetId: string,
+  params?: AssetTimelineParams
+): Promise<Http.BaseResponse<AssetTimelineResponse>> => {
+  const { types, ...rest } = params ?? {}
+  return httpClient.get({
+    url: `${API_PREFIX}/${assetId}/timeline`,
+    params: {
+      ...rest,
+      ...(types && types.length ? { types: types.join(',') } : {})
+    },
     keepFullResponse: true
   })
 }
