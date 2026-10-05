@@ -30,6 +30,7 @@ export enum RoutesAlias {
   AssetReconciliation = '/asset/reconciliation/index', // 资产稽核（P3/F1.3）
   AssetDataHealth = '/asset/data-health/index', // 数据健康：源健康/死信/稽核三层（P3/F1.3）
   AssetGraphPerf = '/asset/graph/perf-dashboard/index', // 图谱 P95 性能看板（OH-3.6）
+  AttributionWorkbench = '/asset/attribution-workbench/index', // OH-UI.3 归属确认工作台
   SecurityReports = '/reports/list/index', // 安全报告列表/详情（P3/F2.2）
   AssetImpactAnalysis = '/asset/impact-analysis/index', // 变更影响分析（P3/F3.1）
   Incidents = '/incidents/list', // 事件管理

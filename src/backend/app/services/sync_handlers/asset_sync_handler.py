@@ -21,6 +21,7 @@ from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
 from app.services.network_segment import infer_segment
 from app.services.sync_handlers.base import BaseSyncHandler
+from app.services.attribution_service import AttributionReviewService
 from app.services.identity_fusion import score_fusion
 
 logger = logging.getLogger(__name__)
@@ -301,8 +302,10 @@ class AssetSyncHandler(BaseSyncHandler):
         # 逐个候选评分，取置信度最高者
         best = None
         best_result = None
+        scored = []
         for cand in candidates:
             res = score_fusion(item, cand)
+            scored.append((cand, res))
             if best_result is None or res.confidence > best_result.confidence:
                 best, best_result = cand, res
 
@@ -314,14 +317,25 @@ class AssetSyncHandler(BaseSyncHandler):
             return self._update_existing(best, source, item, sync_task_id, now, db, allow_ip_update=True)
 
         if best_result.decision == "needs_review":
-            # 保守安全动作：不自动新建（防重复资产），记录待复核。
-            # 持久化由 OH-UI.3 确认工作台承接。
+            # 保守安全动作：不自动新建（防重复资产），落 OH-UI.3 确认工作台
+            # 待人工裁决；同观测重复触发只 bump 计数。落表失败不应阻断同步主流程，
+            # 记 error 后仍按 skipped 处理（下一轮可再次触发）。
             logger.warning(
                 "OH-4.1 融合待复核，已暂停自动新建：观测 IP=%s ↔ 候选 %s"
                 "（confidence=%.2f，冲突因子=%s）",
                 item.get("asset_ip"), best.asset_ip,
                 best_result.confidence, best_result.conflict_factors,
             )
+            try:
+                AttributionReviewService(db).create_or_bump_review(
+                    item=item, source=source, sync_task_id=sync_task_id,
+                    candidates_scored=scored, best=(best, best_result), now=now,
+                )
+            except Exception:  # noqa: BLE001
+                logger.error(
+                    "OH-UI.3 待复核落表失败：观测 IP=%s 候选=%s",
+                    item.get("asset_ip"), best.asset_id, exc_info=True,
+                )
             return "skipped"
 
         return None

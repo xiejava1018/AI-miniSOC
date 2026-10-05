@@ -22,6 +22,7 @@ from app.api import (
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
+    attribution,
     asset_completeness,
 )
 from app.core.auth import get_current_user
@@ -99,6 +100,11 @@ include_human_router(
 )
 include_human_router(
     api_router, asset_reconciliation.router, prefix="/assets", tags=["资产对账"],
+)
+# OH-UI.3 归属确认工作台：/assets/attribution/**（静态路径，须在 assets.router
+# 的 /{asset_id} catch-all 之前注册）
+include_human_router(
+    api_router, attribution.router, prefix="/assets", tags=["归属确认"],
 )
 include_human_router(
     api_router, assets.router, prefix="/assets", tags=["资产管理"],

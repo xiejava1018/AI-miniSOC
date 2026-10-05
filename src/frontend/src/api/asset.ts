@@ -707,6 +707,95 @@ export const resolveReconciliation = (
   })
 }
 
+// --------------------------------------------------------------- OH-UI.3 确认工作台
+export type AttributionStatus = 'pending' | 'merged' | 'created' | 'dismissed'
+export type AttributionDecision = 'merge' | 'create' | 'dismiss'
+
+export interface AttributionFactorScore {
+  name: string
+  weight: number
+  present: boolean
+  match: boolean
+  a_value?: string | null
+  b_value?: string | null
+}
+
+export interface AttributionFusionScore {
+  confidence: number
+  decision: string
+  factors: AttributionFactorScore[]
+  participating_factors: string[]
+  conflict: boolean
+  conflict_factors: string[]
+}
+
+export interface AttributionCandidate {
+  asset_id: string
+  asset_ip: string
+  name?: string | null
+  score: AttributionFusionScore
+}
+
+export interface AttributionReviewItem {
+  id: string
+  status: AttributionStatus
+  review_kind: string
+  source: string
+  candidate_asset_id?: string | null
+  candidate_count: number
+  confidence?: number | null
+  conflict_factors: string[]
+  observation: Record<string, any>
+  occurrence_count: number
+  last_occurred_at?: string | null
+  resolved_by?: string | null
+  resolved_at?: string | null
+  resolve_note?: string | null
+  created_at: string
+  // 详情独有
+  best_score?: AttributionFusionScore
+  candidates?: AttributionCandidate[]
+  asset_id?: string | null
+}
+
+/** 待复核列表 */
+export const getAttributionReviews = (params: {
+  status?: AttributionStatus
+  candidate_asset_id?: string
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/attribution/reviews`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+/** 待复核详情（含全部候选评分） */
+export const getAttributionReview = (id: string): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/attribution/reviews/${id}`,
+    keepFullResponse: true
+  })
+}
+
+/** 裁决：merge（可指定候选）/ create / dismiss。重复裁决返回 409 */
+export const resolveAttributionReview = (
+  id: string,
+  data: {
+    decision: AttributionDecision
+    target_asset_id?: string
+    note?: string
+  }
+): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/attribution/reviews/${id}/resolve`,
+    data,
+    keepFullResponse: true
+  })
+}
+
 /** 数据健康总览：源健康 / 同步死信 / 稽核差异 三层聚合 */
 export const getDataHealth = (deadLetterLimit = 5): Promise<any> => {
   return httpClient.get({
