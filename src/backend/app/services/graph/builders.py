@@ -266,6 +266,7 @@ class IdentityGraphBuilder:
             "login_to_built": 0,
             "login_from_built": 0,
             "external_access_built": 0,
+            "co_login_built": 0,
             "session_on_built": 0,
             "owned_by_built": 0,
         }
@@ -300,6 +301,9 @@ class IdentityGraphBuilder:
         login_to_agg: dict[tuple[str, str], dict] = {}
         login_from_agg: dict[tuple[str, str], dict] = {}
         external_agg: dict[tuple[str, str], dict] = {}
+        # OH-3.5 身份共现：account -> 其登录过的 dst 设备（仅成功登录，
+        # 失败尝试不产生「使用」语义）
+        account_devices: dict[str, dict[str, dict]] = {}
         # 节点去重集（避免重复 ensure_node 调用，节省 N 倍 RTT）
         # 关键：同一 node_key 只能存一份（即使 type 也只能一个）
         # bug 修复 v1.6：之前用 (node_key, type) 作 dict key，导致
@@ -347,6 +351,21 @@ class IdentityGraphBuilder:
             agg["sample_ids"].append(str(e.id))
             agg["last_seen"] = max(agg["last_seen"], ts)
             agg["first_seen"] = min(agg["first_seen"], ts)
+
+            # OH-3.5：同账号登录的设备集合（只计成功；未纳管 dst 用 ip: 节点）
+            if e.success:
+                dev = account_devices.setdefault(account_node, {})
+                d = dev.get(dst_node)
+                if d is None:
+                    dev[dst_node] = {
+                        "count": 1, "sample_ids": [str(e.id)],
+                        "last_seen": ts, "first_seen": ts,
+                    }
+                else:
+                    d["count"] += 1
+                    d["sample_ids"].append(str(e.id))
+                    d["last_seen"] = max(d["last_seen"], ts)
+                    d["first_seen"] = min(d["first_seen"], ts)
 
             # login_from（src_ip → dst）—— src_ip 可能未纳管
             if e.src_ip:
@@ -416,6 +435,40 @@ class IdentityGraphBuilder:
             )
             stats["login_to_built"] += 1
         self.db.flush()
+
+        # OH-3.5：写 co_login 边（同账号登录的设备两两相连，undirected）
+        co_login_count = 0
+        for account_node, devices in account_devices.items():
+            dst_keys = list(devices.keys())
+            for i in range(len(dst_keys)):
+                for j in range(i + 1, len(dst_keys)):
+                    d1, d2 = dst_keys[i], dst_keys[j]
+                    m1, m2 = devices[d1], devices[d2]
+                    last_seen = max(m1["last_seen"], m2["last_seen"])
+                    first_seen = min(m1["first_seen"], m2["first_seen"])
+                    upsert_edge(
+                        self.db, d1, d2, "co_login",
+                        weight=1.0, confidence=0.6,
+                        direction="undirected",
+                        sources=["wazuh"],
+                        last_seen_by_source={"wazuh": last_seen.isoformat()},
+                        evidence={
+                            "table": "soc_identity_events",
+                            "account": account_node.split(":", 1)[1],
+                            "device_a_logins": m1["count"],
+                            "device_b_logins": m2["count"],
+                            "sample_ids": (m1["sample_ids"][:5] + m2["sample_ids"][:5]),
+                        },
+                        first_seen=first_seen,
+                        last_seen=last_seen,
+                        expires_at=make_expires_at("co_login", last_seen),
+                        _now=_t_now,
+                    )
+                    co_login_count += 1
+        stats["co_login_built"] = co_login_count
+        self.db.flush()
+        logger.info("IdentityGraphBuilder step1.65: %d co_login edges", co_login_count)
+
         # 写入 login_from 边
         logger.info("IdentityGraphBuilder step1.7: write %d login_from edges", len(login_from_agg))
         for i, ((src, dst), agg) in enumerate(login_from_agg.items()):

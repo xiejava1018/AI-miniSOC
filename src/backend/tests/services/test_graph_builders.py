@@ -166,6 +166,51 @@ class TestIdentityGraphBuilder:
         assert ext[0].evidence["count"] == 5
         assert len(from_internal) >= 1  # login_from 也有
 
+    def test_co_login_edges_same_account_multiple_devices(self, db_session):
+        # OH-3.5：同一账号成功登录两台设备 → co_login 无向边
+        a1 = _make_asset(db_session, "192.168.1.61")
+        a2 = _make_asset(db_session, "192.168.1.62")
+        for i, dst in enumerate(("192.168.1.61", "192.168.1.62")):
+            db_session.add(IdentityEvent(
+                es_index="wazuh-2026.01", es_doc_id=f"multi-{i}",
+                account="dave@corp", src_ip="192.168.1.5",
+                dst_ip=dst, success=True,
+                ts=datetime.now(timezone.utc) - timedelta(hours=i),
+            ))
+        db_session.commit()
+
+        stats = IdentityGraphBuilder(db_session, window_days=30).rebuild_all()
+        db_session.commit()
+
+        from app.models import GraphEdge
+        edges = db_session.query(GraphEdge).filter_by(rel_type="co_login").all()
+        assert stats["co_login_built"] == 1
+        assert len(edges) == 1
+        e = edges[0]
+        assert e.direction == "undirected"
+        assert e.evidence["account"] == "dave@corp"
+        assert e.expires_at is not None
+
+    def test_co_login_not_built_for_failed_only(self, db_session):
+        # 失败登录不产生「使用」语义 → 无 co_login 边
+        _make_asset(db_session, "192.168.1.71")
+        _make_asset(db_session, "192.168.1.72")
+        for i, dst in enumerate(("192.168.1.71", "192.168.1.72")):
+            db_session.add(IdentityEvent(
+                es_index="wazuh-2026.01", es_doc_id=f"fail-{i}",
+                account="eve@corp", src_ip="192.168.1.9",
+                dst_ip=dst, success=False,
+                ts=datetime.now(timezone.utc) - timedelta(hours=i),
+            ))
+        db_session.commit()
+
+        stats = IdentityGraphBuilder(db_session, window_days=30).rebuild_all()
+        db_session.commit()
+
+        from app.models import GraphEdge
+        assert stats["co_login_built"] == 0
+        assert db_session.query(GraphEdge).filter_by(rel_type="co_login").count() == 0
+
     def test_session_on_from_bindings(self, db_session):
         a = _make_asset(db_session, "192.168.1.50")
         db_session.add(IdentityBinding(

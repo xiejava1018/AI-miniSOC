@@ -49,6 +49,7 @@ INFERRED_TYPES = D3_TYPES
 EDGE_DECAY_DAYS: dict[str, int] = {
     "login_to": 30,
     "login_from": 30,
+    "co_login": 90,          # OH-3.5 同账号登录多设备的共现边
     "session_on": 90,
     "external_access": 7,
     "alerted_on": 90,        # 簇关闭后 90 天
