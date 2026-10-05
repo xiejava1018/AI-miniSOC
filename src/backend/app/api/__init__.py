@@ -23,6 +23,7 @@ from app.api import (
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
     attribution,
+    remediation,
     asset_completeness,
 )
 from app.core.auth import get_current_user
@@ -105,6 +106,11 @@ include_human_router(
 # 的 /{asset_id} catch-all 之前注册）
 include_human_router(
     api_router, attribution.router, prefix="/assets", tags=["归属确认"],
+)
+# OH-4.6 整改工单：/assets/remediation/**（静态路径，须在 assets.router
+# 的 /{asset_id} catch-all 之前注册）
+include_human_router(
+    api_router, remediation.router, prefix="/assets", tags=["整改工单"],
 )
 include_human_router(
     api_router, assets.router, prefix="/assets", tags=["资产管理"],
