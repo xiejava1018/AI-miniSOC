@@ -24,6 +24,8 @@ from sqlalchemy.orm import Session
 
 from app.models import Asset
 from app.models.asset_port import AssetPort
+from app.models.business_system import AssetBusiness, BusinessSystem
+from app.models.vulnerability import AssetVulnerability, Vulnerability
 
 logger = logging.getLogger(__name__)
 
@@ -360,11 +362,280 @@ def _exec_stats_group_by(db: Session, p: dict) -> dict:
     }
 
 
+def _exec_high_risk_assets(db: Session, p: dict) -> dict:
+    """按 risk_score 降序的高危资产。未评分（NULL）不参与，避免与 0 分混淆。"""
+    min_score = p.get("min_score", 0)
+    total_scored = (
+        db.query(func.count(Asset.id)).filter(Asset.risk_score.isnot(None)).scalar() or 0
+    )
+    rows = (
+        db.query(Asset)
+        .filter(Asset.risk_score.isnot(None), Asset.risk_score >= min_score)
+        .order_by(Asset.risk_score.desc())
+        .limit(MAX_RESULTS)
+        .all()
+    )
+    items = [_brief(a) for a in rows]
+    total_assets = db.query(func.count(Asset.id)).scalar() or 0
+    unscored = total_assets - total_scored
+    head = (
+        f"只看风险评分 ≥ {min_score} 的资产（已评分 {total_scored} 台）。"
+        if min_score
+        else f"按风险评分 risk_score 从高到低排列，共 {total_scored} 台已评分。"
+    )
+    notes = [head]
+    if unscored:
+        notes.append(
+            f"另有 {unscored} 台未评分（risk_score 为空），未参与排序，不代表无风险。"
+        )
+    return {
+        "assets": items,
+        "total": len(items),
+        "coverage": {
+            "total_assets": total_assets,
+            "scored": total_scored,
+            "unscored": unscored,
+        },
+        "notes": notes,
+    }
+
+
+def _exec_asset_by_business_system(db: Session, p: dict) -> dict:
+    """业务系统 → 成员资产（含角色）。先按 code 精确，再按名称模糊。"""
+    key = p["system"]
+    system = db.query(BusinessSystem).filter(BusinessSystem.code == key).first()
+    if system is None:
+        system = db.query(BusinessSystem).filter(BusinessSystem.name.ilike(f"%{key}%")).first()
+    if system is None:
+        return {
+            "assets": [],
+            "total": 0,
+            "notes": [f"未找到编码或名称匹配「{key}」的业务系统。"],
+        }
+
+    rows = (
+        db.query(Asset, AssetBusiness)
+        .join(AssetBusiness, AssetBusiness.asset_id == Asset.id)
+        .filter(AssetBusiness.system_id == system.id)
+        .order_by(Asset.risk_score.desc().nullslast())
+        .limit(MAX_RESULTS)
+        .all()
+    )
+    items = []
+    for a, link in rows:
+        it = _brief(a)
+        it["system_role"] = link.role
+        items.append(it)
+
+    member_count = (
+        db.query(func.count(AssetBusiness.asset_id))
+        .filter(AssetBusiness.system_id == system.id)
+        .scalar()
+        or 0
+    )
+    notes = [f"业务系统「{system.name}」共 {member_count} 个成员资产。"]
+    if member_count > len(items):
+        notes.append(f"结果超过 {MAX_RESULTS} 条上限，仅展示风险最高的前 {len(items)} 个。")
+    return {
+        "assets": items,
+        "total": len(items),
+        "system": {"id": str(system.id), "code": system.code, "name": system.name},
+        "coverage": {"members": member_count, "returned": len(items)},
+        "notes": notes,
+    }
+
+
+def _exec_vuln_assets(db: Session, p: dict) -> dict:
+    """存在漏洞关联的资产，可按漏洞严重度/关联状态过滤。"""
+    severity = p.get("severity")
+    status = p.get("status", "open")
+
+    q = (
+        db.query(Asset, AssetVulnerability, Vulnerability)
+        .join(AssetVulnerability, AssetVulnerability.asset_id == Asset.id)
+        .join(Vulnerability, Vulnerability.id == AssetVulnerability.vulnerability_id)
+        .filter(AssetVulnerability.status == status)
+    )
+    if severity:
+        q = q.filter(Vulnerability.severity == severity)
+    q = q.order_by(Asset.risk_score.desc().nullslast(), AssetVulnerability.detected_at.desc())
+    rows = q.limit(MAX_RESULTS).all()
+
+    # 同一资产可能有多条命中：聚合到资产项下
+    by_asset: dict = {}
+    for a, av, vuln in rows:
+        it = by_asset.get(str(a.id))
+        if it is None:
+            it = _brief(a)
+            it["vulnerabilities"] = []
+            by_asset[str(a.id)] = it
+        it["vulnerabilities"].append(
+            {
+                "cve_id": vuln.cve_id,
+                "severity": vuln.severity,
+                "status": av.status,
+                "detected_at": av.detected_at.isoformat() if av.detected_at else None,
+            }
+        )
+    items = list(by_asset.values())
+
+    # 总量口径（不受 MAX_RESULTS 影响）
+    count_q = (
+        db.query(func.count(func.distinct(AssetVulnerability.asset_id)))
+        .filter(AssetVulnerability.status == status)
+    )
+    if severity:
+        count_q = count_q.join(
+            Vulnerability, Vulnerability.id == AssetVulnerability.vulnerability_id
+        ).filter(Vulnerability.severity == severity)
+    affected_total = count_q.scalar() or 0
+
+    sev_txt = severity or "任意严重度"
+    notes = [f"漏洞状态={status}、严重度={sev_txt}，共 {affected_total} 台资产命中。"]
+    return {
+        "assets": items,
+        "total": len(items),
+        "coverage": {"affected_assets": affected_total, "returned": len(items)},
+        "notes": notes,
+    }
+
+
+def _exec_assets_by_owner(db: Session, p: dict) -> dict:
+    """按责任人姓名模糊查资产。owner 为空的资产不计入。"""
+    owner = p["owner"]
+    total_assets = db.query(func.count(Asset.id)).scalar() or 0
+    rows = (
+        db.query(Asset)
+        .filter(Asset.owner.isnot(None), Asset.owner.ilike(f"%{owner}%"))
+        .order_by(Asset.risk_score.desc().nullslast())
+        .limit(MAX_RESULTS)
+        .all()
+    )
+    items = [_brief(a) for a in rows]
+    with_owner = db.query(func.count(Asset.id)).filter(Asset.owner.isnot(None)).scalar() or 0
+    missing_owner = total_assets - with_owner
+    notes = [f"责任人匹配「{owner}」，共 {len(items)} 台。"]
+    if missing_owner:
+        notes.append(f"另有 {missing_owner} 台资产未填责任人，无法按人检索。")
+    return {
+        "assets": items,
+        "total": len(items),
+        "coverage": {
+            "total_assets": total_assets,
+            "with_owner": with_owner,
+            "missing_owner": missing_owner,
+        },
+        "notes": notes,
+    }
+
+
+def _exec_eol_assets(db: Session, p: dict) -> dict:
+    """已过期 + within_days 内将到期（expected_eol）。无 EOL 数据的资产计入缺失。"""
+    within_days = p.get("within_days", 90)
+    today = datetime.now(timezone.utc).date()
+    horizon = today + timedelta(days=within_days)
+
+    total_assets = db.query(func.count(Asset.id)).scalar() or 0
+    with_eol = (
+        db.query(func.count(Asset.id)).filter(Asset.expected_eol.isnot(None)).scalar() or 0
+    )
+    rows = (
+        db.query(Asset)
+        .filter(Asset.expected_eol.isnot(None), Asset.expected_eol <= horizon)
+        .order_by(Asset.expected_eol.asc())
+        .limit(MAX_RESULTS)
+        .all()
+    )
+    items = []
+    expired = 0
+    for a in rows:
+        it = _brief(a)
+        days_left = (a.expected_eol - today).days
+        it["expected_eol"] = a.expected_eol.isoformat()
+        it["eol_days_left"] = days_left
+        it["eol_state"] = "expired" if days_left < 0 else "within"
+        if days_left < 0:
+            expired += 1
+        items.append(it)
+
+    missing_eol = total_assets - with_eol
+    notes = [f"已过期 {expired} 台，另有未来 {within_days} 天内到期；合计 {len(items)} 台。"]
+    if missing_eol:
+        notes.append(f"另有 {missing_eol} 台资产没有 expected_eol 数据，无法判定。")
+    return {
+        "assets": items,
+        "total": len(items),
+        "coverage": {
+            "total_assets": total_assets,
+            "with_eol": with_eol,
+            "missing_eol": missing_eol,
+        },
+        "notes": notes,
+    }
+
+
+def _exec_port_count_by_asset(db: Session, p: dict) -> dict:
+    """按资产聚合开放端口数（仅计 state=open），从多到少排列。"""
+    min_ports = p.get("min_ports", 1)
+    total_assets = db.query(func.count(Asset.id)).scalar() or 0
+    rows = (
+        db.query(
+            AssetPort.asset_id,
+            func.count(AssetPort.id).label("port_num"),
+        )
+        .filter(AssetPort.state == "open")
+        .group_by(AssetPort.asset_id)
+        .having(func.count(AssetPort.id) >= min_ports)
+        .subquery()
+    )
+    q = (
+        db.query(Asset, rows.c.port_num)
+        .join(rows, rows.c.asset_id == Asset.id)
+        .order_by(rows.c.port_num.desc(), Asset.risk_score.desc().nullslast())
+        .limit(MAX_RESULTS)
+        .all()
+    )
+    items = []
+    for a, port_num in q:
+        it = _brief(a)
+        it["open_port_count"] = port_num
+        items.append(it)
+
+    with_ports = (
+        db.query(func.count(func.distinct(AssetPort.asset_id)))
+        .filter(AssetPort.state == "open")
+        .scalar()
+        or 0
+    )
+    no_ports = total_assets - with_ports
+    notes = [f"按开放端口数从多到少排列（阈值 ≥ {min_ports}），共 {len(items)} 台。"]
+    if no_ports > 0:
+        notes.append(
+            f"另有 {no_ports} 台资产没有开放端口记录（可能未扫描，不代表零暴露）。"
+        )
+    return {
+        "assets": items,
+        "total": len(items),
+        "coverage": {
+            "total_assets": total_assets,
+            "with_open_ports": with_ports,
+            "no_port_record": no_ports,
+        },
+        "notes": notes,
+    }
+
+
 _EXECUTORS = {
     "port_open": _exec_port_open,
     "offline_since": _exec_offline_since,
     "asset_recent_alerts": _exec_asset_recent_alerts,
     "stats_group_by": _exec_stats_group_by,
+    "high_risk_assets": _exec_high_risk_assets,
+    "asset_by_business_system": _exec_asset_by_business_system,
+    "vuln_assets": _exec_vuln_assets,
+    "assets_by_owner": _exec_assets_by_owner,
+    "eol_assets": _exec_eol_assets,
+    "port_count_by_asset": _exec_port_count_by_asset,
 }
 
 

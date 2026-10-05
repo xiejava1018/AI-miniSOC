@@ -30,7 +30,7 @@
 # ============================================================================
 
 # 模板库版本：任何模板的语义变更都要递增（结果落库时记录，便于回溯）
-templates_version: 1
+templates_version: 2
 
 # param 支持的类型（校验器白名单，见 query_templates.py 的 _COERCERS）
 # int / str / enum(choices) / date / days(int + 上限)
@@ -135,6 +135,107 @@ templates:
       - 各种资产类型各有多少台？
       - 按重要性分组看看
 
+  # ── 5. 高危资产（按风险分排序）──────────────────────────────────────────
+  - id: high_risk_assets
+    name: 高危资产查询
+    description: 按风险评分（risk_score，0-100 越高越危险）列出当前最危险的资产，可只看超过指定分数线的。适用于"哪些资产风险最高""当前最该处理的机器"。
+    params:
+      min_score:
+        type: int
+        required: false
+        min: 0
+        max: 100
+        default: 0
+        desc: 风险评分下限（只返回不低于该分的资产）
+    examples:
+      - 当前风险最高的资产有哪些？
+      - 列出风险评分超过 80 的资产
+      - 现在最该优先处理哪几台机器？
+
+  # ── 6. 业务系统下的资产 ─────────────────────────────────────────────────
+  - id: asset_by_business_system
+    name: 业务系统资产查询
+    description: 查询归属某业务系统的全部资产（含在系统中的角色）。适用于"SOC 平台包含哪些服务器"。
+    params:
+      system:
+        type: str
+        required: true
+        max_length: 100
+        desc: 业务系统名称或编码（支持名称模糊匹配）
+    examples:
+      - SOC 平台这个业务系统下有哪些资产？
+      - 属于 OA 系统的服务器都有谁？
+      - soc-platform 包含哪些机器？
+
+  # ── 7. 含漏洞的资产 ─────────────────────────────────────────────────────
+  - id: vuln_assets
+    name: 漏洞资产查询
+    description: 查询存在未修复漏洞的资产，可按漏洞严重度或修复状态过滤。适用于"哪些机器有严重漏洞"。
+    params:
+      severity:
+        type: enum
+        required: false
+        choices: [critical, high, medium, low]
+        desc: 只看该严重度的漏洞
+      status:
+        type: enum
+        required: false
+        choices: [open, in_progress, fixed]
+        default: open
+        desc: 关联状态（默认只看未修复 open）
+    examples:
+      - 哪些资产存在严重（critical）漏洞？
+      - 还有哪些高危漏洞没修？
+      - 列出当前有未修复漏洞的机器
+
+  # ── 8. 按责任人查资产 ───────────────────────────────────────────────────
+  - id: assets_by_owner
+    name: 责任人资产查询
+    description: 查询指定责任人名下的资产。适用于"张三负责哪些机器"。
+    params:
+      owner:
+        type: str
+        required: true
+        max_length: 100
+        desc: 责任人姓名（模糊匹配）
+    examples:
+      - 张三负责哪些资产？
+      - 李四名下有几台机器？
+
+  # ── 9. 即将过保 / 已过保（EOL）──────────────────────────────────────────
+  - id: eol_assets
+    name: 过保资产查询
+    description: 查询已过保或将在指定天数内到期（expected_eol）的资产。适用于"哪些设备快到生命周期了"。
+    params:
+      within_days:
+        type: days
+        required: false
+        min: 0
+        max: 3650
+        default: 90
+        desc: 未来多少天内到期（始终包含已过期资产）
+    examples:
+      - 哪些设备已经过保了？
+      - 未来 3 个月哪些资产要到期？
+      - 快到 EOL 的服务器有哪些？
+
+  # ── 10. 资产开放端口数（暴露面排序）─────────────────────────────────────
+  - id: port_count_by_asset
+    name: 资产端口数统计
+    description: 统计每台资产开放的端口数量并从多到少排列，用于暴露面排序。适用于"谁对外暴露的端口最多"。
+    params:
+      min_ports:
+        type: int
+        required: false
+        min: 1
+        max: 65535
+        default: 1
+        desc: 只返回开放端口数不低于该值的资产
+    examples:
+      - 哪些资产开放的端口最多？
+      - 开放端口超过 10 个的机器
+      - 按暴露端口数给资产排序
+
 # ── 不在 L2 范围内（诚实边界）────────────────────────────────────────────
 # 以下问题两层都答不了，intent=unsupported 直接告知，不要编造：
 #   - 漏洞/补丁状态："哪些机器没打补丁" —— 无补丁数据源
@@ -148,4 +249,10 @@ unsupported_hint: |
   【掉线设备】掉线超过 7 天的设备有哪些？
   【资产告警】192.168.0.30 最近有什么告警？
   【分组统计】按操作系统统计资产数量
-  暂不支持：补丁/漏洞状态（无数据源）、多条件叠加的复合查询、网络拓扑关系。
+  【高危资产】当前风险最高的几台机器
+  【业务系统】SOC 平台下有哪些资产？
+  【漏洞资产】哪些机器有未修复的严重漏洞？
+  【责任人】张三负责哪些资产？
+  【过保资产】未来 3 个月哪些设备到期？
+  【端口统计】谁开放的端口最多？
+  暂不支持：补丁状态（无数据源）、多条件叠加的复合查询、网络拓扑关系、趋势预测。
