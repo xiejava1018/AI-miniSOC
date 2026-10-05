@@ -8,6 +8,7 @@ from app.mcp.tools import (
     asset_extra_tools,
     asset_audit,
     asset_fusion,
+    asset_priority,
     asset_query_v2,
     asset_tools,
     auth_tools,
@@ -29,6 +30,7 @@ def register_all(mcp) -> None:
     asset_query_v2.register(mcp)  # OH-5.2 资产问答·本体驱动版
     asset_fusion.register(mcp)  # OH-5.3 融合助手（列表/详情/裁决）
     asset_audit.register(mcp)  # OH-5.4 稽核助手（定级/覆盖率/数据健康/对账）
+    asset_priority.register(mcp)  # OH-5.5 优先级助手（降级版）
     alert_tools.register(mcp)
     incident_tools.register(mcp)
     ai_tools.register(mcp)
