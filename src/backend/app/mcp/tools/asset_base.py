@@ -40,7 +40,7 @@ _TYPE_MAP: Dict[str, str] = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass
 class ToolResult:
     """资产域工具统一返回。MCP 会将其序列化为 JSON。"""
 
@@ -104,10 +104,11 @@ def schema_for_class(
             required.append(attr_id)
 
     if extra:
-        for name, spec in extra.items():
-            properties[name] = dict(spec)
+        for name, raw_spec in extra.items():
+            spec = dict(raw_spec)
             if spec.pop("__required", False):
                 required.append(name)
+            properties[name] = spec
 
     return {
         "type": "object",
