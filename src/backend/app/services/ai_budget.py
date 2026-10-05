@@ -60,8 +60,8 @@ class AIBudget:
             # 2) QPS（最小间隔）
             if now - self._last_call_ts < MIN_INTERVAL_SECONDS:
                 self.total_rejected += 1
-                logger.debug("AI 调用被 QPS 拦截：间隔 %.2fs < %.2fs",
-                             now - self._last_call_ts, MIN_INTERVAL_SECONDS)
+                logger.warning("AI 调用被 QPS 拦截：间隔 %.2fs < %.2fs",
+                               now - self._last_call_ts, MIN_INTERVAL_SECONDS)
                 return False
             # 3) 单日上限
             today = date.today()

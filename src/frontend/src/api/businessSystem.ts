@@ -159,3 +159,60 @@ export function unlinkAssetFromBusinessSystem(assetId: string, systemId: string)
     url: `${BS_BASE}/assets/${assetId}/systems/${systemId}`
   })
 }
+
+// ==================== OH-4.12/OH-UI.11 定级稽核 ====================
+
+export interface RatingFinding {
+  system_id: string
+  system_name: string
+  rating_status: 'unrated' | 'suggested' | 'confirmed' | string
+  kind: 'unrated' | 'pending' | 'divergence' | 'member_exceeds_system' | string
+  message: string
+  members?: Array<{ asset_id: string; name: string; protection_level: string }>
+}
+
+export interface RatingAuditResult {
+  total_systems: number
+  distribution: { unrated: number; suggested: number; confirmed: number }
+  suggestion_coverage: number
+  confirmed_rate: number
+  findings: RatingFinding[]
+  finding_count: number
+  red_line: string
+}
+
+export interface RatingGapResult {
+  system: {
+    id: string
+    code: string
+    name: string
+    rating_status: string
+    confirmed_level?: string | null
+    suggested_level?: string | null
+    suggestion_basis?: Record<string, any> | null
+    confirmed_by?: string | null
+    confirmed_at?: string | null
+  }
+  member_summary: {
+    count: number
+    level_sources: { inherited: number; manual: number; none: number }
+    highest_member?: { name: string; protection_level?: string | null } | null
+  }
+  gap: 'confirmed_below_suggested' | 'confirmed_above_suggested' | 'aligned' | null
+  consistency: 'ok' | 'member_exceeds_system'
+  red_line: string
+}
+
+/** S4 定级稽核总览（只读） */
+export function getRatingAudit() {
+  return request.get<RatingAuditResult>({
+    url: `${BS_BASE}/rating-audit`
+  })
+}
+
+/** 单系统定级差距分析 */
+export function getRatingGap(systemId: string) {
+  return request.get<RatingGapResult>({
+    url: `${BS_BASE}/${systemId}/rating-gap`
+  })
+}
