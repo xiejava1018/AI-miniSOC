@@ -479,3 +479,35 @@ class TestEdgeCases:
 
     def test_min_covered_dimensions_constant(self):
         assert AHS_MIN_COVERED_DIMENSIONS == 3
+
+class TestComplianceS4Rating:
+    """OH-2.7 — AHS 合规维含 S4 等保稽核因子。"""
+
+    def test_unrated_system_adds_score(self):
+        from app.services.asset_profile._main import (
+            AssetCompliance, AssetProfile,
+        )
+        from app.services.asset_profile.ahs_service import _score_compliance
+
+        p = AssetProfile(asset_id=None, compliance=AssetCompliance(
+            protection_level="level_2", protection_level_source="inherited",
+            system_rating_status="unrated", rated_system_count=2,
+        ))
+        d = _score_compliance(p)
+        assert d.raw_score == 10
+        assert any("未定级" in f for f in d.contributing_factors)
+        assert any("等保=level_2" in f for f in d.contributing_factors)
+
+    def test_confirmed_system_no_penalty(self):
+        from app.services.asset_profile._main import (
+            AssetCompliance, AssetProfile,
+        )
+        from app.services.asset_profile.ahs_service import _score_compliance
+
+        p = AssetProfile(asset_id=None, compliance=AssetCompliance(
+            protection_level="level_3", protection_level_source="inherited",
+            system_rating_status="confirmed", rated_system_count=1,
+        ))
+        d = _score_compliance(p)
+        assert d.raw_score == 0  # 已确认不罚分
+        assert any("等保=level_3" in f for f in d.contributing_factors)

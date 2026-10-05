@@ -166,6 +166,11 @@ class AssetCompliance:
     compliance_unknown_count: int = 0
     last_compliance_run_at: Optional[datetime] = None
     ruleset_version: Optional[str] = None
+    # === S4 Phase 0 等保定级接入（OH-2.7）===
+    protection_level: Optional[str] = None            # 资产等保等级 level_1~5
+    protection_level_source: Optional[str] = None     # inherited/manual
+    system_rating_status: Optional[str] = None        # 所属系统定级状态（取最落后）
+    rated_system_count: int = 0                       # 挂靠业务系统数
     evidence: List[EvidenceItem] = field(default_factory=list)
 
 
@@ -320,6 +325,9 @@ def _has_meaningful_data(dim_name: str, dim_obj: Any) -> bool:
             or dim_obj.compliance_pass_count > 0
             or dim_obj.compliance_fail_count > 0
             or dim_obj.compliance_unknown_count > 0
+            # OH-2.7：有等保定级/所属系统也算有效（⑦维点亮条件扩展）
+            or dim_obj.protection_level is not None
+            or dim_obj.rated_system_count > 0
         )
     if dim_name == "behavior":
         return bool(dim_obj.profile_date)

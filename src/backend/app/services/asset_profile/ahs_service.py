@@ -297,6 +297,20 @@ def _score_compliance(profile: AssetProfile) -> DimensionScore:
         score += cls_score // 2  # 半权（无具体稽核结果时保守）
         factors.append(f"数据分级={comp.data_classification}（无具体稽核，半权）")
 
+    # === S4 等保定级稽核（OH-2.7）：等级信息入因子，未定级系统轻量计分 ===
+    if comp.protection_level:
+        factors.append(
+            f"等保={comp.protection_level}({comp.protection_level_source or 'manual'})"
+        )
+    if comp.rated_system_count and comp.system_rating_status == "unrated":
+        score += 10
+        factors.append(
+            f"{comp.rated_system_count} 个所属系统未定级（等保稽核缺口）"
+        )
+    elif comp.rated_system_count and comp.system_rating_status == "suggested":
+        factors.append("所属系统有定级建议待人工确认")
+    # 无所属系统/已确认 → 不计分不放大（数据缺失不是异常证据）
+
     score = max(0, min(100, score))
     if not data_gap and not factors:
         factors.append("合规数据全空，取中性值")

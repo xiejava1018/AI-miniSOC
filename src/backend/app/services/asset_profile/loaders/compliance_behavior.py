@@ -44,6 +44,23 @@ def load_compliance(db: Session, asset: Asset) -> AssetCompliance:
 
     evidence = [orm_evidence(db, asset, source="soc_compliance_findings")]
 
+    # === S4 Phase 0 等保定级接入（OH-2.7）：资产等级 + 所属系统定级状态 ===
+    # 系统定级状态取「最落后」（unrated < suggested < confirmed）——
+    # 稽核视角下只要有未定级系统就暴露。
+    from app.models.business_system import AssetBusiness, BusinessSystem
+    _RANK = {"unrated": 0, "suggested": 1, "confirmed": 2}
+    sys_rows = db.execute(
+        select(BusinessSystem.rating_status)
+        .join(AssetBusiness, AssetBusiness.system_id == BusinessSystem.id)
+        .where(AssetBusiness.asset_id == asset.id)
+    ).all()
+    rated_system_count = len(sys_rows)
+    system_rating_status = None
+    if sys_rows:
+        statuses = [r[0] or "unrated" for r in sys_rows]
+        system_rating_status = min(statuses, key=lambda s: _RANK.get(s, 0))
+        evidence.append(orm_evidence(db, asset, source="soc_business_systems"))
+
     return AssetCompliance(
         data_classification=asset.data_classification,
         compliance_pass_count=counts.get("pass", 0),
@@ -51,6 +68,10 @@ def load_compliance(db: Session, asset: Asset) -> AssetCompliance:
         compliance_unknown_count=counts.get("unknown", 0),
         last_compliance_run_at=latest_checked,
         ruleset_version=None,  # ComplianceFinding 无该字段
+        protection_level=asset.protection_level,
+        protection_level_source=asset.protection_level_source,
+        system_rating_status=system_rating_status,
+        rated_system_count=rated_system_count,
         evidence=evidence,
     )
 

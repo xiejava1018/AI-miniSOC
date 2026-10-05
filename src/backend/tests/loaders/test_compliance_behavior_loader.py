@@ -66,3 +66,38 @@ class TestLoadBehavior:
         result = load_behavior(db_session, sample_asset_for_profile)
         assert len(result.evidence) >= 1
         assert result.evidence[0].source == "soc_behavior_profiles"
+
+class TestComplianceS4Rating:
+    """OH-2.7 — ⑦ 合规维 S4 等保定级接入。"""
+
+    def test_no_system_defaults(self, db_session, minimal_asset):
+        result = load_compliance(db_session, minimal_asset)
+        assert result.rated_system_count == 0
+        assert result.system_rating_status is None
+        # 资产默认等级 level_2/manual（模型 default）
+        assert result.protection_level == "level_2"
+        assert result.protection_level_source == "manual"
+
+    def test_system_rating_weakest_wins(self, db_session, minimal_asset):
+        from app.models.business_system import (
+            AssetBusiness, BusinessSystem,
+        )
+        s1 = BusinessSystem(code="c1", name="confirmed-sys",
+                            business_impact="medium", data_sensitivity="medium",
+                            rating_status="confirmed", protection_level="level_3")
+        s2 = BusinessSystem(code="c2", name="unrated-sys",
+                            business_impact="medium", data_sensitivity="medium")
+        db_session.add_all([s1, s2])
+        db_session.flush()
+        db_session.add_all([
+            AssetBusiness(asset_id=minimal_asset.id, system_id=s1.id, role="app"),
+            AssetBusiness(asset_id=minimal_asset.id, system_id=s2.id, role="db"),
+        ])
+        db_session.commit()
+
+        result = load_compliance(db_session, minimal_asset)
+        assert result.rated_system_count == 2
+        assert result.system_rating_status == "unrated"  # 最落后者
+        # 有系统关联 → evidence 含 soc_business_systems
+        sources = {e.source for e in result.evidence}
+        assert "soc_business_systems" in sources
