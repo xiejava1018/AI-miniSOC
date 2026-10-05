@@ -311,7 +311,7 @@ class AssetSyncHandler(BaseSyncHandler):
                 "OH-4.1 身份融合自动合并：观测 IP=%s → 资产 %s（confidence=%.2f）",
                 item.get("asset_ip"), best.asset_ip, best_result.confidence,
             )
-            return self._update_existing(best, source, item, sync_task_id, now, db)
+            return self._update_existing(best, source, item, sync_task_id, now, db, allow_ip_update=True)
 
         if best_result.decision == "needs_review":
             # 保守安全动作：不自动新建（防重复资产），记录待复核。
@@ -360,8 +360,16 @@ class AssetSyncHandler(BaseSyncHandler):
         logger.debug(f"创建资产: {item.get('asset_ip')}")
         return "created"
 
-    def _update_existing(self, asset: Asset, source: str, item: dict, sync_task_id, now: datetime, db: Session) -> str:
+    def _update_existing(self, asset: Asset, source: str, item: dict, sync_task_id, now: datetime, db: Session, allow_ip_update: bool = False) -> str:
         changed_fields = []
+
+        # OH-4.1 融合合并：身份证据（MAC/agent）一致但 IP 漂移时，允许同步 IP。
+        if allow_ip_update:
+            new_ip = item.get("asset_ip")
+            if new_ip and str(new_ip) != str(asset.asset_ip):
+                old_ip = str(asset.asset_ip)
+                asset.asset_ip = new_ip
+                changed_fields.append(("asset_ip", old_ip, str(new_ip)))
 
         for field in _UPDATABLE_FIELDS:
             new_value = item.get(field)

@@ -63,6 +63,9 @@ DEFAULT_WEIGHTS = FactorWeights()
 
 # 强物理因子：双方有值却不一致时触发冲突压制
 _STRONG_FACTORS = ("mac", "hardware")
+# 强匹配因子（对称正向）：信号一致时容忍弱信号（IP）不一致。
+# 含 wazuh_agent——管理面唯一 ID（模型有唯一索引），一致即强同一证据。
+_STRONG_MATCH_FACTORS = ("mac", "hardware", "wazuh_agent")
 
 # 判定阈值（默认值；调用方可覆盖）
 AUTO_MERGE_THRESHOLD_DEFAULT = 0.80
@@ -272,8 +275,8 @@ def score_fusion(
             weight_sum += wmap[name]
             if match:
                 matched_weight += wmap[name]
-                if name in _STRONG_FACTORS:
-                    # 强物理因子一致 → 正向强证据
+                if name in _STRONG_MATCH_FACTORS:
+                    # 强因子一致 → 正向强证据
                     strong_matches.append(name)
             elif name in _STRONG_FACTORS and wmap[name] > 0:
                 # 强物理因子双方有值却不一致且权重非零 → 冲突
