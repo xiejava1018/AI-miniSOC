@@ -248,6 +248,7 @@ def score_fusion(
     factors: List[FactorScore] = []
     participating: List[str] = []
     conflicts: List[str] = []
+    strong_matches: List[str] = []
     weight_sum = 0.0
     matched_weight = 0.0
 
@@ -271,8 +272,11 @@ def score_fusion(
             weight_sum += wmap[name]
             if match:
                 matched_weight += wmap[name]
-            elif name in _STRONG_FACTORS:
-                # 强物理因子双方有值却不一致 → 冲突
+                if name in _STRONG_FACTORS:
+                    # 强物理因子一致 → 正向强证据
+                    strong_matches.append(name)
+            elif name in _STRONG_FACTORS and wmap[name] > 0:
+                # 强物理因子双方有值却不一致且权重非零 → 冲突
                 conflicts.append(name)
 
     # 在参与因子间重归一化；无任何共同信号 → confidence=0（无法判断）
@@ -285,6 +289,10 @@ def score_fusion(
     if conflict:
         # 直接把自动合并门槛抬到不可达
         effective_auto = 1.0001
+    elif strong_matches:
+        # 对称规则：强物理证据一致（同一网卡/主板）时，弱信号不一致
+        # （IP 漂移、改名）不应拦截自动合并——门槛降至复核线
+        effective_auto = review_threshold
 
     if confidence >= effective_auto:
         decision = "auto_merge"
