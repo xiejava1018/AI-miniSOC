@@ -21,6 +21,7 @@ from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
 from app.services.network_segment import infer_segment
 from app.services.sync_handlers.base import BaseSyncHandler
+from app.services.identity_fusion import score_fusion
 
 logger = logging.getLogger(__name__)
 
@@ -256,8 +257,75 @@ class AssetSyncHandler(BaseSyncHandler):
 
         if existing:
             return self._update_existing(existing, source, item, sync_task_id, now, db)
-        else:
-            return self._create_new(source, item, sync_task_id, now, db)
+
+        # OH-4.1：IP 未命中，不立刻新建——先按其他身份信号（MAC/wazuh agent/主机名）
+        # 查候选并做融合判定，避免 DHCP 漂移/改名场景下产生重复资产。
+        fused = self._try_identity_fusion(item, source, sync_task_id, now, db)
+        if fused is not None:
+            return fused
+
+        return self._create_new(source, item, sync_task_id, now, db)
+
+    def _find_fusion_candidates(self, item: dict, db: Session) -> list:
+        """按非 IP 身份信号查候选资产（MAC / wazuh agent / 主机名）。"""
+        q = db.query(Asset)
+        conditions = []
+        mac = item.get("mac_address")
+        if mac:
+            conditions.append(Asset.mac_address == mac)
+        agent_id = item.get("wazuh_agent_id")
+        if agent_id:
+            conditions.append(Asset.wazuh_agent_id == str(agent_id))
+        hostname = item.get("name")
+        if hostname:
+            conditions.append(Asset.name == hostname)
+        if not conditions:
+            return []
+        from sqlalchemy import or_
+        return q.filter(or_(*conditions)).limit(20).all()
+
+    def _try_identity_fusion(
+        self, item: dict, source: str, sync_task_id, now: datetime, db: Session
+    ) -> Optional[str]:
+        """身份信号融合判定。
+
+        返回：
+            "updated"  —— auto_merge，已合并到候选资产；
+            "skipped"  —— needs_review，保守不新建（记录日志，待确认工作台）；
+            None       —— distinct/无候选，调用方走新建。
+        """
+        candidates = self._find_fusion_candidates(item, db)
+        if not candidates:
+            return None
+
+        # 逐个候选评分，取置信度最高者
+        best = None
+        best_result = None
+        for cand in candidates:
+            res = score_fusion(item, cand)
+            if best_result is None or res.confidence > best_result.confidence:
+                best, best_result = cand, res
+
+        if best_result.decision == "auto_merge":
+            logger.info(
+                "OH-4.1 身份融合自动合并：观测 IP=%s → 资产 %s（confidence=%.2f）",
+                item.get("asset_ip"), best.asset_ip, best_result.confidence,
+            )
+            return self._update_existing(best, source, item, sync_task_id, now, db)
+
+        if best_result.decision == "needs_review":
+            # 保守安全动作：不自动新建（防重复资产），记录待复核。
+            # 持久化由 OH-UI.3 确认工作台承接。
+            logger.warning(
+                "OH-4.1 融合待复核，已暂停自动新建：观测 IP=%s ↔ 候选 %s"
+                "（confidence=%.2f，冲突因子=%s）",
+                item.get("asset_ip"), best.asset_ip,
+                best_result.confidence, best_result.conflict_factors,
+            )
+            return "skipped"
+
+        return None
+
 
     def _create_new(self, source: str, item: dict, sync_task_id, now: datetime, db: Session) -> str:
         # 新建资产的 segment：显式上报优先，否则按环境事实表推断（不再硬编码 'default'）
