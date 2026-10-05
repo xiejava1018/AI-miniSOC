@@ -20,7 +20,7 @@
 | [行为画像 / 上网行为](#行为画像--上网行为) | 3 | 两层结构、L1 主体列表首屏、入口跳转 |
 | [资产扫描 / scanner](#资产扫描--scanner) | 1 | Phase 1+2 全量落地、ScanFinding UUID、X-API-Key 鉴权 |
 | [AI / LLM / F2.x](#ai--llm--f2x) | 4 | L2 复合查询、变更影响分析、报告生成、W0 评测集 |
-| [配置中心](#配置中心) | 3 | 数据源走 DB、配置审计合并、过期文档评审 |
+| [配置中心](#配置中心) | 4 | 数据源走 DB、配置审计合并、过期文档评审、admin 菜单授权缺失修复 |
 | [业务系统管理](#业务系统管理) | 4 | F9 CRUD、菜单、对齐角色页、负责人/部门/电话 |
 | [资产字段 / 数据模型](#资产字段--数据模型) | 2 | network_zone 5→8 值改造、merge 双 head、字典 seed + backfill 脚本、生产 alembic 落后事故救援 |
 | [告警分级 / 风险评分](#告警分级--风险评分) | 3 | alert_levels 全项目唯一、Top 10 D7 vs F1.1 口径澄清、rising 修复 |
@@ -82,6 +82,7 @@
 
 - **2026-09-11：配置中心设计文档评审修订 + CLAUDE.md 过期记载清理** (L1805–1852) — 推翻 D5「不走 Alembic」前提错误；§6.5 菜单 SQL 6 处错误重写；约定 C11/C12
 - **2026-09-12：配置中心 v1 上线 + Wazuh/OpenSearch 走 DB** (L1914–1970) — 本地 testdb 补 migrate；生产 102 手动 git reset + migrate；3a 写 3 个数据源到 soc_data_sources；3b .env 数据源键标记废弃；3c 11 个后端调用点迁移到 resolver
+- **2026-10-06：admin 角色菜单授权补齐 — 三层根因 + 三库隔离本质**（[`2026-10-06-admin-menu-grants-backfill.md`](2026-10-06-admin-menu-grants-backfill.md)）— d2e3f4g5h6i7 静默 0 行（CLAUDE.md §4.3 红线 2）+ i4j5k6l7m8n9 改 parent 不补授权 + t3u4v5w6x7y8 / b6c7d8e9f0a1 dev 端授权 SQL 静默；新迁移 j6a7b8c9d0e1 走 JOIN path + NOT EXISTS 幂等补全 6 项；dev 顶级菜单 10 → 11；生产 102 验证 admin 已正常；BigSerial 三库 ID 不一致是预期；B 路径（追 head 同步）排期不阻塞
 
 ## 业务系统管理
 

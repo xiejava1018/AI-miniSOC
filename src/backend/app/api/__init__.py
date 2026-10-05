@@ -23,7 +23,7 @@ from app.api import (
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
     attribution,
-    remediation,
+    remediation, identity_ueba,
     asset_completeness,
 )
 from app.core.auth import get_current_user
@@ -111,6 +111,10 @@ include_human_router(
 # 的 /{asset_id} catch-all 之前注册）
 include_human_router(
     api_router, remediation.router, prefix="/assets", tags=["整改工单"],
+)
+# OH-2.8 行为维 UEBA：/assets/ueba/**（静态两段，须在 catch-all 前）
+include_human_router(
+    api_router, identity_ueba.router, prefix="/assets", tags=["行为 UEBA"],
 )
 include_human_router(
     api_router, assets.router, prefix="/assets", tags=["资产管理"],

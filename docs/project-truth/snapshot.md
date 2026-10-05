@@ -1,17 +1,17 @@
 # 项目硬事实快照
 
-> **自动生成于 2026-09-15 02:58 UTC** by `scripts/sync_claude_md_truth.py`
+> **自动生成于 2026-10-05 14:21 UTC** by `scripts/sync_claude_md_truth.py`
 > 不要手改——下次跑脚本会被覆盖。发现过期请修脚本或修源数据。
 
 ## 数据库
 
-- **业务表总数**: `66`（全部 `soc_` 前缀）
+- **业务表总数**: `68`（全部 `soc_` 前缀）
 - **非 soc_ 前缀的表**: 无
-- **alembic 迁移文件数**: `63`
+- **alembic 迁移文件数**: `74`
 
 ## Alembic heads
 
-- 单 head: `628109e83308`（线性 OK）
+- 单 head: `j6a7b8c9d0e1`（线性 OK）
 
 ## 顶级菜单（按 sort_order）
 

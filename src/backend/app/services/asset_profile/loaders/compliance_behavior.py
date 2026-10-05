@@ -81,6 +81,10 @@ def load_behavior(db: Session, asset: Asset) -> AssetBehavior:
 
     evidence = [orm_evidence(db, asset, source="soc_behavior_profiles")]
 
+    # OH-2.8：UEBA 异常评分（纯函数，无额外查询）
+    from app.services.identity_ueba import score_behavior_anomaly
+    ueba = score_behavior_anomaly(row, asset_type=asset.asset_type)
+
     return AssetBehavior(
         profile_date=str(row.profile_date) if row.profile_date else None,
         traffic_type=row.traffic_type,
@@ -89,5 +93,7 @@ def load_behavior(db: Session, asset: Asset) -> AssetBehavior:
         top_domain_count=top_domain_count,
         tags=tag_names,
         layer_visit=row.layer_visit or {},
+        anomaly_score=ueba.get("anomaly_score"),
+        anomaly_signals=ueba.get("signals") or [],
         evidence=evidence,
     )

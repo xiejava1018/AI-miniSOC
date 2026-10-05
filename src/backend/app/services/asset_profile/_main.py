@@ -183,6 +183,9 @@ class AssetBehavior:
     top_domain_count: int = 0                      # top_domains 数组长度
     tags: List[str] = field(default_factory=list)  # 画像标签名
     layer_visit: Dict[str, float] = field(default_factory=dict)  # ACT/SYS/AD 占比
+    # OH-2.8 UEBA 异常评分（0-100；None=无数据不判异常）
+    anomaly_score: Optional[int] = None
+    anomaly_signals: List[Dict[str, Any]] = field(default_factory=list)
     evidence: List[EvidenceItem] = field(default_factory=list)
 
 
