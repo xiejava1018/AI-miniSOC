@@ -115,6 +115,33 @@ async def get_coverage_kpi(
     }
 
 
+@router.get("/rating-audit")
+async def get_rating_audit(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """S4 定级稽核总览（OH-4.12）：状态分布 + 发现列表 + 建议覆盖率 KPI。
+
+    红线：系统只建议不裁决，本端点只读。
+    """
+    from app.services.rating_audit import audit
+    return audit(db)
+
+
+@router.get("/{system_id}/rating-gap")
+async def get_rating_gap(
+    system_id: str,
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """单系统定级差距分析（OH-4.12）：确认 vs 建议 vs 成员等级分布。"""
+    from app.services.rating_audit import gap_analysis
+    try:
+        return gap_analysis(db, system_id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 # ----------------------- 业务系统 CRUD -----------------------
 
 

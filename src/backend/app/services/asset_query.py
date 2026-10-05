@@ -134,7 +134,7 @@ class AssetQueryService:
                 context=f"此前对话上下文（可继承其中的筛选条件）：{context}\n" if context else "",
                 question=question,
             )
-            content = ai_chat(prompt, scene="asset_query", temperature=0.1)
+            content = ai_chat(prompt, scene="asset_query", temperature=0.1, db=self.db)
             parsed = _extract_json(content)
             if not parsed:
                 return {"level": "L1", "intent": "unsupported", "params": {}}
@@ -253,7 +253,7 @@ class AssetQueryService:
                 f"用户问题：{question}\n查询结果（{n} 台）：\n{rows}\n"
                 "用一两句中文总结结果（总数 + 值得注意的点，如高危系统版本、离线设备），不超过60字，不要寒暄。"
             )
-            text = ai_chat(prompt, scene="asset_query", temperature=0.3)
+            text = ai_chat(prompt, scene="asset_query", temperature=0.3, db=self.db)
             return text or template
         except Exception as e:
             ai_budget.record_failure()
@@ -475,7 +475,7 @@ class AssetQueryService:
                 "两者是不同的量，绝不得混用或互相替代；\n"
                 "3) 不要寒暄，不要重复参数原文。"
             )
-            text = ai_chat(prompt, scene="asset_query", temperature=0.3)
+            text = ai_chat(prompt, scene="asset_query", temperature=0.3, db=self.db)
             return text or template
         except Exception as e:
             ai_budget.record_failure()
