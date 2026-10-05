@@ -317,3 +317,159 @@ def score_fusion(
 def should_auto_merge(result: FusionResult) -> bool:
     """便于调用方的语义判定。"""
     return result.decision == "auto_merge"
+
+
+# =========================================================================
+# OH-3.2 单资产身份可信度评分（Identity Trust）
+# =========================================================================
+#
+# 与 OH-3.1 的区别：
+#   OH-3.1 是 pairwise——"两条观测是否同一实体"；
+#   OH-3.2 是 single-asset——"这个已存在资产的身份有多可信"，
+#          作为一等评分项，不达阈值不入推理层。
+#
+# 三个构成维度：
+#   coverage      身份因子覆盖广度（5 因子加权覆盖）
+#   corroboration 多源佐证（被几个独立来源观测到；单源未经佐证）
+#   strength      强身份锚（wazuh agent / MAC / 硬件指纹）
+#
+# 核心安全语义：单源 + 仅弱信号（IP/主机名）拿不到 trusted。
+
+# 因子在"身份可信度"语境下的覆盖权重（强 ID 更能锚定身份）
+_TRUST_FACTOR_WEIGHTS = {
+    "ip": 0.15,
+    "mac": 0.25,
+    "hostname": 0.10,
+    "wazuh_agent": 0.30,
+    "hardware": 0.20,
+}
+_STRONG_TRUST_FACTORS = ("wazuh_agent", "mac", "hardware")
+
+# 多源佐证：不同有效来源数 → 佐证分
+#   0 源（异常）=0；1 源=0.45（未经独立佐证）；2 源=0.8；3+源=1.0
+_CORROBORATION_BY_SOURCES = {0: 0.0, 1: 0.45, 2: 0.8, 3: 1.0}
+
+# 合成权重：coverage / corroboration / strength
+TRUST_W_COVERAGE = 0.40
+TRUST_W_CORROBORATION = 0.35
+TRUST_W_STRENGTH = 0.25
+
+# 分档阈值
+TRUSTED_THRESHOLD_DEFAULT = 0.80
+TENTATIVE_THRESHOLD_DEFAULT = 0.40
+
+
+@dataclass(frozen=True)
+class IdentityTrustResult:
+    """单资产身份可信度评分结果。"""
+
+    identity_confidence: float
+    tier: str               # trusted / tentative / unverified
+    coverage_score: float
+    corroboration_score: float
+    strength_score: float
+    factors_present: List[str]
+    strong_anchors: List[str]
+    source_count: int
+    eligible_for_reasoning: bool
+    trusted_threshold: float
+    tentative_threshold: float
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "identity_confidence": round(self.identity_confidence, 4),
+            "tier": self.tier,
+            "coverage_score": round(self.coverage_score, 4),
+            "corroboration_score": round(self.corroboration_score, 4),
+            "strength_score": round(self.strength_score, 4),
+            "factors_present": self.factors_present,
+            "strong_anchors": self.strong_anchors,
+            "source_count": self.source_count,
+            "eligible_for_reasoning": self.eligible_for_reasoning,
+            "trusted_threshold": self.trusted_threshold,
+            "tentative_threshold": self.tentative_threshold,
+        }
+
+
+def score_identity_trust(
+    asset: Any,
+    *,
+    sources: Optional[List[Any]] = None,
+    trusted_threshold: float = TRUSTED_THRESHOLD_DEFAULT,
+    tentative_threshold: float = TENTATIVE_THRESHOLD_DEFAULT,
+) -> IdentityTrustResult:
+    """评估单个资产的身份可信度。
+
+    参数：
+        asset: 资产记录（dict 或对象），含身份信号字段。
+        sources: 可选的该资产来源列表（AssetSource 对象/dict），
+                 用于多源佐证；不传则按单一来源处理。
+        trusted_threshold: 可入推理层的置信度线。
+        tentative_threshold: 入图谱但结论降权的最低线。
+    """
+    if asset is None:
+        raise FusionError("身份可信度评分需要资产记录")
+    if not (0.0 <= tentative_threshold <= trusted_threshold <= 1.0):
+        raise FusionError("阈值需满足 0 ≤ tentative ≤ trusted ≤ 1")
+
+    # --- coverage：因子加权覆盖 ---
+    present: List[str] = []
+    coverage_sum = 0.0
+    for name, w in _TRUST_FACTOR_WEIGHTS.items():
+        val = _extract(asset, name)
+        if val is not None:
+            present.append(name)
+            coverage_sum += w
+    # 权重和为 1，coverage 即加权覆盖度
+    coverage_score = min(1.0, coverage_sum)
+
+    # --- strength：强身份锚 ---
+    strong = [n for n in _STRONG_TRUST_FACTORS
+              if _extract(asset, n) is not None]
+    # 至少一个强锚给基础分，多个略提；clamp
+    strength_score = 0.0 if not strong else min(1.0, 0.6 + 0.2 * (len(strong) - 1))
+
+    # --- corroboration：多源佐证 ---
+    source_count = 0
+    if sources is not None:
+        # 去重（按 source 名），防止同一来源多条记录虚高
+        distinct = set()
+        for s in sources:
+            key = s.get("source") if isinstance(s, dict) else getattr(s, "source", None)
+            if key:
+                distinct.add(str(key))
+        source_count = len(distinct)
+    else:
+        # 未提供来源列表：资产至少有主数据源 → 单源
+        source_count = 1
+    corroboration_score = _CORROBORATION_BY_SOURCES.get(
+        min(source_count, 3), 1.0
+    )
+
+    # --- 合成 ---
+    identity_confidence = (
+        coverage_score * TRUST_W_COVERAGE
+        + corroboration_score * TRUST_W_CORROBORATION
+        + strength_score * TRUST_W_STRENGTH
+    )
+
+    if identity_confidence >= trusted_threshold:
+        tier = "trusted"
+    elif identity_confidence >= tentative_threshold:
+        tier = "tentative"
+    else:
+        tier = "unverified"
+
+    return IdentityTrustResult(
+        identity_confidence=identity_confidence,
+        tier=tier,
+        coverage_score=coverage_score,
+        corroboration_score=corroboration_score,
+        strength_score=strength_score,
+        factors_present=present,
+        strong_anchors=strong,
+        source_count=source_count,
+        eligible_for_reasoning=(tier == "trusted"),
+        trusted_threshold=trusted_threshold,
+        tentative_threshold=tentative_threshold,
+    )
