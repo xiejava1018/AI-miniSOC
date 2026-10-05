@@ -189,6 +189,7 @@
     getAlertAttackChain,
     getAlertList,
     type AlertItem,
+    type AttackTechnique,
     type AttackChainResult
   } from '@/api/alert'
 
@@ -215,7 +216,7 @@
   const tacticLabel = (t: string) => TACTIC_LABELS[t] || t
 
   const groupedTechniques = computed(() => {
-    const g: Record<string, typeof chain.value.techniques> = {}
+    const g: Record<string, AttackTechnique[]> = {}
     for (const t of chain.value?.techniques || []) {
       ;(g[t.tactic] = g[t.tactic] || []).push(t)
     }
@@ -240,7 +241,7 @@
     alertsLoading.value = true
     try {
       const res = await getAlertList({ page: 1, page_size: 30 })
-      alerts.value = (res?.data?.alerts || res?.data?.items || []) as any
+      alerts.value = (res?.data?.items || []) as any
     } catch (e: any) {
       ElMessage.error(e?.message || '加载告警列表失败')
     } finally {

@@ -111,6 +111,8 @@ def ai_chat(
         with httpx.Client(verify=cfg.get("verify_ssl", False), timeout=timeout) as client:
             resp = client.post(f"{base_url}/chat/completions", headers=headers, json=body)
     except httpx.HTTPError as e:
+        logger.error("AI 请求失败 scene=%s model=%s endpoint=%s err=%s",
+                     scene, model, base_url, e, exc_info=True)
         if _budget:
             from app.services.ai_budget import ai_budget
 
@@ -118,6 +120,10 @@ def ai_chat(
         raise AIClientError(f"AI 请求失败: {e}") from e
 
     if resp.status_code != 200:
+        logger.warning(
+            "AI 返回非 200 scene=%s model=%s endpoint=%s status=%s body[:300]=%s",
+            scene, model, base_url, resp.status_code, resp.text[:300],
+        )
         if _budget:
             from app.services.ai_budget import ai_budget
 
@@ -131,6 +137,8 @@ def ai_chat(
         data = resp.json()
         text = (data["choices"][0]["message"]["content"] or "").strip()
     except Exception as e:
+        logger.error("AI 响应解析失败 scene=%s model=%s body[:300]=%s err=%s",
+                     scene, model, resp.text[:300] if 'resp' in dir() else '', e, exc_info=True)
         raise AIClientError(f"AI 响应解析失败: {e}") from e
 
     if _budget:

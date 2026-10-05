@@ -890,7 +890,7 @@
   import MetricCard from './components/MetricCard.vue'
   import RelationGraphTab from './components/RelationGraphTab.vue'
   import AHSRing from './components/AHSRing.vue'
-  import ProfileCard from './components/ProfileCard.vue'
+  import ProfileCard, { type DimensionInfo } from './components/ProfileCard.vue'
   import EvidenceChainPanel from './components/EvidenceChainPanel.vue'
   import TimelineTab from './components/TimelineTab.vue'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
@@ -1773,9 +1773,9 @@
     const c = completeness.value
     if (!c) return []
     return Object.entries(c.dimensions || {}).map(([key, info]) => ({
-      key: key as any,
+      key: key as DimensionInfo['key'],
       label: DIMENSION_LABELS[key] || key,
-      status: !info.evidence_count ? 'missing' : (info.confidence >= 0.8 ? 'covered' : 'partial'),
+      status: (!info.evidence_count ? 'missing' : (info.confidence >= 0.8 ? 'covered' : 'partial')) as DimensionInfo['status'],
       evidence_count: info.evidence_count || 0,
       confidence: info.confidence || 0
     }))

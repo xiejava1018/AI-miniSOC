@@ -15,15 +15,15 @@
       <!-- 摘要条 -->
       <div class="evidence-panel__summary">
         <div class="summary-item">
-          <div class="summary-item__num">{{ summary.total_evidence }}</div>
+          <div class="summary-item__num">{{ summary?.total_evidence ?? 0 }}</div>
           <div class="summary-item__label">总证据</div>
         </div>
         <div class="summary-item">
-          <div class="summary-item__num">{{ summary.sources?.length ?? 0 }}</div>
+          <div class="summary-item__num">{{ summary?.sources?.length ?? 0 }}</div>
           <div class="summary-item__label">数据来源</div>
         </div>
         <div class="summary-item">
-          <div class="summary-item__num">{{ summary.dimensions?.length ?? 0 }}/8</div>
+          <div class="summary-item__num">{{ summary?.dimensions?.length ?? 0 }}/8</div>
           <div class="summary-item__label">覆盖维度</div>
         </div>
         <div class="summary-item">
@@ -32,12 +32,12 @@
         </div>
         <div class="summary-item summary-item--wide">
           <div class="summary-item__num summary-item__num--sm">
-            {{ formatTimeRange(summary.earliest_observed_at, summary.latest_observed_at) }}
+            {{ formatTimeRange(summary?.earliest_observed_at, summary?.latest_observed_at) }}
           </div>
           <div class="summary-item__label">
             观测时间跨
-            <span v-if="summary.timespan_hours != null">
-              ({{ formatTimespan(summary.timespan_hours) }})
+            <span v-if="summary?.timespan_hours != null">
+              ({{ formatTimespan(summary?.timespan_hours!) }})
             </span>
           </div>
         </div>
@@ -48,7 +48,7 @@
         <div class="tag-row">
           <span class="tag-row__title">来源：</span>
           <ElTag
-            v-for="s in (summary.sources || [])"
+            v-for="s in (summary?.sources || [])"
             :key="s"
             size="small"
             type="info"
@@ -60,7 +60,7 @@
         <div class="tag-row">
           <span class="tag-row__title">维度：</span>
           <ElTag
-            v-for="d in (summary.dimensions || [])"
+            v-for="d in (summary?.dimensions || [])"
             :key="d"
             size="small"
             :type="dimTagType(d)"
@@ -257,9 +257,9 @@ function formatTime(iso: string | null | undefined): string {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}`
 }
 
-function formatTimeRange(from: string | null, to: string | null): string {
+function formatTimeRange(from?: string | null, to?: string | null): string {
   if (!from && !to) return '—'
-  const fmt = (s: string | null) => (s ? formatTime(s).slice(0, 10) : '—')
+  const fmt = (s?: string | null) => (s ? formatTime(s).slice(0, 10) : '—')
   return `${fmt(from)} → ${fmt(to)}`
 }
 

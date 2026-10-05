@@ -100,8 +100,10 @@ class TestAssetPortVulnBuilder:
         assert len(has_vuln) >= 1
         assert any(e.confidence == 1.0 for e in has_vuln)
         # port_has_vuln 通过 vulnerabilities JSONB 匹配 CVE-2023-44487
+        # 注：confidence 列是 Numeric，返回 Decimal；与 float 0.9 直接 == 会因
+        # 二进制不可精确表示而恒 False（Decimal('0.900') == 0.9 → False）
         assert len(port_has_vuln) >= 1
-        assert any(e.confidence == 0.9 for e in port_has_vuln)
+        assert any(float(e.confidence) == 0.9 for e in port_has_vuln)
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +263,7 @@ class TestTopologyBuilder:
         from app.models import GraphEdge
         edges = db_session.query(GraphEdge).filter_by(rel_type="shared_tag").all()
         assert stats["shared_tag_built"] >= 1
-        assert all(e.confidence == 0.4 for e in edges)
+        assert all(float(e.confidence) == 0.4 for e in edges)
 
 
 # ---------------------------------------------------------------------------

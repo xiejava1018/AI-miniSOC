@@ -48,6 +48,10 @@ class AIBudget:
             if self._circuit_opened_at is not None:
                 if now - self._circuit_opened_at < CIRCUIT_OPEN_SECONDS:
                     self.total_rejected += 1
+                    logger.warning(
+                        "AI 调用被熔断拦截：circuit 还剩 %ds (10min 窗口)",
+                        int(CIRCUIT_OPEN_SECONDS - (now - self._circuit_opened_at)),
+                    )
                     return False
                 # 熔断恢复
                 logger.info("AI 熔断恢复，重新放行")
@@ -56,6 +60,8 @@ class AIBudget:
             # 2) QPS（最小间隔）
             if now - self._last_call_ts < MIN_INTERVAL_SECONDS:
                 self.total_rejected += 1
+                logger.debug("AI 调用被 QPS 拦截：间隔 %.2fs < %.2fs",
+                             now - self._last_call_ts, MIN_INTERVAL_SECONDS)
                 return False
             # 3) 单日上限
             today = date.today()
@@ -64,6 +70,10 @@ class AIBudget:
                 self._daily_count = 0
             if self._daily_count >= DAILY_CAP:
                 self.total_rejected += 1
+                logger.warning(
+                    "AI 调用被 DAILY_CAP=%d 拦截：今日已用 %d 次",
+                    DAILY_CAP, self._daily_count,
+                )
                 return False
             # 放行
             self._last_call_ts = now
