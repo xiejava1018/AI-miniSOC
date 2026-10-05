@@ -12,6 +12,7 @@ from app.mcp.tools import (
     asset_query_v2,
     asset_remediation,
     asset_tools,
+    asset_verify,
     auth_tools,
     dict_tools,
     incident_tools,
@@ -33,6 +34,7 @@ def register_all(mcp) -> None:
     asset_audit.register(mcp)  # OH-5.4 稽核助手（定级/覆盖率/数据健康/对账）
     asset_priority.register(mcp)  # OH-5.5 优先级助手（降级版）
     asset_remediation.register(mcp)  # OH-5.6 修复助手（工单查/派/流转）
+    asset_verify.register(mcp)  # OH-5.7 验证助手（降级版：回单质检+验证结论）
     alert_tools.register(mcp)
     incident_tools.register(mcp)
     ai_tools.register(mcp)
