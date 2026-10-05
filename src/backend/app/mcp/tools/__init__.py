@@ -6,6 +6,7 @@ from app.mcp.tools import (
     ai_tools,
     alert_tools,
     asset_extra_tools,
+    asset_fusion,
     asset_query_v2,
     asset_tools,
     auth_tools,
@@ -25,6 +26,7 @@ def register_all(mcp) -> None:
     asset_tools.register(mcp)
     asset_extra_tools.register(mcp)  # 资产补充：端口 / 数据源 / 概览
     asset_query_v2.register(mcp)  # OH-5.2 资产问答·本体驱动版
+    asset_fusion.register(mcp)  # OH-5.3 融合助手（列表/详情/裁决）
     alert_tools.register(mcp)
     incident_tools.register(mcp)
     ai_tools.register(mcp)
