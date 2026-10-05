@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
 from app.core.database import get_db
+from app.api.deps import get_current_user
+from app.core.permissions import require_role
+from app.models.user import User
 from app.services.alert_query import AlertQueryService
 from app.services.alert_sla import AlertSlaService
 
@@ -220,6 +223,34 @@ async def get_top_alert_assets(
         return {"assets": assets}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询Top资产失败: {str(e)}")
+
+
+@router.get("/{alert_id}/attack-chain")
+async def get_alert_attack_chain(
+    alert_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """告警 → ATT&CK 技战术 → 资产 → 业务系统（OH-4.4 · S6）。
+
+    未映射的告警 mapped=false（不伪造技战术）；目录种子见
+    configs/attack_patterns.yaml，POST /alerts/attack-mappings/sync 重同步。
+    """
+    from app.services import attack_mapping
+    try:
+        return attack_mapping.attack_chain(db, alert_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/attack-mappings/sync")
+async def sync_attack_mappings(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operator")),
+):
+    """从 configs/attack_patterns.yaml 重同步 ATT&CK 目录与映射（manual 不覆盖）。"""
+    from app.services import attack_mapping
+    return attack_mapping.sync_from_yaml(db)
 
 
 @router.get("/{alert_id}")

@@ -1,0 +1,145 @@
+# ATT&CK 技战术目录 + Wazuh 规则映射（OH-4.4 · S6）
+#
+# 【定位】离线种子（替代 STIX feed——现网无外联 ATT&CK feed 通路）。
+# 技战术条目对应 MITRE ATT&CK Enterprise v14（只收录现网 Wazuh 规则
+# 覆盖得到的子集，按需增补；technique_id 保持官方编号）。
+#
+# 【映射纪律】
+# - rule_id 精确匹配 Wazuh rule id；rule_groups 按 Wazuh 规则组前缀匹配
+#   （如 sshd/auth 集群），命中即视为该技战术的证据
+# - confidence：精确 id 匹配 0.9；组前缀匹配 0.6；未命中不映射（宁缺勿错）
+# - 人工修订（manual_override=true 的 mapping）优先于默认，且不被 sync 覆盖
+
+version: 1
+
+tactics:
+  - id: TA0001
+    name: Initial Access
+  - id: TA0002
+    name: Execution
+  - id: TA0003
+    name: Persistence
+  - id: TA0004
+    name: Privilege Escalation
+  - id: TA0005
+    name: Defense Evasion
+  - id: TA0006
+    name: Credential Access
+  - id: TA0007
+    name: Discovery
+  - id: TA0008
+    name: Lateral Movement
+
+techniques:
+  - technique_id: T1110
+    name: Brute Force
+    tactic: TA0006
+    url: https://attack.mitre.org/techniques/T1110/
+  - technique_id: T1110.001
+    name: Password Guessing
+    tactic: TA0006
+    url: https://attack.mitre.org/techniques/T1110/001/
+  - technique_id: T1595
+    name: Active Scanning
+    tactic: TA0043
+    url: https://attack.mitre.org/techniques/T1595/
+  - technique_id: T1190
+    name: Exploit Public-Facing Application
+    tactic: TA0001
+    url: https://attack.mitre.org/techniques/T1190/
+  - technique_id: T1059
+    name: Command and Scripting Interpreter
+    tactic: TA0002
+    url: https://attack.mitre.org/techniques/T1059/
+  - technique_id: T1059.004
+    name: Unix Shell
+    tactic: TA0002
+    url: https://attack.mitre.org/techniques/T1059/004/
+  - technique_id: T1548
+    name: Abuse Elevation Control Mechanism
+    tactic: TA0004
+    url: https://attack.mitre.org/techniques/T1548/
+  - technique_id: T1548.003
+    name: Sudo and Sudo Caching
+    tactic: TA0004
+    url: https://attack.mitre.org/techniques/T1548/003/
+  - technique_id: T1068
+    name: Exploitation for Privilege Escalation
+    tactic: TA0004
+    url: https://attack.mitre.org/techniques/T1068/
+  - technique_id: T1078
+    name: Valid Accounts
+    tactic: TA0001
+    url: https://attack.mitre.org/techniques/T1078/
+  - technique_id: T1078.003
+    name: Local Accounts
+    tactic: TA0001
+    url: https://attack.mitre.org/techniques/T1078/003/
+  - technique_id: T1003
+    name: OS Credential Dumping
+    tactic: TA0006
+    url: https://attack.mitre.org/techniques/T1003/
+  - technique_id: T1046
+    name: Network Service Discovery
+    tactic: TA0007
+    url: https://attack.mitre.org/techniques/T1046/
+  - technique_id: T1087
+    name: Account Discovery
+    tactic: TA0007
+    url: https://attack.mitre.org/techniques/T1087/
+  - technique_id: T1021
+    name: Remote Services
+    tactic: TA0008
+    url: https://attack.mitre.org/techniques/T1021/
+  - technique_id: T1021.004
+    name: SSH
+    tactic: TA0008
+    url: https://attack.mitre.org/techniques/T1021/004/
+  - technique_id: T1098
+    name: Account Manipulation
+    tactic: TA0003
+    url: https://attack.mitre.org/techniques/T1098/
+  - technique_id: T1562
+    name: Impair Defenses
+    tactic: TA0005
+    url: https://attack.mitre.org/techniques/T1562/
+  - technique_id: T1562.001
+    name: Disable or Modify Tools
+    tactic: TA0005
+    url: https://attack.mitre.org/techniques/T1562/001/
+
+# Wazuh rule → ATT&CK 映射
+# rule_id 精确（confidence 0.9）；rule_groups 前缀（confidence 0.6）
+mappings:
+  - rule_id: "5710"
+    technique_id: T1110.001
+  - rule_id: "5712"
+    technique_id: T1110
+  - rule_id: "5720"
+    technique_id: T1110.001
+  - rule_id: "31151"
+    technique_id: T1595
+  - rule_id: "31103"
+    technique_id: T1595
+  - rule_id: "40601"
+    technique_id: T1190
+  - rule_id: "5902"
+    technique_id: T1548.003
+  - rule_id: "5903"
+    technique_id: T1548.003
+  - rule_id: "50102"
+    technique_id: T1068
+  - rule_id: "57104"
+    technique_id: T1021.004
+  - rule_id: "9265"
+    technique_id: T1003
+  - rule_id: "9266"
+    technique_id: T1003
+  - rule_groups: ["syscheck"]
+    technique_id: T1562.001
+  - rule_groups: ["sshd", "authentication_failed"]
+    technique_id: T1110.001
+  - rule_groups: ["sudo"]
+    technique_id: T1548.003
+  - rule_groups: ["web", "accesslog"]
+    technique_id: T1190
