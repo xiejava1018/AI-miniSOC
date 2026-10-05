@@ -101,3 +101,14 @@ class TestAdvance:
     def test_illegal_to_status(self, bad):
         with pytest.raises(ToolValidationError):
             RemediationAdvanceTool().run(ticket_id="t1", to_status=bad)
+
+
+class TestZombieCreate:
+    def test_ueba_zombie_routes_to_ueba_endpoint(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {"id": "tz", "status": "open"}, captured)
+        RemediationCreateTool().run(
+            source_type="ueba_zombie", source_id="asset-uuid-1",
+        )
+        assert captured["path"] == "/assets/ueba/zombies/ticket"
+        assert captured["body"] == {"asset_id": "asset-uuid-1"}

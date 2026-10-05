@@ -101,12 +101,12 @@ class RemediationCreateTool(AssetToolBase):
         "source_type": {
             "type": "string",
             "description": "来源类型",
-            "enum": ["reconciliation", "compliance"],
+            "enum": ["reconciliation", "compliance", "ueba_zombie"],
             "__required": True,
         },
         "source_id": {
             "type": "string",
-            "description": "来源记录 UUID（对账差异 ID 或合规 fail 项 ID）",
+            "description": "来源记录 UUID（对账差异 ID 或合规 fail 项 ID；ueba_zombie 传资产 ID）",
             "__required": True,
         },
         "assignee": {"type": "string", "description": "可选责任人用户名"},
@@ -116,19 +116,25 @@ class RemediationCreateTool(AssetToolBase):
     name = "asset_remediation_create"
     description = (
         "【写动作·须人工确认】从来源派整改工单：reconciliation=对账差异，"
-        "compliance=合规 fail 项。同来源已有未完结工单时只累计 occurrence 不重复建。"
+        "compliance=合规 fail 项，ueba_zombie=僵尸资产候选（source_id 传资产 ID，"
+        "后端会重新检测防陈旧候选）。同来源已有未完结工单时只累计 occurrence 不重复建。"
     )
 
     def build_request(self, cleaned):
-        body: Dict[str, Any] = {
-            "source_type": cleaned["source_type"],
-            "source_id": cleaned["source_id"],
-        }
+        if cleaned["source_type"] == "ueba_zombie":
+            body: Dict[str, Any] = {"asset_id": cleaned["source_id"]}
+            path = "/assets/ueba/zombies/ticket"
+        else:
+            body = {
+                "source_type": cleaned["source_type"],
+                "source_id": cleaned["source_id"],
+            }
+            path = "/assets/remediation/tickets"
         if "assignee" in cleaned:
             body["assignee"] = cleaned["assignee"]
         if "due_at" in cleaned:
             body["due_at"] = cleaned["due_at"]
-        return "POST", "/assets/remediation/tickets", None, body
+        return "POST", path, None, body
 
     def make_evidence(self, cleaned, data):
         if isinstance(data, dict):

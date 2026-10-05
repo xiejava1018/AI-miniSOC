@@ -25,6 +25,7 @@ from app.models.remediation_ticket import (
     SEVERITY_ORDER,
     SOURCE_COMPLIANCE,
     SOURCE_RECONCILIATION,
+    SOURCE_UEBA_ZOMBIE,
     STATUS_IN_PROGRESS,
     STATUS_OPEN,
     STATUS_RESOLVED,
@@ -118,6 +119,34 @@ class RemediationWorkflowService:
             due_at=due_at,
         )
 
+    def create_from_zombie(
+        self,
+        asset: Asset,
+        *,
+        evidence: dict,
+        created_by: str = "system",
+        assignee: Optional[str] = None,
+        due_at: Optional[datetime] = None,
+    ) -> RemediationTicket:
+        """OH-2.8 UEBA 僵尸候选 → 整改工单（人工确认后调用）。"""
+        title = f"僵尸资产候选：{asset.name or asset.asset_ip}（长期零行为/零认证）"
+        detail = {
+            "evidence": evidence,
+            "suggestion": "核实设备状态：已下线则标记退役，仍在网则排查采集覆盖",
+        }
+        return self._create(
+            source_type=SOURCE_UEBA_ZOMBIE,
+            reconciliation_id=None,
+            compliance_finding_id=None,
+            asset_id=asset.id,
+            title=title[:200],
+            severity="low",
+            detail=detail,
+            created_by=created_by,
+            assignee=assignee,
+            due_at=due_at,
+        )
+
     def _create(
         self,
         *,
@@ -144,6 +173,8 @@ class RemediationWorkflowService:
             q = q.filter(RemediationTicket.reconciliation_id == reconciliation_id)
         elif source_type == SOURCE_COMPLIANCE and compliance_finding_id is not None:
             q = q.filter(RemediationTicket.compliance_finding_id == compliance_finding_id)
+        elif source_type == SOURCE_UEBA_ZOMBIE and asset_id is not None:
+            q = q.filter(RemediationTicket.asset_id == asset_id)
         else:
             raise RemediationError("来源记录 ID 缺失")
 

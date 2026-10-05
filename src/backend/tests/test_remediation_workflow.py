@@ -150,3 +150,24 @@ class TestList:
     def test_get_missing_raises(self, db_session: Session):
         with pytest.raises(RemediationError):
             RemediationWorkflowService(db_session).get_ticket(uuid.uuid4())
+
+
+class TestZombieSource:
+    def test_create_and_dedup(self, db_session: Session):
+        from app.models.asset import Asset
+        a = Asset(name="zomb", asset_ip="10.0.0.20")
+        db_session.add(a)
+        db_session.commit()
+
+        svc = RemediationWorkflowService(db_session)
+        ev = {"behavior_visits_window": 0, "identity_events_window": 0,
+              "window_days": 14, "confidence": 0.7}
+        t1 = svc.create_from_zombie(a, evidence=ev, created_by="u")
+        assert t1.source_type == "ueba_zombie"
+        assert t1.asset_id == a.id
+        assert "僵尸资产候选" in t1.title
+
+        # 同资产重复派单 bump
+        t2 = svc.create_from_zombie(a, evidence=ev)
+        assert t1.id == t2.id
+        assert t2.occurrence_count == 2

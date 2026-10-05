@@ -30,7 +30,8 @@ from app.models.base import Base
 # 来源类型
 SOURCE_RECONCILIATION = "reconciliation"
 SOURCE_COMPLIANCE = "compliance"
-VALID_SOURCES = (SOURCE_RECONCILIATION, SOURCE_COMPLIANCE)
+SOURCE_UEBA_ZOMBIE = "ueba_zombie"
+VALID_SOURCES = (SOURCE_RECONCILIATION, SOURCE_COMPLIANCE, SOURCE_UEBA_ZOMBIE)
 
 # 状态机：open → in_progress → resolved（→ verified）
 #   reopened：verified 不通过回 open（S12 预留）
