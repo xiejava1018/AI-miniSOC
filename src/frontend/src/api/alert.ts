@@ -447,3 +447,55 @@ export const createIncidentFromAlert = (
     keepFullResponse: true
   })
 }
+
+// ==================== OH-4.4/OH-UI.10 ATT&CK 映射 ====================
+
+export interface AttackTechnique {
+  technique_id: string
+  name: string
+  tactic: string
+  url?: string | null
+  confidence: number
+  match_type: 'rule_id' | 'rule_groups'
+  match_value: string
+}
+
+export interface AttackChainResult {
+  alert: {
+    id: string
+    rule_id?: string
+    rule_description?: string
+    rule_level?: number
+    rule_groups?: string[]
+    agent: { id?: string; name?: string; ip?: string }
+    timestamp?: string | null
+  }
+  techniques: AttackTechnique[]
+  linked_asset?: Record<string, any> | null
+  business_systems: Array<{
+    id: string
+    code: string
+    name: string
+    protection_level?: string | null
+    role?: string | null
+  }>
+  mapped: boolean
+}
+
+/** 告警 → ATT&CK 技战术 → 资产 → 业务系统 */
+export const getAlertAttackChain = (
+  alertId: string
+): Promise<Http.BaseResponse<AttackChainResult>> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/${alertId}/attack-chain`,
+    keepFullResponse: true
+  })
+}
+
+/** 重同步 ATT&CK 目录种子（admin/operator） */
+export const syncAttackMappings = (): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/attack-mappings/sync`,
+    keepFullResponse: true
+  })
+}
