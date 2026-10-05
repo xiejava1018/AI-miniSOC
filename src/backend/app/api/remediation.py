@@ -7,8 +7,8 @@
   POST /remediation/tickets/{id}/assign 指派责任人
   POST /remediation/tickets/{id}/advance 状态流转
 
-权限：UI（OH-UI.13）落地前不建菜单，写端点用 require_role(admin/operator)
-兜底 + @log_audit；读端点登录即可。UI 落地时改挂 require_button_permission。
+权限（X1）：菜单「整改工单」挂资产管理下，view / assign / advance 三枚
+按钮权限（迁移 g3b4c5d6e7f8 种子）；写端点均 @log_audit。
 注册顺序：静态两段路径，须在 assets.router（/{asset_id} catch-all）之前。
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.audit_decorator import log_audit
 from app.core.database import get_db
-from app.core.permissions import require_role
+from app.core.permissions import require_button_permission
 from app.models.asset_reconciliation import AssetReconciliation
 from app.models.compliance import ComplianceFinding
 from app.models.user import User
@@ -63,7 +63,7 @@ async def list_tickets(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_button_permission("remediation", "view")),
 ):
     svc = RemediationWorkflowService(db)
     aid = _parse_uuid(asset_id, "asset_id") if asset_id else None
@@ -81,7 +81,7 @@ async def list_tickets(
 async def get_ticket(
     ticket_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_button_permission("remediation", "view")),
 ):
     svc = RemediationWorkflowService(db)
     try:
@@ -103,7 +103,7 @@ async def create_ticket(
         },
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "operator")),
+    current_user: User = Depends(require_button_permission("remediation", "assign")),
 ):
     source_type = str(payload.get("source_type") or "")
     source_id = payload.get("source_id")
@@ -147,7 +147,7 @@ async def assign_ticket(
     ticket_id: str,
     payload: dict = Body(..., example={"assignee": "ops", "due_at": "2026-10-12T00:00:00Z"}),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "operator")),
+    current_user: User = Depends(require_button_permission("remediation", "assign")),
 ):
     assignee = str(payload.get("assignee") or "").strip()
     if not assignee:
@@ -173,7 +173,7 @@ async def advance_ticket(
     ticket_id: str,
     payload: dict = Body(..., example={"to_status": "resolved", "note": "已补录台账"}),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "operator")),
+    current_user: User = Depends(require_button_permission("remediation", "advance")),
 ):
     to_status = str(payload.get("to_status") or "").strip()
     if not to_status:

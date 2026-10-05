@@ -805,6 +805,95 @@ export const getDataHealth = (deadLetterLimit = 5): Promise<any> => {
   })
 }
 
+// ==================== OH-4.6/OH-UI.13 整改工单 ====================
+
+export type RemediationStatus =
+  | 'open'
+  | 'in_progress'
+  | 'resolved'
+  | 'verified'
+  | 'reopened'
+  | 'cancelled'
+
+export interface RemediationTicketItem {
+  id: string
+  source_type: 'reconciliation' | 'compliance'
+  reconciliation_id?: string | null
+  compliance_finding_id?: string | null
+  asset_id?: string | null
+  title: string
+  severity: string
+  detail: Record<string, any>
+  status: RemediationStatus
+  created_by: string
+  assignee?: string | null
+  due_at?: string | null
+  resolved_by?: string | null
+  resolved_at?: string | null
+  resolve_note?: string | null
+  verified_by?: string | null
+  verified_at?: string | null
+  occurrence_count: number
+  created_at: string
+  updated_at?: string | null
+}
+
+export const getRemediationTickets = (params: {
+  status?: RemediationStatus
+  source_type?: 'reconciliation' | 'compliance'
+  assignee?: string
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/remediation/tickets`,
+    params,
+    keepFullResponse: true
+  })
+}
+
+export const getRemediationTicket = (id: string): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/remediation/tickets/${id}`,
+    keepFullResponse: true
+  })
+}
+
+export const createRemediationTicket = (data: {
+  source_type: 'reconciliation' | 'compliance'
+  source_id: string
+  assignee?: string
+  due_at?: string
+}): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/remediation/tickets`,
+    data,
+    keepFullResponse: true
+  })
+}
+
+export const assignRemediationTicket = (
+  id: string,
+  data: { assignee: string; due_at?: string }
+): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/remediation/tickets/${id}/assign`,
+    data,
+    keepFullResponse: true
+  })
+}
+
+export const advanceRemediationTicket = (
+  id: string,
+  data: { to_status: RemediationStatus; note?: string }
+): Promise<any> => {
+  return httpClient.post({
+    url: `${API_PREFIX}/remediation/tickets/${id}/advance`,
+    data,
+    keepFullResponse: true
+  })
+}
+
 // ==================== P3/F2.2 AI 安全报告 ====================
 
 export type ReportType = 'weekly' | 'monthly' | 'on_demand' | 'incident_driven'
