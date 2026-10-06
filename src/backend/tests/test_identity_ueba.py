@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.asset import Asset
 from app.models.behavior_profile import BehaviorProfile
 from app.models.identity import IdentityEvent
-from app.services.identity_ueba import detect_zombies, score_behavior_anomaly
+from app.services.identity_ueba import detect_zombies, score_behavior_anomaly, zombie_clearance_rate
 
 
 def _profile(**kw) -> BehaviorProfile:
@@ -128,3 +128,52 @@ class TestZombies:
         out = detect_zombies(db_session, days=14)
         hit = {c["asset_id"]: c for c in out["candidates"]}.get(str(a.id))
         assert hit and hit["confidence"] == 0.7
+
+
+class TestZombieClearance:
+    def _ticket(self, asset_id: str, status: str):
+        from app.models.remediation_ticket import RemediationTicket
+        return RemediationTicket(
+            source_type="ueba_zombie",
+            asset_id=asset_id,
+            severity="medium",
+            status=status,
+            title="zombie",
+            created_by="tester",
+        )
+
+    def test_empty_rate_is_none(self, db_session: Session):
+        out = zombie_clearance_rate(db_session)
+        assert out["clearance_rate"] is None
+        assert out["dispatched_assets"] == 0
+
+    def test_partial_clearance(self, db_session: Session):
+        a1 = Asset(name="z1", asset_ip="10.0.1.9")
+        a2 = Asset(name="z2", asset_ip="10.0.1.10")
+        a3 = Asset(name="z3", asset_ip="10.0.1.11")
+        db_session.add_all([a1, a2, a3])
+        db_session.commit()
+        db_session.add_all([
+            self._ticket(str(a1.id), "verified"),
+            self._ticket(str(a2.id), "verified"),
+            self._ticket(str(a3.id), "open"),
+        ])
+        db_session.commit()
+
+        out = zombie_clearance_rate(db_session)
+        assert out["dispatched_assets"] == 3
+        assert out["cleared_assets"] == 2
+        assert out["in_flight_assets"] == 1
+        assert out["clearance_rate"] == pytest.approx(2 / 3, abs=1e-4)
+
+    def test_cancelled_not_counted_as_cleared(self, db_session: Session):
+        a = Asset(name="zc", asset_ip="10.0.1.12")
+        db_session.add(a)
+        db_session.commit()
+        db_session.add(self._ticket(str(a.id), "cancelled"))
+        db_session.commit()
+
+        out = zombie_clearance_rate(db_session)
+        assert out["cleared_assets"] == 0
+        assert out["cancelled_assets"] == 1
+        assert out["clearance_rate"] == 0.0

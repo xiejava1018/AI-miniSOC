@@ -21,7 +21,7 @@ from app.core.permissions import require_role
 from app.models.asset import Asset
 from app.models.behavior_profile import BehaviorProfile
 from app.models.user import User
-from app.services.identity_ueba import detect_zombies, score_behavior_anomaly
+from app.services.identity_ueba import detect_zombies, score_behavior_anomaly, zombie_clearance_rate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -34,6 +34,15 @@ async def zombies(
     current_user: User = Depends(get_current_user),
 ):
     return detect_zombies(db, days=days)
+
+
+@router.get("/ueba/zombies/clearance", summary="S8 僵尸清零率")
+async def zombies_clearance(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operator",
+                                            "viewer", "auditor")),
+):
+    return zombie_clearance_rate(db)
 
 
 @router.post("/ueba/zombies/ticket", summary="僵尸候选派整改工单（人工确认后）")

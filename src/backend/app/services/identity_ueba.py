@@ -226,3 +226,49 @@ def detect_zombies(
         "candidates": candidates,
         "note": "候选须人工确认；置信 0.7=有画像史但窗口内零流量，0.4=无画像史",
     }
+
+
+def zombie_clearance_rate(db: Session) -> Dict[str, Any]:
+    """S8 僵尸清零率（OH-4.8 验收口径）。
+
+    分母 = 曾被检出僵尸并派单的资产数（ueba_zombie 工单，按 asset 去重）
+    分子 = 其中已 verified（真正清零）的资产数。cancelled 单独列出（不
+    计入清零——误报/撤销不等同处置清零）。
+
+    这是闭环度量，纯读不写。
+    """
+    from app.models.remediation_ticket import (
+        RemediationTicket, SOURCE_UEBA_ZOMBIE,
+        STATUS_VERIFIED, STATUS_CANCELLED,
+    )
+    rows = (
+        db.query(
+            RemediationTicket.asset_id,
+            RemediationTicket.status,
+        )
+        .filter(
+            RemediationTicket.source_type == SOURCE_UEBA_ZOMBIE,
+            RemediationTicket.asset_id.isnot(None),
+        )
+        .all()
+    )
+    # 每个资产取其最“终局”的状态
+    best: Dict[str, str] = {}
+    rank = {"verified": 3, "cancelled": 2, "resolved": 1,
+            "in_progress": 1, "reopened": 0, "open": 0}
+    for asset_id, status in rows:
+        key = str(asset_id)
+        if key not in best or rank.get(status, 0) > rank.get(best[key], 0):
+            best[key] = status
+
+    total = len(best)
+    cleared = sum(1 for s in best.values() if s == STATUS_VERIFIED)
+    cancelled = sum(1 for s in best.values() if s == STATUS_CANCELLED)
+    return {
+        "dispatched_assets": total,
+        "cleared_assets": cleared,
+        "cancelled_assets": cancelled,
+        "in_flight_assets": total - cleared - cancelled,
+        "clearance_rate": round(cleared / total, 4) if total else None,
+        "note": "清零率=verified 资产/派单资产；cancelled 不计清零（误报撤销）",
+    }
