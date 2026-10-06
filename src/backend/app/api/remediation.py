@@ -236,3 +236,47 @@ async def evaluate_retest(
         return v.evaluate_retest(_parse_uuid(ticket_id, "ticket_id"))
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ==================== OH-7.1 闭环编排 ====================
+
+@router.get("/remediation/loop/status", summary="闭环态势（只读）")
+async def get_loop_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_button_permission("remediation", "view")),
+):
+    """治理闭环六步态势：阶段分布+漏斗+卡点清单（OH-7.1）。"""
+    from app.services.governance_loop import GovernanceLoopService
+    return GovernanceLoopService(db).loop_status()
+
+
+@router.post("/remediation/tickets/{ticket_id}/loop",
+             summary="闭环编排动作")
+async def run_loop_action(
+    ticket_id: str,
+    payload: dict = Body(..., example={
+        "action": "suggest_next",
+        "note": "ports",
+    }),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_button_permission("remediation", "advance")),
+):
+    """单工单闭环动作：advance/retest/suggest_next（OH-7.1）。"""
+    from app.services.governance_loop import GovernanceLoopService
+    action = str(payload.get("action") or "").strip()
+    note = payload.get("note")
+    svc = GovernanceLoopService(db)
+    try:
+        return svc.run_loop_for_ticket(
+            _parse_uuid(ticket_id, "ticket_id"),
+            action=action, username=current_user.username, note=note,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # 透传业务异常（409 等）
+        from app.services.remediation_workflow import RemediationConflictError
+        if isinstance(exc, RemediationConflictError):
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise
