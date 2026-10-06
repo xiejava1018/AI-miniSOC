@@ -128,6 +128,30 @@ async def get_rating_audit(
     return audit(db)
 
 
+@router.get("/audit-scope")
+async def get_audit_scope(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """S3 考核范围真实性稽核（OH-4.3）：脱锚/传播缺口/无证据资产。只读。"""
+    from app.services.audit_check import scope_audit
+    return scope_audit(db)
+
+
+@router.get("/{system_id}/audit-findings")
+async def get_audit_findings(
+    system_id: str,
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """S3 系统考核清单：真实 ComplianceFinding 聚合（OH-4.3）。"""
+    from app.services.audit_check import system_findings
+    try:
+        return system_findings(db, system_id)
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+
 @router.get("/{system_id}/rating-gap")
 async def get_rating_gap(
     system_id: str,

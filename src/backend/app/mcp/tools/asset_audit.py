@@ -12,8 +12,9 @@
   - ``asset_audit_data_health``：源健康 + 同步死信 + 对账差异三层总览
   - ``asset_audit_recon_summary``：最近一次台账 vs Wazuh 对账摘要
 
-边界：23 项考核逐项稽核（OH-4.3 audit_check）尚未建设，本助手不伪造该清单；
-其落地后在此增补。助手不提供自动整改入口（整改归 OH-5.6）。
+边界：23 项考核的**口径定义**属业务侧（主方案 §12），助手不伪造逐项判定；
+S3 考核范围真实性稽核（audit-scope）与系统考核清单（audit-findings，由真实
+ComplianceFinding 聚合）已接入。助手不提供自动整改入口（整改归 OH-5.6）。
 """
 from __future__ import annotations
 
@@ -182,6 +183,79 @@ class ReconSummaryAuditTool(AssetToolBase):
         return []
 
 
+class AuditScopeTool(AssetToolBase):
+    """S3 考核范围真实性稽核。"""
+
+    class_id = "asset-instance"
+    include_fields = ()
+    extra_schema: Dict[str, Dict[str, Any]] = {}
+
+    name = "asset_audit_scope"
+    description = (
+        "S3 考核范围真实性稽核（无需参数）：应在范围资产数、脱锚资产"
+        "（等级标继承却无系统可回溯）、传播缺口（系统已确认但成员等级未到位）、"
+        "范围内无当期稽核证据的资产。考核项必须回溯真实实体。"
+    )
+
+    def build_request(self, cleaned):
+        return "GET", "/business-systems/audit-scope", None, None
+
+    def make_evidence(self, cleaned, data):
+        if isinstance(data, dict):
+            return [{
+                "type": "scope_audit",
+                "in_scope_count": data.get("in_scope_count"),
+                "finding_count": data.get("finding_count"),
+            }]
+        return []
+
+
+class SystemAuditFindingsTool(AssetToolBase):
+    """S3 系统考核清单（真实 ComplianceFinding 聚合）。"""
+
+    class_id = "asset-instance"
+    include_fields = ()
+    extra_schema = {
+        "system_id": {
+            "type": "string",
+            "description": "业务系统 UUID",
+            "__required": True,
+        },
+    }
+
+    name = "asset_audit_system_findings"
+    description = (
+        "按业务系统输出考核清单：由真实合规稽核结果（ComplianceFinding）聚合的"
+        "逐规则 pass/fail/unknown、达标率、无证据成员资产。不伪造判定；"
+        "23 项口径以业务侧定义为准。"
+    )
+
+    def build_request(self, cleaned):
+        return (
+            "GET",
+            f"/business-systems/{cleaned['system_id']}/audit-findings",
+            None,
+            None,
+        )
+
+    def make_evidence(self, cleaned, data):
+        if isinstance(data, dict):
+            return [{
+                "type": "system_findings",
+                "compliance_rate": data.get("compliance_rate"),
+                "rule_count": len(data.get("by_rule") or []),
+                "no_evidence": len(data.get("no_evidence_assets") or []),
+            }]
+        return []
+
+    def run(self, **params: Any) -> ToolResult:
+        result = super().run(**params)
+        if isinstance(result.data, dict):
+            rate = result.data.get("compliance_rate")
+            result.confidence = round(rate / 100.0, 4) if isinstance(rate, (int, float)) else None
+        return result
+
+
 # 单例
 _tools = (
     SystemsAuditTool(),
@@ -189,6 +263,8 @@ _tools = (
     ProtectionSuggestTool(),
     DataHealthAuditTool(),
     ReconSummaryAuditTool(),
+    AuditScopeTool(),
+    SystemAuditFindingsTool(),
 )
 
 

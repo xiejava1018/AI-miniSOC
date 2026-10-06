@@ -6,10 +6,12 @@ import pytest
 from app.mcp.tools import asset_base
 from app.mcp.tools.asset_base import ToolValidationError
 from app.mcp.tools.asset_audit import (
+    AuditScopeTool,
     CoverageAuditTool,
     DataHealthAuditTool,
     ProtectionSuggestTool,
     ReconSummaryAuditTool,
+    SystemAuditFindingsTool,
     SystemsAuditTool,
 )
 
@@ -114,3 +116,37 @@ class TestReconSummary:
         assert captured["path"] == "/assets/reconcile/summary"
         assert result.evidence[0]["by_type"] == {"shadow": 2, "offline": 1}
         assert result.evidence[0]["pending_total"] == 3
+
+
+class TestAuditScope:
+    def test_scope_evidence(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {
+            "in_scope_count": 10,
+            "finding_count": 2,
+            "unanchored": [],
+            "propagation_gaps": [{"name": "x"}],
+        }, captured)
+        result = AuditScopeTool().run()
+        assert captured["path"] == "/business-systems/audit-scope"
+        assert result.evidence[0]["in_scope_count"] == 10
+
+
+class TestSystemFindings:
+    def test_required_system_id(self, monkeypatch):
+        _patch(monkeypatch, {})
+        with pytest.raises(ToolValidationError):
+            SystemAuditFindingsTool().run()
+
+    def test_rate_confidence_and_evidence(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {
+            "compliance_rate": 80.0,
+            "by_rule": [{"rule_id": "R1"}, {"rule_id": "R2"}],
+            "no_evidence_assets": [],
+        }, captured)
+        t = SystemAuditFindingsTool()
+        result = t.run(system_id="sys-1")
+        assert captured["path"] == "/business-systems/sys-1/audit-findings"
+        assert result.confidence == 0.8
+        assert result.evidence[0]["rule_count"] == 2
