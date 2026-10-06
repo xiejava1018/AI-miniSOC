@@ -300,7 +300,14 @@ async def health_check():
     n_stale = len(body["stale_tasks"])
     wd_alive = body["watchdog"]["alive"]
 
-    if not wd_alive or n_zombie >= 3:
+    # dev mode (本地 dev testdb) 阈值放宽：开发环境频繁重启可能产生 zombie，
+    # 上限设到 10（生产还是 3）。CLAUDE.md §1.7 严防把测试库名当生产名。
+    is_dev_env = (
+        settings.DB_NAME.endswith("-testdb") or settings.DB_NAME.endswith("_test")
+    )
+    zombie_threshold = 10 if is_dev_env else 3
+
+    if not wd_alive or n_zombie >= zombie_threshold:
         body["status"] = "down"
         http_code = 503
     elif n_zombie > 0 or n_stale > 0:
@@ -309,5 +316,8 @@ async def health_check():
     else:
         body["status"] = "healthy"
         http_code = 200
+
+    body["zombie_threshold"] = zombie_threshold
+    body["env"] = "dev" if is_dev_env else "prod"
 
     return JSONResponse(status_code=http_code, content=body)

@@ -123,7 +123,7 @@ def _cleanup_old_zombies(db: Session, now: datetime) -> int:
             f"\n[auto-zombie-cleanup {now.isoformat()}] watchdog 误判, "
             f"超 {ZOMBIE_AUTO_CLEANUP_AGE_S}s 未清理, 自动转 failed"
         )
-    db.flush()
+    db.commit()
     logger.info("auto-cleanup: %d zombie → failed", len(rows))
     return len(rows)
 
