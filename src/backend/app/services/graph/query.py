@@ -45,10 +45,22 @@ DEFAULT_MAX_PATHS = 10
 DEFAULT_MIN_CONF = 0.5
 DEFAULT_NODE_LIMIT = 500
 DEFAULT_EDGE_LIMIT = 1500
+# OH-4.7 find_paths 防护：递归路径搜索的语句级超时（毫秒）。
+# 配合“按节点 BFS + 环检测 + 深度上限”，保证失控搜索绝不拖垮数据库。
+DEFAULT_PATH_STATEMENT_TIMEOUT_MS = 3000
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _is_query_canceled(exc: Exception) -> bool:
+    """判断异常是否为 statement_timeout 触发的 QueryCanceled。"""
+    # psycopg2 OperationalError，pgcode 57014 = query_canceled
+    pgcode = getattr(getattr(exc, "orig", None), "pgcode", None)
+    if pgcode == "57014":
+        return True
+    return "statement timeout" in str(exc).lower() or "57014" in str(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -264,100 +276,167 @@ def find_paths(
     max_depth = max(1, min(int(max_depth), 10))
     max_paths = max(1, min(int(max_paths), 100))
 
-    # 递归前向搜索（src → dst）
+    # OH-4.7 关键优化：不再枚举全部简单路径（密集攻击边图上组合爆炸）。
+    # 改为 **按节点 BFS**——每个 dst 节点只在首次到达的深度展开（DISTINCT ON
+    # 取置信度最高的入边），并用 statement_timeout 兑底，让失控搜索绝不可能
+    # 拖垮数据库。路径重建在查询后做。
     sql = text("""
-        WITH RECURSIVE paths AS (
+        WITH RECURSIVE bfs AS (
             SELECT e.dst_key AS node_key,
+                   e.src_key AS parent_key,
+                   e.id AS edge_id,
                    1 AS depth,
-                   ARRAY[e.src_key, e.dst_key] AS path,
-                   ARRAY[e.id]::uuid[] AS edge_ids,
-                   e.weight AS cost,
-                   e.confidence AS min_conf,
-                   e.rel_type AS last_rel
+                   e.confidence AS conf,
+                   ARRAY[e.src_key, e.dst_key] AS seen
             FROM soc_graph_edges e
             WHERE e.src_key = :src
               AND e.rel_type = ANY(:attack_types)
               AND e.confidence >= :min_conf
               AND (e.expires_at IS NULL OR e.expires_at > now())
             UNION ALL
-            SELECT e.dst_key,
-                   p.depth + 1,
-                   p.path || e.dst_key,
-                   p.edge_ids || e.id,
-                   (p.cost + e.weight)::numeric(5,3),
-                   LEAST(p.min_conf, e.confidence),
-                   e.rel_type
-            FROM soc_graph_edges e
-            JOIN paths p ON e.src_key = p.node_key
-            WHERE NOT e.dst_key = ANY(p.path)
-              AND p.depth < :max_depth
-              AND e.rel_type = ANY(:attack_types)
-              AND e.confidence >= :min_conf
-              AND (e.expires_at IS NULL OR e.expires_at > now())
+            SELECT node_key, parent_key, edge_id, depth, conf, seen FROM (
+                SELECT e.dst_key AS node_key,
+                       e.src_key AS parent_key,
+                       e.id AS edge_id,
+                       b.depth + 1 AS depth,
+                       e.confidence AS conf,
+                       b.seen || e.dst_key AS seen,
+                       row_number() OVER (
+                           PARTITION BY e.dst_key
+                           ORDER BY e.confidence DESC, e.weight ASC
+                       ) AS rn
+                FROM soc_graph_edges e
+                JOIN bfs b ON e.src_key = b.node_key
+                WHERE b.depth < :max_depth
+                  AND NOT e.dst_key = ANY(b.seen)
+                  AND e.rel_type = ANY(:attack_types)
+                  AND e.confidence >= :min_conf
+                  AND (e.expires_at IS NULL OR e.expires_at > now())
+            ) cand
+            WHERE cand.rn = 1
         )
-        SELECT path, edge_ids, cost, min_conf, depth
-        FROM paths
-        WHERE node_key = :dst
-        ORDER BY cost ASC, min_conf DESC
-        LIMIT :max_paths
+        SELECT node_key, parent_key, edge_id, depth, conf
+        FROM bfs
     """)
 
     attack_types = list(ATTACK_EDGE_TYPES)
-    rows = db.execute(sql, {
-        "src": src_key,
-        "dst": dst_key,
-        "max_depth": max_depth,
-        "min_conf": min_conf,
-        "max_paths": max_paths,
-        "attack_types": attack_types,
-    }).mappings().all()
+    prev_timeout = db.execute(text("SHOW statement_timeout")).scalar()
+    try:
+        # 本查询独占上限（毫秒），防止递归拖垮连接
+        db.execute(text("SET LOCAL statement_timeout = :ms"),
+                   {"ms": DEFAULT_PATH_STATEMENT_TIMEOUT_MS})
+        rows = db.execute(sql, {
+            "src": src_key,
+            "max_depth": max_depth,
+            "min_conf": min_conf,
+            "attack_types": attack_types,
+        }).mappings().all()
+    except Exception as e:
+        db.rollback()
+        if _is_query_canceled(e):
+            return {
+                "paths": [],
+                "stats": {"pathCount": 0, "minCost": None, "maxDepthUsed": 0,
+                          "truncated": True, "timedOut": True},
+                "message": (f"路径搜索超过 {DEFAULT_PATH_STATEMENT_TIMEOUT_MS}ms "
+                            "被中止，请收窄 max_depth 或提高 min_conf"),
+            }
+        raise
+    finally:
+        # 恢复会话级超时（SET LOCAL 已在事务结束失效，这里显式兑底）
+        try:
+            db.execute(text("SET statement_timeout = :t"),
+                       {"t": prev_timeout or "0"})
+        except Exception:
+            pass
 
     if not rows:
         return {
             "paths": [],
-            "stats": {"pathCount": 0, "minCost": None, "maxDepthUsed": 0},
+            "stats": {"pathCount": 0, "minCost": None, "maxDepthUsed": 0,
+                      "truncated": False},
             "message": f"未找到 {src_key} → {dst_key} 的路径",
         }
 
-    # 拉边明细
-    all_edge_ids = []
+    # OH-4.7：rows 是按节点 BFS 的父指针（每节点唯一最佳入边）。
+    # 重建 src → dst 的最短路径（单条最佳；旧版枚举全部路径是爆炸源）。
+    parent: dict[str, str] = {}      # node -> parent node
+    edge_of: dict[str, Any] = {}     # node -> BFS row
+    depth_of: dict[str, int] = {}
     for r in rows:
-        all_edge_ids.extend(r["edge_ids"])
+        parent[r["node_key"]] = r["parent_key"]
+        edge_of[r["node_key"]] = r
+        depth_of[r["node_key"]] = r["depth"]
+
+    if dst_key not in parent:
+        return {
+            "paths": [],
+            "stats": {"pathCount": 0, "minCost": None, "maxDepthUsed": 0,
+                      "truncated": False},
+            "message": f"未找到 {src_key} → {dst_key} 的路径",
+        }
+
+    # 从 dst 沿父指针回溯到 src
+    chain_keys: list[str] = [dst_key]
+    chain_edges: list[Any] = []
+    cur = dst_key
+    guard = 0
+    while cur != src_key and cur in parent and guard < max_depth + 1:
+        chain_edges.append(edge_of[cur])
+        cur = parent[cur]
+        chain_keys.append(cur)
+        guard += 1
+    if cur != src_key:
+        return {
+            "paths": [],
+            "stats": {"pathCount": 0, "minCost": None, "maxDepthUsed": 0,
+                      "truncated": False},
+            "message": f"路径重建异常：{src_key} → {dst_key} 父指针不连通",
+        }
+
+    chain_keys.reverse()       # src ... dst
+    chain_edges.reverse()      # 与节点间隔对齐
+
+    edge_ids = [r["edge_id"] for r in chain_edges]
     edge_meta: dict = {}
-    if all_edge_ids:
+    if edge_ids:
         for e in db.execute(
             text("SELECT * FROM soc_graph_edges WHERE id = ANY(:ids)"),
-            {"ids": list(set(all_edge_ids))},
+            {"ids": edge_ids},
         ).mappings().all():
             edge_meta[str(e["id"])] = e
 
-    # 组装结果
-    paths = []
-    for r in rows:
-        edge_specs = []
-        for eid in r["edge_ids"]:
-            e = edge_meta.get(str(eid))
-            if e:
-                edge_specs.append({
-                    "relType": e["rel_type"],
-                    "confidence": float(e["confidence"] or 0),
-                    "srcKey": e["src_key"],
-                    "dstKey": e["dst_key"],
-                })
-        paths.append({
-            "nodeKeys": r["path"],
-            "edges": edge_specs,
-            "cost": float(r["cost"]),
-            "minConfidence": float(r["min_conf"]),
-            "depth": r["depth"],
-        })
+    edge_specs = []
+    costs = 0.0
+    min_conf = 1.0
+    for r in chain_edges:
+        e = edge_meta.get(str(r["edge_id"]))
+        if e:
+            edge_specs.append({
+                "relType": e["rel_type"],
+                "confidence": float(e["confidence"] or 0),
+                "srcKey": e["src_key"],
+                "dstKey": e["dst_key"],
+            })
+            costs += float(e["weight"] or 0)
+            min_conf = min(min_conf, float(e["confidence"] or 0))
+
+    paths = [{
+        "nodeKeys": chain_keys,
+        "edges": edge_specs,
+        "cost": costs,
+        "minConfidence": min_conf,
+        "depth": depth_of[dst_key],
+    }]
 
     return {
         "paths": paths,
         "stats": {
-            "pathCount": len(paths),
-            "minCost": min(p["cost"] for p in paths),
-            "maxDepthUsed": max(p["depth"] for p in paths),
+            "pathCount": 1,
+            "minCost": costs,
+            "maxDepthUsed": depth_of[dst_key],
+            "truncated": False,
+            "note": "OH-4.7：返回置信度最高的最短路径（按节点 BFS，不枚举全部路径）",
         },
     }
 

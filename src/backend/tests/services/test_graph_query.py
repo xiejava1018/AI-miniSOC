@@ -187,6 +187,39 @@ class TestFindPaths:
         )
         assert result["paths"] == []
 
+    def test_search_budget_truncation(self, db_session, monkeypatch):
+        """OH-4.7：极小 statement_timeout + 密集图 → truncated/timedOut 诚实标注。"""
+        from app.services.graph import query as qmod
+        from app.services.graph.utils import ensure_node, upsert_edge
+        center = _make_asset(db_session, "10.0.0.20")
+        leaves = [_make_asset(db_session, f"10.0.0.{30+i}")
+                  for i in range(12)]
+        ensure_node(db_session, f"asset:{center.id}", "asset", center.name,
+                   ref_table="soc_assets", ref_id=str(center.id))
+        for lf in leaves:
+            ensure_node(db_session, f"asset:{lf.id}", "asset", lf.name,
+                       ref_table="soc_assets", ref_id=str(lf.id))
+            upsert_edge(db_session, f"asset:{center.id}",
+                       f"asset:{lf.id}", "login_to",
+                       confidence=0.9, sources=["wazuh"])
+        db_session.commit()
+        for l1 in leaves:
+            for l2 in leaves:
+                if l1 is not l2:
+                    upsert_edge(db_session, f"asset:{l1.id}",
+                               f"asset:{l2.id}", "login_to",
+                               confidence=0.9, sources=["wazuh"])
+        db_session.commit()
+
+        # 超时=1ms 强制触发 QueryCanceled
+        monkeypatch.setattr(qmod, "DEFAULT_PATH_STATEMENT_TIMEOUT_MS", 1)
+        result = find_paths(
+            db_session, f"asset:{center.id}", f"asset:{leaves[-1].id}",
+            max_depth=4, min_conf=0.5,
+        )
+        assert result["stats"]["timedOut"] is True
+        assert result["stats"]["truncated"] is True
+
 
 # ---------------------------------------------------------------------------
 # ③ impact_scope
