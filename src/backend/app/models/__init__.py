@@ -52,6 +52,7 @@ from .security_report import SecurityReport
 from .data_source import DataSource
 from .ai_provider import AIProvider
 from .ai_asset import AIAsset, AIAssetKind, AIAssetStatus, AIAssetRisk
+from .ontology_mapping import OntologyMapping, ClassMapping
 from .config_schema import ConfigSchema
 
 # P4 数据可靠性 / 脆弱性 / SCA 模块。

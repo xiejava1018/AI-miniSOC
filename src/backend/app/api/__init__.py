@@ -23,6 +23,7 @@ from app.api import (
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
     ai_assets,
+    ontology_view,
     attribution,
     remediation, identity_ueba,
     asset_completeness,
@@ -112,6 +113,9 @@ include_human_router(
 # 的 /{asset_id} catch-all 之前注册）
 include_human_router(
     api_router, remediation.router, prefix="/assets", tags=["整改工单"],
+)
+include_human_router(
+    api_router, ontology_view.router, prefix="/assets", tags=["本体对齐"],
 )
 # OH-2.8 行为维 UEBA：/assets/ueba/**（静态两段，须在 catch-all 前）
 include_human_router(
