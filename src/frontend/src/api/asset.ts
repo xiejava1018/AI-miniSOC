@@ -1059,6 +1059,38 @@ export const analyzeChangeImpact = (payload: ImpactAnalysisPayload): Promise<any
 }
 
 // ─────────────────────────────────────────────
+// OH-UI.12 / S11 变更风险预测
+// ─────────────────────────────────────────────
+
+export interface ChangeRiskPredictResult {
+  risk_score: number | null
+  risk_level: 'low' | 'medium' | 'high' | 'critical' | 'unknown'
+  identified: boolean
+  change_description: string
+  change_window_hours?: number
+  history_days?: number
+  targets?: any[]
+  contributing_factors: string[]
+  degraded_sources: string[]
+  evidence_summary?: any
+  message?: string
+  red_line: string
+}
+
+/** 变更风险预测（启发式纯计算，非成功率模型） */
+export const predictChangeRisk = (payload: {
+  change_description: string
+  change_window_hours?: number
+  history_days?: number
+}): Promise<ChangeRiskPredictResult> => {
+  return httpClient.post({
+    url: '/api/v1/assets/risk-predict',
+    data: payload,
+    timeout: 120000,
+  })
+}
+
+// ─────────────────────────────────────────────
 // OH-UI.5 八维画像 + AHS + 证据链完整度评分卡
 // ─────────────────────────────────────────────
 

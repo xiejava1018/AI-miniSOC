@@ -28,6 +28,12 @@
             <span class="card-title">变更描述</span>
           </template>
 
+          <!-- 模式切换：影响分析 vs 风险预测 -->
+          <ElRadioGroup v-model="mode" class="mode-switch" @change="onModeChange">
+            <ElRadioButton value="impact">影响分析</ElRadioButton>
+            <ElRadioButton value="risk">风险预测</ElRadioButton>
+          </ElRadioGroup>
+
           <ElForm label-position="top">
             <ElFormItem>
               <template #label>
@@ -54,14 +60,20 @@
               <span class="window-hint">1 - 168（最长 7 天）</span>
             </ElFormItem>
 
+            <!-- 风险预测专用：回溯天数 -->
+            <ElFormItem v-if="mode === 'risk'" label="历史回溯（天）">
+              <ElInputNumber v-model="form.history_days" :min="1" :max="90" :step="1" />
+              <span class="window-hint">1 - 90 天</span>
+            </ElFormItem>
+
             <ElFormItem>
               <ElButton
                 type="primary"
                 :loading="loading"
                 :disabled="form.change_description.trim().length < 3"
-                @click="runAnalysis"
+                @click="mode === 'risk' ? runRiskPredict() : runAnalysis()"
               >
-                {{ loading ? '分析中（可能需 30-60 秒）' : '开始分析' }}
+                {{ loading ? '分析中（可能需 30-60 秒）' : (mode === 'risk' ? '预测风险' : '开始分析') }}
               </ElButton>
               <ElButton v-if="result" @click="reset">清空</ElButton>
             </ElFormItem>
@@ -99,6 +111,11 @@
 
         <!-- 结果 -->
         <template v-else-if="result">
+          <!-- 风险预测结果 -->
+          <RiskPredictPanel v-if="mode === 'risk' && riskResult" :result="riskResult" />
+
+          <!-- 影响分析结果 -->
+          <template v-else>
           <!-- 降级 / 来源横幅：必须置顶，绝不把模板伪装成 AI -->
           <ElAlert
             v-if="result.data_degraded"
@@ -342,6 +359,7 @@
               <span v-else class="muted">未识别</span>
             </div>
           </ElCard>
+          </template>
         </template>
       </ElCol>
     </ElRow>
@@ -352,18 +370,27 @@
   import { computed, reactive, ref } from 'vue'
   import { ElMessage } from 'element-plus'
   import { QuestionFilled } from '@element-plus/icons-vue'
-  import { analyzeChangeImpact } from '@/api/asset'
+  import { analyzeChangeImpact, predictChangeRisk } from '@/api/asset'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
+  import RiskPredictPanel from './RiskPredictPanel.vue'
 
   defineOptions({ name: 'AssetImpactAnalysis' })
 
   const loading = ref(false)
   const result = ref<any>(null)
+  const mode = ref<'impact' | 'risk'>('impact')
+  const riskResult = ref<any>(null)
 
   const form = reactive({
     change_description: '',
-    change_window_hours: 4
+    change_window_hours: 4,
+    history_days: 14
   })
+
+  const onModeChange = () => {
+    result.value = null
+    riskResult.value = null
+  }
 
   const examples = [
     '升级 192.168.0.30 的 Wazuh Agent 到 4.9',
@@ -453,13 +480,47 @@
 
   const reset = () => {
     result.value = null
+    riskResult.value = null
     form.change_description = ''
     form.change_window_hours = 4
+    form.history_days = 14
+  }
+
+  // OH-UI.12 变更风险预测
+  const runRiskPredict = async () => {
+    const desc = form.change_description.trim()
+    if (desc.length < 3) {
+      ElMessage.warning('变更描述至少 3 个字符')
+      return
+    }
+    loading.value = true
+    result.value = null
+    riskResult.value = null
+    try {
+      const r = await predictChangeRisk({
+        change_description: desc,
+        change_window_hours: form.change_window_hours,
+        history_days: form.history_days,
+      })
+      riskResult.value = r
+      result.value = r
+      if (!r.identified) {
+        ElMessage.warning('未识别到具体资产，请补充 IP / 主机名 / 网段')
+      }
+    } catch (e: any) {
+      ElMessage.error(e?.message || '风险预测失败')
+    } finally {
+      loading.value = false
+    }
   }
 </script>
 
 <style lang="scss" scoped>
   .impact-analysis-page {
+    .mode-switch {
+      margin-bottom: 16px;
+    }
+
     .header-card {
       margin-bottom: 16px;
     }
