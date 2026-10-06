@@ -42,6 +42,8 @@ WATCHDOG_TASK_KEY = "__watchdog__"
 WATCHDOG_INTERVAL_S = 60
 WATCHDOG_TIMEOUT_S = 120
 CLOCK_SKEW_THRESHOLD_S = 60
+# 老 zombie 自动清理：超过此秒数的 zombie run 自动转 failed（保留审计 + 不卡 health）
+ZOMBIE_AUTO_CLEANUP_AGE_S = 24 * 3600
 
 _watchdog_task: Optional[asyncio.Task] = None
 _stop_event: Optional[asyncio.Event] = None
@@ -96,6 +98,34 @@ def _find_zombies(db: Session, now: datetime) -> list[SocTaskRun]:
             if age_since_start > 2 * timeout_s and age_since_progress > timeout_s:
                 zombies.append(run)
     return zombies
+
+
+def _cleanup_old_zombies(db: Session, now: datetime) -> int:
+    """把超 ZOMBIE_AUTO_CLEANUP_AGE_S 的 zombie 自动转 failed（不删 — 保留审计）。
+
+    背景 (CLAUDE.md §4.13)：watchdog 误判会把已 finished 的 run 标 zombie,
+    4 条历史 zombie 都是这种误判。清理它们让 /health 不被卡死（n_zombie >= 3 → 503）。
+    """
+    cutoff = now - timedelta(seconds=ZOMBIE_AUTO_CLEANUP_AGE_S)
+    rows = (
+        db.query(SocTaskRun)
+        .filter(
+            SocTaskRun.status == TaskRunStatus.ZOMBIE,
+            SocTaskRun.started_at <= cutoff,
+        )
+        .all()
+    )
+    if not rows:
+        return 0
+    for run in rows:
+        run.status = TaskRunStatus.FAILED
+        run.error_text = (run.error_text or "") + (
+            f"\n[auto-zombie-cleanup {now.isoformat()}] watchdog 误判, "
+            f"超 {ZOMBIE_AUTO_CLEANUP_AGE_S}s 未清理, 自动转 failed"
+        )
+    db.flush()
+    logger.info("auto-cleanup: %d zombie → failed", len(rows))
+    return len(rows)
 
 
 def _tick_once() -> dict:
@@ -201,7 +231,14 @@ def _tick_once() -> dict:
         except Exception:
             logger.exception("watchdog self-registry upsert failed")
 
-        return {"zombies": zombies_found, "stale": stale_found, "clock_skew": skew}
+        # 8. 老 zombie 自动清理（超 ZOMBIE_AUTO_CLEANUP_AGE_S → failed）
+        try:
+            cleaned = _cleanup_old_zombies(db, now)
+        except Exception:
+            logger.exception("auto zombie cleanup failed")
+            cleaned = 0
+
+        return {"zombies": zombies_found, "stale": stale_found, "clock_skew": skew, "cleaned": cleaned}
     finally:
         db.close()
 

@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -33,3 +33,18 @@ async def ontology_validate(
                                             "viewer", "auditor")),
 ):
     return OntologyMapping(db).validate()
+
+
+@router.get("/ontology/owl", summary="导出 OWL/XML")
+async def ontology_owl(
+    current_user: User = Depends(require_role("admin", "operator",
+                                            "viewer", "auditor")),
+):
+    """把资产本体导出为 OWL/XML（OH-1.5）。"""
+    from app.core.asset_ontology_owl import export_owl
+    xml = export_owl()
+    return Response(
+        content=xml,
+        media_type="application/rdf+xml",
+        headers={"Content-Disposition": 'attachment; filename="asset-ontology.owl"'},
+    )
