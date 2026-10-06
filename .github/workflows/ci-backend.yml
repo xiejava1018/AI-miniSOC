@@ -62,7 +62,7 @@ jobs:
           # CI 采用同样方式: --no-deps 装 zhipuai
           python -m pip install -r requirements.txt
           python -m pip install --no-deps "zhipuai>=2.1.5"
-          python -m pip install ruff
+          python -m pip install ruff mypy types-PyYAML
 
       - name: Lint (ruff, advisory)
         working-directory: src/backend
@@ -83,6 +83,11 @@ jobs:
       - name: 本体校验 (OH-1.3, blocks on error)
         run: |
           PYTHONPATH=src/backend python scripts/validate_ontology.py --strict
+
+      - name: mypy (OH-Q.1, enforced subset blocks; full baseline advisory)
+        working-directory: src/backend
+        run: |
+          PYTHON=python bash scripts/typecheck.sh
         # 阻塞式：本体破坏 = 后续依赖全部下环，立刻拦住
         # 本任务仅校验结构 + 必填字段 + 公理 rule/test 存在，
         # 不校验语义（语义校验需运行 LLM，由 OH-1.7 单独任务承担）
