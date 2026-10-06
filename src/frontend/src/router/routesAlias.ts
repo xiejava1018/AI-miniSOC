@@ -35,6 +35,7 @@ export enum RoutesAlias {
   AttackChainView = '/asset/attack-chain/index', // OH-UI.10 ATT&CK 技战术映射视图
   RatingAuditView = '/asset/rating-audit/index', // OH-UI.11 定级备案稽核视图
   GovernanceLoopView = '/asset/governance-loop/index', // OH-7.4 治理闭环看板
+  AssetAgentWorkbench = '/asset/agent-workbench/index', // OH-UI.6 数字员工统一对话工作空间
   SecurityReports = '/reports/list/index', // 安全报告列表/详情（P3/F2.2）
   AssetImpactAnalysis = '/asset/impact-analysis/index', // 变更影响分析（P3/F3.1）
   Incidents = '/incidents/list', // 事件管理
