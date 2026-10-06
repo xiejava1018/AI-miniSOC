@@ -1,15 +1,15 @@
-"""验证助手（OH-5.7 · S12 降级版）
+"""验证助手（OH-5.7 · S12）
 
-S12 完整形态是「外侧复测通路 + 自动 reopen」（OH-7.2/4.11，pending）。
-降级版先覆盖人工验证场景的两件事：
+S12 验证能力（OH-7.2 复测通路 2026-10-05 落地）：
 
-  - ``asset_verify_queue``：待验证工单队列 + 回单质检——已 resolved 未 verified
-    的工单里，找出：缺处理说明（resolve_note 空）、超期未验证（due_at 已过）、
-    重复触发（occurrence_count > 1，老问题又回来了）三类质量信号
-  - ``asset_verify_decide``：人工验证结论落地——verified（通过）/ reopened
-    （不通过重开），包装工单 advance，语义化 + 证据链
+  - ``asset_verify_queue``：待验证工单队列 + 回单质检（缺说明/超期/重复）
+  - ``asset_verify_retest``：触发/查看网络侧独立复测——对 resolved 工单建
+    扫描任务并回取结论（pass/fail/inconclusive），缺证据不判达标
+  - ``asset_verify_decide``：人工验证结论落地——verified / reopened
 
-OH-7.2 外测通路落地后：queue 增补外侧复测证据，decide 支持自动复测触发。
+边界（诚实披露）：复测是**网络侧独立复测**（端口/漏洞），非互联网
+外部攻击者视角；自动 reopen 的最终决策权在人工（decide），复测 fail
+    只给信号不静默改状态。
 """
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ from app.mcp.tools.asset_base import AssetToolBase, ToolResult
 
 logger = logging.getLogger(__name__)
 
-_DEGRADATION_NOTE = (
-    "降级版：验证依据为工单元数据（说明/期限/重复次数），不含外侧复测；"
-    "OH-7.2 复测通路落地后升级。"
+_QUEUE_NOTE = (
+    "回单质检依据为工单元数据（说明/期限/重复）；"
+    "网络侧复测请用 asset_verify_retest。"
 )
 
 
@@ -67,7 +67,7 @@ class VerifyQueueTool(AssetToolBase):
                 "awaiting_verification": len(items),
                 "flagged": n_flag,
                 "items": flagged,
-                "note": _DEGRADATION_NOTE,
+                "note": _QUEUE_NOTE,
             }
             # 队列可信度：无质量问题的工单占比（全无说明 → None）
             result.confidence = (
@@ -150,11 +150,68 @@ class VerifyDecideTool(AssetToolBase):
         return []
 
 
+class VerifyRetestTool(AssetToolBase):
+    """网络侧独立复测：触发并回取结论。"""
+
+    class_id = "asset-instance"
+    include_fields = ()
+    extra_schema = {
+        "ticket_id": {"type": "string", "description": "工单 UUID",
+                      "__required": True},
+        "action": {
+            "type": "string",
+            "description": "trigger=触发复测；evaluate=只看已有结论（默认 evaluate）",
+            "enum": ["trigger", "evaluate"],
+        },
+        "mode": {
+            "type": "string",
+            "description": "trigger 时复测类型：ports(默认)/internal",
+            "enum": ["ports", "internal"],
+        },
+    }
+
+    name = "asset_verify_retest"
+    description = (
+        "网络侧独立复测：action=trigger 对已整改工单建扫描任务（从网络侧重测"
+        "端口/漏洞），action=evaluate 回取结论（pass/fail/inconclusive）。"
+        "缺证据不判达标；非互联网外部视角。复测 fail 请用 asset_verify_decide"
+        "(verdict=fail) 重开。"
+    )
+
+    def build_request(self, cleaned):
+        tid = cleaned["ticket_id"]
+        if cleaned.get("action", "evaluate") == "trigger":
+            body: Dict[str, Any] = {
+                "mode": cleaned.get("mode", "ports"),
+            }
+            return "POST", f"/assets/remediation/tickets/{tid}/retest", None, body
+        return "GET", f"/assets/remediation/tickets/{tid}/retest", None, None
+
+    def make_evidence(self, cleaned, data):
+        if isinstance(data, dict):
+            return [{
+                "type": "retest",
+                "verdict": data.get("verdict"),
+                "task_status": data.get("task_status"),
+                "target_ip": data.get("target_ip"),
+            }]
+        return []
+
+    def run(self, **params: Any) -> ToolResult:
+        result = super().run(**params)
+        if isinstance(result.data, dict) and result.data.get("verdict"):
+            v = result.data["verdict"]
+            result.confidence = {"pass": 0.9, "fail": 0.85}.get(v, None)
+        return result
+
+
 # 单例
 _queue_tool = VerifyQueueTool()
+_retest_tool = VerifyRetestTool()
 _decide_tool = VerifyDecideTool()
 
 
 def register(mcp) -> None:
     _queue_tool.register(mcp)
+    _retest_tool.register(mcp)
     _decide_tool.register(mcp)

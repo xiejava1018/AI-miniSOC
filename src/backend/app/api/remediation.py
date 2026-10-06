@@ -191,3 +191,48 @@ async def advance_ticket(
     except RemediationConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return svc.to_dict(ticket)
+
+
+# ==================== OH-7.2 网络侧独立复测通路 ====================
+
+@router.post("/remediation/tickets/{ticket_id}/retest",
+             summary="触发网络侧独立复测")
+@log_audit(action="REMEDIATION_RETEST", resource_type="remediation_ticket")
+async def trigger_retest(
+    ticket_id: str,
+    payload: dict = Body(default_factory=dict),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_button_permission("remediation", "advance")),
+):
+    """对 resolved 工单触发网络侧独立复测（建扫描任务）。
+
+    非互联网外部视角，缺证据不判达标。
+    """
+    from app.services.external_verifier import ExternalVerifier, MODE_PORTS
+    mode = str(payload.get("mode") or MODE_PORTS)
+    v = ExternalVerifier(db)
+    try:
+        return v.trigger_retest(
+            _parse_uuid(ticket_id, "ticket_id"),
+            username=current_user.username, mode=mode,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/remediation/tickets/{ticket_id}/retest",
+            summary="复测结论")
+async def evaluate_retest(
+    ticket_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_button_permission("remediation", "view")),
+):
+    """取网络侧复测结论（pass/fail/inconclusive）。只读。"""
+    from app.services.external_verifier import ExternalVerifier
+    v = ExternalVerifier(db)
+    try:
+        return v.evaluate_retest(_parse_uuid(ticket_id, "ticket_id"))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

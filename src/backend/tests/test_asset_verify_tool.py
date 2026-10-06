@@ -5,7 +5,11 @@ import pytest
 
 from app.mcp.tools import asset_base
 from app.mcp.tools.asset_base import ToolValidationError
-from app.mcp.tools.asset_verify import VerifyDecideTool, VerifyQueueTool
+from app.mcp.tools.asset_verify import (
+    VerifyDecideTool,
+    VerifyQueueTool,
+    VerifyRetestTool,
+)
 
 
 def _patch(monkeypatch, payload, captured=None):
@@ -40,7 +44,7 @@ class TestQueue:
         assert items["t1"] == []
         assert set(items["t2"]) == {"missing_note", "overdue"}
         assert items["t3"] == ["recurring"]
-        assert "降级版" in r.data["note"]
+        assert "回单质检" in r.data["note"]
 
     def test_requests_resolved_status(self, monkeypatch):
         captured = {}
@@ -72,3 +76,28 @@ class TestDecide:
     def test_missing_ticket(self):
         with pytest.raises(ToolValidationError):
             VerifyDecideTool().run(verdict="pass")
+
+
+class TestVerifyRetest:
+    def test_evaluate_default(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {"verdict": "pass", "task_status": "success"},
+               captured)
+        t = VerifyRetestTool()
+        result = t.run(ticket_id="t1")
+        assert captured["method"] == "GET"
+        assert captured["path"].endswith("/t1/retest")
+        assert result.confidence == 0.9
+        assert result.evidence[0]["verdict"] == "pass"
+
+    def test_trigger_post(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {"task_uuid": "x", "status": "pending"}, captured)
+        VerifyRetestTool().run(ticket_id="t1", action="trigger", mode="internal")
+        assert captured["method"] == "POST"
+        assert captured["body"] == {"mode": "internal"}
+
+    def test_required_ticket(self, monkeypatch):
+        _patch(monkeypatch, {})
+        with pytest.raises(ToolValidationError):
+            VerifyRetestTool().run()
