@@ -30,6 +30,49 @@ class ImpactAnalysisRequest(BaseModel):
                                      description="计划维护窗口时长（1-168 小时）")
 
 
+class RiskPredictRequest(BaseModel):
+    change_description: str = Field(..., min_length=3, max_length=2000)
+    change_window_hours: int = Field(4, ge=1, le=168)
+    history_days: int = Field(14, ge=1, le=90)
+
+
+@router.post("/risk-predict", summary="变更风险预测（S11 / OH-4.10）")
+async def change_risk_predict(
+    body: RiskPredictRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin", "operator")),
+):
+    """基于联邦时间线历史事件的变更风险预测（启发式，非成功率模型）。
+
+    纯计算无 LLM；Loki 等源不可达时自动降级并在 degraded_sources 列明。
+    """
+    from app.services.change_risk_predict import ChangeRiskPredictor
+    try:
+        result = await ChangeRiskPredictor(db).predict(
+            change_description=body.change_description.strip(),
+            change_window_hours=body.change_window_hours,
+            history_days=body.history_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    AuditLogService(db).create_audit_log(
+        user_id=current_user.id,
+        username=current_user.username,
+        action="QUERY",
+        resource_type="change_risk_predict",
+        resource_name=f"risk:{result.get('risk_level')}:{result.get('risk_score')}",
+        new_values={
+            "change_description": body.change_description[:200],
+            "window_hours": body.change_window_hours,
+            "history_days": body.history_days,
+            "identified": result.get("identified"),
+            "degraded_sources": result.get("degraded_sources"),
+        },
+    )
+    return {"code": 200, "msg": "success", "data": result}
+
+
 @router.post("/impact-analysis", summary="智能变更影响分析（PRD P3 / F3.1）")
 async def impact_analysis(
     body: ImpactAnalysisRequest,
