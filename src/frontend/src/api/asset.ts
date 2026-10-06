@@ -894,6 +894,49 @@ export const advanceRemediationTicket = (
   })
 }
 
+// ==================== OH-7.4 治理闭环看板 ====================
+
+export interface LoopBlocker {
+  ticket_id: string
+  title: string
+  status: string
+  kind: 'verify_overdue' | 'unassigned' | 'recurring'
+  message: string
+}
+
+export interface LoopStatus {
+  total_tickets: number
+  stage_distribution: Record<string, number>
+  funnel: Array<{ stage: string; count: number }>
+  closed_rate: number
+  blockers: LoopBlocker[]
+  blocker_count: number
+  red_line: string
+}
+
+export interface WeightFeedback {
+  total_verified: number
+  min_sample: number
+  sample_sufficient: boolean
+  message?: string
+  by_dimension: Record<string, { count: number; high_ratio: number; critical_count: number }>
+  suggestions: Array<{ dimension: string; direction: 'up' | 'down'; delta: number; reason: string }>
+  current_weights: Record<string, number>
+  red_line: string
+}
+
+export const getLoopStatus = (): Promise<LoopStatus> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/remediation/loop/status`,
+  })
+}
+
+export const getWeightFeedback = (): Promise<WeightFeedback> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/remediation/loop/weight-feedback`,
+  })
+}
+
 // ==================== P3/F2.2 AI 安全报告 ====================
 
 export type ReportType = 'weekly' | 'monthly' | 'on_demand' | 'incident_driven'
