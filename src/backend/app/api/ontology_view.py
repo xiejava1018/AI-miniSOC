@@ -48,3 +48,13 @@ async def ontology_owl(
         media_type="application/rdf+xml",
         headers={"Content-Disposition": 'attachment; filename="asset-ontology.owl"'},
     )
+
+
+@router.get("/ontology/stix", summary="导出 STIX 2.1 Bundle")
+async def ontology_stix(
+    current_user: User = Depends(require_role("admin", "operator",
+                                            "viewer", "auditor")),
+):
+    """把技战术目录导出为 STIX 2.1 Bundle（OH-1.6）。"""
+    from app.core.asset_ontology_stix import export_stix_bundle
+    return export_stix_bundle()
