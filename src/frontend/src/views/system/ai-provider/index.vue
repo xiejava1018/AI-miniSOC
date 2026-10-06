@@ -6,6 +6,8 @@
 -->
 <template>
   <div class="ai-provider-page art-full-height">
+   <ElTabs v-model="activeTab" class="aisoc-tabs">
+    <ElTabPane label="模型实例" name="providers">
     <ElCard shadow="never" class="art-table-card">
       <!-- 工具栏（与数据源管理一致：搜索框 append 按钮 + 新增放右侧） -->
       <div class="toolbar">
@@ -49,6 +51,12 @@
         @pagination:current-change="handleCurrentChange"
       />
     </ElCard>
+    </ElTabPane>
+
+    <ElTabPane label="AI 资产台账" name="assets" lazy>
+      <AIAssetLedger />
+    </ElTabPane>
+   </ElTabs>
 
     <!-- 新增/编辑抽屉 -->
     <ElDrawer
@@ -156,6 +164,9 @@
 import { ref, reactive, computed, h, resolveComponent, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormRules } from 'element-plus'
+import AIAssetLedger from './AIAssetLedger.vue'
+
+const activeTab = ref('providers')
 import {
   getAIProviderList,
   getAIScenes,
