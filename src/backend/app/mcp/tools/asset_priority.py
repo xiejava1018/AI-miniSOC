@@ -1,15 +1,15 @@
-"""优先级助手（OH-5.5，S5 脆弱性优先级 · 降级版）
+"""优先级助手（OH-5.5，S5 脆弱性优先级）
 
-S5 完整形态是 VPT+ 图谱重排（OH-4.5，pending）——以漏洞可达性/暴露路径
-重排修复优先级。当前降级版复用既有评分与排行能力：
+S5 完整形态 VPT+ 图谱重排已由 OH-4.5（2026-10-05）落地，本助手现提供：
 
   - ``asset_priority_overview``：风险总览（分数段分布 + Top10 + 上升最快）
-  - ``asset_priority_top_vuln``：按漏洞严重度加权的 Top 资产排行（仅 OPEN 漏洞）
-  - ``asset_priority_system``：业务系统视角——成员资产按业务影响/等保等级/角色
-    排序，给出修复顺序建议（弱排序，不冒充 VPT+）
+  - ``asset_priority_top_vuln``：按漏洞严重度加权的 Top 资产排行（仅 OPEN）
+  - ``asset_priority_system``：业务系统成员排序（等保/业务影响，快速视图）
+  - ``asset_priority_vpt_plus``：**VPT+ 修复优先级**——CVSS+攻击路径阻塞
+    +业务重要性+暴露可达+在野利用+SLA，消费 GET /vulnerabilities/priority
 
-降级边界（诚实披露）：本工具不重排暴露路径可达性；OH-4.5 落地后
-``asset_priority_system`` 升级为 VPT+ 排序。
+边界（诚实披露）：``system`` 是轻量排序不含路径；``vpt_plus`` 才是
+完整优先级，数据客观缺失（无图谱/无系统）时其对应项中性降级。
 """
 from __future__ import annotations
 
@@ -20,9 +20,9 @@ from app.mcp.tools.asset_base import AssetToolBase, ToolResult
 
 logger = logging.getLogger(__name__)
 
-_DEGRADATION_NOTE = (
-    "当前为降级版排序（业务影响/等保/漏洞加权），未含暴露路径可达性重排；"
-    "OH-4.5 VPT+ 落地后升级。"
+_SYSTEM_NOTE = (
+    "轻量排序（等保>业务影响），不含攻击路径；"
+    "完整 VPT+ 请用 asset_priority_vpt_plus。"
 )
 
 # 等保等级 → 排序权重（level_5 最高）
@@ -108,9 +108,8 @@ class SystemPriorityTool(AssetToolBase):
 
     name = "asset_priority_system"
     description = (
-        "输入业务系统，输出其成员资产的修复优先级排序（按等保等级 + 业务影响 + 角色）。"
-        "降级版：不含暴露路径可达性重排（VPT+ 待建）；每资产建议用 "
-        "asset_query / get_asset 进一步取风险明细。"
+        "输入业务系统，输出其成员资产的快速排序（按等保等级 + 业务影响）。"
+        "轻量视图不含攻击路径；完整修复优先级用 asset_priority_vpt_plus。"
     )
 
     def build_request(self, cleaned):
@@ -124,7 +123,7 @@ class SystemPriorityTool(AssetToolBase):
             result.data = {
                 "system_assets": ranked,
                 "count": len(ranked),
-                "note": _DEGRADATION_NOTE,
+                "note": _SYSTEM_NOTE,
             }
             # 排序可信度：有等保/业务影响字段支撑的比例
             supported = sum(
@@ -134,7 +133,7 @@ class SystemPriorityTool(AssetToolBase):
             result.evidence = [{
                 "type": "ranking_basis",
                 "basis": "protection_level > business_impact > name",
-                "degradation": _DEGRADATION_NOTE,
+                "note": _SYSTEM_NOTE,
             }]
         return result
 
@@ -158,11 +157,66 @@ class SystemPriorityTool(AssetToolBase):
         return ranked
 
 
+class VPTPlusTool(AssetToolBase):
+    """S5 VPT+ 完整修复优先级。"""
+
+    class_id = "asset-instance"
+    include_fields = ()
+    extra_schema = {
+        "system_id": {
+            "type": "string",
+            "description": "可选：按业务系统圈定范围",
+        },
+        "limit": {
+            "type": "integer",
+            "description": "返回条数（1-100，默认 20）",
+        },
+    }
+
+    name = "asset_priority_vpt_plus"
+    description = (
+        "VPT+ 脆弱性修复优先级（漏洞太多修不完先修哪个）：综合 CVSS、"
+        "攻击路径阻塞性（修一断多）、业务系统重要性、暴露可达性、在野利用、"
+        "SLA 超期。纯计算无 LLM；无图谱/无系统的项中性降级，不伪造可达性。"
+    )
+
+    def build_request(self, cleaned):
+        params: Dict[str, Any] = {
+            "limit": cleaned.get("limit", 20),
+        }
+        if cleaned.get("system_id"):
+            params["system_id"] = cleaned["system_id"]
+        return "GET", "/vulnerabilities/priority", params, None
+
+    def run(self, **params: Any) -> ToolResult:
+        result = super().run(**params)
+        if isinstance(result.data, dict):
+            ranked = result.data.get("ranked") or []
+            result.evidence = [{
+                "type": "vpt_plus",
+                "total_open": result.data.get("total_open"),
+                "graph_method": result.data.get("graph_method"),
+                "top": [
+                    {"cve": r["vulnerability"]["cve_id"],
+                     "score": r["priority_score"]}
+                    for r in ranked[:5]
+                ],
+            }]
+            # 置信度：有完整分数的条目占比（数据缺失越少越高）
+            if ranked:
+                result.confidence = round(
+                    sum(1 for r in ranked
+                        if r["priority_score"] is not None) / len(ranked), 4
+                )
+        return result
+
+
 # 单例
 _tools = (
     PriorityOverviewTool(),
     TopVulnAssetsTool(),
     SystemPriorityTool(),
+    VPTPlusTool(),
 )
 
 

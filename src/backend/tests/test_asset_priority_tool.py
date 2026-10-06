@@ -9,6 +9,7 @@ from app.mcp.tools.asset_priority import (
     PriorityOverviewTool,
     SystemPriorityTool,
     TopVulnAssetsTool,
+    VPTPlusTool,
 )
 
 
@@ -66,3 +67,29 @@ class TestSystemPriority:
     def test_system_id_required(self):
         with pytest.raises(ToolValidationError):
             SystemPriorityTool().run()
+
+
+class TestVPTPlus:
+    def test_vpt_plus_request_and_evidence(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {
+            "total_open": 2,
+            "graph_method": "approximate_degree_centrality",
+            "ranked": [
+                {"vulnerability": {"cve_id": "CVE-1"}, "priority_score": 80},
+                {"vulnerability": {"cve_id": "CVE-2"}, "priority_score": 40},
+            ],
+        }, captured)
+        t = VPTPlusTool()
+        result = t.run(system_id="s1", limit=10)
+        assert captured["path"] == "/vulnerabilities/priority"
+        assert captured["params"]["system_id"] == "s1"
+        assert result.evidence[0]["total_open"] == 2
+        assert result.confidence == 1.0
+        assert result.evidence[0]["top"][0]["cve"] == "CVE-1"
+
+    def test_vpt_plus_defaults(self, monkeypatch):
+        captured = {}
+        _patch(monkeypatch, {"total_open": 0, "ranked": []}, captured)
+        VPTPlusTool().run()
+        assert captured["params"] == {"limit": 20}

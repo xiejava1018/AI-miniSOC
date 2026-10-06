@@ -1146,3 +1146,23 @@ async def get_stats_by_type(
             result[vuln_type]["total"] += count
     
     return result
+
+
+# ==================== S5 VPT+ 修复优先级（OH-4.5）====================
+
+@router.get("/priority")
+async def get_vulnerability_priority(
+    system_id: Optional[str] = Query(None, description="按业务系统圈定范围"),
+    limit: int = Query(50, ge=1, le=200),
+    include_fixed: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """VPT+ 脆弱性修复优先级（纯计算无 LLM）。
+
+    编排：CVSS + 攻击路径阻塞性 + 业务重要性 + 暴露可达 + 在野利用 + SLA。
+    数据客观缺失（无图谱/无系统）时对应项中性降级，不伪造可达性。
+    """
+    from app.services.vulnerability_priority import VulnerabilityPriorityService
+    return VulnerabilityPriorityService(db).rank(
+        system_id=system_id, limit=limit, include_fixed=include_fixed
+    )
