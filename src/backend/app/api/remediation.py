@@ -280,3 +280,18 @@ async def run_loop_action(
         if isinstance(exc, RemediationConflictError):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         raise
+
+
+# ==================== OH-7.3 权重学习 ====================
+
+@router.get("/remediation/loop/weight-feedback", summary="权重学习报告")
+async def get_weight_feedback(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_button_permission("remediation", "view")),
+):
+    """基于已 verified 工单的维度事故统计 + 权重调整建议（OH-7.3）。
+
+    报告仅供审阅参考，不自动改 AHS_DIMENSION_WEIGHTS；样本不足不下结论。
+    """
+    from app.services.weight_feedback import WeightFeedbackService
+    return WeightFeedbackService(db).report()
