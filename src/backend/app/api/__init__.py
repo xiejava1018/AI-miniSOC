@@ -22,6 +22,7 @@ from app.api import (
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
+    ai_assets,
     attribution,
     remediation, identity_ueba,
     asset_completeness,
@@ -225,6 +226,12 @@ include_human_router(
 )
 include_human_router(
     api_router, ai_providers.router, prefix="/ai-providers", tags=["AI 模型管理"],
+)
+include_human_router(
+    api_router, ai_assets.router, prefix="", tags=["AI 资产管理"],
+)
+include_human_router(
+    api_router, ai_assets.router, prefix="", tags=["AI 资产管理"],
 )
 include_human_router(
     api_router, config_schemas.router, prefix="/config-schemas", tags=["配置Schema"],
