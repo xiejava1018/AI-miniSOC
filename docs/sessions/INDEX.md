@@ -21,6 +21,7 @@
 | [资产扫描 / scanner](#资产扫描--scanner) | 1 | Phase 1+2 全量落地、ScanFinding UUID、X-API-Key 鉴权 |
 | [AI / LLM / F2.x](#ai--llm--f2x) | 4 | L2 复合查询、变更影响分析、报告生成、W0 评测集 |
 | [配置中心](#配置中心) | 4 | 数据源走 DB、配置审计合并、过期文档评审、admin 菜单授权缺失修复 |
+| [通知 / 站内信 / 邮件通道](#通知--站内信--邮件通道) | 1 | OH-NOT-F2 Phase 1 通道扩展、dispatcher 框架、Phase 2 邮件投递 |
 | [业务系统管理](#业务系统管理) | 4 | F9 CRUD、菜单、对齐角色页、负责人/部门/电话 |
 | [资产字段 / 数据模型](#资产字段--数据模型) | 2 | network_zone 5→8 值改造、merge 双 head、字典 seed + backfill 脚本、生产 alembic 落后事故救援 |
 | [告警分级 / 风险评分](#告警分级--风险评分) | 3 | alert_levels 全项目唯一、Top 10 D7 vs F1.1 口径澄清、rising 修复 |
@@ -77,6 +78,10 @@
 - **2026-08-22 P3/F2.1 L2 复合查询 + 告警计数假阴性修复** (L816–901) — **真安全教训**：把 99 条 critical 报成 0 比查询失败更危险；计数类需求一律用服务端聚合，不要取 N 条文档客户端数
 - **2026-08-22 P3/F3.1 变更影响分析** (L762–815) — 关键词提取零 LLM 成本 → 资产定位 → 粗粒度关联 → OpenSearch → GLM；honest 降级；target_count 膨胀 bug
 - **2026-08-22 续：W0 评测集 + LLM-SQL 路径审计** (L902–966) — 50 条评测集基线 49/50=98%；**Go/No-Go 安全项审计通过**：项目无 LLM 生成 SQL 路径（全是 select() 构造体）
+
+## 通知 / 站内信 / 邮件通道
+
+- **2026-10-07：OH-NOT-F2 Phase 1 — 通道扩展 + dispatcher 框架 + SMTP 可配置**（[`2026-10-07-notification-channel-phase1.md`](2026-10-07-notification-channel-phase1.md)）— 3 张新表 (channels/dispatch_logs/user_prefs); admin SMTP 配置走表 + fernet 加密 password (CLAUDE.md §1.7); dispatcher 框架 inbox=同步 sent / email=写 pending 留给 Phase 2 worker; 用户 per-(type, channel) 偏好 X1 矩阵默认全收; 端到端验证 SMTP socket connect gmail:587 10ms; commit 4b5c261; alembic head s5t6u7v8w9x0; Phase 2 待做: aiosmtplib 真投递 + Jinja2 模板 + admin/用户前端页 + 菜单入口
 
 ## 配置中心
 
