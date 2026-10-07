@@ -39,6 +39,7 @@ from app.models import (  # noqa: F401  (imports register all models with Base.m
     AlertDigest, AlertGroupSnapshot, AlertGroupAnalysis,
     CisaKev, SocTaskRegistry, SocTaskRun,
     AssetRiskHistory, AiFeedback,
+    AssetComponent,  # OH-1.4 方案3：soc_asset_components（同步自 syscollector packages）
     # P3 资产扫描（docs/design/...-final.md §6.3）
     ScannerTask, ScanTarget, ScanFinding, ScannerAgent,
 )
