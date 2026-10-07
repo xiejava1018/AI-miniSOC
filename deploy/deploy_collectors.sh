@@ -41,6 +41,12 @@ COLLECTORS_DIR="$PROJECT_DIR/src/collectors"
 LOG_FILE=/tmp/aisoc-deploy.log
 BACKUP_SHA_FILE=/tmp/aisoc.previous_sha
 HEALTH_WAIT_SECONDS=200
+# OH-6.8 门禁参数：
+#   僵尸子进程容忍上限（超了 = init:true 失效回归，FAIL；少量瞬时 WARN）
+ZOMBIE_FAIL_THRESHOLD=10
+#   NAT 数据新鲜度（tplink-collector 5min 推一次 soc_maps_to；
+#   曾有数据但起过 24h 未更新 = 同步断流回归，FAIL；从无数据 WARN 不 FAIL）
+NAT_STALE_HOURS=24
 
 FORCE=0
 [[ "${1:-}" == "--force" ]] && FORCE=1
@@ -189,11 +195,87 @@ for svc in $SERVICES; do
     [[ -z "$pid" || "$pid" == "0" ]] && continue
     zcount=$(ps -eo ppid,stat --no-headers 2>/dev/null | awk -v p="$pid" '$1==p && $2 ~ /Z/' | wc -l | tr -d ' ')
     init_on=$(docker inspect -f '{{.HostConfig.Init}}' "$cid" 2>/dev/null || echo "?")
-    log "$svc: PID=$pid init=$init_on 僵尸子进程=$zcount"
+    health_cfg=$(docker inspect -f '{{if .Config.Healthcheck}}yes{{else}}no{{end}}' "$cid" 2>/dev/null || echo "?")
+    log "$svc: PID=$pid init=$init_on healthcheck=$health_cfg 僵尸子进程=$zcount"
+    if [[ "$health_cfg" != "yes" ]]; then
+        # 项目纪律（跟踪表 §硬约定）：采集器新增必须同步加 HEALTHCHECK。
+        # 存量缺的不 FAIL（scanner 一次性任务等合法场景），但必须可见。
+        log "  WARN: $svc 未配置 HEALTHCHECK（Running 即视为健康）——新增采集器必须补"
+    fi
     if [[ "$zcount" -gt 0 ]]; then
-        log "  WARN: 仍有僵尸子进程，确认 compose 的 init: true 是否生效"
+        if [[ "$zcount" -ge "$ZOMBIE_FAIL_THRESHOLD" ]]; then
+            log "  ERROR: 僵尸子进程 $zcount ≥ $ZOMBIE_FAIL_THRESHOLD —— init:true 疑似失效回归，部署判失败"
+            ZOMBIE_GATE_FAILED=1
+        else
+            log "  WARN: 仍有 $zcount 个僵尸子进程（< $ZOMBIE_FAIL_THRESHOLD），观察即可"
+        fi
     fi
 done
+if [[ "${ZOMBIE_GATE_FAILED:-0}" -ne 0 ]]; then
+    exit 1
+fi
+
+# ===== 7. OH-6.8 NAT 数据新鲜度门禁 =====
+# 背景（2026-08 教训 + S2 暴露面归位）：tplink-collector 5min 推 NAT 映射到
+# soc_maps_to，断流不会让容器变 unhealthy（容器健康 ≠ 数据在流）。
+# 门禁语义（诚实分级）：
+#   曾有数据但起过 NAT_STALE_HOURS 未更新 → FAIL（同步断流回归）
+#   从无数据 → WARN（NAT 未启用/从未成功，不拦部署）
+#   DB 查询失败 → WARN（不因门禁自身故障误杀部署）
+log "===== NAT 数据新鲜度门禁 ====="
+DB_HOST=$(grep '^DB_HOST=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
+DB_PORT=$(grep '^DB_PORT=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "5432")
+DB_NAME=$(grep '^DB_NAME=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
+DB_USER=$(grep '^DB_USER=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
+DB_PASS=$(grep '^DB_PASSWORD=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
+if [[ -z "$DB_HOST" || -z "$DB_NAME" ]]; then
+    log "WARN: .env 缺 DB_HOST/DB_NAME，跳过 NAT 门禁"
+else
+    NAT_CHECK=$(cd "$PROJECT_DIR/src/backend" && ../../venv/bin/python -c '
+import sys, psycopg2
+from datetime import datetime, timezone
+h, p, n, u, pw, sh = sys.argv[1:7]
+try:
+    conn = psycopg2.connect(host=h, port=p, dbname=n, user=u, password=pw,
+                            connect_timeout=10)
+    cur = conn.cursor()
+    cur.execute("SELECT count(*), max(updated_at)::text FROM soc_maps_to")
+    cnt, latest = cur.fetchone()
+    conn.close()
+    if cnt == 0:
+        print("WARN|0|NAT-not-enabled")
+    elif latest is None:
+        print("WARN|" + str(cnt) + "|no-updated-at")
+    else:
+        ts = datetime.fromisoformat(latest)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = int((datetime.now(timezone.utc) - ts).total_seconds() // 3600)
+        print(("FAIL" if age >= int(sh) else "OK") + "|" + str(cnt) + "|" + latest + "|" + str(age))
+except Exception:
+    print("PYERR|0|db-query-failed")
+' "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER" "$DB_PASS" "$NAT_STALE_HOURS" 2>/dev/null || echo "PYERR|0|spawn-failed")
+    verdict=${NAT_CHECK%%|*}
+    case "$verdict" in
+        OK)
+            IFS='|' read -r _ cnt latest age <<< "$NAT_CHECK"
+            log "NAT 门禁通过：${cnt} 行，最新更新 ${latest}（${age}h 前）"
+            ;;
+        FAIL)
+            IFS='|' read -r _ cnt latest age <<< "$NAT_CHECK"
+            log "ERROR: NAT 数据已 ${age}h 未更新（阈值 ${NAT_STALE_HOURS}h，采集器 5min 一推）"
+            log "       soc_maps_to ${cnt} 行，最新 ${latest} —— 同步断流回归，部署判失败"
+            exit 1
+            ;;
+        WARN)
+            IFS='|' read -r _ cnt msg <<< "$NAT_CHECK"
+            log "WARN: $msg —— 不拦部署，人工确认是否应启用"
+            ;;
+        *)
+            log "WARN: NAT 门禁 DB 查询失败（不拦部署，人工核查 soc_maps_to）"
+            ;;
+    esac
+fi
 
 log "====== 采集器部署成功: $CURRENT_SHA ======"
 exit 0
