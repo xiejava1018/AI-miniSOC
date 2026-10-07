@@ -1,8 +1,8 @@
 # 2026-10-07：通知通道 + 偏好 + dispatcher 框架（OH-NOT-F2 · Phase 1）
 
 > 主题：通知系统扩展 + SMTP 可配置 + 多通道分发
-> commit: `4b5c261 ✨ OH-NOT-F2 Phase 1`
-> alembic head: `s5t6u7v8w9x0`（dev testdb）/ `l8c9d0e1f2a3`（102 prod 待 cherry-pick）
+> Phase 1 commit: `4b5c261` · Phase 2 commit: `e4f7cd5`
+> alembic head: `t6u7v8w9x0y1`（dev testdb）
 
 ## 用户需求
 
@@ -91,7 +91,41 @@ PUT    /api/v1/notification-preferences/my/{type}/{channel_code}  upsert 偏好
 7. **per-(type, channel) 偏好粒度**: UNIQUE (user_id, type, channel_code)，用户可精细控制
 8. **Phase 1 dispatcher 不真发邮件**: email 通道只写 dispatch_logs(status=pending)，Phase 2 worker 接管 (CLAUDE.md §4.7 「分阶段发布」)
 
-## Phase 2 待办（不在本 commit 范围）
+## Phase 2 交付（commit `e4f7cd5`，2026-10-07）
+
+| 文件 | 内容 |
+|---|---|
+| `services/email_sender.py` | aiosmtplib 异步 SMTP；587 STARTTLS / 465 SMTPS 自适配；auth 失败不重试、网络超时可重试 |
+| `services/email_template_registry.py` | 7 内置模板（default/eol/source_down/risk_spike/shadow/zombie/test），HTML 自动 escape 防 XSS |
+| `services/email_notifier_worker.py` | 60s tick 扫 pending；指数退避 60s/5m/25m/1h/2h；max_retries(3) 后置 failed；`EMAIL_NOTIFIER_ENABLED` 开关 |
+| `api/notification_channels.py` 扩展 | `/test?actual=true` 真发邮件（Phase 1 socket 探活保留为默认） |
+| `frontend/api/notificationChannel.ts` | 通道 + 偏好 API client + 类型目录 |
+| `views/system/notification-channels/index.vue` | admin SMTP 配置表单 + 连接/发送双测试 |
+| `views/system/notification-preferences/index.vue` | type × channel 开关矩阵 |
+| `alembic t6u7v8w9x0y1_notification_menu.py` | 通知通道(admin) + 通知偏好(四角色) 菜单 |
+| `requirements.txt` | +aiosmtplib<6.0 +Jinja2<4.0（备用） |
+
+### Phase 2 端到端实测
+
+```
+✅ worker tick: {'scanned': 3, 'sent': 0, 'retry': 0, 'failed': 3}（fake SMTP）
+✅ retry 退避: retry_count=1 + next_retry_at=+60s 落库
+✅ /test?actual=true: 连接失败 17.5s 超时 → 完整错误返回（不 500）
+✅ KeyError('test_time') 修复: ctx fallback 注入
+✅ user 不存在 → status=failed 不重试（预期行为）
+✅ 密码: fernet(gAAAAA) 入库 + 出参 *** + 前端不回显明文
+✅ vue-tsc 新文件 0 错误（存量 art-form 报错与本次无关）
+✅ 菜单: id=101 通知通道(admin) + id=102 通知偏好(4 角色)，ri:mail-line / ri:notification-3-line
+```
+
+### Phase 3 待办
+
+- [ ] Jinja2 自定义模板（registry.register 已留扩展点）
+- [ ] dispatch_logs 管理/查询 API + 前端投递历史页
+- [ ] 邮件退订链接（unsubscribe token）
+- [ ] FK: dispatch_logs.notification_id → soc_notifications.id
+
+## Phase 2 待办（✅ 已全部完成，见上）
 
 - [ ] `app/services/email_sender.py` — aiosmtplib 异步 SMTP 投递
 - [ ] `app/services/email_notifier_worker.py` — 60s tick 扫 pending dispatch_logs 队列
