@@ -1,9 +1,9 @@
 <template>
   <div class="notification-preferences-page">
-    <ArtSearchBar>
-      <template #title>通知偏好</template>
-      <template #subTitle>按通知类型 × 通道精细控制；未配置的类型默认全收（OH-NOT-F2）</template>
-    </ArtSearchBar>
+    <div class="page-header">
+      <h3 class="page-title">通知偏好</h3>
+      <p class="page-subtitle">按通知类型 × 通道精细控制；未配置的类型默认全收（OH-NOT-F2）</p>
+    </div>
 
     <el-card shadow="never" v-loading="loading">
       <el-table :data="rows" border style="width: 100%">
@@ -55,7 +55,6 @@
  */
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import ArtSearchBar from '@/components/core/forms/art-search-bar/index.vue'
 import {
   fetchMyNotificationPrefs,
   updateMyNotificationPref,
@@ -117,5 +116,17 @@ onMounted(loadPrefs)
 <style scoped>
 .notification-preferences-page {
   padding: 16px;
+}
+.page-header {
+  padding: 4px 0 12px;
+}
+.page-title {
+  margin: 0;
+  font-size: 18px;
+}
+.page-subtitle {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 </style>

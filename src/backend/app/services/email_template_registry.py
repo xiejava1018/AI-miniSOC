@@ -68,7 +68,7 @@ DEFAULT_TEMPLATE = EmailTemplate(
         "查看详情：{notification[link]}\n"
         "--\n"
         "AI-miniSOC 通知中心\n"
-        "（如不需要邮件通知请到「个人中心 → 通知偏好」关闭）"
+        "如不再需要此类邮件，可直接退订：{unsubscribe_url}"
     ),
     html_tmpl=(
         "<!DOCTYPE html><html><body style=\"font-family:Arial,sans-serif\">"
@@ -78,7 +78,8 @@ DEFAULT_TEMPLATE = EmailTemplate(
         "<p>{notification[content]}</p>"
         "</div>"
         "<p><a href=\"{notification[link]}\" style=\"background:#3a86ff;color:#fff;padding:8px 16px;border-radius:4px;text-decoration:none\">查看详情</a></p>"
-        "<hr><small style=\"color:#999\">AI-miniSOC 通知中心 · 如不需要邮件通知请到「个人中心 → 通知偏好」关闭</small>"
+        "<hr><small style=\"color:#999\">AI-miniSOC 通知中心 · "
+        "<a href=\"{unsubscribe_url}\" style=\"color:#999\">退订此类邮件</a></small>"
         "</body></html>"
     ),
 )
@@ -196,7 +197,7 @@ TEMPLATE_TEST = EmailTemplate(
         "这是一封来自 AI-miniSOC 通知中心 SMTP 配置测试邮件。\n"
         "如果你收到这封邮件说明 SMTP 配置正确。\n"
         "测试时间：{test_time}\n"
-        "测试链接：{notification[link]}"
+        "退订：{unsubscribe_url}"
     ),
     html_tmpl=(
         "<!DOCTYPE html><html><body style=\"font-family:Arial,sans-serif\">"
@@ -204,6 +205,7 @@ TEMPLATE_TEST = EmailTemplate(
         "<p>你好 {user[username]},</p>"
         "<p>这是一封来自 AI-miniSOC 通知中心的 SMTP 测试邮件。</p>"
         "<p>测试时间：<strong>{test_time}</strong></p>"
+        "<hr><small><a href=\"{unsubscribe_url}\" style=\"color:#999\">退订此类邮件</a></small>"
         "</body></html>"
     ),
 )
@@ -214,10 +216,17 @@ TEMPLATE_TEST = EmailTemplate(
 # ============================================================
 
 class EmailTemplateRegistry:
-    """线程安全的模板注册表（CLAUDE.md §0 + §3.2 模块化）"""
+    """线程安全的模板注册表（CLAUDE.md §0 + §3.2 模块化）
+
+    Phase 3：优先级 = DB 覆盖（soc_email_templates.enabled=true）> 内置。
+    """
+
+    _DB_OVERRIDE_TTL = 60  # 秒
 
     def __init__(self) -> None:
         self._templates: Dict[str, EmailTemplate] = {}
+        self._db_overrides: Dict[str, EmailTemplate] = {}
+        self._db_loaded_at: float = 0.0
         self._lock = threading.Lock()
         self._register_defaults()
 
@@ -234,14 +243,64 @@ class EmailTemplateRegistry:
         ):
             self._templates[tpl.type] = tpl
 
+    # ---------------- Phase 3: DB 覆盖 ----------------
+
+    def ensure_db_overrides(self, db) -> None:
+        """从 soc_email_templates 加载 enabled 覆盖（60s 缓存）。
+
+        调用方传 db session（worker / API 均有）；失败静默回退内置
+        （CLAUDE.md §4.13：模板库故障不应阻断邮件投递）。
+        """
+        import time as _time
+        with self._lock:
+            if _time.time() - self._db_loaded_at < self._DB_OVERRIDE_TTL:
+                return
+        try:
+            from app.models.notification_channel import EmailTemplateOverride
+            rows = (
+                db.query(EmailTemplateOverride)
+                .filter(EmailTemplateOverride.enabled.is_(True))
+                .all()
+            )
+            overrides = {
+                r.type: EmailTemplate(
+                    type=r.type,
+                    subject_tmpl=r.subject_tmpl,
+                    text_tmpl=r.text_tmpl,
+                    html_tmpl=r.html_tmpl,
+                )
+                for r in rows
+            }
+            with self._lock:
+                self._db_overrides = overrides
+                self._db_loaded_at = _time.time()
+        except Exception:  # noqa: BLE001
+            logger.warning("email template db override load failed; fallback builtin",
+                           exc_info=True)
+            with self._lock:
+                self._db_loaded_at = _time.time()  # 失败也记账，避免每封邮件都撞库
+
+    def invalidate_db_overrides(self) -> None:
+        """admin 改完模板后立即清缓存。"""
+        with self._lock:
+            self._db_loaded_at = 0.0
+            self._db_overrides = {}
+
     def get(self, type: str) -> Optional[EmailTemplate]:
+        return self._db_overrides.get(type) or self._templates.get(type)
+
+    def get_builtin(self, type: str) -> Optional[EmailTemplate]:
+        """仅查内置（API 展示「重置到默认」用）。"""
         return self._templates.get(type)
 
+    def list_builtin_types(self) -> list[str]:
+        return list(self._templates.keys())
+
     def get_default(self) -> EmailTemplate:
-        return self._templates["_default"]
+        return self._db_overrides.get("_default") or self._templates["_default"]
 
     def register(self, template: EmailTemplate) -> None:
-        """Phase 3 扩展点：admin 自定义模板"""
+        """进程内注册（测试用；生产覆盖走 DB）"""
         with self._lock:
             self._templates[template.type] = template
         logger.info("email template registered: %s", template.type)

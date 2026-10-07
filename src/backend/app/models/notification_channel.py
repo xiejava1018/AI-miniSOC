@@ -28,6 +28,30 @@ from sqlalchemy.sql import func
 from app.models.base import Base
 
 
+class EmailTemplateOverride(Base):
+    """邮件模板 DB 覆盖（OH-NOT-F2 Phase 3）
+
+    type 唯一；enabled=true 时覆盖内置同名模板（str.format 语法）；
+    删除行或 enabled=false 回退内置。渲染层自动 escape 防 XSS。
+    """
+
+    __tablename__ = "soc_email_templates"
+
+    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
+    type = Column(String(64), nullable=False, unique=True)
+    subject_tmpl = Column(Text, nullable=False)
+    text_tmpl = Column(Text, nullable=False)
+    html_tmpl = Column(Text, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now(),
+    )
+
+    def __repr__(self) -> str:
+        return f"<EmailTemplateOverride type={self.type!r} enabled={self.enabled}>"
+
+
 class NotificationChannel(Base):
     """通知通道字典（inbox / email / 未来 sms/webhook）"""
 

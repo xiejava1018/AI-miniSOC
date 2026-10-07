@@ -111,3 +111,76 @@ export const NOTIFICATION_TYPE_CATALOG: Array<{ type: string; label: string; des
   { type: 'task_zombie', label: '任务异常', desc: '后台任务 zombie/失败告警' },
   { type: 'test', label: '测试通知', desc: '管理员手动测试' }
 ]
+
+// ============ Phase 3: 投递日志 ============
+
+export interface DispatchLogItem {
+  id: string
+  notification_id: string | null
+  user_id: number
+  channel_code: string
+  status: string
+  error_text: string | null
+  sent_at: string | null
+  retry_count: number
+  next_retry_at: string | null
+  correlation_id: string | null
+  created_at: string | null
+}
+
+export interface DispatchLogPage {
+  items: DispatchLogItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export const fetchDispatchLogs = (params: {
+  page?: number
+  page_size?: number
+  channel_code?: string
+  status?: string
+  user_id?: number
+}) => {
+  return httpClient.get<Http.BaseResponse<DispatchLogPage>>({
+    url: '/api/v1/notification-dispatch-logs',
+    params,
+    keepFullResponse: true
+  })
+}
+
+// ============ Phase 3: 邮件模板覆盖 ============
+
+export interface EmailTemplateInfo {
+  type: string
+  subject_tmpl: string
+  text_tmpl: string
+  html_tmpl: string
+  source: 'builtin' | 'override'
+  enabled: boolean
+}
+
+export const fetchEmailTemplates = () => {
+  return httpClient.get<Http.BaseResponse<EmailTemplateInfo[]>>({
+    url: `${CHANNEL_PREFIX}/email-templates`,
+    keepFullResponse: true
+  })
+}
+
+export const upsertEmailTemplate = (
+  type: string,
+  data: { subject_tmpl: string; text_tmpl: string; html_tmpl: string; enabled?: boolean }
+) => {
+  return httpClient.put<Http.BaseResponse<{ type: string; source: string }>>({
+    url: `${CHANNEL_PREFIX}/email-templates/${encodeURIComponent(type)}`,
+    data,
+    keepFullResponse: true
+  })
+}
+
+export const deleteEmailTemplate = (type: string) => {
+  return httpClient.del<Http.BaseResponse<{ type: string; source: string }>>({
+    url: `${CHANNEL_PREFIX}/email-templates/${encodeURIComponent(type)}`,
+    keepFullResponse: true
+  })
+}

@@ -139,6 +139,7 @@ def _tick_once() -> dict:
                         notification=notif,
                         type=notif.type or "_default",
                         extra_context=extra_ctx,
+                        db=db,
                     )
                 )
                 # 成功

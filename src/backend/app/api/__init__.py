@@ -18,6 +18,7 @@ from app.api import (
     incidents, alerts, ai, ai_chat, ai_agent, menus, roles, departments,
     audit_logs, sync, webhooks, dicts, system_configs, public, notifications,
     notification_channels, notification_preferences,
+    notification_dispatch_logs,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
     compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
@@ -250,6 +251,10 @@ include_human_router(api_router, notifications.router, tags=["站内通知"])
 # 通知通道管理 + 用户偏好（OH-NOT-F2 · Phase 1）
 include_human_router(api_router, notification_channels.router, tags=["通知通道管理"])
 include_human_router(api_router, notification_preferences.router, tags=["通知偏好"])
+# OH-NOT-F2 Phase 3: 投递日志查询（admin）
+include_human_router(api_router, notification_dispatch_logs.router, tags=["通知投递日志"])
+# OH-NOT-F2 Phase 3: 邮件退订（公开，HMAC token 鉴权，不走 JWT — 同 public.router 模式）
+api_router.include_router(notification_preferences.unsubscribe_router, tags=["通知偏好"])
 
 # 同步任务管理（人类侧触发；Wazuh 推送走 webhooks）
 include_human_router(api_router, sync.router, prefix="/sync", tags=["资产同步"])

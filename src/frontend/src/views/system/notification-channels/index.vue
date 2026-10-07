@@ -1,9 +1,9 @@
 <template>
   <div class="notification-channels-page">
-    <ArtSearchBar>
-      <template #title>通知通道管理</template>
-      <template #subTitle>站内信与邮件双通道；SMTP 配置加密存储（OH-NOT-F2）</template>
-    </ArtSearchBar>
+    <div class="page-header">
+      <h3 class="page-title">通知通道管理</h3>
+      <p class="page-subtitle">站内信与邮件双通道；SMTP 配置加密存储（OH-NOT-F2）</p>
+    </div>
 
     <el-row :gutter="16">
       <!-- 站内信通道（只读） -->
@@ -144,6 +144,71 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 邮件模板管理（Phase 3） -->
+    <el-card shadow="never" style="margin-top: 16px" v-loading="tplLoading">
+      <template #header>
+        <div class="card-header">
+          <span><el-icon><Document /></el-icon> 邮件模板（DB 覆盖 > 内置；删除覆盖即回退内置）</span>
+          <el-button size="small" @click="loadTemplates">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="templates" border size="small">
+        <el-table-column prop="type" label="类型" width="170">
+          <template #default="{ row }">
+            <el-tag size="small" type="info">{{ row.type }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.source === 'override' ? 'warning' : 'info'">
+              {{ row.source === 'override' ? '自定义' : '内置' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="subject_tmpl" label="主题模板" min-width="260" show-overflow-tooltip />
+        <el-table-column label="操作" width="180">
+          <template #default="{ row }">
+            <el-button size="small" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button
+              v-if="row.source === 'override'"
+              size="small"
+              link
+              type="danger"
+              @click="onResetTemplate(row.type)"
+            >
+              恢复内置
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- 模板编辑对话框 -->
+    <el-dialog v-model="editVisible" :title="`编辑模板: ${editForm.type}`" width="720px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+        title="Python str.format 语法：{user[username]} {notification[title]} {notification[link]} {unsubscribe_url}；变量缺失会导致发送失败"
+      />
+      <el-form label-width="80px">
+        <el-form-item label="主题">
+          <el-input v-model="editForm.subject_tmpl" />
+        </el-form-item>
+        <el-form-item label="纯文本">
+          <el-input v-model="editForm.text_tmpl" type="textarea" :rows="6" />
+        </el-form-item>
+        <el-form-item label="HTML">
+          <el-input v-model="editForm.html_tmpl" type="textarea" :rows="8" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editVisible = false">取消</el-button>
+        <el-button type="primary" :loading="tplSaving" @click="onSaveTemplate">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -157,14 +222,17 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Bell, Message } from '@element-plus/icons-vue'
-import ArtSearchBar from '@/components/core/forms/art-search-bar/index.vue'
+import { Bell, Document, Message } from '@element-plus/icons-vue'
 import {
   fetchNotificationChannels,
   updateNotificationChannel,
   testNotificationChannel,
   type NotificationChannel,
-  type ChannelTestResult
+  type ChannelTestResult,
+  type EmailTemplateInfo,
+  fetchEmailTemplates,
+  upsertEmailTemplate,
+  deleteEmailTemplate
 } from '@/api/notificationChannel'
 
 defineOptions({ name: 'NotificationChannels' })
@@ -299,7 +367,70 @@ const onTest = async (actual: boolean) => {
   }
 }
 
-onMounted(loadChannels)
+// ---------- Phase 3: 模板管理 ----------
+const tplLoading = ref(false)
+const tplSaving = ref(false)
+const templates = ref<EmailTemplateInfo[]>([])
+const editVisible = ref(false)
+const editForm = reactive({
+  type: '',
+  subject_tmpl: '',
+  text_tmpl: '',
+  html_tmpl: ''
+})
+
+const loadTemplates = async () => {
+  tplLoading.value = true
+  try {
+    const res = await fetchEmailTemplates()
+    if (res.code === 200 && res.data) templates.value = res.data
+  } finally {
+    tplLoading.value = false
+  }
+}
+
+const openEdit = (row: EmailTemplateInfo | any) => {
+  editForm.type = row.type
+  editForm.subject_tmpl = row.subject_tmpl
+  editForm.text_tmpl = row.text_tmpl
+  editForm.html_tmpl = row.html_tmpl
+  editVisible.value = true
+}
+
+const onSaveTemplate = async () => {
+  tplSaving.value = true
+  try {
+    const res = await upsertEmailTemplate(editForm.type, {
+      subject_tmpl: editForm.subject_tmpl,
+      text_tmpl: editForm.text_tmpl,
+      html_tmpl: editForm.html_tmpl
+    })
+    if (res.code === 200) {
+      ElMessage.success('模板已保存')
+      editVisible.value = false
+      await loadTemplates()
+    } else {
+      ElMessage.error(res.msg || '保存失败')
+    }
+  } finally {
+    tplSaving.value = false
+  }
+}
+
+const onResetTemplate = async (type: string) => {
+  const res = await deleteEmailTemplate(type)
+  if (res.code === 200) {
+    ElMessage.success('已恢复内置模板')
+    await loadTemplates()
+  } else {
+    ElMessage.error(res.msg || '操作失败')
+  }
+}
+
+onMounted(() => {
+  loadChannels()
+  loadTemplates()
+})
 </script>
 
 <style scoped>
@@ -320,6 +451,18 @@ onMounted(loadChannels)
   margin-left: 8px;
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.page-header {
+  padding: 4px 0 12px;
+}
+.page-title {
+  margin: 0;
+  font-size: 18px;
+}
+.page-subtitle {
+  margin: 4px 0 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 </style>
 

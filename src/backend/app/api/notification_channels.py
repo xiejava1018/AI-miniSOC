@@ -9,6 +9,8 @@ Phase 2：test 端点实际发邮件（Phase 1 仅校验配置完整性）。
 from typing import List
 from datetime import datetime
 
+from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Body
 from sqlalchemy.orm import Session
 
@@ -21,6 +23,7 @@ from app.schemas.notification_channel import (
     NotificationChannelOut,
     NotificationChannelUpdate,
 )
+from app.services.unsubscribe_token import build_unsubscribe_url
 from app.services.notification_channel_service import (
     EMAIL_CHANNEL_CODE,
     NotificationChannelService,
@@ -60,6 +63,127 @@ def list_channels(
         )
         for ch in channels
     ]
+
+
+# ============================================================
+# Phase 3: 邮件模板覆盖 CRUD（admin）
+# ============================================================
+
+class EmailTemplateOut(BaseModel):
+    type: str
+    subject_tmpl: str
+    text_tmpl: str
+    html_tmpl: str
+    source: str  # "builtin" | "override"
+    enabled: bool = True
+
+
+class EmailTemplateUpsert(BaseModel):
+    subject_tmpl: str
+    text_tmpl: str
+    html_tmpl: str
+    enabled: bool = True
+
+
+def _validate_format_braces(tpls: dict, errors: list) -> None:
+    """str.format 模板语法校验（错括号/未闭合直接 400，防运行时 KeyError）。"""
+    import string
+    for k, v in tpls.items():
+        try:
+            list(string.Formatter().parse(v))
+        except ValueError as e:
+            errors.append(f"{k} 模板语法错误: {e}")
+
+
+@router.get("/email-templates", response_model=List[EmailTemplateOut])
+def list_email_templates(
+    current_user: User = Depends(require_admin()),
+    db: Session = Depends(get_db),
+):
+    """列出内置模板 + 当前生效版本（override 优先）。"""
+    from app.services.email_template_registry import get_template_registry
+    from app.models.notification_channel import EmailTemplateOverride
+
+    registry = get_template_registry()
+    registry.ensure_db_overrides(db)
+    overrides = {
+        o.type: o
+        for o in db.query(EmailTemplateOverride).all()
+    }
+
+    out = []
+    for t in registry.list_builtin_types():
+        ov = overrides.get(t)
+        effective = registry.get(t)
+        out.append(EmailTemplateOut(
+            type=t,
+            subject_tmpl=(ov.subject_tmpl if ov and ov.enabled else effective.subject_tmpl),
+            text_tmpl=(ov.text_tmpl if ov and ov.enabled else effective.text_tmpl),
+            html_tmpl=(ov.html_tmpl if ov and ov.enabled else effective.html_tmpl),
+            source="override" if (ov and ov.enabled) else "builtin",
+            enabled=(ov.enabled if ov else True),
+        ))
+    # 纯自定义 type（内置没有的）也列出
+    for t, ov in overrides.items():
+        if t not in registry.list_builtin_types() and ov.enabled:
+            out.append(EmailTemplateOut(
+                type=t, subject_tmpl=ov.subject_tmpl, text_tmpl=ov.text_tmpl,
+                html_tmpl=ov.html_tmpl, source="override", enabled=ov.enabled,
+            ))
+    return out
+
+
+@router.put("/email-templates/{type}")
+def upsert_email_template(
+    type: str,
+    body: EmailTemplateUpsert,
+    current_user: User = Depends(require_admin()),
+    db: Session = Depends(get_db),
+):
+    """upsert 模板覆盖（admin）。删除覆盖回退内置。"""
+    from app.models.notification_channel import EmailTemplateOverride
+    from app.services.email_template_registry import get_template_registry
+
+    errors: list = []
+    _validate_format_braces(
+        {"subject": body.subject_tmpl, "text": body.text_tmpl, "html": body.html_tmpl},
+        errors,
+    )
+    if errors:
+        raise HTTPException(status_code=400, detail={"validation_errors": errors})
+
+    row = db.query(EmailTemplateOverride).filter(
+        EmailTemplateOverride.type == type).first()
+    if row is None:
+        row = EmailTemplateOverride(type=type)
+        db.add(row)
+    row.subject_tmpl = body.subject_tmpl
+    row.text_tmpl = body.text_tmpl
+    row.html_tmpl = body.html_tmpl
+    row.enabled = body.enabled
+    db.commit()
+
+    get_template_registry().invalidate_db_overrides()
+    return {"code": 200, "msg": "success", "data": {"type": type, "source": "override"}}
+
+
+@router.delete("/email-templates/{type}")
+def delete_email_template(
+    type: str,
+    current_user: User = Depends(require_admin()),
+    db: Session = Depends(get_db),
+):
+    """删除覆盖 → 回退内置模板。"""
+    from app.models.notification_channel import EmailTemplateOverride
+    from app.services.email_template_registry import get_template_registry
+
+    row = db.query(EmailTemplateOverride).filter(
+        EmailTemplateOverride.type == type).first()
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    get_template_registry().invalidate_db_overrides()
+    return {"code": 200, "msg": "success", "data": {"type": type, "source": "builtin"}}
 
 
 @router.get("/{channel_id}", response_model=NotificationChannelOut)
@@ -226,6 +350,10 @@ def test_channel(
         },
         "type": "test",
         "test_time": datetime.utcnow().isoformat() + "Z",
+        "unsubscribe_url": build_unsubscribe_url(
+            str(cfg.get("app_base_url", "http://localhost:8000")),
+            current_user.id, "test",
+        ),
     }
 
     t0 = time.time()
@@ -257,3 +385,4 @@ def test_channel(
 
 
 __all__ = ["router"]
+

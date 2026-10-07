@@ -148,28 +148,31 @@ async def render_and_send(
     notification: Notification,
     type: str,
     extra_context: Optional[Dict[str, Any]] = None,
+    db=None,
 ) -> Dict[str, Any]:
     """根据 notification.type 选模板 + 渲染 + 投递。
 
-    Phase 2 策略：每 type 一个内置 Jinja2 模板 (注册到 TypeTemplateRegistry)，
-    Phase 3 才支持用户自定义 HTML 模板。
-
-    Args:
-        cfg: SMTP config
-        user: 接收人 (用于拿名字 + 邮箱)
-        notification: 站内 Notification 实例
-        type: 通知类型 (e.g. 'push:eol_warning')
-        extra_context: type 特有变量 (EOL 日期 / 风险分数 / etc)
+    Phase 3：DB 覆盖模板优先（传 db 时自动 ensure）；邮件 footer 注入
+    退订链接（unsubscribe_url，HMAC 签名，点击即关该类型邮件投递）。
     """
     from app.services.email_template_registry import get_template_registry
+    from app.services.unsubscribe_token import build_unsubscribe_url
 
     registry = get_template_registry()
+    if db is not None:
+        try:
+            registry.ensure_db_overrides(db)
+        except Exception:  # noqa: BLE001
+            logger.warning("db template override load failed; builtin used")
     template = registry.get(type)
     if template is None:
         # fallback 到通用模板
         template = registry.get_default()
 
-    ctx = {
+    app_base_url = str(cfg.get("app_base_url", "http://localhost:8000"))
+    unsubscribe_url = build_unsubscribe_url(app_base_url, user.id, type)
+
+    ctx: Dict[str, Any] = {
         "user": {"id": user.id, "username": user.username, "email": user.email},
         "notification": {
             "id": str(notification.id),
@@ -179,6 +182,7 @@ async def render_and_send(
             "created_at": notification.created_at.isoformat() if notification.created_at else None,
         },
         "type": type,
+        "unsubscribe_url": unsubscribe_url,
     }
     if extra_context:
         ctx.update(extra_context)

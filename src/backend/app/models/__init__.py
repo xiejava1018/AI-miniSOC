@@ -26,6 +26,7 @@ from .dict import Dict
 from .chat import ChatSession, ChatMessage
 from .notification import Notification
 from .notification_channel import (
+    EmailTemplateOverride,
     NotificationChannel,
     NotificationDispatchLog,
     UserNotificationPreference,
@@ -118,6 +119,7 @@ __all__ = [
     "ChatMessage",
     "Notification",
     "NotificationChannel",
+    "EmailTemplateOverride",
     "NotificationDispatchLog",
     "UserNotificationPreference",
     "AssetSource",
