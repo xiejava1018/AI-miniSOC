@@ -95,6 +95,10 @@
 
 ## 资产字段 / 数据模型
 
+- **2026-10-07：本体 SBOM 物化 + CI/CD runner Failed 排查**（[`2026-10-07-ontology-sbom-component-sync.md`](2026-10-07-ontology-sbom-component-sync.md)）— OH-1.4 方案3：`AssetComponent` + `soc_asset_components` + 迁移 `c3d4e5f6a7b8`；`asset_component_sync` OpenSearch→PG 6h 刷新；mapping 支持 table/opensearch/planned；UI 修复 risk-card 间距/通知 isDirty 死锁/用户邮箱/邮件 certifi TLS；d02242c 生产部署成功，runner 三次 Failed 无 deploy 日志，疑似 alembic check pipeline + 慢网
+
+## 资产字段 / 数据模型
+
 - **2026-XX-XX：network_zone 5→8 值改造** — 公网/DMZ/生产/办公/开发/管理网/隔离区/未分类；alembic merge 双 head（628109e83308）；字典 seed 8 值 + 历史 intranet/other 合并；backfill 脚本 5 条高置信度二次回填规则；`other` 不可信统一 `unknown`；云服务器按角色选（SLB=public/ECS=dmz or production/蜜罐=isolated/堡垒机=management）
 - **2026-XX-XX：生产 alembic 落后事故救援** — 生产 500 + 业务系统菜单缺失；生产 alembic_version 停 k6l7m8n9o0p1 落后 7 迁移；原因是 deploy.sh 只跑 alembic check 不跑 upgrade；修复：手动 upgrade head 7 迁移 + 字典 seed + deploy.sh 改为自动 upgrade + 双保险验证
 
