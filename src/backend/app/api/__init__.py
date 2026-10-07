@@ -24,6 +24,7 @@ from app.api import (
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
     ai_assets,
     ontology_view,
+    entity_resolver,
     attribution,
     remediation, identity_ueba,
     asset_completeness,
@@ -116,6 +117,9 @@ include_human_router(
 )
 include_human_router(
     api_router, ontology_view.router, prefix="/assets", tags=["本体对齐"],
+)
+include_human_router(
+    api_router, entity_resolver.router, prefix="/assets", tags=["实体锚"],
 )
 # OH-2.8 行为维 UEBA：/assets/ueba/**（静态两段，须在 catch-all 前）
 include_human_router(
