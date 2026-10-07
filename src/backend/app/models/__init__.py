@@ -25,6 +25,11 @@ from .asset_change_log import AssetChangeLog
 from .dict import Dict
 from .chat import ChatSession, ChatMessage
 from .notification import Notification
+from .notification_channel import (
+    NotificationChannel,
+    NotificationDispatchLog,
+    UserNotificationPreference,
+)
 from .asset_source import AssetSource
 from .browsing_event import BrowsingEvent
 from .browsing_blacklist import BrowsingBlacklist
@@ -112,6 +117,9 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "Notification",
+    "NotificationChannel",
+    "NotificationDispatchLog",
+    "UserNotificationPreference",
     "AssetSource",
     "BrowsingEvent",
     "BrowsingBlacklist",
