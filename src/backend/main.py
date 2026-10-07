@@ -110,6 +110,9 @@ async def lifespan(app: FastAPI):
     start_alert_group_snapshot()
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
+    # OH-1.4 方案3：syscollector packages → SBOM 物化（6h 全量刷新）
+    from app.services.asset_component_sync import start_asset_component_scheduler
+    start_asset_component_scheduler()
     start_push_scheduler()
     # OH-NOT-F2 Phase 2: 邮件投递 worker (60s tick 扫 pending dispatch_logs)
     if os.environ.get("EMAIL_NOTIFIER_ENABLED", "true").lower() == "true":
@@ -143,6 +146,8 @@ async def lifespan(app: FastAPI):
         await stop_alert_group_snapshot()
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
+        from app.services.asset_component_sync import stop_asset_component_scheduler
+        await stop_asset_component_scheduler()
         await stop_push_scheduler()
         # OH-NOT-F2 Phase 2: 邮件 worker shutdown
         await stop_email_notifier_worker()

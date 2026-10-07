@@ -85,6 +85,20 @@ async def send_email(
 
     import time
     t0 = time.time()
+
+    # TLS context：优先 certifi CA（Mac 框架版 Python 无系统 CA，默认 context 会
+    # CERTIFICATE_VERIFY_FAILED）；配置 ssl_verify=false 可关校验（自签/隔离网逃生口）
+    import ssl
+    try:
+        import certifi
+        cafile = certifi.where()
+    except ImportError:
+        cafile = None
+    tls_ctx = ssl.create_default_context(cafile=cafile)
+    if cfg.get("ssl_verify") is False:
+        tls_ctx.check_hostname = False
+        tls_ctx.verify_mode = ssl.CERT_NONE
+
     try:
         if is_tls_port_465(use_tls, port):
             # SMTPS (隐式 TLS, 端口 465)
@@ -95,6 +109,7 @@ async def send_email(
                 username=user,
                 password=password,
                 use_tls=True,  # implicit TLS
+                tls_context=tls_ctx,
             )
         else:
             # STARTTLS (端口 587) 或 plain (端口 25) — aiosmtplib 默认行为
@@ -105,6 +120,7 @@ async def send_email(
                 username=user,
                 password=password,
                 use_tls=use_tls,
+                tls_context=tls_ctx,
             )
         elapsed_ms = int((time.time() - t0) * 1000)
         logger.info("email sent: to=%s subject=%r elapsed=%dms", to_addr, subject[:50], elapsed_ms)

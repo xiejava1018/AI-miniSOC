@@ -73,10 +73,14 @@ async def get_asset_timeline(
 
     type_enums = None
     if types:
+        # 兼容两种传参：?types=a&types=b（FastAPI 原生）与 ?types=a,b,c（前端 join(',')）
+        flat: List[str] = []
+        for t in types:
+            flat.extend(x.strip() for x in t.split(",") if x.strip())
         try:
-            type_enums = [EventType(t) for t in types]
+            type_enums = [EventType(t) for t in flat]
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"invalid event type in {types}")
+            raise HTTPException(status_code=400, detail=f"invalid event type in {flat}")
 
     result = await TimelineService(db).get_timeline(
         anchor=anchor,

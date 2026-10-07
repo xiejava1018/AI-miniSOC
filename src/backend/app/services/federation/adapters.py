@@ -179,7 +179,7 @@ class OSAdapter:
                             asset_anchor=ip,
                             asset_id=anchor.asset_id,
                             severity=item.get("level"),
-                            summary=item.get("description") or item.get("rule") or "Wazuh alert",
+                            summary=str(item.get("description") or item.get("rule", {}).get("description") or "Wazuh alert")[:200],
                             payload=item,
                             raw_ref=f"wazuh-alerts:{item.get('_id')}",
                         )

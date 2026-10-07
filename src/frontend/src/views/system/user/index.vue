@@ -79,6 +79,11 @@
 
         <ElRow :gutter="20">
           <ElCol :span="12">
+            <ElFormItem label="邮箱" prop="email">
+              <ElInput v-model="formData.email" placeholder="请输入邮箱（通知邮件接收地址）" />
+            </ElFormItem>
+          </ElCol>
+          <ElCol :span="12">
             <ElFormItem label="性别" prop="gender">
               <ElSelect v-model="formData.gender" placeholder="请选择性别" style="width: 100%">
                 <ElOption label="请选择" value="" disabled></ElOption>
@@ -192,6 +197,12 @@
           formatter: (row: any) => row.phone || '--'
         },
         {
+          prop: 'email',
+          label: '邮箱',
+          align: 'center',
+          formatter: (row: any) => row.email || '--'
+        },
+        {
           prop: 'gender',
           label: '性别',
           align: 'center',
@@ -291,6 +302,7 @@
     full_name: '',
     password: '',
     phone: '',
+    email: '',
     gender: undefined,
     status: 1,
     department_id: undefined,
@@ -356,6 +368,7 @@
     { label: '登录账号', prop: 'username' },
     { label: '用户名称', prop: 'full_name' },
     { label: '手机号', prop: 'phone' },
+    { label: '邮箱', prop: 'email' },
     { label: '性别', prop: 'gender' },
     { label: '部门', prop: 'department_name' },
     { label: '角色', prop: 'role_name' },
@@ -431,6 +444,7 @@
       formData.username = row.username || ''
       formData.full_name = row.full_name || ''
       formData.phone = row.phone || ''
+      formData.email = row.email || ''
       formData.gender = row.gender === 0 ? 1 : row.gender
       formData.status = row.status
       formData.department_id = row.department_id
@@ -442,6 +456,7 @@
       formData.full_name = ''
       formData.password = ''
       formData.phone = ''
+      formData.email = ''
       formData.gender = undefined
       formData.status = 1
       formData.department_id = undefined
@@ -519,6 +534,10 @@
     phone: [
       { required: false, message: '请输入手机号', trigger: 'blur' },
       { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号格式', trigger: 'blur' }
+    ],
+    email: [
+      { required: false, message: '请输入邮箱', trigger: 'blur' },
+      { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
     ],
     gender: [{ required: true, message: '请选择性别', trigger: 'change' }],
     status: [{ required: true, message: '请选择状态', trigger: 'change' }],

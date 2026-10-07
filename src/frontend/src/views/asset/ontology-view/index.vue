@@ -73,6 +73,9 @@
         <ElTableColumn label="过滤条件 / 备注" min-width="200">
           <template #default="{ row }">
             <code v-if="row.filter" class="filter">{{ row.filter }}</code>
+            <span v-if="row.planned && row.planned.length" class="planned-note">
+              规划中（尚未落地）：{{ row.planned.join(', ') }}
+            </span>
             <span v-if="row.unresolved && row.unresolved.length" class="unresolved">
               <ElIcon><WarningFilled /></ElIcon>
               未注册模型：{{ row.unresolved.join(', ') }}
@@ -235,6 +238,10 @@ onMounted(load)
   align-items: center;
   gap: 3px;
   color: var(--el-color-danger);
+  font-size: 12px;
+}
+.planned-note {
+  color: var(--el-color-info);
   font-size: 12px;
 }
 .muted {

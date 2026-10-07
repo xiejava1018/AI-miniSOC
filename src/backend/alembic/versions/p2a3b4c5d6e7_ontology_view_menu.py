@@ -28,7 +28,7 @@ def upgrade() -> None:
         "INSERT INTO soc_menus (parent_id, name, title, path, icon, sort_order, "
         "  is_visible, component, permissions) "
         "SELECT 2, '本体对齐', '本体对齐', 'ontology-view', "
-        "  'ri:share-circle-2-line', 15, TRUE, '/asset/ontology-view/index', "
+        "  'ri:node-tree', 15, TRUE, '/asset/ontology-view/index', "
         "  CAST(:perms AS jsonb) "
         "WHERE NOT EXISTS ("
         "  SELECT 1 FROM soc_menus WHERE parent_id = 2 "

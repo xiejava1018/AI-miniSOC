@@ -38,13 +38,14 @@ logger = logging.getLogger(__name__)
 def _model_index() -> Dict[str, Any]:
     # 延迟导入，避免循环
     from app.models import (
-        Asset, User, BusinessSystem, AIAsset,
+        Asset, User, BusinessSystem, AIAsset, AssetComponent,
     )
     return {
         "Asset": Asset,
         "User": User,
         "BusinessSystem": BusinessSystem,
         "AIAsset": AIAsset,
+        "AssetComponent": AssetComponent,
     }
 
 
@@ -59,6 +60,8 @@ class ClassMapping:
     filter: Optional[str] = None
     graph_node_types: List[str] = field(default_factory=list)
     unresolved: List[str] = field(default_factory=list)  # 引用了但解析不了的模型名
+    planned: List[str] = field(default_factory=list)     # status: planned，规划中尚未落地
+    opensearch_sources: List[str] = field(default_factory=list)  # OpenSearch 来源声明（无 SQL 计数）
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,6 +73,8 @@ class ClassMapping:
             "filter": self.filter,
             "graph_node_types": self.graph_node_types,
             "unresolved": self.unresolved,
+            "planned": self.planned,
+            "opensearch_sources": self.opensearch_sources,
         }
 
 
@@ -94,33 +99,57 @@ class OntologyMapping:
         orm_entries: List[Dict[str, Any]] = []
         graph_types: List[str] = []
         unresolved: List[str] = []
+        planned: List[str] = []
+        os_sources: List[str] = []
 
         for m in oc.ai_minisoc_mappings:
             if "model" in m:
                 name = m["model"]
                 model = self._models.get(name)
                 if model is None:
-                    unresolved.append(name)
+                    # status: planned 的映射是“规划中尚未落地”，非错误
+                    if m.get("status") == "planned":
+                        planned.append(name)
+                    else:
+                        unresolved.append(name)
                 else:
                     orm_entries.append({
                         "model_name": name,
                         "model": model,
                         "filter": m.get("filter"),
                     })
+            elif "table" in m:
+                # 裸表映射（无 ORM 模型，如 soc_graph_nodes）：只读计数用
+                orm_entries.append({
+                    "model_name": None,
+                    "model": None,
+                    "table": m["table"],
+                    "filter": m.get("filter"),
+                })
+            if "opensearch" in m:
+                # OpenSearch 来源声明（如 syscollector packages）：非 SQL 数据源，
+                # 仅声明数据来源供对齐总览展示，无 SQL 计数
+                os_sources.append(m["opensearch"])
             if "graph_node_type" in m:
                 graph_types.append(m["graph_node_type"])
 
         cm.graph_node_types = graph_types
         cm.unresolved = unresolved
+        cm.planned = planned
+        cm.opensearch_sources = os_sources
 
         if orm_entries:
             first = orm_entries[0]
             cm.mapped_to = "orm"
-            cm.model_name = first["model_name"]
-            cm.table = first["model"].__tablename__
+            cm.model_name = first.get("model_name")
+            cm.table = first.get("table") or (first["model"].__tablename__ if first.get("model") else None)
             cm.filter = first["filter"]
         elif graph_types:
             cm.mapped_to = "graph"
+        elif os_sources and not orm_entries:
+            cm.mapped_to = "opensearch"
+        elif planned:
+            cm.mapped_to = "planned"
         else:
             cm.mapped_to = "unmapped"
         return cm

@@ -290,8 +290,11 @@ sub_models:
     label: "资产组件"
     description: "SBOM 级组件，用于漏洞匹配与降误报"
     ai_minisoc_mappings:
-      - model: AssetComponent  # OH-1.4 SQLAlchemy 映射同步
-        status: planned
+      # 物化落表（方案3）：asset_component_sync 把 OpenSearch 快照刷到本表（6h）
+      - model: AssetComponent
+        status: live
+      # 来源声明（方案1）：原始数据在 OpenSearch states 索引，非 SQL 直查
+      - opensearch: wazuh-states-inventory-packages-*
     attributes:
       - id: name
         type: string
@@ -349,7 +352,11 @@ sub_models:
     label: "防护措施"
     description: "v1 仅建模本体骨架，实际数据源（WAF/堡垒机/4A/IPS/防火墙）AI-miniSOC 现网暂未接入，OH-1.4 同步建表但不预填数据"
     ai_minisoc_mappings:
-      - model: Control  # OH-1.4 SQLAlchemy 映射同步
+      # EDR 现实映射：Wazuh agent 承担 EDR 职责（OH-6.6 复写口径）——
+      # 用“装有 agent 的资产数”作为 EDR 覆盖的近似计数，只读不建表
+      - model: Asset
+        filter: "wazuh_agent_id IS NOT NULL"
+      - model: Control  # OH-1.4 SQLAlchemy 映射同步（独立 Control 表待未来接入）
         status: planned
     attributes:
       - id: type
@@ -386,6 +393,7 @@ sub_models:
     description: "端点进程（OH-3.9 端点行为图，Wazuh syscollector 观测）"
     ai_minisoc_mappings:
       - table: soc_graph_nodes  # node_type='process'，不入独立业务表
+        filter: "node_type = 'process'"
         status: live
     attributes:
       - id: name

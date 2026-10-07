@@ -2203,7 +2203,8 @@
     }
 
     .info-card,
-    .summary-card {
+    .summary-card,
+    .risk-card {
       flex-shrink: 0;
       margin-bottom: 16px;
     }

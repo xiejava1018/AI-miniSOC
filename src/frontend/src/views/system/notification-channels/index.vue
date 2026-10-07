@@ -2,27 +2,12 @@
   <div class="notification-channels-page">
     <div class="page-header">
       <h3 class="page-title">通知通道管理</h3>
-      <p class="page-subtitle">站内信与邮件双通道；SMTP 配置加密存储（OH-NOT-F2）</p>
+      <p class="page-subtitle">站内信默认可用，无需配置；邮件 SMTP 配置加密存储（OH-NOT-F2）</p>
     </div>
 
     <el-row :gutter="16">
-      <!-- 站内信通道（只读） -->
-      <el-col :span="8">
-        <el-card shadow="never">
-          <template #header>
-            <div class="card-header">
-              <span><el-icon><Bell /></el-icon> 站内信 (inbox)</span>
-              <el-tag :type="inboxChannel?.enabled ? 'success' : 'info'" size="small">
-                {{ inboxChannel?.enabled ? '已启用' : '已停用' }}
-              </el-tag>
-            </div>
-          </template>
-          <el-empty description="站内信通道无需配置，始终可用" :image-size="60" />
-        </el-card>
-      </el-col>
-
       <!-- 邮件通道（SMTP 可配置） -->
-      <el-col :span="16">
+      <el-col :span="24">
         <el-card shadow="never" v-loading="loading">
           <template #header>
             <div class="card-header">
@@ -30,7 +15,6 @@
               <div>
                 <el-switch
                   v-model="emailEnabled"
-                  :disabled="!isDirty"
                   active-text="启用"
                   @change="onToggleEmail"
                 />
@@ -222,7 +206,7 @@
  */
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Bell, Document, Message } from '@element-plus/icons-vue'
+import { Document, Message } from '@element-plus/icons-vue'
 import {
   fetchNotificationChannels,
   updateNotificationChannel,
@@ -244,7 +228,6 @@ const testingActual = ref(false)
 const channels = ref<NotificationChannel[]>([])
 const testResult = ref<ChannelTestResult | null>(null)
 
-const inboxChannel = computed(() => channels.value.find((c) => c.code === 'inbox'))
 const emailChannel = computed(() => channels.value.find((c) => c.code === 'email'))
 
 const smtpForm = reactive({
@@ -259,8 +242,19 @@ const smtpForm = reactive({
 })
 
 const emailEnabled = ref(false)
-// 跟踪表单是否被修改过（未保存前不允许切 enabled）
-const isDirty = computed(() => false) // 简化：保存后刷新状态由后端控制
+// 脏检查：表单与加载快照比较（修复写死 false 导致按钮永远灰的 bug）
+const original = reactive({ ...smtpForm })
+const isDirty = computed(
+  () =>
+    smtpForm.host !== original.host ||
+    smtpForm.port !== original.port ||
+    smtpForm.user !== original.user ||
+    !!smtpForm.password ||
+    smtpForm.from_addr !== original.from_addr ||
+    smtpForm.from_name !== original.from_name ||
+    smtpForm.use_tls !== original.use_tls ||
+    smtpForm.max_retries !== original.max_retries
+)
 
 const loadChannels = async () => {
   loading.value = true
@@ -281,6 +275,8 @@ const loadChannels = async () => {
         smtpForm.use_tls = cfg.use_tls ?? true
         smtpForm.max_retries = cfg.max_retries ?? 3
       }
+      Object.assign(original, smtpForm)
+      smtpForm.password = ''
     }
   } finally {
     loading.value = false
@@ -441,6 +437,10 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+.inbox-hint {
+  margin-left: 8px;
+  font-weight: normal;
 }
 .actions {
   display: flex;

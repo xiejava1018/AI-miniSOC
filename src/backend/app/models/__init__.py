@@ -5,6 +5,7 @@
 from .base import Base
 from .asset import Asset
 from .asset_port import AssetPort
+from .asset_component import AssetComponent
 from .asset_tag import AssetTag
 from .incident import Incident
 from .ai_analysis import AIAnalysis
