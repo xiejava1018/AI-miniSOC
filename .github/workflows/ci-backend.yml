@@ -40,6 +40,10 @@ jobs:
       TEST_DB_NAME: AI-miniSOC-db_test
       SECRET_KEY: ci-test-secret-key-not-for-production
       ALGORITHM: HS256
+      # ENCRYPTION_KEY: Settings 必填（app/core/config.py:55），Fernet 加密敏感配置用
+      # ci-test 值与生产不同——任何加密读取走测试实例 + DB 里加密列是 ci 写入的，
+      # 不会越过 CI 环境；如需验证加解密，tests/ 里应有 e2e 覆盖
+      ENCRYPTION_KEY: ci-test-encryption-key-32bytes-base64pad==
       LOG_LEVEL: warning
 
     steps:
