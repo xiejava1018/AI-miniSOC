@@ -36,6 +36,7 @@ D1_TYPES = {
 }
 D2_TYPES = {
     "login_to", "login_from", "session_on", "external_access",
+    "creates",  # OH-3.9（端点行为图）：主机→进程，Wazuh syscollector 观测
 }
 D3_TYPES = {"same_segment", "shared_tag", "co_alerted"}
 D4_TYPES = {"depends_on"}
@@ -56,6 +57,7 @@ EDGE_DECAY_DAYS: dict[str, int] = {
     "co_alerted": 90,
     "same_segment": 365,     # 拓扑变化少，年度重算
     "shared_tag": 90,
+    "creates": 7,            # OH-3.9：进程清单随重启漂移，短窗口过期
 }
 
 

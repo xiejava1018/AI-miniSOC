@@ -49,6 +49,7 @@ TOPOLOGY_CRON_HOUR = 4                  # 每天 04:00
 ALERT_GROUP_INTERVAL_S = 6 * 3600       # 6h
 MANUAL_INTERVAL_S = 6 * 3600            # 6h
 CLEANUP_INTERVAL_S = 6 * 3600           # 6h
+ENDPOINT_PROCESS_INTERVAL_S = 6 * 3600  # OH-3.9：进程清单 6h 重拉（边衰减 7 天）
 NAT_MAPPING_INTERVAL_S = 5 * 60        # 5min：跟随 tplink-collector 推送节奏，
     # NAT 规则（虚拟服务器）变更后最多 5 分钟反映到图谱；全量重建轻量（<20 行）
 FIRST_RUN_DELAY = 60                     # 启动后 60s 首次跑
@@ -273,6 +274,21 @@ async def rebuild_nat_mapping_task() -> dict:
     )
 
 
+@track_task(
+    task_key="graph_builder_endpoint_process",
+    task_name="端点行为图构建（每6小时）",
+    task_type="scheduled",
+    schedule_expr="@every 6h",
+    expected_interval_s=ENDPOINT_PROCESS_INTERVAL_S,
+    timeout_s=600,
+)
+async def rebuild_endpoint_process_task() -> dict:
+    """端点行为图构建（creates：主机→进程，OH-3.9）。"""
+    return await _offload(
+        lambda db: EndpointProcessBuilder(db).rebuild_all(), "endpoint_process",
+    )
+
+
 # ---------------------------------------------------------------------------
 # asyncio 循环（启动后 60s 首跑，之后按各自间隔触发）
 # 与 alert_group_snapshot_scheduler._loop 同款范式
@@ -348,8 +364,11 @@ async def start_graph_builders() -> None:
                 cleanup_expired_edges_task, CLEANUP_INTERVAL_S, "cleanup_expired")),
             asyncio.create_task(_interval_loop(
                 rebuild_nat_mapping_task, NAT_MAPPING_INTERVAL_S, "nat_mapping")),
+            asyncio.create_task(_interval_loop(
+                rebuild_endpoint_process_task,
+                ENDPOINT_PROCESS_INTERVAL_S, "endpoint_process")),
         ])
-        logger.info("graph builders started: 7 loops")
+        logger.info("graph builders started: 8 loops")
 
     asyncio.create_task(_start_all())
 

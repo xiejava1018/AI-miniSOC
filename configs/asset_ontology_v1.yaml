@@ -381,6 +381,24 @@ sub_models:
         type: string
       - id: version
         type: string
+  - id: process
+    label: "进程"
+    description: "端点进程（OH-3.9 端点行为图，Wazuh syscollector 观测）"
+    ai_minisoc_mappings:
+      - table: soc_graph_nodes  # node_type='process'，不入独立业务表
+        status: live
+    attributes:
+      - id: name
+        type: string
+        required: true
+      - id: agent_id
+        type: string
+        description: "Wazuh agent id"
+      - id: euser
+        type: string
+        description: "有效用户（聚合去重）"
+      - id: state
+        type: string
 
 # ==== AI 资产六类详细 ====
 ai_asset_types:
@@ -478,6 +496,15 @@ relations:
       - collector: src/collectors/tplink/  # OH-6.1 复写：NAT 表从 TP-Link 路由器扩展采集
         collector_capability: "TP-Link TL-R479GP-AC NAT 表拉取（HTTP API / syslog，待 P0-H1 启动前验证可拉取性）"
         edge_type: maps_to
+
+  - id: creates
+    label: "运行进程"
+    domain: asset-instance
+    range: process
+    description: "主机 → 进程（OH-3.9 端点行为图，Wazuh syscollector 观测边）"
+    ai_minisoc_mappings:
+      - table: soc_graph_edges  # rel_type='creates'，EndpointProcessBuilder
+        status: live
 
   - id: has_vulnerability
     label: "有漏洞"

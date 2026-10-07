@@ -45,7 +45,8 @@ class GraphNode(Base):
     __table_args__ = (
         CheckConstraint("node_type IN ("
                         "'asset','port','vulnerability','account','ip',"
-                        "'business_system','person','segment','alert_group'"
+                        "'business_system','person','segment','alert_group',"
+                        "'process'"
                         ")", name="ck_graph_node_type"),
     )
 

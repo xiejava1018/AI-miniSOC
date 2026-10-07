@@ -1147,6 +1147,124 @@ class NatMappingBuilder:
 
 
 # ---------------------------------------------------------------------------
+# Builder 7: EndpointProcessBuilder（OH-3.9，端点行为图）
+# ---------------------------------------------------------------------------
+
+
+class EndpointProcessBuilder:
+    """构建 creates 边：``(Host)-creates->(Process)``（OH-3.9 端点行为图）。
+
+    数据源：Wazuh syscollector processes（复用现有 WazuhClient，**不新建
+    EDR 采集器**——方案 §OH-6.6 纪律）。每个 agent 的进程清单按 name
+    聚合去重（PID 随重启漂移，图谱以 (agent, name) 为进程身份）。
+
+    诚实边界（v1）:
+      - 只建 host→process（creates）；process→process / process→remote
+        （connects_to）等需要网络连接事件，属 OH-6.6 后续，不伪造。
+      - Wazuh 不可达 → 返回 degraded 统计，不拋异常（不影响其他 builder）。
+      - 每 agent 进程数上限 ``max_processes_per_agent``（防内核 worker
+        噪音推爆图；超出诚实记 truncated_agents）。
+    """
+
+    def __init__(self, db: Session, *, max_processes_per_agent: int = 300):
+        self.db = db
+        self.max_processes_per_agent = max_processes_per_agent
+
+    def rebuild_all(self) -> dict:
+        from app.models.asset import Asset
+
+        stats = {
+            "agents_scanned": 0,
+            "processes_built": 0,
+            "creates_built": 0,
+            "truncated_agents": 0,
+            "degraded": False,
+            "error": None,
+        }
+        now = _utcnow()
+
+        # 1. 有 agent 绑定的在册资产
+        assets = (
+            self.db.query(Asset)
+            .filter(Asset.wazuh_agent_id.isnot(None))
+            .all()
+        )
+        if not assets:
+            stats["error"] = "无 wazuh_agent_id 绑定的资产"
+            return stats
+
+        # 2. Wazuh 客户端（不可达则诚实降级）
+        try:
+            from app.services.wazuh_client import WazuhClient
+            client = WazuhClient()
+        except Exception as e:
+            stats["degraded"] = True
+            stats["error"] = f"WazuhClient 初始化失败: {e}"
+            return stats
+
+        from collections import defaultdict
+        for a in assets:
+            agent_id = str(a.wazuh_agent_id)
+            stats["agents_scanned"] += 1
+            try:
+                procs = client._request(
+                    "GET", f"/syscollector/{agent_id}/processes",
+                    params={"limit": 500, "offset": 0},
+                ).get("data", {}).get("affected_items", [])
+            except Exception as e:
+                logger.warning("EndpointProcessBuilder: agent %s 拉取失败: %s",
+                               agent_id, e)
+                stats["degraded"] = True
+                continue
+
+            # 按 name 聚合（euser 去重集合 / pid 计数）
+            agg: dict = defaultdict(lambda: {"eusers": set(), "pids": 0})
+            for p in procs:
+                name = p.get("name")
+                if not name:
+                    continue
+                agg[name]["eusers"].add(p.get("euser") or "")
+                agg[name]["pids"] += 1
+
+            if len(agg) > self.max_processes_per_agent:
+                stats["truncated_agents"] += 1
+                agg = dict(sorted(
+                    agg.items(), key=lambda kv: -kv[1]["pids"]
+                )[:self.max_processes_per_agent])
+
+            host_key = f"asset:{a.id}"
+            ensure_node(
+                self.db, host_key, "asset", a.name or str(a.asset_ip),
+                ref_table="soc_assets", ref_id=str(a.id),
+            )
+            for name, info in agg.items():
+                pkey = f"process:{agent_id}:{name}"
+                ensure_node(
+                    self.db, pkey, "process", name,
+                    props={
+                        "agent_id": agent_id,
+                        "eusers": sorted(x for x in info["eusers"] if x),
+                        "pid_count": info["pids"],
+                    },
+                    props_synced_at=now,
+                )
+                stats["processes_built"] += 1
+                upsert_edge(
+                    self.db, host_key, pkey, "creates",
+                    confidence=0.9,           # agent 直接上报的观测事实
+                    sources=["wazuh"],
+                    evidence={"pid_count": info["pids"]},
+                    last_seen=now,
+                    expires_at=make_expires_at("creates", now),
+                    _now=now,
+                )
+                stats["creates_built"] += 1
+
+        logger.info("EndpointProcessBuilder rebuilt: %s", stats)
+        return stats
+
+
+# ---------------------------------------------------------------------------
 # 顶层调度入口（给 scheduler 用）
 # ---------------------------------------------------------------------------
 
@@ -1168,6 +1286,7 @@ def run_all_builders(db: Session, only: Optional[str] = None) -> dict:
         ("alert_group", AlertGroupBuilder),
         ("manual", ManualRelationBuilder),
         ("nat_mapping", NatMappingBuilder),  # OH-3.4（S2）：maps_to 边
+        ("endpoint_process", EndpointProcessBuilder),  # OH-3.9 端点行为图
     ]
     if only and only != "all":
         all_builders = [(n, c) for n, c in all_builders if n == only]
