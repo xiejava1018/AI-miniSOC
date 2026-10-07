@@ -122,3 +122,98 @@ class TestBatch:
         out = EntityResolver(db_session).resolve_batch(["009", "10.9.4.99"])
         assert out["total"] == 2
         assert out["hit"] == 1
+
+
+class TestT6Backfill:
+    def test_backfill_anchors(self, db_session: Session):
+        from datetime import datetime
+        from app.services.entity_resolver import backfill_events_alignment
+        a = _asset(db_session, "10.9.5.1", name="bf1")
+        db_session.commit()
+        db_session.add(IdentityEvent(
+            es_index="i", es_doc_id="bf1", dst_ip="10.9.5.1",
+            success=True, event_type="auth_success", ts=datetime.utcnow(),
+        ))
+        db_session.add(IdentityEvent(
+            es_index="i", es_doc_id="bf2", dst_ip="10.9.5.99",
+            success=False, event_type="auth_failed", ts=datetime.utcnow(),
+        ))
+        db_session.commit()
+
+        out = backfill_events_alignment(db_session)
+        assert out["dst_ips_matched"] >= 1
+        assert "10.9.5.99" in out["unmatched_ips"]
+
+        from sqlalchemy import text
+        n = db_session.execute(text(
+            "SELECT count(*) FROM soc_identity_events "
+            "WHERE es_doc_id='bf1' AND dst_asset_id IS NOT NULL")).scalar()
+        assert n == 1
+        # 未命中保持 NULL
+        n2 = db_session.execute(text(
+            "SELECT count(*) FROM soc_identity_events "
+            "WHERE es_doc_id='bf2' AND dst_asset_id IS NULL")).scalar()
+        assert n2 == 1
+
+    def test_backfill_idempotent(self, db_session: Session):
+        from datetime import datetime
+        from app.services.entity_resolver import backfill_events_alignment
+        _asset(db_session, "10.9.5.2", name="bf3")
+        db_session.commit()
+        db_session.add(IdentityEvent(
+            es_index="i", es_doc_id="bf3", dst_ip="10.9.5.2",
+            success=True, event_type="auth_success", ts=datetime.utcnow(),
+        ))
+        db_session.commit()
+        backfill_events_alignment(db_session)
+        out2 = backfill_events_alignment(db_session)
+        # 第二轮：无 NULL 行待处理
+        assert out2["events_anchored"] == 0
+
+
+class TestT6AlertReport:
+    def test_report_degraded_on_os_error(self, db_session: Session, monkeypatch):
+        from app.services import entity_resolver as er
+        # OpenSearch 不可达 → 诚实 degraded
+        import httpx
+
+        class BoomClient:
+            def __init__(self, *a, **k):
+                pass
+            def post(self, *a, **k):
+                raise httpx.ConnectError("unreachable")
+            def close(self):
+                pass
+        import httpx
+        monkeypatch.setattr(httpx, "Client", BoomClient)
+        out = er.alert_alignment_report(db_session)
+        assert out["degraded"] is True
+        assert "OpenSearch" in out["error"]
+
+    def test_report_matches(self, db_session: Session, monkeypatch):
+        from app.services import entity_resolver as er
+        _asset(db_session, "10.9.6.1", name="ar1")
+        db_session.commit()
+
+        class FakeClient:
+            def __init__(self, *a, **k):
+                pass
+            def post(self, url, headers=None, json=None):
+                class R:
+                    def raise_for_status(self):
+                        pass
+                    def json(self):
+                        return {"aggregations": {"by_agent_ip": {"buckets": [
+                            {"key": "10.9.6.1", "doc_count": 10},
+                            {"key": "10.9.6.99", "doc_count": 2},
+                        ]}}}
+                return R()
+            def close(self):
+                pass
+        import httpx
+        monkeypatch.setattr(httpx, "Client", FakeClient)
+        out = er.alert_alignment_report(db_session)
+        assert out["degraded"] is False
+        assert out["matched"] == 1
+        assert out["unmatched"] == 1
+        assert out["unmatched_ips"][0]["ip"] == "10.9.6.99"

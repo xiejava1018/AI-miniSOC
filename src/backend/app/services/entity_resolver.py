@@ -207,3 +207,124 @@ class EntityResolver:
             "note": ("分母=在册资产（非日志 IP 全集——攻击者公网 IP 计入"
                      "分母是口径错误）；快照非承诺，随资产增长漂移"),
         }
+
+
+# ---------------------------------------------------------------------------
+# OH-P1.T6：全量对齐（事件回填 + 告警 agent.ip 对齐报告）
+# ---------------------------------------------------------------------------
+
+
+def backfill_events_alignment(db: Session) -> Dict[str, Any]:
+    """把 soc_identity_events 的 dst_ip 全量锚定回填到 dst_asset_id。
+
+    幂等：只处理 dst_asset_id IS NULL 的行；按 distinct dst_ip 解析一次、
+    批量 UPDATE（避免逐行 resolve）。
+
+    诚实边界：
+      - 只回填 dst 侧（agent.ip，被登录主机）；src 侧主体是外部攻击 IP
+        （D-2 摸底：3987 种仅 0.2% 命中），不做 src 锚定。
+      - 未命中的 dst_ip 保持 NULL——影子资产发现（S8）的去重候选素材，
+        不强行猜。
+    """
+    resolver = EntityResolver(db)
+    stats = {
+        "dst_ips_scanned": 0,
+        "dst_ips_matched": 0,
+        "events_anchored": 0,
+        "events_remaining": 0,
+        "unmatched_ips": [],
+    }
+
+    rows = db.execute(text("""
+        SELECT dst_ip, count(*) FROM soc_identity_events
+        WHERE dst_asset_id IS NULL AND dst_ip IS NOT NULL
+        GROUP BY dst_ip
+    """)).fetchall()
+
+    for dst_ip, cnt in rows:
+        stats["dst_ips_scanned"] += 1
+        out = resolver.resolve(dst_ip, alias_type=ALIAS_IP)
+        if out.get("asset_id"):
+            db.execute(text("""
+                UPDATE soc_identity_events
+                SET dst_asset_id = CAST(:aid AS uuid)
+                WHERE dst_ip = :ip AND dst_asset_id IS NULL
+            """), {"aid": out["asset_id"], "ip": dst_ip})
+            stats["dst_ips_matched"] += 1
+            stats["events_anchored"] += int(cnt)
+        else:
+            stats["events_remaining"] += int(cnt)
+            if len(stats["unmatched_ips"]) < 50:
+                stats["unmatched_ips"].append(dst_ip)
+
+    db.commit()
+    logger.info("T6 backfill: %s", stats)
+    stats["note"] = ("未命中 dst_ip 保持 NULL（S8 影子候选素材）；"
+                     "新锚定结果由下一轮 IdentityGraphBuilder（1h）回流图谱")
+    return stats
+
+
+def alert_alignment_report(db: Session, *, days: int = 7) -> Dict[str, Any]:
+    """告警 agent.ip 全量对齐报告（只读，OpenSearch 聚合）。
+
+    告警不落 PG 行存（在 OpenSearch），故对齐结果是**报告**而非回填——
+    覆盖率 + 未锚 agent.ip 清单（供 S8 影子发现）。
+    """
+    import httpx
+    from app.core.config import settings
+    from app.services.data_source_resolver import data_source_resolver
+
+    rc = data_source_resolver.resolve("opensearch", db)
+    cfg = rc.config or {}
+    client = httpx.Client(
+        base_url=(cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/"),
+        auth=(cfg.get("username") or settings.OPENSEARCH_USER,
+              cfg.get("password") or settings.OPENSEARCH_PASSWORD),
+        verify=False, timeout=20,
+    )
+    body = {
+        "size": 0,
+        "query": {"bool": {"filter": [
+            {"range": {"timestamp": {"gte": f"now-{days}d"}}},
+            {"exists": {"field": "agent.ip"}},
+        ]}},
+        "aggs": {"by_agent_ip": {
+            "terms": {"field": "agent.ip", "size": 100},
+        }},
+    }
+    try:
+        resp = client.post(
+            "/wazuh-alerts-*/_search",
+            headers={"Content-Type": "application/json"}, json=body,
+        )
+        resp.raise_for_status()
+        buckets = (resp.json().get("aggregations", {})
+                   .get("by_agent_ip", {}).get("buckets", []))
+    except Exception as e:
+        return {"degraded": True, "error": f"OpenSearch 查询失败: {e}"}
+    finally:
+        client.close()
+
+    resolver = EntityResolver(db)
+    matched = unmatched = 0
+    unmatched_ips = []
+    for b in buckets:
+        out = resolver.resolve(b["key"], alias_type=ALIAS_IP)
+        if out.get("asset_id"):
+            matched += 1
+        else:
+            unmatched += 1
+            unmatched_ips.append({"ip": b["key"], "alert_count": b["doc_count"]})
+
+    total = matched + unmatched
+    return {
+        "degraded": False,
+        "window_days": days,
+        "agent_ips_total": total,
+        "matched": matched,
+        "unmatched": unmatched,
+        "match_ratio": round(matched / total, 4) if total else None,
+        "unmatched_ips": unmatched_ips[:50],
+        "note": ("告警在 OpenSearch 不落 PG，对齐为只读报告；"
+                 "未锚 agent.ip 是 S8 影子资产候选"),
+    }

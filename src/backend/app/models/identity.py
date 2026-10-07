@@ -37,6 +37,9 @@ class IdentityEvent(Base):
     event_type = Column(String(16), nullable=False, default="auth",
                         comment="auth_success/auth_failed/session_open/session_close")
     ts = Column(DateTime(timezone=True), nullable=False, comment="事件时间")
+    # OH-P1.T6：dst_ip 经 EntityResolver 锚定的资产 id（回填列，可空）
+    dst_asset_id = Column(UUID(as_uuid=True), nullable=True,
+                          comment="OH-P1.T6 回填：dst_ip 锚定的资产")
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
