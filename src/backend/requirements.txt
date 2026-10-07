@@ -26,6 +26,10 @@ alembic>=1.13,<2.0
 # 重试与容错
 tenacity>=8.2,<10.0
 
+# 邮件通知 (OH-NOT-F2 Phase 2): 异步 SMTP + Jinja2 模板
+aiosmtplib>=3.0,<6.0
+Jinja2>=3.1,<4.0
+
 # MCP (Model Context Protocol) — 让 Agent 通过 MCP 调用 FastAPI
 # 注意：mcp<1.13 有 issubclass(param.annotation, Context) 启动崩溃；mcp>=1.20 引入 pyjwt>=2.10.1
 # 与 zhipuai 的 pyjwt<2.9.0 冲突。限定为 1.13 ≤ mcp < 1.20，避免冲突

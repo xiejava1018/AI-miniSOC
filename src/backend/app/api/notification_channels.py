@@ -7,8 +7,9 @@ Phase 2：test 端点实际发邮件（Phase 1 仅校验配置完整性）。
 """
 
 from typing import List
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Body
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -127,11 +128,15 @@ def test_channel(
     body: ChannelTestRequest = ChannelTestRequest(),
     current_user: User = Depends(require_admin()),
     db: Session = Depends(get_db),
+    actual: bool = Query(
+        False,
+        description="Phase 2: true=真发邮件 (发到 to_address 或 admin 自己), false=仅 SMTP socket 测试 (Phase 1 行为)",
+    ),
 ):
-    """admin 手动测试通道（Phase 1 仅 email 校验 SMTP 配置，不实际发邮件）。
+    """admin 手动测试通道。
 
-    Phase 1 行为：读 SMTP 配置 + 校验完整性 + 模拟连接 (socket test)。
-    Phase 2 行为：实际通过 SMTP 发一封 hello email 给 admin 自己。
+    - actual=false (默认): 仅 SMTP socket 测试 (Phase 1 行为)
+    - actual=true (Phase 2): 真发邮件给 to_address (或 admin 自己) 并返回发送结果
     """
     import time as _time
 
@@ -163,30 +168,90 @@ def test_channel(
             elapsed_ms=0,
         )
 
-    # Phase 1 仅 SMTP socket 连接测试（不实际发邮件）
-    import socket
+    # Phase 1 行为: SMTP socket 连接测试 (不实际发邮件)
+    if not actual:
+        import socket
 
-    host = cfg.get("host")
-    port = int(cfg.get("port", 587))
-    t0 = _time.time()
-    try:
-        sock = socket.create_connection((host, port), timeout=5)
-        sock.close()
-        elapsed_ms = int((_time.time() - t0) * 1000)
-        return ChannelTestResult(
-            success=True,
-            message=f"SMTP socket connect OK (Phase 1: not sending email yet)",
-            smtp_host=host,
-            smtp_port=port,
-            elapsed_ms=elapsed_ms,
-        )
-    except Exception as e:  # noqa: BLE001
-        elapsed_ms = int((_time.time() - t0) * 1000)
+        host = cfg.get("host")
+        port = int(cfg.get("port", 587))
+        t0 = _time.time()
+        try:
+            sock = socket.create_connection((host, port), timeout=5)
+            sock.close()
+            elapsed_ms = int((_time.time() - t0) * 1000)
+            return ChannelTestResult(
+                success=True,
+                message=f"SMTP socket connect OK (Phase 1: not sending email yet)",
+                smtp_host=host,
+                smtp_port=port,
+                elapsed_ms=elapsed_ms,
+            )
+        except Exception as e:  # noqa: BLE001
+            elapsed_ms = int((_time.time() - t0) * 1000)
+            return ChannelTestResult(
+                success=False,
+                message=f"SMTP connect failed: {type(e).__name__}: {e}",
+                smtp_host=host,
+                smtp_port=port,
+                elapsed_ms=elapsed_ms,
+            )
+
+    # Phase 2 行为: 真发邮件
+    import time
+    from app.services.email_sender import send_email, EmailSendError
+    from app.services.email_template_registry import get_template_registry
+
+    # 决定收件邮箱
+    to_addr = (body.to_address if body.to_address else current_user.email) if hasattr(body, 'to_address') else current_user.email
+    if not to_addr:
         return ChannelTestResult(
             success=False,
-            message=f"SMTP connect failed: {type(e).__name__}: {e}",
-            smtp_host=host,
-            smtp_port=port,
+            message="no to_address and admin user has no email",
+            smtp_host=cfg.get("host"),
+            smtp_port=cfg.get("port"),
+            elapsed_ms=0,
+        )
+
+    # 渲染 test 模板
+    registry = get_template_registry()
+    template = registry.get("test") or registry.get_default()
+    ctx = {
+        "user": {"id": current_user.id, "username": current_user.username, "email": current_user.email},
+        "notification": {
+            "id": "",
+            "title": "SMTP 配置测试",
+            "content": "这是一封来自 AI-miniSOC 通知中心 SMTP 配置测试邮件。",
+            "link": "http://localhost:5173/system/notification-channels",
+            "created_at": None,
+        },
+        "type": "test",
+        "test_time": datetime.utcnow().isoformat() + "Z",
+    }
+
+    t0 = time.time()
+    try:
+        import asyncio
+        result = asyncio.run(send_email(
+            cfg,
+            to_addr=to_addr,
+            subject=template.render_subject(ctx),
+            text_body=template.render_text(ctx),
+            html_body=template.render_html(ctx),
+        ))
+        return ChannelTestResult(
+            success=result["success"],
+            message=f"email sent to {to_addr}: {result['message']}",
+            smtp_host=result["smtp_host"],
+            smtp_port=result["smtp_port"],
+            elapsed_ms=result["elapsed_ms"],
+        )
+    except EmailSendError as e:
+        elapsed_ms = int((time.time() - t0) * 1000)
+        return ChannelTestResult(
+            success=False,
+            message=f"send failed: {e}",
+            smtp_host=cfg.get("host"),
+            smtp_port=cfg.get("port"),
             elapsed_ms=elapsed_ms,
         )
 

@@ -41,6 +41,11 @@ from app.services.push_scheduler import (
     start_push_scheduler,
     stop_push_scheduler,
 )
+# OH-NOT-F2 Phase 2: 邮件投递 worker
+from app.services.email_notifier_worker import (
+    start_email_notifier_worker,
+    stop_email_notifier_worker,
+)
 # OH-3.7 图谱慢查询告警（Session #11）
 from app.services.graph.slow_query_monitor import (
     start_graph_perf_monitor,
@@ -106,6 +111,9 @@ async def lifespan(app: FastAPI):
     start_alert_digest_scheduler()
     start_cisa_kev_scheduler()
     start_push_scheduler()
+    # OH-NOT-F2 Phase 2: 邮件投递 worker (60s tick 扫 pending dispatch_logs)
+    if os.environ.get("EMAIL_NOTIFIER_ENABLED", "true").lower() == "true":
+        start_email_notifier_worker()
     # OH-3.7 图谱慢查询告警
     start_graph_perf_monitor()
     # OH-3.8 扩容触发线巡检
@@ -136,6 +144,8 @@ async def lifespan(app: FastAPI):
         await stop_alert_digest_scheduler()
         await stop_cisa_kev_scheduler()
         await stop_push_scheduler()
+        # OH-NOT-F2 Phase 2: 邮件 worker shutdown
+        await stop_email_notifier_worker()
         await stop_graph_perf_monitor()
         # OH-3.8 扩容触发线 shutdown
         await stop_graph_capacity_check()
