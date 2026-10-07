@@ -1,8 +1,8 @@
 # 2026-10-07：通知通道 + 偏好 + dispatcher 框架（OH-NOT-F2 · Phase 1）
 
 > 主题：通知系统扩展 + SMTP 可配置 + 多通道分发
-> Phase 1 commit: `4b5c261` · Phase 2 commit: `e4f7cd5`
-> alembic head: `t6u7v8w9x0y1`（dev testdb）
+> Phase 1 commit: `4b5c261` · Phase 2 commit: `e4f7cd5` · Phase 3 commit: `6b8718e`
+> alembic head: `u7v8w9x0y1z2`（dev testdb）
 
 ## 用户需求
 
@@ -118,12 +118,27 @@ PUT    /api/v1/notification-preferences/my/{type}/{channel_code}  upsert 偏好
 ✅ 菜单: id=101 通知通道(admin) + id=102 通知偏好(4 角色)，ri:mail-line / ri:notification-3-line
 ```
 
-### Phase 3 待办
+### Phase 3 交付（commit `6b8718e`，2026-10-07）
 
-- [ ] Jinja2 自定义模板（registry.register 已留扩展点）
-- [ ] dispatch_logs 管理/查询 API + 前端投递历史页
-- [ ] 邮件退订链接（unsubscribe token）
-- [ ] FK: dispatch_logs.notification_id → soc_notifications.id
+| 能力 | 实现 |
+|---|---|
+| **投递日志查询** | `GET /notification-dispatch-logs`（admin，通道/状态/用户筛选+分页）+ 前端「投递日志」页 |
+| **邮件一键退订** | HMAC-SHA256 无状态 token（SECRET_KEY，30 天 TTL）；公开端点返回 HTML 结果页；邮件 footer 自动注入链接 |
+| **DB 模板覆盖** | `soc_email_templates` 表；registry 60s 缓存合并（DB > 内置）；GET/PUT/DELETE admin API + 前端模板管理卡片；str.format 语法校验 |
+| **FK 补全** | dispatch_logs.notification_id → soc_notifications(id) ON DELETE SET NULL（先清孤儿） |
+
+**关键坑**：静态路由 `/email-templates` 必须先于 `/{channel_id}` 注册，
+否则被参数路由抢匹配返回 422（CLAUDE.md asset_query 同款坑）。
+
+**E2E 实测**：override 往返（PUT→GET source=override→DELETE→builtin）、
+退订 token 往返 + 偏好真实关闭、坏 token 400、渲染冒烟（DB 覆盖+退订链接注入）。
+
+### Phase 4 候选（未排期）
+
+- [ ] 通知中心独立菜单（全量通知列表页，替代仅顶栏铃铛）
+- [ ] 通知聚合/摘要 digest（每日一封汇总邮件）
+- [ ] dispatch_logs 保留策略（定期清理 >90 天）
+- [ ] webhook / 飞书 / 短信通道（channels.code 已预留）
 
 ## Phase 2 待办（✅ 已全部完成，见上）
 
