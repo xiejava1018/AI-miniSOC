@@ -230,6 +230,32 @@ class WazuhClient:
         data = self._request("GET", f"/syscheck/{agent_id}", params=params)
         return data.get("data", {}).get("items", [])
 
+    # ---- OH-6.6（OH-3.9/端点行为图数据源扩展，2026-10-07） ----
+
+    def get_processes(
+        self, agent_id: str, limit: int = 500
+    ) -> List[Dict[str, Any]]:
+        """syscollector 进程清单（端点行为图 creates 边数据源）。
+
+        实测注（2026-10-07）：本环境部分 agent 的 syscollector 存在“毒记录”
+        ——含该记录的任何分页窗都 400。调用方须按 agent 捕获异常降级。
+        """
+        data = self._request(
+            "GET", f"/syscollector/{agent_id}/processes",
+            params={"limit": limit, "offset": 0},
+        )
+        return data.get("data", {}).get("affected_items", [])
+
+    def get_ports(
+        self, agent_id: str, limit: int = 500
+    ) -> List[Dict[str, Any]]:
+        """syscollector 监听端口清单（本地监听，非外联连接）。"""
+        data = self._request(
+            "GET", f"/syscollector/{agent_id}/ports",
+            params={"limit": limit, "offset": 0},
+        )
+        return data.get("data", {}).get("affected_items", [])
+
     def get_agent_sysinfo(self, agent_id: str) -> Dict[str, Any]:
         """获取 agent 的系统信息（硬件、操作系统等）"""
         try:

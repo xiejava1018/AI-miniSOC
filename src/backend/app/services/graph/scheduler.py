@@ -30,8 +30,11 @@ from app.services.graph import delete_expired_edges
 from app.services.graph.builders import (
     AlertGroupBuilder,
     AssetPortVulnBuilder,
+    EndpointProcessBuilder,
     IdentityGraphBuilder,
     ManualRelationBuilder,
+    NatMappingBuilder,
+    NetworkConnectionBuilder,
     TopologyBuilder,
 )
 from app.services.task_observability import (
@@ -289,6 +292,22 @@ async def rebuild_endpoint_process_task() -> dict:
     )
 
 
+@track_task(
+    task_key="graph_builder_network_connection",
+    task_name="外联连接边构建（每6小时）",
+    task_type="scheduled",
+    schedule_expr="@every 6h",
+    expected_interval_s=ENDPOINT_PROCESS_INTERVAL_S,
+    timeout_s=300,
+)
+async def rebuild_network_connection_task() -> dict:
+    """EDR 网络事件入图（connects_to：主机→外联目标，OH-6.6）。"""
+    return await _offload(
+        lambda db: NetworkConnectionBuilder(db).rebuild_all(),
+        "network_connection",
+    )
+
+
 # ---------------------------------------------------------------------------
 # asyncio 循环（启动后 60s 首跑，之后按各自间隔触发）
 # 与 alert_group_snapshot_scheduler._loop 同款范式
@@ -367,8 +386,11 @@ async def start_graph_builders() -> None:
             asyncio.create_task(_interval_loop(
                 rebuild_endpoint_process_task,
                 ENDPOINT_PROCESS_INTERVAL_S, "endpoint_process")),
+            asyncio.create_task(_interval_loop(
+                rebuild_network_connection_task,
+                ENDPOINT_PROCESS_INTERVAL_S, "network_connection")),
         ])
-        logger.info("graph builders started: 8 loops")
+        logger.info("graph builders started: 9 loops")
 
     asyncio.create_task(_start_all())
 

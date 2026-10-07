@@ -20,14 +20,8 @@ def _asset(db, name, ip, agent):
 
 
 def _procs(names):
-    return {
-        "data": {
-            "affected_items": [
-                {"name": n, "pid": str(i), "euser": "root"}
-                for i, n in enumerate(names)
-            ]
-        }
-    }
+    return [{"name": n, "pid": str(i), "euser": "root"}
+            for i, n in enumerate(names)]
 
 
 class _FakeWazuhClient:
@@ -37,11 +31,10 @@ class _FakeWazuhClient:
         "001": _procs(["sshd", "nginx", "sshd"]),  # 重复名聚合
     }
 
-    def _request(self, method: str, path: str, params=None):
-        aid = path.split("/")[2]
-        if aid == "bad":
+    def get_processes(self, agent_id: str, limit: int = 500):
+        if agent_id == "bad":
             raise RuntimeError("400 Bad Request")
-        return self.pages.get(aid, _procs([]))
+        return self.pages.get(agent_id, _procs([]))
 
 
 class TestEndpointProcessBuilder:

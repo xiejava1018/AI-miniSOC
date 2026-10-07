@@ -1207,10 +1207,7 @@ class EndpointProcessBuilder:
             agent_id = str(a.wazuh_agent_id)
             stats["agents_scanned"] += 1
             try:
-                procs = client._request(
-                    "GET", f"/syscollector/{agent_id}/processes",
-                    params={"limit": 500, "offset": 0},
-                ).get("data", {}).get("affected_items", [])
+                procs = client.get_processes(agent_id)
             except Exception as e:
                 logger.warning("EndpointProcessBuilder: agent %s 拉取失败: %s",
                                agent_id, e)
@@ -1265,6 +1262,159 @@ class EndpointProcessBuilder:
 
 
 # ---------------------------------------------------------------------------
+# Builder 8: NetworkConnectionBuilder（OH-6.6，EDR 事件入图）
+# ---------------------------------------------------------------------------
+
+
+class NetworkConnectionBuilder:
+    """构建 connects_to 边：``(Host)-connects_to->(外联目标)``（OH-6.6）。
+
+    数据源：OpenSearch wazuh-alerts 中含 ``data.dstip`` 的网络遥测事件
+    （auditd/Sysmon/防火墙外联类）。按 (agent, dstip) 聚合。
+
+    诚实边界（v1，2026-10-07 实测）：
+      - **现网无外联网络遥测**——wazuh-alerts 全量 0 条含 data.dstip 的
+        文档（只有入站攻击 srcip）。builder 真实执行，命中 0 → 返回
+        degraded + "无外联网络遥测"，**不伪造 connects_to 边**。
+        环境接入 auditd/Sysmon/NetFlow 后自然出数。
+      - 边是**主机级**（无进程归因）——现网事件无 process 字段；
+        进程级 connects_to 待真实 EDR 遥测。
+    """
+
+    def __init__(self, db: Session, *, window_days: int = 7):
+        self.db = db
+        self.window_days = window_days
+
+    def rebuild_all(self) -> dict:
+        from app.models.asset import Asset
+        from datetime import timedelta
+
+        stats = {
+            "events_scanned": 0,
+            "connects_to_built": 0,
+            "degraded": False,
+            "error": None,
+        }
+        now = _utcnow()
+
+        # 1. 查 OpenSearch 含 data.dstip 的事件（按 agent+dstip 聚合）
+        try:
+            conn_buckets = self._fetch_connections()
+        except Exception as e:
+            stats["degraded"] = True
+            stats["error"] = f"OpenSearch 查询失败: {e}"
+            return stats
+
+        stats["events_scanned"] = len(conn_buckets)
+        if not conn_buckets:
+            stats["degraded"] = True
+            stats["error"] = ("窗口内无含 data.dstip 的外联遥测事件"
+                              "（现网未接入 auditd/Sysmon/NetFlow 外联日志）")
+            return stats
+
+        # 2. agent → asset 映射
+        assets = {
+            str(a.wazuh_agent_id): a
+            for a in self.db.query(Asset)
+            .filter(Asset.wazuh_agent_id.isnot(None)).all()
+        }
+
+        # 3. 建边（主机级，无进程归因——诚实标注在 evidence）
+        for (agent_id, dst_ip), count in conn_buckets:
+            a = assets.get(agent_id)
+            if a is None:
+                continue  # 未纳管资产的 agent 不建边
+            host_key = f"asset:{a.id}"
+            dst_key = resolve_asset_or_ip_node(self.db, dst_ip)
+            ensure_node(self.db, host_key, "asset", a.name or str(a.asset_ip),
+                        ref_table="soc_assets", ref_id=str(a.id))
+            if dst_key.startswith("ip:"):
+                # 外联目标未纳管 → 建独立 ip 节点（边 FK 要求节点先存在）
+                ensure_node(self.db, dst_key, "ip", dst_ip,
+                            props={"is_external": True})
+            elif dst_key.startswith("asset:"):
+                dst_asset = self.db.get(Asset, dst_key.split(":", 1)[1])
+                ensure_node(
+                    self.db, dst_key, "asset",
+                    (dst_asset.name if dst_asset else None) or dst_ip,
+                    ref_table="soc_assets",
+                    ref_id=dst_key.split(":", 1)[1],
+                )
+            upsert_edge(
+                self.db, host_key, dst_key, "connects_to",
+                confidence=0.7,           # 网络遥测观测，非 agent 直报配置
+                sources=["opensearch"],
+                evidence={
+                    "event_count": count,
+                    "attribution": "host-level（无进程归因）",
+                },
+                last_seen=now,
+                expires_at=make_expires_at("connects_to", now),
+                _now=now,
+            )
+            stats["connects_to_built"] += 1
+
+        logger.info("NetworkConnectionBuilder rebuilt: %s", stats)
+        return stats
+
+    def _fetch_connections(self) -> list:
+        """OpenSearch 聚合：窗口内含 data.dstip 的事件按 (agent, dstip) 分桶。
+
+        返回 [((agent_id, dst_ip), doc_count), ...]。
+        """
+        import httpx
+        from app.core.config import settings
+        from app.services.data_source_resolver import data_source_resolver
+
+        rc = data_source_resolver.resolve("opensearch", self.db)
+        cfg = rc.config or {}
+        client = httpx.Client(
+            base_url=(cfg.get("endpoint") or settings.OPENSEARCH_URL).rstrip("/"),
+            auth=(cfg.get("username") or settings.OPENSEARCH_USER,
+                  cfg.get("password") or settings.OPENSEARCH_PASSWORD),
+            verify=False, timeout=20,
+        )
+        body = {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"range": {"timestamp": {
+                            "gte": f"now-{self.window_days}d"}}},
+                        {"exists": {"field": "data.dstip"}},
+                    ],
+                },
+            },
+            "aggs": {
+                "by_agent": {
+                    "terms": {"field": "agent.id", "size": 50},
+                    "aggs": {
+                        "by_dst": {
+                            "terms": {"field": "data.dstip", "size": 50},
+                        },
+                    },
+                },
+            },
+        }
+        try:
+            resp = client.post(
+                "/wazuh-alerts-*/_search",
+                headers={"Content-Type": "application/json"},
+                json=body,
+            )
+            resp.raise_for_status()
+            aggs = resp.json().get("aggregations", {})
+        finally:
+            client.close()
+
+        out = []
+        for ab in aggs.get("by_agent", {}).get("buckets", []):
+            for db_ in ab.get("by_dst", {}).get("buckets", []):
+                out.append(((ab["key"], db_["key"]), db_["doc_count"]))
+        return out
+
+
+# ---------------------------------------------------------------------------
 # 顶层调度入口（给 scheduler 用）
 # ---------------------------------------------------------------------------
 
@@ -1287,6 +1437,7 @@ def run_all_builders(db: Session, only: Optional[str] = None) -> dict:
         ("manual", ManualRelationBuilder),
         ("nat_mapping", NatMappingBuilder),  # OH-3.4（S2）：maps_to 边
         ("endpoint_process", EndpointProcessBuilder),  # OH-3.9 端点行为图
+        ("network_connection", NetworkConnectionBuilder),  # OH-6.6 connects_to
     ]
     if only and only != "all":
         all_builders = [(n, c) for n, c in all_builders if n == only]
