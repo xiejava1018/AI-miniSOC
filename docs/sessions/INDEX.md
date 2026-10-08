@@ -114,6 +114,7 @@
 
 ## 采集器 / 僵尸进程 / 凭证
 
+- **2026-10-08：前端 data-health "网络错误" 三层修复** → [2026-10-08-frontend-data-health-network-error.md](2026-10-08-frontend-data-health-network-error.md) — vite proxy localhost IPv6 坑、axios 30s 覆盖冷启动、ECONNABORTED 单独文案
 - **2026-10-08：AssetSync wazuh_agent_id 漂移识别修复** → [2026-10-08-asset-sync-wazuh-agent-id-drift.md](2026-10-08-asset-sync-wazuh-agent-id-drift.md) — 17 条 IP 漂移资产一次性释放占位；0.18 重新入表；wazuh:agents 修复后稳态 0 失败；顺手配 WAZUH_WEBHOOK_KEY 真 key 关闭裸 API 风险
 - **2026-10-08：wazuh-collector 假绿 6 周活体案例修复** → [2026-10-08-wazuh-collector-data-type-trim.md](2026-10-08-wazuh-collector-data-type-trim.md) — config 移除 vulnerability/baseline；sync_client 严判 envelope 治住假绿；顺手暴露 wazuh:agents UniqueViolation 6 周未修
 - **2026-08-23：采集器 unhealthy / 僵尸进程 → CI/CD 缺口** (L1344–1480) — tplink `__main__.py` 的 `--test` 分支连开 3 个 asyncio.run 导致 RuntimeError；`TPLinkCollector` 补 close()；compose `init: true`；wazuh `yaml.safe_load` 不展开 `${VAR}` → 401
