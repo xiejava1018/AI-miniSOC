@@ -64,6 +64,17 @@ class MiniSOCClient:
                 # 注意：业务失败时 HTTP 仍是 200，真实状态在 body.code（CLAUDE.md 注意 #11）。
                 # 不能只看 HTTP 状态——否则业务失败会被记成“同步成功”（假绿）。
                 body = resp.json()
+                if not isinstance(body, dict) or "code" not in body:
+                    # 响应不是 envelope 形态——视为异常，避免老逻辑 `else: return body` 假绿
+                    last_error = RuntimeError(f"响应非 envelope 形态: {str(body)[:200]}")
+                    logger.warning(
+                        f"同步收到非预期响应 (attempt {attempt}/{self.max_retries}): "
+                        f"body={str(body)[:200]}"
+                    )
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    raise last_error
                 if body.get("code") == 200 and isinstance(body.get("data"), dict):
                     result = body["data"]
                 elif body.get("code") and body.get("code") != 200:
@@ -79,7 +90,19 @@ class MiniSOCClient:
                         continue
                     raise last_error
                 else:
-                    result = body
+                    # code==200 但 data 不是 dict（异常情况）→ 当失败处理
+                    last_error = RuntimeError(
+                        f"业务成功但 data 字段异常: code={body.get('code')}, "
+                        f"data={body.get('data')}"
+                    )
+                    logger.warning(
+                        f"同步 data 字段异常 (attempt {attempt}/{self.max_retries}): "
+                        f"{str(body)[:200]}"
+                    )
+                    if attempt < self.max_retries:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    raise last_error
 
                 logger.info(
                     f"同步成功: source={source}, type={data_type}, "

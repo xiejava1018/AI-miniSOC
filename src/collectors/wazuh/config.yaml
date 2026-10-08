@@ -1,8 +1,11 @@
 # Wazuh Collector 配置
+# 2026-10-08 修复：移除 vulnerability / baseline（后端 /data/sync 不支持，且 SCA/CVE 真实链路在 OpenSearch，见 T5）
+# 参见 docs/sessions/INDEX.md / 2026-10-08-wazuh-collector-data-type-trim.md
 
 # AI-miniSOC 连接配置
+# 实际由 docker-compose env 注入覆盖（MINISOC_URL），这里仅作 fallback
 minisoc:
-  url: http://192.168.0.128:8000
+  url: http://192.168.0.102:8000
   api_key: ${MINISOC_API_KEY}
 
 # 采集配置
@@ -11,8 +14,6 @@ collect:
   once: false
   types:
     - asset
-    - vulnerability
-    - baseline
 
 # Wazuh 连接配置
 wazuh:

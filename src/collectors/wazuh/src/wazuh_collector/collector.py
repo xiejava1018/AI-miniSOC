@@ -164,7 +164,9 @@ async def run_collector(config: CollectorConfig) -> None:
     collector = WazuhCollector(config)
 
     # 确定要采集的类型
-    collect_types = config.collect_types or ["asset", "vulnerability", "baseline"]
+    # 2026-10-08：去掉 vulnerability / baseline——后端 /data/sync 不支持
+    # 真实漏洞/SCA 同步走 OpenSearch 链路（见 T5 迁移 / opensearch_scap_sync.py）
+    collect_types = config.collect_types or ["asset"]
     data_types = [DataType(t) for t in collect_types]
 
     logger.info(f"Wazuh Collector 启动，采集类型: {collect_types}")
