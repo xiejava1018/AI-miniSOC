@@ -114,6 +114,7 @@
 
 ## 采集器 / 僵尸进程 / 凭证
 
+- **2026-10-08：wazuh-collector 假绿 6 周活体案例修复** → [2026-10-08-wazuh-collector-data-type-trim.md](2026-10-08-wazuh-collector-data-type-trim.md) — config 移除 vulnerability/baseline；sync_client 严判 envelope 治住假绿；顺手暴露 wazuh:agents UniqueViolation 6 周未修
 - **2026-08-23：采集器 unhealthy / 僵尸进程 → CI/CD 缺口** (L1344–1480) — tplink `__main__.py` 的 `--test` 分支连开 3 个 asyncio.run 导致 RuntimeError；`TPLinkCollector` 补 close()；compose `init: true`；wazuh `yaml.safe_load` 不展开 `${VAR}` → 401
 
 ## 生产库迁移

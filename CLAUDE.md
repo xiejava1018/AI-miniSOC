@@ -305,9 +305,18 @@ LLM 只选模板填参数，**不生成 SQL**。模板清单在 `configs/query_t
 1. 分页字段映射：`core.paginationKey = { current: 'page', size: 'page_size' }` 对齐后端
 2. 响应提取：`sizeFields` 默认不含 `page_size` → 在 `transform.responseAdapter` 显式解包
 
-### 4.13 同步采集器 `sync_client` 的假绿（**已知未修**）
+### 4.13 同步采集器 `sync_client` 的假绿（**2026-10-08 修复**）
 
-`sync_client` 把 `body.code=400` 当成同步成功——wazuh/baseline 数据其实没进库，`soc_source_health` 也跟着记 success。**未修原因**：改对会让 `/data-health` 转 degraded——这是正确行为，但要决策是补后端 `data/sync` 类型支持还是接受降级面板。
+**根因**：`sync_client` 旧版 `else: result = body` 兜底 + `wazuh-collector` 配置推 `[asset, vulnerability, baseline]` 但后端 handler 只注册了 `[asset, port, discovery, nat_mapping]`。HTTP 200 + `code=400` 被采集器当成功。**6 周 baseline/vulnerability 0 入库**。
+
+**修复**（[2026-10-08-wazuh-collector-data-type-trim.md](docs/sessions/2026-10-08-wazuh-collector-data-type-trim.md)）：
+- `wazuh/config.yaml` `types:` 移除 vulnerability/baseline
+- `base/collector_framework/sync_client.py` 严判 envelope：非 dict / 无 code / data 非 dict / code!=200 全部走重试到 raise
+- 顺手暴露 `wazuh:agents` UniqueViolation 6 周未修（`uq_soc_assets_agent_id` 在批内冲突）—— 见「已知未修 / 待办」
+
+**配套教训**：
+- 任何架构迁移（T5 等）必须**三处同步改**：①代码 ②配置 ③所有依赖配置的下游（采集器/容器/CI）
+- `pip install -e` 装的 base 库**不会自动跟随源代码变更**——采集器镜像 site-packages 必须 `docker compose build` 重建，否则容器里跑的是 6 周前的代码
 
 ### 4.14 Mac 到 GitHub 慢网
 
@@ -349,7 +358,8 @@ POST `/auth/login` 不带 `captcha_key`/`captcha_code` 即跳过验证。前端�
 详见 [`docs/sessions/CLAUDE-archive-v2.36-2026-09-15.md`](docs/sessions/CLAUDE-archive-v2.36-2026-09-15.md) 各章节「待办（不阻塞）」节，摘要：
 
 - 登录验证码后端强制校验（§4.16 安全洞）
-- 同步采集器 `sync_client` 不看 `body.code`（§4.13 假绿）
+- ~~同步采集器 `sync_client` 不看 `body.code`（§4.13 假绿）~~ **2026-10-08 修复**
+- **新增 2026-10-08**：`AssetSyncHandler` 批量 upsert 触发 `uq_soc_assets_agent_id` 唯一约束违反 → 整批 500 → `wazuh:agents` 6 周持续 1/3 失败（success 8192 / failure 5370）
 - Loki 192.168.0.30:3100 不可达（`browsing_detector` 持续降级）
 - F2.1 L2 降级文案说"已达调用限额"实际可能是熔断（措辞略偏）
 - 旧远端生产库 `111.228.57.2:25432` 暂未删（迁回滚素材）
