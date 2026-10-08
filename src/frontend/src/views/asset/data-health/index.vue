@@ -503,7 +503,9 @@
         display: flex;
         flex-wrap: wrap;
         gap: 20px;
-        align-items: center;
+        // 2026-10-08：align-items: center 会让 ov-left 被 ov-right 高度拉低（视觉上
+        // ov-left 上下被裁）。改 flex-start 让状态卡顶部对齐。
+        align-items: flex-start;
       }
 
       .ov-left {
@@ -513,25 +515,30 @@
         // flex-basis 让左侧拿 220px、多出空间可伸、可被 flex-wrap 换行。
         min-width: 0;
         flex: 0 0 220px;
+        // 2026-10-08：line-height: normal 防止 ov-text 被 22px icon 行高影响
+        // 导致 ov-text 被 overflow:hidden 切掉下半个字。
+        line-height: 1.4;
 
         .ov-status {
           display: flex;
           gap: 8px;
           align-items: center;
           min-width: 0;
+          // 2026-10-08：之前 height: 26px 锁住了行高，导致 ov-text 17px + default line-height
+          // 超 26px 被父容器切了上半部分。改 min-height 26px 让容器可伸。
+          min-height: 26px;
 
           .ov-icon {
             font-size: 22px;
             flex-shrink: 0;
+            line-height: 1;
           }
 
           .ov-text {
             font-size: 17px;
             font-weight: 600;
-            // 不让文字被截断或出现水平滚动条
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            line-height: 1.2;
+            // ov-text 6 个中文加粗 ≈ 130px < 220px，不需要 ellipsis
           }
         }
 
@@ -539,6 +546,8 @@
           margin-top: 4px;
           font-size: 12px;
           color: var(--art-text-gray-500);
+          line-height: 1.2;
+          // ov-time 时间字符串（252px）超 220px 时 ellipsis 截断
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
