@@ -232,6 +232,14 @@ class AssetSyncHandler(BaseSyncHandler):
         if not asset_ip:
             raise ValueError("缺少 asset_ip 字段")
 
+        # 2026-10-08：wazuh_agent_id 漂移识别
+        # 背景：partial unique index 让 wazuh_agent_id 全局唯一。Wazuh agent DHCP 漂移到新 IP
+        # 之后，旧 IP 被 tplink 等其他来源接管时，旧资产上 wazuh_agent_id 残留，
+        # 阻止新 IP 的资产重新入表 → UniqueViolation → 同 batch 后续 17 条全部 500。
+        # 修复：先释放“陈旧占位”，再走原有查重+upsert。
+        if item.get("wazuh_agent_id"):
+            self._release_stale_wazuh_agent_id(item, db)
+
         # segment 优先级：采集器显式上报 > 环境事实表推断（app/services/network_segment.py）
         # 背景（2026-XX-XX）：存量资产已从 'default' 回填为 hq-lan/aliyun-172.18 等，
         # 若继续用裸 'default' 查重，(default, ip) 必然 miss → 每 5 分钟批量建重复资产。
@@ -266,6 +274,68 @@ class AssetSyncHandler(BaseSyncHandler):
             return fused
 
         return self._create_new(source, item, sync_task_id, now, db)
+
+    def _release_stale_wazuh_agent_id(self, item: dict, db: Session) -> None:
+        """释放被“陈旧资产”占用的 wazuh_agent_id。
+
+        背景：partial unique index `uq_soc_assets_agent_id` 让 wazuh_agent_id 在
+        soc_assets 表里全局唯一（NULL 例外）。当 Wazuh agent DHCP 漂移到新 IP、
+        且旧 IP 被 tplink / scanner / 人工等其他来源接管后，旧资产上 wazuh_agent_id
+        会残留 → 阻止新 IP 的资产重新入表 → UniqueViolation → 同 batch 后续 N 条全 500。
+
+        判定“陈旧”：
+          - asset_status == 'offline'           （wazuh 那边已断连）
+          - last_synced_at 早于 24h              （wazuh 那边已很久没推）
+          - data_source != 'wazuh'              （已经被其他来源接管）
+
+        不释放“陈旧”的：
+          - 则 raise（采集器侧需人工介入）
+
+        调用时机：_upsert_asset 入口。
+        """
+        agent_id = str(item.get("wazuh_agent_id"))
+        target_ip = item.get("asset_ip")
+        target_seg = item.get("network_segment") or infer_segment(target_ip)
+
+        stale = db.query(Asset).filter(
+            Asset.wazuh_agent_id == agent_id,
+        ).first()
+        if stale is None:
+            return  # 无占用，无需释放
+
+        # 占位的就是新 item 目标资产（（IP, segment）同）：走更新路径不会冲突，不释放
+        if str(stale.asset_ip) == str(target_ip) and stale.network_segment == target_seg:
+            return
+
+        now = datetime.now(timezone.utc)
+        is_stale = (
+            stale.asset_status == "offline"
+            or (stale.last_synced_at is not None
+                and (now - stale.last_synced_at).total_seconds() > 86400)
+            or (stale.data_source is not None and stale.data_source != "wazuh")
+        )
+
+        if not is_stale:
+            # 占用方还是“活着的 wazuh 资产” → 采集器侧 wazuh_agent_id 重复上报，不该发生
+            raise ValueError(
+                f"wazuh_agent_id {agent_id} 已被活跃资产 {stale.id} (ip={stale.asset_ip}) 占用，"
+                f"无法新建/更新 {target_ip}；请检查 Wazuh Server 上是否有重复 agent id"
+            )
+
+        # 释放占位：设为 NULL 让 partial unique index 跳过，变更日志记录
+        stale.wazuh_agent_id = None
+        db.flush()
+        self._log_change(
+            asset_id=stale.id, sync_task_id=None,
+            change_type="wazuh_agent_id_drop",
+            field_name="wazuh_agent_id",
+            old_value=agent_id, new_value=None, db=db,
+        )
+        logger.info(
+            "OH-4.1 wazuh_agent_id 漂移识别：释放旧资产 %s (ip=%s) 上的 wazuh_agent_id=%s，"
+            "新观测将绑定到 %s",
+            stale.id, stale.asset_ip, agent_id, target_ip,
+        )
 
     def _find_fusion_candidates(self, item: dict, db: Session) -> list:
         """按非 IP 身份信号查候选资产（MAC / wazuh agent / 主机名）。"""
