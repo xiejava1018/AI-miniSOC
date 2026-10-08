@@ -94,8 +94,22 @@ export function handleError(error: AxiosError<ErrorResponse>): never {
     timestamp: new Date().toISOString()
   })
 
+  if (error.code === 'ECONNABORTED') {
+    // axios timeout：不要误报为“网络错误”，后端可能正在冷启动/重查询（CLAUDE.md §4.10）
+    const httpError = new HttpError(
+      '请求超时，后端响应过慢或冷启动中，请重试',
+      ApiStatus.error,
+      {
+        url: requestConfig?.url,
+        method: requestConfig?.method?.toUpperCase()
+      }
+    )
+    throw httpError
+  }
+
   if (!error.response) {
-    const httpError = new HttpError('网络错误', ApiStatus.error, {
+    // 真正的网络错误：连接被拒 / DNS 失败 / CORS 拦截 / 服务不来
+    const httpError = new HttpError('网络错误，请检查后端连接', ApiStatus.error, {
       url: requestConfig?.url,
       method: requestConfig?.method?.toUpperCase()
     })

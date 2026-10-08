@@ -14,9 +14,16 @@ import tailwindcss from '@tailwindcss/vite'
 export default ({ mode }: { mode: string }) => {
   const root = process.cwd()
   const env = loadEnv(mode, root)
-  const { VITE_VERSION, VITE_PORT, VITE_BASE_URL, VITE_API_URL, VITE_API_PROXY_URL, VITE_ALLOWED_HOSTS } = env
+  const { VITE_VERSION, VITE_PORT, VITE_BASE_URL, VITE_API_URL, VITE_ALLOWED_HOSTS } = env
+  // 2026-10-08：VITE_API_PROXY_URL 默认 127.0.0.1:8000。
+  // Mac 本地 uvicorn 监听 0.0.0.0（IPv4 only），localhost 会走 IPv6 ::1 解析，
+  // vite proxy 转发到 ::1:8000 ECONNREFUSED → 浏览器报"网络错误"。
+  // 0.0.0.0 不接受 IPv6 连接，必须走 127.0.0.1 明确 IPv4。
+  // 注意：.env.development 走 .gitignore（不入库），所以默认项必须留在代码里。
+  const VITE_API_PROXY_URL = env.VITE_API_PROXY_URL || 'http://127.0.0.1:8000'
 
   console.log(`🚀 API_URL = ${VITE_API_URL}`)
+  console.log(`🚀 API_PROXY_URL = ${VITE_API_PROXY_URL}`)
   console.log(`🚀 VERSION = ${VITE_VERSION}`)
   console.log(`🚀 ALLOWED_HOSTS = ${VITE_ALLOWED_HOSTS || 'all'}`)
 

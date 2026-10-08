@@ -4,7 +4,10 @@ import { ApiStatus } from './status'
 import { HttpError, handleError, showError, showSuccess } from './error'
 
 /** 请求配置常量 */
-const REQUEST_TIMEOUT = 15000
+// 2026-10-08：15s 不够覆盖后端冷启动（CLAUDE.md §4.10 8s+，但 data-health 端点首次查
+// 三表 source_health + 死信 + 对账差异 实际要 20-30s）。30s + 重试 2 次最坏 ~90s，
+// 但用户能看 loading 状态，体验上比"网络错误"误报好。
+const REQUEST_TIMEOUT = 30000
 const LOGOUT_DELAY = 500
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1000
