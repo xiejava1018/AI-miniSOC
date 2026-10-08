@@ -469,9 +469,12 @@
     }
   }
 
-  onMounted(() => {
-    load()
-    loadAggregate()
+  onMounted(async () => {
+    // 2026-10-08：串行调用避免两个重冷查询一起打（源健康 / 死信 / 对账三表 +
+    // 资产完整度四表），双 30s timeout 内会同时超（dev mode 后端未预热）。
+    // 生产环境 systemd 后端持续在跑不影响，但保持串行不要双请求。
+    await load()
+    await loadAggregate()
   })
 </script>
 

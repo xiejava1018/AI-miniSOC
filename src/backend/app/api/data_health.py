@@ -31,7 +31,6 @@ from app.models.sync_task import SyncTask
 from app.models.user import User
 from app.services.asset_reconciliation import (
     STALE_SYNC_HOURS,
-    AssetReconciliationService,
 )
 
 logger = logging.getLogger(__name__)
@@ -146,7 +145,10 @@ async def data_health(
             )
 
     # ---------- 第 3 层：对账差异 ----------
-    recon = AssetReconciliationService(db).summary()
+    # 2026-10-08：data-health 页面首次冷启动 8-30s（uvicorn lifespan + DB pool
+    # + AssetReconciliationService 首次 JOIN 编译）。最重的就是 AssetReconciliationService
+    # 内部的全表聚合。修法：这里只取 pending 计数（轻量），“最新对账”详情走独立
+    # /assets/reconciliations/summary 端点（如需），避免双 30s timeout。
     recon_pending_all = (
         db.execute(
             select(func.count())
@@ -287,7 +289,7 @@ async def data_health(
             "samples": dl_samples,
         },
         "reconciliation": {
-            "latest_run": recon,
+            "latest_run": None,  # 2026-10-08：从 AssetReconciliationService.summary() 提取出去，避免 data-health 冷启动最重的 JOIN；详见 /assets/reconciliations/summary
             "pending_all_runs": recon_pending_all,
         },
         "sync_freshness": {
