@@ -504,7 +504,9 @@
       }
 
       .ov-left {
-        min-width: 180px;
+        // 2026-10-08：'数据链路正常/降级/故障' 6 个中文加 22px icon 加 8px gap
+        // 180px 会被换行；从 180 调大到 220。min-width 保持兑子状态（中等以上窗口不拐弯）。
+        min-width: 220px;
 
         .ov-status {
           display: flex;
