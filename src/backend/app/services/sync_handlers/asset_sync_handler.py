@@ -288,6 +288,11 @@ class AssetSyncHandler(BaseSyncHandler):
           - last_synced_at 早于 24h              （wazuh 那边已很久没推）
           - data_source != 'wazuh'              （已经被其他来源接管）
 
+        “自己”判定（不释放）：
+          - 占用资产的 IP == 新 item IP
+          - 且 data_source 仍是 wazuh 或为 None
+          （不依赖 network_segment：Wazuh 采集器可能不报 segment 或报不一致）
+
         不释放“陈旧”的：
           - 则 raise（采集器侧需人工介入）
 
@@ -295,7 +300,6 @@ class AssetSyncHandler(BaseSyncHandler):
         """
         agent_id = str(item.get("wazuh_agent_id"))
         target_ip = item.get("asset_ip")
-        target_seg = item.get("network_segment") or infer_segment(target_ip)
 
         stale = db.query(Asset).filter(
             Asset.wazuh_agent_id == agent_id,
@@ -303,8 +307,10 @@ class AssetSyncHandler(BaseSyncHandler):
         if stale is None:
             return  # 无占用，无需释放
 
-        # 占位的就是新 item 目标资产（（IP, segment）同）：走更新路径不会冲突，不释放
-        if str(stale.asset_ip) == str(target_ip) and stale.network_segment == target_seg:
+        # “自己”判定：同 IP + 是 wazuh 资产/未确定源 → 更新路径不冲突，不释放
+        # 不依赖 network_segment：Wazuh 采集器现在 transformers.py 写死 'default'，
+        # 但库中资产可能是 lan-main / aliyun-172.18 等真实段，segment 不一致是常态。
+        if str(stale.asset_ip) == str(target_ip) and stale.data_source in (None, "wazuh"):
             return
 
         now = datetime.now(timezone.utc)
