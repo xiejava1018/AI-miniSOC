@@ -483,6 +483,9 @@
     .overall-card {
       margin-bottom: 12px;
       border-left: 4px solid var(--el-color-info);
+      // 2026-10-08：防止 ov-text 6 个中文 + ov-time 时间字符串超出父容器
+      // 触发水平滚动条。
+      overflow: hidden;
 
       &.ov-healthy {
         border-left-color: var(--el-color-success);
@@ -504,22 +507,31 @@
       }
 
       .ov-left {
-        // 2026-10-08：'数据链路正常/降级/故障' 6 个中文加 22px icon 加 8px gap
-        // 180px 会被换行；从 180 调大到 220。min-width 保持兑子状态（中等以上窗口不拐弯）。
-        min-width: 220px;
+        // 2026-10-08：'数据链路正常/降级/故障' 6 个中文加 22px icon + 8px gap。
+        // min-width: 0 覆盖 flex item 默认 min-width: auto（这是产生水平滚动条的根因——
+        // flex 不会压缩内容到默认的 auto，而是撑出滚动条）。
+        // flex-basis 让左侧拿 220px、多出空间可伸、可被 flex-wrap 换行。
+        min-width: 0;
+        flex: 0 0 220px;
 
         .ov-status {
           display: flex;
           gap: 8px;
           align-items: center;
+          min-width: 0;
 
           .ov-icon {
             font-size: 22px;
+            flex-shrink: 0;
           }
 
           .ov-text {
             font-size: 17px;
             font-weight: 600;
+            // 不让文字被截断或出现水平滚动条
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
           }
         }
 
@@ -527,12 +539,16 @@
           margin-top: 4px;
           font-size: 12px;
           color: var(--art-text-gray-500);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
       }
 
       .ov-right {
+        // 2026-10-08：min-width: 0 同样让右侧不会被内容撑出滚动条
         flex: 1;
-        min-width: 240px;
+        min-width: 0;
 
         .issue-item {
           font-size: 13px;
