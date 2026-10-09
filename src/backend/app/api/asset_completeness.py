@@ -58,6 +58,7 @@ from app.services.asset_profile import (
     build_evidence_chain,
     CoverageInfo,
 )
+from app.services.asset_profile.batch import build_profiles_batch
 
 logger = logging.getLogger(__name__)
 
@@ -362,13 +363,16 @@ async def get_completeness_aggregate(
 ):
     """全库画像覆盖率聚合（OH-2.5 画像覆盖率看板）。
 
-    对每个资产跑 OH-2.1 builder → 汇总八维覆盖 / 均分 / 状态分布 /
-    score 直方图 / worst 5（缺失维度定位入口）。
+    2026-10-09 性能治本：改为 build_profiles_batch 批量构建（约 12 条
+    asset_id IN (...) 聚合 SQL，与资产数无关），替代原先逐资产跑 8 个
+    loader（100 资产 = 1400+ 次串行往返，dev 连远端 testdb 时必超 30s）。
+    AHS / 证据链 / 组装均为纯函数，在内存中逐资产完成，口径不变。
     """
     assets = db.query(Asset).order_by(Asset.id).limit(limit).all()
+    profiles = build_profiles_batch(db, assets)
 
     entries: list[dict] = []
-    for asset in assets:
+    for asset, profile in zip(assets, profiles):
         entry = {
             "asset_id": str(asset.id),
             "asset_name": asset.name,
@@ -376,7 +380,6 @@ async def get_completeness_aggregate(
             "asset_type": asset.asset_type,
         }
         try:
-            profile = build_profile(db, asset)
             ahs = compute_ahs(profile)
             profile = apply_ahs_to_profile(profile, ahs)
             chain = build_evidence_chain(profile)

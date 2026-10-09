@@ -11,7 +11,10 @@
   没有任何界面，出问题没人知道。这个页面是它们第一次可见。
 -->
 <template>
-  <div class="dh-page art-full-height" v-loading="loading">
+  <!-- 2026-10-09：去掉 art-full-height（会把页面锁死为一屏高的 flex 纵容器，
+       内容超高时卡片被 flex-shrink 压扁，el-card__body 出内滚动条，
+       总体结论卡下半截要滚动才能看到）。本页是纯展示多卡片页，让文档流自然撑高即可。n  -->
+  <div class="dh-page" v-loading="loading">
     <!-- 总体结论 -->
     <ElCard shadow="never" class="overall-card" :class="`ov-${data?.overall_status || 'unknown'}`">
       <div class="overall-body">
