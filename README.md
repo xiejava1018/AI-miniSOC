@@ -4,9 +4,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-active--development-orange.svg)](#项目状态)
-[![Version](https://img.shields.io/badge/version-2.4-blue.svg)](#版本)
 [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/vue-3.5-green.svg)](https://vuejs.org/)
+[![Blog](https://img.shields.io/badge/%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2-xiejava.ishareread.com-blueviolet.svg)](https://xiejava.ishareread.com)
+[![WeChat](https://img.shields.io/badge/%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7-fullbug-07c160.svg)](#交流互动)
+
+> 💬 **有疑问 / 想交流 / 求部署帮助？** 欢迎 [访问我的博客](https://xiejava.ishareread.com) 或扫码关注微信公众号 **fullbug**（见文末[交流互动](#交流互动)）。如果这个项目对你有帮助，欢迎点一个 ⭐ Star，让更多中小企业看到它。
 
 ---
 
@@ -26,6 +29,7 @@
 - [路线图](#路线图)
 - [文档索引](#文档索引)
 - [贡献指南](#贡献指南)
+- [交流互动](#交流互动)
 - [许可证](#许可证)
 
 ---
@@ -36,10 +40,11 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 
 平台采用**前后端分离 + 容器化采集器**的现代化架构：
 
-- **后端**：基于 FastAPI 的统一 API 网关（**52 张业务表 · 43 个 API 路由 · 60+ 服务**），提供资产、告警、事件、用户、权限、AI 分析、报告、稽核、攻击面扫描等核心能力。
-- **前端**：基于 Vue 3 + Vite + TypeScript + Element Plus 的现代化管理控制台，含 11 个顶级菜单（概览 / 资产 / 脆弱性 / 事件 / 告警 / 上网行为 / 安全报告 / 运维管理 / 资产管理 / 系统管理 / 扫描等）。
+- **后端**：基于 FastAPI 的统一 API 网关（**60+ 张业务表 · 60+ 个 API 路由模块 · 90+ 服务**），提供资产、告警、事件、用户、权限、AI 分析、报告、稽核、攻击面扫描、知识图谱、行为画像、配置中心等核心能力。
+- **前端**：基于 Vue 3 + Vite + TypeScript + Element Plus 的现代化管理控制台，含 11 个顶级菜单（概览 / 资产 / 脆弱性 / 事件 / 告警 / 行为分析 / 安全报告 / 资产扫描 / 配置中心 / 运维管理 / 系统管理）。
 - **采集层**：基于 `collector-framework` 的容器化采集器，支持 **Wazuh**（agent / SCA / SCAP）、**TP-Link**（路由器内网资产）、**Nmap 攻击面扫描器**（拉模型，控制面/数据面分离）三类数据源。
-- **AI 层**：以智谱 GLM 为统一大模型底座，覆盖 7 个 AI 消费点：自然语言资产查询（L1+L2）、风险摘要、变更影响分析、AI 安全报告、对账 AI 解读、合规 AI 解读、AI Chat；全部具备**诚实降级**路径。
+- **AI 层**：**可灵活配置的多模型底座**（OpenAI 兼容协议，支持 GLM / DeepSeek / Qwen / Kimi / OpenAI / Ollama 等，按场景路由不同模型），覆盖 9 个 AI 消费点：自然语言资产查询（L1+L2）、风险摘要、变更影响分析、AI 安全报告、对账 AI 解读、合规 AI 解读、AI Chat、AI Agent、AI 资产画像；全部具备**诚实降级**路径。
+- **图谱与行为分析层**：资产知识图谱（identity graph + 攻击链映射）、行为画像（L1 群体概览 / L2 单 IP 身份档案）、UEBA 异常检测、上网行为分析、攻击溯源工作台。
 - **基础设施**：Loki（7 天日志保留）+ Wazuh SIEM + OpenSearch（告警 / 脆弱性）+ Grafana + PostgreSQL 16。
 
 > 🎯 **目标**：让中小企业用一台 8 GB 内存的小服务器就能跑起一个真正"会用 AI"的安全运营中心。
@@ -75,8 +80,10 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 - **数据健康** —— 源健康 / 同步死信 / 对账差异三层聚合
 - **同步历史** —— 每次同步的统计、进度、字段级变更日志完整可审计
 
-### 5. 🤖 AI 能力（GLM 统一底座）
-7 个 AI 消费点 + 降级演练全部通过：
+### 5. 🤖 AI 能力（多模型可配置）
+
+**任意 OpenAI 兼容 LLM 均可接入**：通过配置中心（AI Provider 管理）灵活配置模型，支持按场景（查询 / 报告 / 解读 / Chat）路由不同 provider，API Key 加密存储，按 provider 独立限流熔断；默认出厂配置为智谱 GLM（glm-4-flash，免费可用）。
+9 个 AI 消费点 + 降级演练全部通过：
 
 | 功能 | 入口 | 状态 |
 |---|---|---|
@@ -89,6 +96,7 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 | 合规 AI 解读 | `POST /compliance/{id}/interpret` | ✅ |
 | AI Chat | `POST /api/v1/ai/chat` | ✅ |
 | AI Agent | `POST /api/v1/ai/agent` | ✅ |
+| AI 资产画像 / 多模型接入 | `POST /api/v1/ai/assets/*` · `ai_providers` | ✅ |
 
 **W0 评测集**：`asset_query_eval.yaml` 50 条用例，基线准确率 **98%**，对抗样本 5/5 全拒。
 
@@ -97,6 +105,11 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 - **合规基线** —— 内置 compliance_rules.yaml，AI 解读 + 规则模板降级
 - **脆弱性管理** —— CISA KEV 自动同步 + SCA + SCAP 多源接入
 - **资产详情 EOL** —— 生命周期管理 + operator 可手动覆盖
+- **处置工单** —— 告警/漏洞处置闭环
+- **暴露面管理** —— 资产公网暴露等级 + 归因分析
+- **资产知识图谱** —— 身份图谱 + 攻击链可视化 + 拓扑性能看板
+- **行为画像 / UEBA** —— L1 群体概览 + L2 单 IP 身份档案，DHCP 漂移不分裂画像
+- **配置中心** —— Wazuh / OpenSearch / Loki 等数据源运行时动态配置（免改 .env 重启）
 
 ### 7. 👥 用户与权限（X1 权限矩阵）
 - **RBAC** —— 角色 admin / operator / viewer / auditor 端点级隔离
@@ -125,15 +138,15 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
                                   │ HTTP / WS
 ┌─────────────────────────────────▼───────────────────────────────────┐
 │                Backend API (FastAPI · Python 3.13)                  │
-│  src/backend/app/api  ──→  43 个路由模块                              │
-│  services/        ──→  60+ 服务（含 AI / 对账 / 报告 / 影响分析）  │
-│  models/          ──→  52 张 SQLAlchemy ORM 表 (统一 soc_ 前缀)    │
+│  src/backend/app/api  ──→  60+ 个路由模块                              │
+│  services/        ──→  90+ 服务（含 AI / 图谱 / UEBA / 对账 / 报告）  │
+│  models/          ──→  60+ 张 SQLAlchemy ORM 表 (统一 soc_ 前缀)    │
 └────┬──────────────┬──────────────┬──────────────┬──────────────────┘
      │              │              │              │
 ┌────▼─────┐  ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼──────────┐
 │PostgreSQL│  │   AI Layer │ │ Observabil │ │ Notification  │
-│   16     │  │  GLM (智谱) │ │  OpenTel   │ │ 邮件/钉钉/微信│
-│  52 张表 │  │ + 7 消费点  │ │  Prometheus│ │  + WebSocket  │
+│   16     │  │ 任意 LLM │ │  OpenTel   │ │ 邮件/钉钉/微信│
+│  60+ 张表 │  │ + 9 消费点  │ │  Prometheus│ │  + WebSocket  │
 │          │  │ + 诚实降级  │ │            │ │  + 站内通知   │
 └──────────┘  └────────────┘ └────────────┘ └───────────────┘
 
@@ -153,7 +166,7 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 > **架构要点**：
 > - 采集器只**出向请求**（心跳 + 拉任务 + 推数据），天然穿透 NAT
 > - 扫描器显式注册：admin `POST /scan/agents` 分配 `scanner_id` + API Key
-> - 7 个 AI 消费点全部走 GLM，单点可禁用 / 切换模型
+> - 9 个 AI 消费点共享统一 LLM 客户端（OpenAI 兼容协议），任意模型可配置、按场景路由、单点可禁用
 > - 响应统一包装：`{code, msg, data}`，HTTP 恒 200，业务码在 `body.code`
 
 ---
@@ -171,11 +184,11 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 | **后端框架** | Python + FastAPI（async） | Python 3.13 / FastAPI 0.141 |
 | **后端 ORM** | SQLAlchemy（async） + asyncpg + psycopg2-binary | SQLAlchemy 2.0.36 |
 | **后端校验** | Pydantic v2 + pydantic-settings | 2.13.4 / 2.15.0 |
-| **后端迁移** | Alembic | 39 个迁移（head `u3v4w5x6y7z8`） |
+| **后端迁移** | Alembic | 80+ 迁移（线性历史，单 head） |
 | **后端认证** | PyJWT + passlib[bcrypt] + python-multipart | — |
 | **数据库** | PostgreSQL | 16+（生产 16.15） |
 | **采集器** | Python（asyncio） + httpx + collector-framework | Python 3.13 / httpx 0.28.1 |
-| **AI / LLM** | 智谱 GLM（统一底座） + OpenAI 兼容接口 | glm-4-flash（默认） |
+| **AI / LLM** | 任意 OpenAI 兼容 LLM（GLM / DeepSeek / Qwen / Kimi / OpenAI / Ollama 等），配置中心灵活切换 | 默认 glm-4-flash |
 | **日志** | Loki + OpenSearch + Grafana | Loki 7 天保留 |
 | **监控** | Prometheus + OpenTelemetry | — |
 | **安全** | Wazuh SIEM | — |
@@ -192,31 +205,32 @@ AI-miniSOC/
 ├── src/
 │   ├── backend/                    # FastAPI 后端（Python 3.13）
 │   │   ├── app/
-│   │   │   ├── api/                # 43 个路由模块（auth / users / roles / menus / 
-│   │   │   │                      #   assets / asset_ports / asset_tags / 
-│   │   │   │                      #   asset_incidents / asset_reconciliation /
-│   │   │   │                      #   asset_risk / asset_query / asset_lifecycle /
-│   │   │   │                      #   impact_analysis / asset_summary / …
-│   │   │   │                      #   alerts / alert_digests / browsing /
-│   │   │   │                      #   compliance / sca / vulnerabilities /
-│   │   │   │                      #   incidents / data_sync / sync /
-│   │   │   │                      #   data_health / reports / ai / ai_agent /
-│   │   │   │                      #   ai_chat / ai_feedback / scan_* /
-│   │   │   │                      #   knowledge / departments / dicts /
-│   │   │   │                      #   system_configs / audit_logs /
-│   │   │   │                      #   webhooks / ws / public / dashboard /
-│   │   │   │                      #   metrics / task_observability /
-│   │   │   │                      #   notifications / deps）
+│   │   │   ├── api/                # 60+ 个路由模块（auth / users / roles / menus /
+│   │   │                      #   assets / asset_ports / asset_query /
+│   │   │                      #   asset_reconciliation / asset_risk /
+│   │   │                      #   asset_completeness / asset_timeline /
+│   │   │                      #   impact_analysis / graph / ontology_view /
+│   │   │                      #   behavior_profile / identity_ueba /
+│   │   │                      #   attribution / remediation / exposure /
+│   │   │                      #   business_systems / data_sources /
+│   │   │                      #   alerts / browsing / compliance / sca /
+│   │   │                      #   vulnerabilities / incidents / reports /
+│   │   │                      #   ai / ai_agent / ai_chat / ai_assets /
+│   │   │                      #   ai_providers / scan_* / knowledge /
+│   │   │                      #   data_health / data_sync / sync /
+│   │   │                      #   system_configs / audit_logs /
+│   │   │                      #   webhooks / ws / dashboard / metrics …）
 │   │   │   ├── core/               # config / security / permissions / response_wrapper
 │   │   │   │                      # alert_levels / deps
-│   │   │   ├── models/             # SQLAlchemy ORM（52 张表，统一 soc_ 前缀）
+│   │   │   ├── models/             # SQLAlchemy ORM（60+ 张表，统一 soc_ 前缀）
 │   │   │   ├── schemas/            # Pydantic 数据契约
-│   │   │   ├── services/           # 60+ 业务服务（含 sync_handlers/、
-│   │   │   │                      #   opensearch/、task_observability/、
-│   │   │   │                      #   browsing_detection/）
+│   │   │   ├── services/           # 90+ 业务服务（含 sync_handlers/、
+│   │   │   │                      #   opensearch/、graph/、behavior_profile/、
+│   │   │   │                      #   asset_profile/、browsing_detection/、
+│   │   │   │                      #   task_observability/、federation/）
 │   │   │   ├── observability/      # Prometheus 指标 / OpenTelemetry
 │   │   │   └── mcp/                # MCP（Model Context Protocol）集成
-│   │   ├── alembic/                # 数据库迁移（39 个迁移，head `u3v4w5x6y7z8`）
+│   │   ├── alembic/                # 数据库迁移（80+ 个迁移，线性历史）
 │   │   ├── tests/                  # 单元 / 集成测试（in-process）
 │   │   └── main.py                 # FastAPI 入口（lifespan 注册所有 scheduler）
 │   │
@@ -490,7 +504,9 @@ DB_PORT=5432
 DB_NAME=AI-miniSOC-db
 TEST_DB_NAME=AI-miniSOC-db_test      # pytest 跑前必须先 CREATE DATABASE
 
-# AI / LLM（统一底座）
+# AI / LLM（.env 仅兜底默认值；生产建议在「配置中心 → AI Provider」页面
+# 配置任意 OpenAI 兼容模型：GLM / DeepSeek / Qwen / Kimi / OpenAI / Ollama 等，
+# 支持按场景路由不同模型，API Key 加密存储）
 GLM_API_KEY=your_glm_api_key_here
 GLM_MODEL=glm-4-flash
 GLM_API_BASE=https://open.bigmodel.cn/api/paas/v4/
@@ -547,7 +563,7 @@ PYTHONPATH=. ../../venv/bin/python -m pytest tests/integration        # 仅集�
 cd src/frontend
 npm test
 
-# 评测集（需 GLM key）
+# 评测集（需 LLM key）
 PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 
 # E2E（GitHub Actions，已禁用）
@@ -594,7 +610,7 @@ PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 - [x] 用户 / 角色 / 认证 / 审计（RBAC + JWT + 验证码 + 黑名单 + refresh rotation）
 - [x] 资产管理（CRUD + 端口 + 标签 + 同步 + 溯源）
 - [x] 采集器架构集成（wazuh / tplink / scanner）
-- [x] AI 能力（GLM 统一底座，9 个消费点）
+- [x] AI 能力（多模型可配置底座，9 个消费点）
 - [x] W0 评测集（asset_query_eval.yaml，基线 98%）
 
 ### Phase 3：AI 增强 ✅ 完成
@@ -604,7 +620,7 @@ PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 - [x] F2.1 L1 自然语言资产查询 + L2 复合查询（4 模板）
 - [x] F2.2 AI 安全报告（weekly / monthly / on_demand / incident_driven）
 - [x] F2.3 知识库（knowledge）
-- [x] F3.1 变更影响分析（关键词 → 资产定位 → 粗粒度关联 → GLM 报告）
+- [x] F3.1 变更影响分析（关键词 → 资产定位 → 粗粒度关联 → LLM 报告）
 - [x] F3.2 生命周期 / EOL（operator 可手动覆盖）
 - [x] F3.3 合规基线（compliance_rules.yaml + AI 解读）
 - [x] F4.1 AI 反馈闭环（ai_feedback）
@@ -618,7 +634,7 @@ PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 - [x] 源健康 / 同步死信 / 对账差异三层聚合（data-health）
 - [x] CI/CD 全链路（push → CI → CD → 部署 → 自动回滚）
 - [x] 采集器 CI/CD 覆盖（deploy_collectors.sh）
-- [x] Alembic 迁移历史补齐（39 迁移，幂等）
+- [x] Alembic 迁移历史补齐（80+ 迁移，幂等）
 - [x] §十一 Go/No-Go（4 大类：数据、AI 质量、安全权限、指标）
 
 ### Phase 5：规模化（待启动）
@@ -719,4 +735,24 @@ PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 
 ---
 
-<sub>📅 最后更新：2026-08-26 · 🏷️ 版本 v2.4（基于 P3+P4 全量交付）</sub>
+## 交流互动
+
+如果你对这个项目感兴趣、正在评估落地、或者部署中遇到了问题，欢迎通过以下方式和我交流：
+
+### 📝 个人博客
+
+**[xiejava.ishareread.com](https://xiejava.ishareread.com)** —— 分享安全运营、AI 工程化、开源实践方面的文章，项目的设计思路和踩坑记录也会在博客持续更新。
+
+### 💬 微信公众号：fullbug
+
+扫码关注公众号，可以第一时间获取项目更新动态，也欢迎在后台留言交流：
+
+<p align="center">
+  <img src="https://image2.ishareread.com/images/fullbug%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7.jpg" width="260" alt="fullbug 微信公众号二维码" />
+</p>
+
+> 🌟 觉得项目有用的话，别忘了给仓库点个 **⭐ Star**——这是持续更新的最大动力！
+
+---
+
+<sub>📅 最后更新：2026-10-09 · 基于 P3+P4 全量交付 + 知识图谱 / UEBA / 配置中心模块</sub>
