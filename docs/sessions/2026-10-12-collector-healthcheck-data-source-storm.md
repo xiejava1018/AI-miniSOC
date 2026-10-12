@@ -118,8 +118,7 @@ docker inspect minisoc-wazuh-collector   # Status=healthy, FailingStreak=0
 
 ## 待办(不阻塞)
 
-- **业务密码**:`.env` 里的 `ROUTER_PASSWORD=mnbvvbnm123qaz` 失配,需用户确认新密码后改 .env + restart 容器
-  - 现在 healthcheck 已不刷,只剩 5 分钟一次业务登录,告警频率从 ~1 分钟 1 次降到 5 分钟 1 次
+- ~~**业务密码**:`.env` 里的 `ROUTER_PASSWORD=mnbvvbnm123qaz` 失配~~ ✅ **2026-10-12 修复**:用户确认路由器新凭据 `xiejava / xiejava@Happy99`,改 102 `.env` + `docker compose up -d tplink-collector` 重启。`登录成功,stok: d61c6453...`,采集 11 条资产 `updated=11, skipped=0`,NAT 0 条(路由器无虚拟服务器规则)。DB 验证 `soc_assets WHERE data_source='tplink-router'` 76 条,`updated_at` 集中在 `2026-10-12T22:54:05`。
 - **wazuh 凭据**:虽密码对,但 30 秒一次刷 Wazuh API 是"礼貌"问题(API 限流场景可能踩到),本次已一并降级
 - **CLAUDE.md §4.13** 已加"静默刷数据源"教训,后续新增 collector 必须:
   - Dockerfile 不写 HEALTHCHECK 指令
