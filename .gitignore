@@ -94,6 +94,8 @@ src/backend/backups/
 !src/assets/images/**/*.png
 !src/frontend/src/assets/images/**/*.png
 !docs/blog/images/**/*.png
+# 例外：README 用的微信公众号二维码（QR code 是放仓库内永久托管，不是临时截图）
+!docs/images/**
 
 # 上述白名单的窄例外：本地未提交的孤儿资源
 # （不在远端 master，由本地其它来源引入，避免被白名单重新放行）

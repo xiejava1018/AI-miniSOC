@@ -748,7 +748,7 @@ PYTHONPATH=src/backend ../../venv/bin/python scripts/eval_asset_query.py
 扫码关注公众号，可以第一时间获取项目更新动态，也欢迎在后台留言交流：
 
 <p align="center">
-  <img src="https://image2.ishareread.com/images/fullbug%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7.jpg" width="260" alt="fullbug 微信公众号二维码" />
+  <img src="docs/images/fullbug-qrcode.jpg" width="260" alt="fullbug 微信公众号二维码" />
 </p>
 
 > 🌟 觉得项目有用的话，别忘了给仓库点个 **⭐ Star**——这是持续更新的最大动力！
