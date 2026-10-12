@@ -46,9 +46,13 @@
           </div>
         </div>
         <ul class="py-4 mt-3 border-t border-g-300/80">
-          <li class="btn-item" @click="editUserInfo">
+          <li class="btn-item" @click="goUserCenter">
             <ArtSvgIcon icon="ri:user-settings-line" />
-            <span>修改个人信息</span>
+            <span>个人中心</span>
+          </li>
+          <li class="btn-item" @click="editUserInfo">
+            <ArtSvgIcon icon="ri:edit-line" />
+            <span>快速修改资料</span>
           </li>
           <li class="btn-item" @click="lockScreen()">
             <ArtSvgIcon icon="ri:lock-line" />
@@ -64,13 +68,16 @@
 
 <script setup lang="ts">
   import { ElMessageBox } from 'element-plus'
+  import { useRouter } from 'vue-router'
   import { useUserStore } from '@/store/modules/user'
+  import { RoutesAlias } from '@/router/routesAlias'
   import { mittBus } from '@/utils/sys'
   import defaultAvatar from '@imgs/user/avatar.webp'
 
   defineOptions({ name: 'ArtUserMenu' })
 
   const userStore = useUserStore()
+  const router = useRouter()
 
   const { getUserInfo: userInfo } = storeToRefs(userStore)
   const userMenuPopover = ref()
@@ -109,6 +116,11 @@
     const info = userInfo.value
     return info?.account || info?.username || info?.userName || ''
   })
+
+  const goUserCenter = () => {
+    closeUserMenu()
+    router.push(RoutesAlias.UserCenter)
+  }
 
   const editUserInfo = () => {
     closeUserMenu()
