@@ -19,12 +19,12 @@ COPY --from=builder /usr/local/bin/ /usr/local/bin/
 
 COPY tplink/config.example.yaml /app/config.yaml
 
-# timeout 从 5s 提到 15s：一轮自检要跟路由器登录 + 后端 /health 两次网络往返，
-# 实测 p50 约 1s，但路由器偶尔反应慢时会超 5s 被 docker SIGKILL。被 kill 的探针
-# 既会把容器误判为 unhealthy，又会留下无人回收的子进程（配合 compose 的
-# init: true 一起治）。start-period 避开启动瞬间的假告警。
-HEALTHCHECK --interval=60s --timeout=15s --start-period=15s --retries=3 \
-    CMD python -m tplink_collector --test || exit 1
+# 不在 Dockerfile 里写 HEALTHCHECK。历史版本每 60s 调 --test 模式
+# 走 test_connection() 登录路由器，但 TP-Link 路由器自带防爆破节流（5 分钟
+# 封禁），每分钟一次登录会被打为 401 触发路由器"错误密码登录"告警；同时
+# 业务密码一换（生产已发生：102 容器内 ROUTER_PASSWORD 失配 4 天）就会
+# 持续刷 401，刷出整页告警。健康度交给 compose 段的 healthcheck 段——
+# 它只打 AI-miniSOC 的 /api/v1/health，不接触数据源。
 
 ENTRYPOINT ["python", "-m", "tplink_collector"]
 CMD ["--config", "/app/config.yaml"]

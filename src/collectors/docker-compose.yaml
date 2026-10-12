@@ -27,6 +27,19 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # 健康检查只测 AI-miniSOC 端点，不刷数据源（路由器/Wazuh API）。
+    # 历史教训（2026-10-12）：原 Dockerfile HEALTHCHECK 每 60s 调
+    # `tplink_collector --test` 走 test_connection() 登录路由器，
+    # 业务密码变更后持续打 401 触发路由器防爆破告警。wazuh-collector
+    # 同样问题（每 30s 刷 Wazuh API，靠密码对才没爆出来）。
+    # 数据源连通性由业务采集循环 + 告警覆盖（_run_daemon 已做），
+    # 这里只验"进程活着 + 网络到后端通"。
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request, urllib.error, sys\ntry:\n    r = urllib.request.urlopen(os.environ['MINISOC_URL'].rstrip('/') + '/api/v1/health', timeout=5)\n    sys.exit(0 if r.status == 200 else 1)\nexcept (urllib.error.URLError, OSError):\n    sys.exit(1)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   wazuh-collector:
     build:
@@ -34,9 +47,10 @@ services:
       dockerfile: wazuh/Dockerfile
     container_name: minisoc-wazuh-collector
     restart: unless-stopped
-    # 同上。wazuh 侧目前没堆僵尸（healthcheck 一直成功、正常退出即被回收），
-    # 但它的 healthcheck 同样是 exec 子进程，一旦哪天超时被 SIGKILL 就会漏。
-    # 属防御性配置，不是在修现存故障。
+    # 进程 PID 1 收养孤儿（防止 healthcheck 偶发 SIGKILL 留下 <defunct>）。
+    # 属防御性配置；wazuh 侧 healthcheck 一直成功、正常退出即被回收，
+    # 但 exec 子进程一旦哪天被 SIGKILL 就会漏。同 tplink 一样，init: true
+    # 配合 docker-compose 默认 init 机制，tini 收养孤儿。
     init: true
     environment:
       - MINISOC_URL=${MINISOC_URL:-http://host.docker.internal:8000}
@@ -56,25 +70,17 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # 健康检查只测 AI-miniSOC 端点，不刷 Wazuh API。
+    # 历史版本每 30s 调 WazuhCollector.test_connection() → 登录 Wazuh API
+    # 一次。生产 Wazuh 没内置防爆破节流，没爆告警；换到有防爆破的数据源就会
+    # 触发误报（参见 tplink 的 2026-10-12 事件，CLAUDE.md §4.13）。
+    # 数据源连通性由业务采集循环覆盖，这里只验"进程活着 + 网络到后端通"。
     healthcheck:
-      test: |
-        python -c "
-        import sys; sys.path.insert(0, '/app/src')
-        from wazuh_collector.collector import WazuhCollector
-        from collector_framework.config import CollectorConfig
-        import asyncio
-
-        async def test():
-            cfg = CollectorConfig.from_yaml('/etc/wazuh-collector/config.yaml')
-            c = WazuhCollector(cfg)
-            ok = await c.test_connection()
-            sys.exit(0 if ok else 1)
-        asyncio.run(test())
-        " || exit 1
-      interval: 30s
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request, urllib.error, sys\ntry:\n    r = urllib.request.urlopen(os.environ['MINISOC_URL'].rstrip('/') + '/api/v1/health', timeout=5)\n    sys.exit(0 if r.status == 200 else 1)\nexcept (urllib.error.URLError, OSError):\n    sys.exit(1)\""]
+      interval: 60s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
 
   # P3/F-S2 资产发现与攻击面扫描采集器（公网暴露面）
   # 设计：docs/design/2026-08-26-asset-discovery-and-attack-surface-scanner-final.md §10.1
