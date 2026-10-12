@@ -130,3 +130,4 @@ src/backend/src/backend/
 .git-state-snapshot/
 # 本次（2026-08-28）README 脱敏前的原始备份，仅本地留存
 .docs-backup-pre-redaction/
+.serena/
