@@ -60,5 +60,12 @@ export const staticRoutes: AppRouteRecordRaw[] = [
         meta: { title: 'iframe' }
       }
     ]
+  },
+  // 全员可达的隐藏页：个人中心（不在后端菜单表里，登录后守卫自动放行）
+  {
+    path: '/system/user-center',
+    name: 'UserCenter',
+    component: () => import('@views/system/user-center/index.vue'),
+    meta: { title: '个人中心', isHide: true, isHideTab: true, keepAlive: true }
   }
 ]
