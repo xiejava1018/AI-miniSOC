@@ -167,6 +167,7 @@
   import { CacheInvalidationStrategy } from '@/utils/table/tableCache'
   import { SearchFormItem } from '@/types'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
+  import ArtSvgIcon from '@/components/core/base/art-svg-icon/index.vue'
   import McpKeysDialog from './modules/mcp-keys-dialog.vue'
 
   // 状态变量
