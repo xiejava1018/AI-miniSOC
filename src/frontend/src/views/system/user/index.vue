@@ -255,7 +255,7 @@
           prop: 'operation',
           label: '操作',
           align: 'center',
-          width: 200,
+          width: 170,
           fixed: 'right',
           formatter: (row: any) =>
             h('div', { class: 'operation-column-container' }, [
@@ -269,10 +269,12 @@
                 {
                   type: 'primary',
                   link: true,
+                  size: 'small',
                   style: 'margin-right: 8px;',
+                  title: 'MCP Key 管理',
                   onClick: () => openMcpKeysDialog(row)
                 },
-                { default: () => 'MCP Key' }
+                { default: () => h(ArtSvgIcon, { icon: 'ri:key-2-line' }) }
               ),
               h(ArtButtonTable, {
                 type: 'delete',
