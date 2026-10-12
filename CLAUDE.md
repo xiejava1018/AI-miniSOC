@@ -318,6 +318,11 @@ LLM 只选模板填参数，**不生成 SQL**。模板清单在 `configs/query_t
 **配套教训**：
 - 任何架构迁移（T5 等）必须**三处同步改**：①代码 ②配置 ③所有依赖配置的下游（采集器/容器/CI）
 - `pip install -e` 装的 base 库**不会自动跟随源代码变更**——采集器镜像 site-packages 必须 `docker compose build` 重建，否则容器里跑的是 6 周前的代码
+- **容器 healthcheck 不该调业务 test_connection() 刷数据源**（2026-10-12 事件，同源问题）：tplink `Dockerfile` `HEALTHCHECK` 每 60s 调 `tplink_collector --test` 走 `test_connection()` 登录路由器；wazuh compose `healthcheck` 段每 30s 调 `WazuhCollector.test_connection()` 登录 Wazuh API。两者**同病**：数据源无防爆破节流时静默刷（Wazuh），有节流时持续 401 触发误报告警（tplink 4 天 FailingStreak=4349）。**正确解**：
+  - 删 `Dockerfile` 里的 `HEALTHCHECK` 指令
+  - compose `healthcheck` 段改成 `urllib.request` 打 miniSOC `/api/v1/health`，不刷数据源
+  - 数据源连通性由业务采集循环 + 告警覆盖（`_run_daemon` 已做）
+  - 例外：`scanner-collector` 走 `nmap --version` 自检无外联，可以保留
 
 ### 4.14 Mac 到 GitHub 慢网
 
