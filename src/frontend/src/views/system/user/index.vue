@@ -273,9 +273,9 @@
                   size: 'small',
                   style: 'margin-right: 8px;',
                   title: 'MCP Key 管理',
+                  icon: h(ArtSvgIcon, { icon: 'ri:key-2-line' }),
                   onClick: () => openMcpKeysDialog(row)
-                },
-                { default: () => h(ArtSvgIcon, { icon: 'ri:key-2-line' }) }
+                }
               ),
               h(ArtButtonTable, {
                 type: 'delete',
