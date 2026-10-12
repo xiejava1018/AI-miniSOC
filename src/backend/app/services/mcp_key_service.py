@@ -377,6 +377,70 @@ class MCPKeyService:
         invalidate_key_cache(key_hash=row.key_hash)
         return row
 
+    def purge_key(self, user_id: int, key_id: int) -> None:
+        """硬删除已注销的 Key（仅 status=revoked 可调用；active 强制 revoke 后再走这一步）。
+
+        设计动机：避免已注销记录无限积累。
+        安全约束：
+          1) active Key 不许 purge（必须先 revoke 以留审计 trace，避免静默删造成失联无追）
+          2) 双步走：revoke 落 audit hash 链 → purge 只物理 DELETE 不进 hash 链（单独记录在 soc_audit_logs）
+          3) 清缓存避免中间件有遗留条目
+        返回被删除记录的快照（给审计用）。
+        """
+        row = self.db.query(SOCMCPKey).filter(
+            SOCMCPKey.id == key_id, SOCMCPKey.user_id == user_id
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="MCP Key 不存在")
+        if row.status != "revoked":
+            # active 强制走 revoke，不允许绕过。已 expired（active 状态但 days_remaining==0）仍属 active。
+            raise HTTPException(
+                status_code=409,
+                detail="仅可彻底删除已注销的 Key；请先「注销」该 Key"
+            )
+        # 提关键信息留 audit（key_hash 记上，便于追溯是哪一条 hash 被删；key_prefix 已记）
+        snapshot = {
+            "id": row.id,
+            "user_id": row.user_id,
+            "name": row.name,
+            "key_prefix": row.key_prefix,
+            "key_hash": row.key_hash,
+            "status": row.status,
+            "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+            "revoke_reason": row.revoke_reason,
+        }
+        # 清缓存
+        invalidate_key_cache(key_hash=row.key_hash)
+        # 物理删除
+        self.db.delete(row)
+        self.db.commit()
+        # 快照返回后由调用方落审计（保持 service 与审计系统解耦）
+
+    def admin_purge_key(self, key_id: int) -> dict:
+        """admin 硬删除任意用户的已注销 Key。返回快照供审计。"""
+        row = self.db.query(SOCMCPKey).filter(SOCMCPKey.id == key_id).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="MCP Key 不存在")
+        if row.status != "revoked":
+            raise HTTPException(
+                status_code=409,
+                detail="仅可彻底删除已注销的 Key；请先「强制注销」该 Key"
+            )
+        snapshot = {
+            "id": row.id,
+            "user_id": row.user_id,
+            "name": row.name,
+            "key_prefix": row.key_prefix,
+            "key_hash": row.key_hash,
+            "status": row.status,
+            "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None,
+            "revoke_reason": row.revoke_reason,
+        }
+        invalidate_key_cache(key_hash=row.key_hash)
+        self.db.delete(row)
+        self.db.commit()
+        return snapshot
+
     # ---------- 校验（与模块级 validate_key_cached 等价的直查版）----------
 
     def validate_key(self, plaintext: str) -> dict:

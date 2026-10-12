@@ -51,6 +51,9 @@
           <ElButton v-if="row.status === 'active'" link type="danger" size="small" @click="confirmRevoke(row)">
             强制注销
           </ElButton>
+          <ElButton v-else-if="row.status === 'revoked'" link type="danger" size="small" @click="confirmPurge(row)">
+            彻底删除
+          </ElButton>
           <span v-else class="text-g-500 text-xs">—</span>
         </template>
       </ElTableColumn>
@@ -110,6 +113,7 @@ import {
   fetchGetUserMcpKeys,
   fetchAdminCreateMcpKey,
   fetchAdminRevokeMcpKey,
+  fetchAdminPurgeMcpKey,
   type McpKeyItem
 } from '@/api/user-center'
 
@@ -180,6 +184,21 @@ const confirmRevoke = async (row: McpKeyItem) => {
   } catch { return }
   await fetchAdminRevokeMcpKey(props.userId, row.id)
   ElMessage.success('已强制注销')
+  await load()
+}
+
+// 彻底删除已注销 Key
+const confirmPurge = async (row: McpKeyItem) => {
+  try {
+    await ElMessageBox.confirm(
+      `彻底删除用户 "${props.username}" 的 Key "${row.name}"（前缀 ${row.key_prefix}）？\n\n` +
+      `该记录将被物理删除，仅审计哈希链留痕，不可恢复。`,
+      '彻底删除',
+      { type: 'warning', confirmButtonText: '确认彻底删除', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  await fetchAdminPurgeMcpKey(props.userId, row.id)
+  ElMessage.success('已彻底删除')
   await load()
 }
 

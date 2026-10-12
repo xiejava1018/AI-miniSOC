@@ -139,3 +139,19 @@ export function fetchAdminRevokeMcpKey(userId: number, keyId: number) {
     showErrorMessage: false
   })
 }
+
+/** 彻底删除自己的已注销 Key（双步走：先 revoke、再 purge；active Key 服务端返回 409） */
+export function fetchPurgeMyMcpKey(keyId: number) {
+  return request.del<{ deleted: true; key_id: number; name: string }>({
+    url: `/api/v1/users/me/mcp-keys/${keyId}/purge`,
+    showErrorMessage: false
+  })
+}
+
+/** admin 彻底删除指定用户的已注销 Key */
+export function fetchAdminPurgeMcpKey(userId: number, keyId: number) {
+  return request.del<{ deleted: true; key_id: number; name: string }>({
+    url: `/api/v1/users/${userId}/mcp-keys/${keyId}/purge`,
+    showErrorMessage: false
+  })
+}

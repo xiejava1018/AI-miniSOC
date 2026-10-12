@@ -79,6 +79,15 @@
             >
               注销
             </ElButton>
+            <ElButton
+              v-if="item.status === 'revoked'"
+              size="small"
+              text
+              type="danger"
+              @click="confirmPurge(item)"
+            >
+              彻底删除
+            </ElButton>
           </template>
         </div>
       </div>
@@ -216,6 +225,7 @@
     fetchCreateMyMcpKey,
     fetchExtendMyMcpKey,
     fetchRevokeMyMcpKey,
+    fetchPurgeMyMcpKey,
     type McpKeyItem,
     type McpKeyCreated
   } from '@/api/user-center'
@@ -401,6 +411,34 @@
           await loadKeys()
         } catch (e) {
           console.error('注销失败', e)
+        }
+      })
+      .catch(() => {})
+  }
+
+  // ---------- 彻底删除已注销 Key（双步走：先 revoke 留审计，再 purge 物理消解）----------
+  const confirmPurge = (item: McpKeyItem) => {
+    ElMessageBox.prompt(
+      `彻底删除是物理消解，DB 记录会被永久删除（仅审计哈希链留痕）。\n\n` +
+      `Key 名称「${item.name}」将不可恢复，Agent 再也无法复用。\n\n` +
+      `输入 Key 名称「${item.name}」以确认：`,
+      '彻底删除已注销 Key',
+      {
+        confirmButtonText: '确认彻底删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+        inputValidator: (v: string) => v.trim() === item.name || `请输入「${item.name}」以确认`
+      }
+    )
+      .then(async ({ value }) => {
+        if (value.trim() !== item.name) return
+        try {
+          await fetchPurgeMyMcpKey(item.id)
+          ElMessage.success('已彻底删除')
+          await loadKeys()
+        } catch (e) {
+          console.error('彻底删除失败', e)
         }
       })
       .catch(() => {})

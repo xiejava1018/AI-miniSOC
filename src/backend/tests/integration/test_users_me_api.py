@@ -423,3 +423,118 @@ def test_me_route_not_swallowed_by_user_id(client: TestClient, auth_token: str):
     """/users/me 若被 /{user_id} 先匹配会返回 422（int("me") 解析失败）——必须 200。"""
     resp = client.get("/api/v1/users/me", headers=_auth(auth_token))
     assert resp.json()["code"] == 200
+
+
+# ---------------------------------------------------------------------------
+# PR4 Purge（彻底删除已注销 Key）
+# ---------------------------------------------------------------------------
+
+def test_purge_active_key_rejected_409(
+    client: TestClient, auth_token: str, db_session: Session, test_user: User
+):
+    """active Key 不许直接 purge（安全约束：避免静默丢失 Agent 会话）。"""
+    # 准备
+    resp = client.post(
+        "/api/v1/users/me/mcp-keys",
+        json={"name": "to-purge", "validity_days": 7},
+        headers=_auth(auth_token),
+    )
+    kid = resp.json()["data"]["id"]
+    # 试图 purge active Key
+    resp = client.delete(f"/api/v1/users/me/mcp-keys/{kid}/purge", headers=_auth(auth_token))
+    assert resp.json()["code"] == 409
+    assert "请先「注销」" in resp.json()["msg"]
+    # 记录仍在
+    from app.models.mcp_key import SOCMCPKey
+    assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == kid).first() is not None
+
+
+def test_purge_revoked_key_success(
+    client: TestClient, auth_token: str, db_session: Session, test_user: User
+):
+    """revoke 后 purge：DB 物理 DELETE，缓存清，审计 mcp_key.purge 落链。"""
+    from app.models import AuditLog
+    from app.models.mcp_key import SOCMCPKey
+    # 准备：建 Key + revoke
+    resp = client.post(
+        "/api/v1/users/me/mcp-keys",
+        json={"name": "to-purge-revoked", "validity_days": 7},
+        headers=_auth(auth_token),
+    )
+    kid = resp.json()["data"]["id"]
+    client.delete(f"/api/v1/users/me/mcp-keys/{kid}", headers=_auth(auth_token))
+    # purge
+    resp = client.delete(f"/api/v1/users/me/mcp-keys/{kid}/purge", headers=_auth(auth_token))
+    assert resp.json()["code"] == 200
+    assert resp.json()["data"]["deleted"] is True
+    # DB 不存在
+    assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == kid).first() is None
+    # 审计落链 mcp_key.purge
+    logs = db_session.query(AuditLog).filter(AuditLog.action == "mcp_key.purge").all()
+    assert len(logs) == 1
+    assert logs[0].resource_name == "to-purge-revoked"
+    assert logs[0].new_values.get("deleted") is True
+    assert "key_prefix" in (logs[0].old_values or {})
+
+
+def test_purge_nonexistent_404(client: TestClient, auth_token: str):
+    """不存在的 key_id purge → 404。"""
+    resp = client.delete(
+        "/api/v1/users/me/mcp-keys/999999/purge", headers=_auth(auth_token)
+    )
+    assert resp.json()["code"] == 404
+
+
+def test_purge_viewer_role_forbidden(
+    client: TestClient, admin_token: str, viewer_user: User
+):
+    """viewer/auditor 无自助写权限（与 revoke 一致）。"""
+    # admin 帮 viewer 代发一个 Key 再 revoke
+    proxy = client.post(
+        f"/api/v1/users/{viewer_user.id}/mcp-keys",
+        json={"name": "viewer-key", "validity_days": 7},
+        headers=_auth(admin_token),
+    )
+    kid = proxy.json()["data"]["id"]
+    # admin revoke
+    client.delete(
+        f"/api/v1/users/{viewer_user.id}/mcp-keys/{kid}", headers=_auth(admin_token)
+    )
+    # viewer 试图 purge 自己 → 403
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": viewer_user.username, "password": "viewerpass1"},
+    )
+    assert login.json()["code"] == 200, login.text
+    viewer_token = login.json()["data"]["access_token"]
+    resp = client.delete(
+        f"/api/v1/users/me/mcp-keys/{kid}/purge", headers=_auth(viewer_token)
+    )
+    assert resp.json()["code"] == 403
+
+
+def test_admin_purge_other_users_revoked_key(
+    client: TestClient, admin_token: str, auth_token: str, test_user: User, db_session: Session
+):
+    """admin 可 purge 任意用户的已注销 Key。"""
+    from app.models import AuditLog
+    from app.models.mcp_key import SOCMCPKey
+    # test_user 申请 + revoke
+    resp = client.post(
+        "/api/v1/users/me/mcp-keys",
+        json={"name": "for-admin-purge", "validity_days": 7},
+        headers=_auth(auth_token),
+    )
+    kid = resp.json()["data"]["id"]
+    client.delete(f"/api/v1/users/me/mcp-keys/{kid}", headers=_auth(auth_token))
+    # admin purge
+    resp = client.delete(
+        f"/api/v1/users/{test_user.id}/mcp-keys/{kid}/purge", headers=_auth(admin_token)
+    )
+    assert resp.json()["code"] == 200
+    # 记录消失
+    assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == kid).first() is None
+    # 审计 mcp_key.admin_purge
+    logs = db_session.query(AuditLog).filter(AuditLog.action == "mcp_key.admin_purge").all()
+    assert len(logs) == 1
+    assert logs[0].resource_name == "for-admin-purge"

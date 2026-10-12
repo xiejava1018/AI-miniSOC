@@ -302,3 +302,103 @@ class TestGetConfig:
         assert isinstance(mks.get_config("mcp.key.max_per_user", 5, db_session), int)
         assert mks.get_config("mcp.key.max_per_user", 5, db_session) == 5
         assert mks.get_config("mcp.key.not-exists", "fallback", db_session) == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# Purge（PR4：彻底删除已注销 Key）
+# ---------------------------------------------------------------------------
+
+class TestPurgeKey:
+    """purge_key / admin_purge_key 设计动机：
+    1) active Key 不许 purge（静默删除会绕过审计）
+    2) revoked Key 可物理 DELETE FROM soc_mcp_keys
+    3) 缓存同步清除
+    4) 幂等性：第二次 purge 同一 id 返回 404（记录已不存在）
+    """
+
+    def test_purge_revoked_key_success(self, db_session, user):
+        """正常流程：revoke 后 purge，DB 物理消失。"""
+        # 准备：先建一个 Key 造出明文，再 revoke
+        svc = MCPKeyService(db_session)
+        row, plaintext = svc.create_key(user.id, "to-purge", 7)
+        svc.revoke_key(user.id, row.id, reason="user_revoked")
+        # populate cache as if Agent was using it
+        mks.validate_key_cached(plaintext, db_session)
+        assert row.key_hash in mks._key_cache
+        # purge
+        svc.purge_key(user_id=user.id, key_id=row.id)
+        # 缓存已清
+        assert row.key_hash not in mks._key_cache
+        # DB 不存在该记录
+        assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == row.id).first() is None
+
+    def test_purge_active_key_rejected_409(self, db_session, user):
+        """未注销的 Key 不允许 purge（设计动机：避免静默丢失 Agent 会话）。"""
+        svc = MCPKeyService(db_session)
+        row, _ = svc.create_key(user.id, "active", 7)
+        with pytest.raises(HTTPException) as exc:
+            svc.purge_key(user_id=user.id, key_id=row.id)
+        assert exc.value.status_code == 409
+        assert "请先「注销」该 Key" in str(exc.value.detail)
+        # active Key 仍存在
+        assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == row.id).first() is not None
+
+    def test_purge_other_users_key_rejected_404(self, db_session, user):
+        """不能 purge 别人的 Key（按 user_id 限定）。"""
+        # 第二个用户
+        other_role = Role(name="other", code="other", description="t")
+        db_session.add(other_role); db_session.commit(); db_session.refresh(other_role)
+        other = User(
+            username="other_tester",
+            password_hash=get_password_hash("Passw0rd!123"),
+            email="other@test.local",
+            role_id=other_role.id,
+            status="active",
+        )
+        db_session.add(other); db_session.commit(); db_session.refresh(other)
+        # other 有一个 revoked Key
+        other_svc = MCPKeyService(db_session)
+        other_row, _ = other_svc.create_key(other.id, "other-key", 7)
+        other_svc.revoke_key(other.id, other_row.id, reason="user_revoked")
+        # user 试图 purge other 的 Key
+        user_svc = MCPKeyService(db_session)
+        with pytest.raises(HTTPException) as exc:
+            user_svc.purge_key(user_id=user.id, key_id=other_row.id)
+        assert exc.value.status_code == 404
+        # other 的记录还在
+        assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == other_row.id).first() is not None
+
+    def test_purge_nonexistent_id_rejected_404(self, db_session, user):
+        svc = MCPKeyService(db_session)
+        with pytest.raises(HTTPException) as exc:
+            svc.purge_key(user_id=user.id, key_id=999999)
+        assert exc.value.status_code == 404
+
+    def test_admin_purge_any_users_revoked_key(self, db_session, user):
+        """admin 可 purge 任意用户的已注销 Key（与 admin_revoke 一致权限）。"""
+        svc = MCPKeyService(db_session)
+        row, _ = svc.create_key(user.id, "for-admin", 7)
+        svc.revoke_key(user.id, row.id, reason="user_revoked")
+        # admin purge
+        svc.admin_purge_key(key_id=row.id)
+        assert db_session.query(SOCMCPKey).filter(SOCMCPKey.id == row.id).first() is None
+
+    def test_admin_purge_active_key_rejected_409(self, db_session, user):
+        """admin 也不能 purge active。"""
+        svc = MCPKeyService(db_session)
+        row, _ = svc.create_key(user.id, "active-admin", 7)
+        with pytest.raises(HTTPException) as exc:
+            svc.admin_purge_key(key_id=row.id)
+        assert exc.value.status_code == 409
+
+    def test_purge_expired_active_key_rejected_409(self, db_session, user):
+        """边界：active 状态但 days_remaining==0（expired）仍属 active，purge 一律拒绝。
+        逼用户先走 revoke 流程，保留 audit trace。"""
+        svc = MCPKeyService(db_session)
+        row, _ = svc.create_key(user.id, "to-expire", 7)
+        # 手动把 expires_at 拨到昨天（仍 status=active）
+        row.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+        db_session.commit()
+        with pytest.raises(HTTPException) as exc:
+            svc.purge_key(user_id=user.id, key_id=row.id)
+        assert exc.value.status_code == 409

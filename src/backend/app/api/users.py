@@ -28,6 +28,7 @@ from app.services.user_service import UserService
 from app.services.mcp_key_service import MCPKeyService
 from app.services.audit_log_service import AuditLogService
 from app.models.user import User, UserStatus
+from app.models.mcp_key import SOCMCPKey
 
 
 router = APIRouter(tags=["用户管理"])
@@ -371,6 +372,52 @@ async def revoke_my_mcp_key(
     return _build_key_response(key_obj)
 
 
+@router.delete("/me/mcp-keys/{key_id}/purge")
+@log_audit(
+    action="mcp_key.purge",
+    resource_type="mcp_key",
+    get_resource_id=lambda result, kwargs: kwargs.get("key_id"),
+    get_resource_name=lambda result, kwargs: result.get("name"),
+    get_old_values=lambda result, kwargs: result.get("snapshot"),
+    get_new_values=lambda result, kwargs: {"deleted": True},
+)
+async def purge_my_mcp_key(
+    request: Request,
+    key_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """彻底删除已注销的 Key（双步走：先 revoke、再 purge）。
+
+    设计原则：
+    1) active Key 不可直接 purge（强制先 revoke），避免静默删除造成 Agent 失联无审计
+    2) purge 仅限已 revoke 的 Key，物理 DELETE FROM soc_mcp_keys
+    3) 审计作为「mcp_key.purge」事件落 hash 链（与 revoke 一致，不绕过）
+    4) viewer/auditor 无自助写权限（与 revoke 一致）
+    """
+    _ensure_mcp_key_write_allowed(current_user)
+    service = MCPKeyService(db)
+    # 先拿一次取快照（不能直接调 purge_key 拿不到快照了）
+    row = db.query(SOCMCPKey).filter(
+        SOCMCPKey.id == key_id, SOCMCPKey.user_id == current_user.id
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="MCP Key 不存在")
+    if row.status != "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail="仅可彻底删除已注销的 Key；请先「注销」该 Key",
+        )
+    snapshot = {
+        "id": row.id, "name": row.name, "key_prefix": row.key_prefix,
+        "key_hash": row.key_hash, "user_id": row.user_id,
+        "revoke_reason": row.revoke_reason,
+    }
+    service.purge_key(user_id=current_user.id, key_id=key_id)
+    # 返回值供装饰器取用
+    return {"deleted": True, "key_id": key_id, "name": snapshot["name"], "snapshot": snapshot}
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: int,
@@ -628,3 +675,43 @@ async def admin_revoke_user_mcp_key(
     _get_target_user(db, user_id)
     key_obj = MCPKeyService(db).admin_revoke_key(key_id)
     return _build_key_response(key_obj)
+
+
+@router.delete("/{user_id}/mcp-keys/{key_id}/purge")
+@log_audit(
+    action="mcp_key.admin_purge",
+    resource_type="mcp_key",
+    get_resource_id=lambda result, kwargs: kwargs.get("key_id"),
+    get_resource_name=lambda result, kwargs: result.get("name"),
+    get_old_values=lambda result, kwargs: result.get("snapshot"),
+    get_new_values=lambda result, kwargs: {"deleted": True, "owner_user_id": kwargs.get("user_id")},
+)
+async def admin_purge_user_mcp_key(
+    request: Request,
+    user_id: int,
+    key_id: int,
+    current_user: User = Depends(require_role("admin")),
+    db: Session = Depends(get_db),
+):
+    """admin 彻底删除已注销的 Key（仅可对 status=revoked 物理删除）。
+
+    审计作为「mcp_key.admin_purge」事件落 hash 链；双重审计：先 admin_revoke、再 admin_purge。
+    """
+    _get_target_user(db, user_id)
+    row = db.query(SOCMCPKey).filter(
+        SOCMCPKey.id == key_id, SOCMCPKey.user_id == user_id
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="MCP Key 不存在")
+    if row.status != "revoked":
+        raise HTTPException(
+            status_code=409,
+            detail="仅可彻底删除已注销的 Key；请先「强制注销」该 Key",
+        )
+    snapshot = {
+        "id": row.id, "name": row.name, "key_prefix": row.key_prefix,
+        "key_hash": row.key_hash, "user_id": row.user_id,
+        "revoke_reason": row.revoke_reason,
+    }
+    MCPKeyService(db).admin_purge_key(key_id=key_id)
+    return {"deleted": True, "key_id": key_id, "name": snapshot["name"], "snapshot": snapshot}
