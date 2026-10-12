@@ -127,7 +127,8 @@ docker inspect minisoc-wazuh-collector   # Status=healthy, FailingStreak=0
 
 ## 经验总结
 
-1. **健康检查 = 进程活着 + 网络到后端通**,不应该去测业务数据源
-2. **数据源连通性** 是业务关注点,必须由业务循环 + 告警覆盖,不能甩给 Docker daemon
-3. **静默 ≠ 没问题** — wazuh 静默 30 秒刷 Wazuh API 4 天没人发现,因为 Wazuh 没内置防爆破
-4. **`FailingStreak=0` 不代表架构正确** — 它只代表"探针逻辑全通过",不代表"探针逻辑本身合理"
+1. **健康检查 = 进程活着 + 网络到后端通**，不应该去测业务数据源
+2. **数据源连通性** 是业务关注点，必须由业务循环 + 告警覆盖，不能甩给 Docker daemon
+3. **静默 ≠ 没问题** — wazuh 静默 30 秒刷 Wazuh API 4 天没人发现，因为 Wazuh 没内置防爆破
+4. **`FailingStreak=0` 不代表架构正确** — 它只代表"探针逻辑全通过"，不代表"探针逻辑本身合理"
+5. **业务采集也应共享 session** — commit 33cef39 加 `collect_session([DataType.ASSET, DataType.NAT_MAPPING])` 一次 login 采两种数据类型，5 分钟 1 个 cycle 只会产生 1 条路由器"成功登录"通知，登录负载减半。兼容旧 `collect(单类型)` 路径不变（单测/--test 仍可走）。
