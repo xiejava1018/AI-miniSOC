@@ -62,10 +62,19 @@ export const staticRoutes: AppRouteRecordRaw[] = [
     ]
   },
   // 全员可达的隐藏页：个人中心（不在后端菜单表里，登录后守卫自动放行）
+  // 父级用 Layout 包裹以渲染侧边栏/顶栏；子级是页面本身
   {
     path: '/system/user-center',
-    name: 'UserCenter',
-    component: () => import('@views/system/user-center/index.vue'),
-    meta: { title: '个人中心', isHide: true, isHideTab: true, keepAlive: true }
+    name: 'UserCenterLayout',
+    component: () => import('@views/index/index.vue'),
+    meta: { title: '个人中心', isHide: true, isHideTab: true },
+    children: [
+      {
+        path: '',
+        name: 'UserCenterStatic',
+        component: () => import('@views/system/user-center/index.vue'),
+        meta: { title: '个人中心', isHide: true, isHideTab: true, keepAlive: true }
+      }
+    ]
   }
 ]
