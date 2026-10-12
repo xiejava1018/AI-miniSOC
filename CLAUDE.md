@@ -168,6 +168,7 @@ sudo systemctl status actions.runner.*
 | 告警分级权威 | `src/backend/app/core/alert_levels.py` |
 | 审计 hash 链 | `src/backend/app/services/audit_log_service.py` |
 | AI 限流/熔断 | `src/backend/app/services/ai_budget.py`（QPS=2, DAILY_CAP=500） |
+| **MCP Key 用户凭证**（PR1 2026-10） | `services/mcp_key_service.py` + `mcp/key_auth.py` + `api/users.py`(/me/mcp-keys)——Bearer Key 认证、TTL 缓存、IP 锁定、admin 代发。详情 `app/mcp/README.md` |
 | 配置中心 resolver | `src/backend/app/services/data_source_resolver.py` |
 | 配置中心管理 | `src/backend/app/services/data_source_service.py` |
 | Alembic 配置 | `src/backend/alembic/`（62 迁移，2 head） |

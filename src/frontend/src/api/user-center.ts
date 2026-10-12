@@ -110,3 +110,32 @@ export function fetchRevokeMyMcpKey(keyId: number) {
     showErrorMessage: false
   })
 }
+
+/* ------------------------------------------------------------------ *
+ * admin 侧（PR3 补充）
+ * ------------------------------------------------------------------ */
+
+/** 查看指定用户 Key 列表（仅 admin 可见） */
+export function fetchGetUserMcpKeys(userId: number) {
+  return request.get<McpKeyItem[]>({
+    url: `/api/v1/users/${userId}/mcp-keys`,
+    showErrorMessage: false
+  })
+}
+
+/** admin 代发新 Key（返回一次性明文；key_admin 已负责保密转交） */
+export function fetchAdminCreateMcpKey(userId: number, data: { name: string; validity_days: number }) {
+  return request.post<McpKeyCreated>({
+    url: `/api/v1/users/${userId}/mcp-keys`,
+    data,
+    showErrorMessage: false
+  })
+}
+
+/** admin 强制注销指定用户的 Key */
+export function fetchAdminRevokeMcpKey(userId: number, keyId: number) {
+  return request.del<McpKeyItem>({
+    url: `/api/v1/users/${userId}/mcp-keys/${keyId}`,
+    showErrorMessage: false
+  })
+}

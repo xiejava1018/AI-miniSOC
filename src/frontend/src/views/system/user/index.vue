@@ -141,6 +141,13 @@
         </div>
       </template>
     </ElDialog>
+
+    <!-- admin：用户 MCP Key 监管 -->
+    <McpKeysDialog
+      v-model="mcpDialogVisible"
+      :user-id="mcpDialogUser.id"
+      :username="mcpDialogUser.username"
+    />
   </div>
 </template>
 
@@ -160,6 +167,7 @@
   import { CacheInvalidationStrategy } from '@/utils/table/tableCache'
   import { SearchFormItem } from '@/types'
   import ArtButtonTable from '@/components/core/forms/art-button-table/index.vue'
+  import McpKeysDialog from './modules/mcp-keys-dialog.vue'
 
   // 状态变量
   const dialogType = ref('add')
@@ -247,7 +255,7 @@
           prop: 'operation',
           label: '操作',
           align: 'center',
-          width: 120,
+          width: 200,
           fixed: 'right',
           formatter: (row: any) =>
             h('div', { class: 'operation-column-container' }, [
@@ -256,6 +264,16 @@
                 style: 'margin-right: 8px;',
                 onClick: () => showDialog('edit', row)
               }),
+              h(
+                'el-button',
+                {
+                  type: 'primary',
+                  link: true,
+                  style: 'margin-right: 8px;',
+                  onClick: () => openMcpKeysDialog(row)
+                },
+                { default: () => 'MCP Key' }
+              ),
               h(ArtButtonTable, {
                 type: 'delete',
                 onClick: () => handleDeleteUser(row)
@@ -507,6 +525,14 @@
       .catch(() => {
         // 用户取消删除，不做处理
       })
+  }
+
+  // admin 监管：打开某用户 MCP Key 对话框
+  const mcpDialogVisible = ref(false)
+  const mcpDialogUser = ref<{ id: number; username: string }>({ id: 0, username: '' })
+  const openMcpKeysDialog = (row: any) => {
+    mcpDialogUser.value = { id: row.id, username: row.username }
+    mcpDialogVisible.value = true
   }
 
   const getTagType = (status: number) => {

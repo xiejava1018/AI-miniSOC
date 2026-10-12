@@ -2,18 +2,18 @@
 
 把 FastAPI 后端包装成 MCP（Model Context Protocol）服务，让 AI Agent 通过标准化协议调用 SOC 能力。
 
-## 架构：纯 C 路线（手写 27 个 tools）
+## 架构：纯 C 路线（手写 60 个 tools，双 transport）
 
 | 部分 | 来源 | tools 数 | 端点 |
 |------|------|---------|------|
-| **C**（手写精选）| `app/mcp/tools/*.py` | 27 | `GET http://localhost:8100/sse` (SSE transport) |
+| **C**（手写精选）| `app/mcp/tools/*.py` | **60** | `POST http://localhost:8100/mcp` (Streamable HTTP，推荐) + `GET http://localhost:8100/sse` (SSE 兼容) |
 
 **为什么不用 B（fastapi-mcp 自动 OpenAPI → MCP）**：
 
 1. Agent 实际只用 OpenAPI 142 个路由中的 7 个（资产/字典相关），剩下都是后台管理（用户/角色/菜单/部门/审计/通知），对 SOC 工作流无价值
 2. fastapi-mcp 依赖脆弱（OpenAPI 自引用递归 + Server API 版本不兼容，需要打库源码补丁 + monkey-patch）
 3. 全 C tool 名字短（5-20 字符），B 名字长（30+ 字符），Agent 上下文省 ~70%
-4. Token 管理全自动（C 用 TokenManager 后台续期，B 必须每次带 Authorization）
+4. Token 管理全自动（Key 模式下服务端免密 mint JWT，不需 Agent 持账密）
 5. 写操作可控（C 可直连 DB 绕过前端 schema bug）
 
 如未来需要重新启用 B（自动从新增 OpenAPI endpoint 同步 tool），代码备份见 `app/mcp/server.py` 底部注释块 + 备份白名单 `SAFE_OPENAPI_OPS_DISABLED`。
@@ -29,18 +29,89 @@ cd src/backend
 
 启动日志会看到：
 ```
-[INFO] app.mcp.server: MCP-C: 手写 tools (27 个): [...]
-[INFO] app.mcp.server: MCP SSE server starting on http://0.0.0.0:8100/sse (SSE transport)
+[INFO] app.mcp.server: MCP-C: 手写 tools (60 个): [...]
+[INFO] app.mcp.server: MCP server starting on http://0.0.0.0:8100 (streamable HTTP: /mcp, SSE: /sse)
 ```
 
 ## MCP 端点
 
-| 端点 | 协议 | 用途 |
-|------|------|------|
-| `http://localhost:8100/sse` | SSE | MCP 客户端连接（拿到 session_id） |
-| `http://localhost:8100/messages/?session_id=...` | POST JSON-RPC | 发送 MCP 请求 |
+| 端点 | 协议 | 用途 | 推荐 |
+|------|------|------|:----:|
+| `http://localhost:8100/mcp` | Streamable HTTP | 新版 MCP 客户端默认（workbuddy / Claude / Cursor 等） | ✅ |
+| `http://localhost:8100/sse` | SSE | 旧版客户端兼容（拿 session_id） |   |
+| `http://localhost:8100/sse/messages/?session_id=...` | POST JSON-RPC | SSE 模式消息通道 |   |
+| `http://localhost:8100/` | GET | 自描述 JSON（列出可用 transport） |   |
 
-## MCP 客户端配置
+## Key 认证接入（推荐 Agent 接入方式）
+
+**用户级凭证**：MCP Key（`sk-mcp-` 前缀）属于某个用户，权限完全继承该用户角色（GitHub PAT 模式）。
+Agent 在 `Authorization: Bearer sk-mcp-xxxx` 头里携带 Key，服务端校验后免密签发 JWT 以该用户身份执行所有 tool 调用。
+
+### 1. 用户申请 Key
+
+登录 AI-miniSOC 前端 → 右上角头像 → **个人中心** → **MCP 接入** Tab → **申请新 Key**（名称 + 有效期 7/30/90/365 天）→ 系统返回**一次性明文**（关闭后无法再查看）→ 复制。
+
+viewer / auditor 角色无法自助申请（需 admin 代发：用户管理页 → 操作列 → "MCP Key" → 代发）。
+
+### 2. 配置 Agent
+
+#### workbuddy（`~/.workbuddy/mcp.json`）
+
+```json
+{
+  "mcpServers": {
+    "ai-mini-soc": {
+      "url": "http://<host>:8100/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-mcp-XXXXX..."
+      }
+    }
+  }
+}
+```
+
+#### Claude Code
+
+```bash
+claude mcp add --transport http ai-mini-soc http://<host>:8100/mcp \
+  --header "Authorization: Bearer sk-mcp-XXXXX..."
+```
+
+#### Cursor / 其他
+
+```json
+{
+  "mcpServers": {
+    "ai-mini-soc": {
+      "url": "http://<host>:8100/mcp",
+      "headers": { "Authorization": "Bearer sk-mcp-XXXXX..." }
+    }
+  }
+}
+```
+
+### 3. 验证
+
+- Agent 连接后调用 `get_system_info` → 拿到 SOC 元信息
+- 调用 `get_current_user` → 验证身份就是该 Key 绑定用户
+- 调 `list_assets` / `list_alerts` / `ai_analyze_alert` 等 → 权限等同该用户
+
+### 4. 失败处理
+
+- Key 错误 / 注销 / 过期 → HTTP 401 `{"error":"key_invalid|key_revoked|key_expired"}`
+- 同一 IP 连续 10 次失败 → HTTP 429 锁 15 分钟（防爆破，可配置）
+- 中间件内置 60s 缓存，Key 注销**即时**（含审计 mcp_key.revoke）
+
+### 5. 与旧 `set_mcp_credentials` 共存
+
+过渡期两种方式都可接入：
+
+- `set_mcp_credentials(u, p)`：把账号密码给 Agent 侧，TokenManager 后台续期
+- `Authorization: Bearer sk-mcp-...`：用户 Key 模式（**推荐**）
+
+`mcp.auth.required` 配置项控制是否强制要求 Key（默认 `false`，生产建议 `true`）。
+
+## MCP 客户端配置（兼容模式 / 不带 Key）
 
 ```json
 {
@@ -53,9 +124,9 @@ cd src/backend
 }
 ```
 
-## 工具清单（27 个，全部按 SOC 工作流精选）
+## 工具清单（60 个，按 SOC 工作流精选；用户级 Key 鉴权）
 
-### 0. 系统 / Token 管理（3）
+### 0. 系统 / Token 管理（6）
 | Tool | 鉴权 | 说明 |
 |------|------|------|
 | `get_system_info` | ❌ 免鉴权 | SOC 元信息（应用名 / Logo / 版权 / 描述），Agent 启动时调用 |
