@@ -73,31 +73,35 @@ async def _collect_and_sync(
 ) -> None:
     """采集一轮并推送到 AI-miniSOC。
 
-    一轮内依次推送 asset 与 nat_mapping 两种数据类型
-    （单次 HTTP 仅承载一个 data_type，故分两次 sync；collector.collect
-    各自独立 login/logout，与原有节奏一致）。
+    一次 cycle 里走 collect_session([ASSET, NAT_MAPPING]) 共享 1 个
+    路由器 session（1 次 login + 1 次 logout）。原实现两种数据类型各自
+    独立 login/logout，每 cycle 走 2 次登录，会在路由器 Web 登录告警
+    里刷 2 条“成功登录”通知，5 分钟 1 cycle 看上去双倍。共享 session
+    后每 cycle 1 条告警。同步侧仍是 2 次 POST（单次 HTTP 仅承载一个
+    data_type）—— 该限制在后端不在采集器。
+
+    路由表：
+      ASSET         → S2 暴露面 + 资产盘点
+      NAT_MAPPING   → S2 暴露面
     """
     logger.info("开始采集...")
-    result = await collector.collect(DataType.ASSET)
-    logger.info(f"资产采集完成: {len(result.items)} 条")
-    sync_result = await soc_client.sync(
-        source=result.source,
-        data_type=result.data_type.value,
-        items=result.items,
-        metadata=result.metadata,
-    )
-    logger.info(f"资产同步结果: {sync_result}")
+    try:
+        results = await collector.collect_session(
+            [DataType.ASSET, DataType.NAT_MAPPING]
+        )
+    except Exception as e:
+        # login 阶段任何异常都不中断常驻循环（路由器/后端临时不可达是常态）
+        raise
 
-    # S2 暴露面：NAT 端口映射（AOG-6 / OH-6.1）
-    nat_result = await collector.collect(DataType.NAT_MAPPING)
-    logger.info(f"NAT 采集完成: {len(nat_result.items)} 条")
-    nat_sync_result = await soc_client.sync(
-        source=nat_result.source,
-        data_type=nat_result.data_type.value,
-        items=nat_result.items,
-        metadata=nat_result.metadata,
-    )
-    logger.info(f"NAT 同步结果: {nat_sync_result}")
+    for result in results:
+        logger.info(f"{result.data_type.value} 采集完成: {len(result.items)} 条")
+        sync_result = await soc_client.sync(
+            source=result.source,
+            data_type=result.data_type.value,
+            items=result.items,
+            metadata=result.metadata,
+        )
+        logger.info(f"{result.data_type.value} 同步结果: {sync_result}")
 
 
 async def _run_test(
