@@ -71,8 +71,28 @@ def mount_mcp(_app: FastAPI, mount_path: str = "/mcp") -> dict[str, Any]:
 
     custom_mcp.settings.host = "0.0.0.0"
     custom_mcp.settings.port = 8100
-    # sse_app("/") 让 endpoint URL 与实际路由都是 /messages/，避免 307 重定向
-    starlette_app = custom_mcp.sse_app("/")
+    # 组合双 transport：Streamable HTTP（/mcp，新版客户端默认）与 SSE（/sse）
+    from starlette.applications import Starlette
+    from starlette.routing import Route
+    from starlette.responses import JSONResponse
+
+    async def _mcp_root(_request):
+        return JSONResponse({
+            "service": "AI-miniSOC MCP",
+            "transports": {
+                "streamable_http": "/mcp",
+                "sse": "/sse",
+            },
+        })
+
+    # streamable_http_app() 内部路由固定在 settings.streamable_http_path（默认 /mcp）
+    streamable_routes = custom_mcp.streamable_http_app().routes
+    sse_routes = custom_mcp.sse_app("/sse").routes
+
+    starlette_app = Starlette(
+        routes=[Route("/", _mcp_root), *streamable_routes, *sse_routes],
+        lifespan=_mcp_lifespan_adapter(custom_mcp),
+    )
 
     def _run_mcp() -> None:
         try:
@@ -90,12 +110,28 @@ def mount_mcp(_app: FastAPI, mount_path: str = "/mcp") -> dict[str, Any]:
 
     t = threading.Thread(target=_run_mcp, name="mcp-sse-server", daemon=True)
     t.start()
-    logger.info("MCP SSE server starting on http://0.0.0.0:8100/sse (SSE transport)")
+    logger.info(
+        "MCP server starting on http://0.0.0.0:8100 "
+        "(streamable HTTP: /mcp, SSE: /sse)"
+    )
 
+    info["endpoints"]["mcp_url"] = "http://0.0.0.0:8100/mcp"
     info["endpoints"]["mcp_sse_url"] = "http://0.0.0.0:8100/sse"
     info["mount_path_unused"] = mount_path  # 保留参数兼容性
 
     return info
+
+
+def _mcp_lifespan_adapter(mcp_instance):
+    """把 FastMCP 的 session manager 生命周期接到组合 Starlette app"""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(app):
+        async with mcp_instance.session_manager.run():
+            yield
+
+    return lifespan
 
 
 def await_get_custom_tools(mcp_instance) -> list[str]:
