@@ -61,6 +61,15 @@ class TokenBundle:
         return time.time() < self.refresh_expires_at
 
 
+@dataclass
+class InjectedIdentity:
+    """MCP Key 免密注入的身份凭证（传输层中间件每次请求刷新）"""
+    user_id: int
+    username: str
+    token: str
+    expires_at: float  # 注入 token 有效期（Unix 秒；过期自动清除回落会话凭证）
+
+
 class TokenManager:
     """单例 Token 管理器：自动刷新 + 线程安全"""
 
@@ -71,6 +80,8 @@ class TokenManager:
         self._lock = threading.RLock()
         self._bundle: Optional[TokenBundle] = None
         self._credentials: Optional[tuple[str, str]] = None  # (username, password)
+        # MCP Key 注入身份（key_auth 中间件写入；优先级高于 _bundle 会话凭证）
+        self._injected: Optional[InjectedIdentity] = None
         self._refresh_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         # refresh 比 access 提前这么多秒触发（避免边界 race）
@@ -110,15 +121,75 @@ class TokenManager:
             self._start_refresh_thread()
             return bundle
 
+    # ------------------------------------------------------------------ MCP Key 身份注入
+    def inject_identity(
+        self,
+        user_id: int,
+        username: str,
+        token: str,
+        ttl_seconds: Optional[int] = None,
+    ) -> None:
+        """
+        注入 MCP Key 免密签发的身份凭证（app/mcp/key_auth.py 中间件调用）。
+
+        注入凭证**优先级高于** set_mcp_credentials 的会话凭证：get_token() 优先
+        返回注入 token。中间件每个请求都会重注入（新签发 JWT），因此注入 token
+        过期后自动清除并回落到会话凭证（防御性兜底，正常时序不会走到）。
+
+        Args:
+            user_id: 绑定用户 id
+            username: 绑定用户名
+            token: 免密签发的 access token（create_access_token 产物，带 jti）
+            ttl_seconds: 注入有效期（默认取 ACCESS_TOKEN_EXPIRE_MINUTES 与 token 一致）
+        """
+        if ttl_seconds is None:
+            ttl_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        with self._lock:
+            self._injected = InjectedIdentity(
+                user_id=int(user_id),
+                username=username,
+                token=token,
+                expires_at=time.time() + ttl_seconds,
+            )
+        logger.debug(
+            "TokenManager identity injected: user=%s(user_id=%s), ttl=%.0fs",
+            username, user_id, ttl_seconds,
+        )
+
+    def clear_identity(self) -> None:
+        """清除注入身份（回落到 set_mcp_credentials 会话凭证）"""
+        with self._lock:
+            if self._injected is not None:
+                logger.info(
+                    "TokenManager identity cleared: user=%s", self._injected.username
+                )
+            self._injected = None
+
+    def _valid_injected(self) -> Optional[InjectedIdentity]:
+        """取有效注入身份；过期自动清除返回 None（调用方须持锁）"""
+        if self._injected is None:
+            return None
+        if time.time() >= self._injected.expires_at:
+            logger.info(
+                "注入身份已过期（user=%s），回落会话凭证", self._injected.username
+            )
+            self._injected = None
+        return self._injected
+
     # ------------------------------------------------------------------ 查询
     def get_token(self) -> str:
         """
         同步返回当前有效的 access token。
 
+        优先级：MCP Key 注入身份 > set_mcp_credentials 会话凭证。
+
         Raises:
-            TokenExpiredError: 凭证彻底失效，需要重新 configure()
+            TokenExpiredError: 凭证彻底失效，需要重新 configure() / 注入
         """
         with self._lock:
+            injected = self._valid_injected()
+            if injected is not None:
+                return injected.token
             if self._bundle is None:
                 raise TokenExpiredError("TokenManager 未配置，请先调用 configure()")
             # 同步兜底：如果即将过期但后台线程没来得及刷，同步刷一次
@@ -143,8 +214,13 @@ class TokenManager:
     def status(self) -> dict:
         """查询当前 token 状态（供 MCP debug tool 用）"""
         with self._lock:
+            injected = self._valid_injected()
             if not self._bundle:
-                return {"configured": False}
+                return {
+                    "configured": False,
+                    "identity_injected": injected is not None,
+                    "injected_username": injected.username if injected else None,
+                }
             now = time.time()
             return {
                 "configured": True,
@@ -153,6 +229,8 @@ class TokenManager:
                 "access_expires_in_seconds": max(0, int(self._bundle.expires_at - now)),
                 "refresh_valid": self._bundle.refresh_valid,
                 "refresh_expires_in_seconds": max(0, int(self._bundle.refresh_expires_at - now)),
+                "identity_injected": injected is not None,
+                "injected_username": injected.username if injected else None,
             }
 
     # ------------------------------------------------------------------ 登录/刷新

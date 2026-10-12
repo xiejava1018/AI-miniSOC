@@ -72,9 +72,12 @@ def mount_mcp(_app: FastAPI, mount_path: str = "/mcp") -> dict[str, Any]:
     custom_mcp.settings.host = "0.0.0.0"
     custom_mcp.settings.port = 8100
     # 组合双 transport：Streamable HTTP（/mcp，新版客户端默认）与 SSE（/sse）
+    # 外层包 MCP Key 认证中间件（Bearer sk-mcp-* → 免密 JWT 注入；见 app/mcp/key_auth.py）
     from starlette.applications import Starlette
     from starlette.routing import Route
     from starlette.responses import JSONResponse
+    from starlette.middleware import Middleware
+    from app.mcp.key_auth import MCPKeyAuthMiddleware
 
     async def _mcp_root(_request):
         return JSONResponse({
@@ -91,6 +94,7 @@ def mount_mcp(_app: FastAPI, mount_path: str = "/mcp") -> dict[str, Any]:
 
     starlette_app = Starlette(
         routes=[Route("/", _mcp_root), *streamable_routes, *sse_routes],
+        middleware=[Middleware(MCPKeyAuthMiddleware)],
         lifespan=_mcp_lifespan_adapter(custom_mcp),
     )
 

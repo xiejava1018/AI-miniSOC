@@ -90,6 +90,7 @@ from .nat_mapping import NatMapping
 # OH-3.7 图谱 P95 性能告警：ORM 模型与 alembic c7d8e9f10a2b 同步，
 # 保证 Base.metadata.create_all 在测试库也能建出该表。
 from .graph_perf_alert import SOCGraphPerfAlert
+from .mcp_key import SOCMCPKey
 
 __all__ = [
     "Base",
@@ -168,4 +169,6 @@ __all__ = [
     "NatMapping",
     # OH-3.7 图谱 P95 性能告警
     "SOCGraphPerfAlert",
+    # 用户中心重构 + MCP Key 管理（PR1）
+    "SOCMCPKey",
 ]
