@@ -240,6 +240,38 @@ class AssetReconciliationService:
                 finally:
                     client.close()
             except Exception as exc:  # noqa: BLE001 — 任何异常都要转成明确的对账失败
+                # 2026-10-13 区分异常类型：让前端能看到"配置错"vs"认证错"vs"网络错"
+                # 不能都包成"Wazuh API 不可达"——用户无法定位问题。
+                from app.services.wazuh_client import (
+                    WazuhConfigError,
+                    WazuhAuthError,
+                    WazuhNetworkError,
+                )
+                if isinstance(exc, WazuhConfigError):
+                    wazuh_error = f"配置错误（{type(exc).__name__}）: {exc}"[:500]
+                    logger.error("对账失败：Wazuh 配置错误 %s", wazuh_error)
+                    raise ReconciliationError(
+                        f"Wazuh 配置读取失败（不是数据源不可达），本次对账终止。"
+                        f"请检查 soc_data_sources 表 type=wazuh 记录 / .env WAZUH_API_USERNAME/PASSWORD。"
+                        f"详情：{wazuh_error}"
+                    ) from exc
+                if isinstance(exc, WazuhAuthError):
+                    wazuh_error = f"认证错误（{type(exc).__name__}）: {exc}"[:500]
+                    logger.error("对账失败：Wazuh 认证错误 %s", wazuh_error)
+                    raise ReconciliationError(
+                        f"Wazuh API 拒绝认证（不是数据源不可达），本次对账终止。"
+                        f"wazuh 用户密码可能已变更，请检查 soc_data_sources 表的 auth_secret / .env WAZUH_API_PASSWORD。"
+                        f"详情：{wazuh_error}"
+                    ) from exc
+                if isinstance(exc, WazuhNetworkError):
+                    wazuh_error = f"网络错误（{type(exc).__name__}）: {exc}"[:500]
+                    logger.warning("对账失败：Wazuh 不可达 %s", wazuh_error)
+                    raise ReconciliationError(
+                        f"Wazuh API 不可达（网络问题），本次对账终止。"
+                        f"请检查 192.168.0.40:55000 可达性 + wazuh-collector 容器状态。"
+                        f"详情：{wazuh_error}"
+                    ) from exc
+                # 兜底：未知异常
                 wazuh_error = f"{type(exc).__name__}: {exc}"[:500]
                 logger.warning("对账失败：Wazuh 不可达 %s", wazuh_error)
                 raise ReconciliationError(

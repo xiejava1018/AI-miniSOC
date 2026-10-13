@@ -76,14 +76,46 @@ class WazuhClient:
     def _get_token(self) -> str:
         """获取或刷新 JWT token"""
         if not self._token:
+            # 2026-10-13 拦截：凭据 None / 空 → 抛 WazuhConfigError
+            # 不要让 httpx 内部拼 auth=(None, None) 才报 TypeError。
+            # 上游 catch 精确异常可提示运维检查配置，而不是看作网络问题。
+            if not self.username or not self.password:
+                raise WazuhConfigError(
+                    "Wazuh 凭据未配置（WazuhClient.username/password 为 None）。"
+                    "请检查 (1) soc_data_sources 表 type=wazuh 记录且 is_default=true "
+                    "且 enabled=true； (2) WazuhClient 实例化时是否传 db；"
+                    " (3) settings.WAZUH_API_USERNAME/PASSWORD 或 .env 兑底；"
+                    " (4) fernet 密钥与 DB 密文是否匹配。"
+                )
             url = f"{self.base_url}/security/user/authenticate"
-            response = self._client.post(
-                url,
-                auth=(self.username, self.password),
-                headers={"Content-Type": "application/json"}
-            )
-            response.raise_for_status()
-            data = response.json()
+            try:
+                response = self._client.post(
+                    url,
+                    auth=(self.username, self.password),
+                    headers={"Content-Type": "application/json"},
+                )
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
+                raise WazuhNetworkError(f"Wazuh API 网络不可达: {e}") from e
+            except httpx.HTTPError as e:
+                # transport-level error（SSL/协议错误）
+                raise WazuhNetworkError(f"Wazuh API 传输错误: {e}") from e
+
+            if response.status_code == 401:
+                # Wazuh 明确拒绝凭据 → WazuhAuthError
+                try:
+                    detail = response.json().get("detail", response.text[:200])
+                except Exception:
+                    detail = response.text[:200]
+                raise WazuhAuthError(
+                    f"Wazuh API 401 拒绝认证: {detail}。请检查 wazuh 用户密码"
+                    f"（soc_data_sources 表或 .env WAZUH_API_PASSWORD）。"
+                )
+            try:
+                response.raise_for_status()
+                data = response.json()
+            except httpx.HTTPStatusError as e:
+                raise WazuhNetworkError(f"Wazuh API HTTP {e.response.status_code}: {e}") from e
+
             self._token = data["data"]["token"]
         return self._token
 
@@ -272,5 +304,133 @@ class WazuhClient:
         self._client.close()
 
 
+# ──────────────────────────────────────────────────────────────────
+# 异常类型分级（2026-10-13 资产稽核 TypeError 后增加）
+#
+# 调用方可以 catch 精确类型，避免把所有 WazuhClient 异常都包成
+# 含义模糊的"Wazuh API 不可达"。三级区分：
+#
+#   WazuhConfigError    → 配置读取失败：httpx auth=(None, None) / fernet
+#                          key 错 / soc_data_sources 表无 wazuh 记录
+#                          （本项目的 2026-10-13 事故是这一类）
+#   WazuhAuthError      → Wazuh 主动拒绝：401 / 用户名密码错 / JWT 过期
+#                          且刷新失败
+#   WazuhNetworkError   → 网络问题：连接超时 / TCP RST / DNS 失败 /
+#                          Wazuh 服务器不可达
+#
+# 上游（如 asset_reconciliation）应当按顺序 catch：WazuhConfigError
+# 要独立提示运维"检查 soc_data_sources 表和 fernet key"，不能混为
+# "Wazuh 不可达"。
+# ──────────────────────────────────────────────────────────────────
+
+
+class WazuhClientError(RuntimeError):
+    """WazuhClient 调用过程异常的基类。"""
+
+
+class WazuhConfigError(WazuhClientError):
+    """配置读取失败（DataSourceResolver / settings 均为 None 或解密失败）。
+
+    修复路径：
+      1. 检查 soc_data_sources 表是否有 type=wazuh 的启用 + is_default 记录
+      2. 如果 .env 兑底：检查 src/backend/.env 是否有
+         WAZUH_API_USERNAME / WAZUH_API_PASSWORD
+      3. 如果走 DB：检查 fernet 密钥与加密值是否匹配
+    """
+
+
+class WazuhAuthError(WazuhClientError):
+    """Wazuh API 主动拒绝认证（HTTP 401）。
+
+    修复路径：
+      1. 验证 Wazuh API 上的 wazuh 用户密码是否变更
+      2. 如果走了 DB：last_test_at 与 last_test_ok 状态
+      3. JWT 过期且重试仍 401 → 可能 wazuh 服务本身被重置过
+    """
+
+
+class WazuhNetworkError(WazuhClientError):
+    """Wazuh API 网络问题（连接超时 / TCP RST / DNS 失败）。
+
+    修复路径：
+      1. telnet https://<wazuh>:55000 验证端口可达
+      2. 看 wazuh-collector 容器是否在跑（业务采集是否成功）
+    """
+
+
 # 全局 Wazuh 客户端实例
+#
+# 【2026-10-13 告警】该单例在模块 import 时创建，WazuhClient.__init__
+# 接受 db 参数默认 None。_resolve_config(db=None) 立刻 return None →
+# DataSourceResolver 路径失效，配置中心 v1 (soc_data_sources 表) 在该单例
+# 上永远不生效，凭据走 settings 兑底。
+#
+# 实际后果：环境变量 WAZUH_API_USERNAME/PASSWORD 未配置时，httpx
+# auth=(None, None) 拼出 TypeError "sequence item 0: expected a
+# bytes-like object, NoneType found"，表面看是"Wazuh API 不可达"，实际
+# 是配置读取错误。
+#
+# 现状：2026-10-13 .env 已补 WAZUH_API_USERNAME/PASSWORD 兑底，能跑。
+# 架构债务：11+ 调用点共用此单例，配置中心 v1 在这里静默失效。
+# 修正方向（未在本次 PR）：引入 get_wazuh_client(db=None) 工厂函数
+# 取代这个单例，所有调用点改为 get_wazuh_client(db=...) 让 db 透传。
+# 跟踪：见 docs/sessions/2026-10-13-asset-reconciliation-wazuh-typeerror.md
+#
+# 过渡期豁免：允许本单例继续走 settings 兑底，调用方需自行保证 .env
+# 有 WAZUH_API_USERNAME/PASSWORD 或上游代码已传 db。
 wazuh_client = WazuhClient()
+
+
+# ──────────────────────────────────────────────────────────────────
+# 2026-10-13 lazy 单例代理（保留旧 wazuh_client 名字供向后兼容）
+#
+# 问题：wazuh_client 在 import 时创建，db=None，凭据永远走 .env 兑底，
+# 11+ 调用点共用这个被配置中心旁路的单例。
+#
+# 方案：新增 get_wazuh_client(db=None) 工厂，让调用点可选性传 db；
+# 11+ 旧调用点可逐步迁移过去，老接口 wazuh_client 继续可用。
+# 该代理走 _LazyWazuhClientSingleton，调用 .get_agents() 等方法时
+# 才检查是否有 db 可用。
+#
+# 现状：现有 11+ 调用点不变仍走 wazuh_client（.env 兑底）；新代码
+# 应当用 get_wazuh_client(db=...) 走配置中心 v1。
+# ──────────────────────────────────────────────────────────────────
+import threading
+
+_wazuh_client_singleton: Optional["WazuhClient"] = None
+_wazuh_client_lock = threading.Lock()
+
+
+def get_wazuh_client(
+    db: Optional[object] = None,
+    use_mock_data: bool = False,
+) -> "WazuhClient":
+    """获取 WazuhClient 单例，支持 db 透传。
+
+    第一次调用时创建单例并用传入的 db 初始化；后续调用复用同—实例。
+    如果多次调用传入不同 db，第一次的 db 胜出（以第一次为准避免中间状态
+    产生不同的 token 缓存）。
+
+    调用方迁移路径：
+      旧：from app.services.wazuh_client import wazuh_client
+          wazuh_client.get_agents()
+      新：from app.services.wazuh_client import get_wazuh_client
+          get_wazuh_client(db=db).get_agents()
+
+    追阶：未来 PR 可以全面迁移调用点后去掉旧的 wazuh_client 名字。
+    """
+    global _wazuh_client_singleton
+    with _wazuh_client_lock:
+        if _wazuh_client_singleton is None:
+            _wazuh_client_singleton = WazuhClient(
+                db=db, use_mock_data=use_mock_data
+            )
+        return _wazuh_client_singleton
+
+
+def _reset_wazuh_client_singleton_for_tests() -> None:
+    """仅供单测调用：重置 lazy 单例。生产代码不应调用。"""
+    global _wazuh_client_singleton
+    with _wazuh_client_lock:
+        _wazuh_client_singleton = None
+

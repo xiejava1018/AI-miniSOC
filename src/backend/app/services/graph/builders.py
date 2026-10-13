@@ -1196,7 +1196,13 @@ class EndpointProcessBuilder:
         # 2. Wazuh 客户端（不可达则诚实降级）
         try:
             from app.services.wazuh_client import WazuhClient
-            client = WazuhClient()
+            # 透传 db 让 DataSourceResolver 走配置中心 v1（CLAUDE.md §4.13
+            # 配套: 不传 db 时 _resolve_config 立刻 return None → settings 兜底；
+            # .env 缺 WAZUH_API_USERNAME/PASSWORD 时 httpx auth=(None,None)
+            # 抛 TypeError "sequence item 0: expected a bytes-like object,
+            # NoneType found" 表现为"Wazuh 不可达"）。透传 db 走 soc_data_sources
+            # 表读到的 wazuh 凭据才是可错送的根治。
+            client = WazuhClient(db=self.db)
         except Exception as e:
             stats["degraded"] = True
             stats["error"] = f"WazuhClient 初始化失败: {e}"
