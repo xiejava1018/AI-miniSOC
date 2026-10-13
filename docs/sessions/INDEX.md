@@ -26,7 +26,7 @@
 | [资产字段 / 数据模型](#资产字段--数据模型) | 2 | network_zone 5→8 值改造、merge 双 head、字典 seed + backfill 脚本、生产 alembic 落后事故救援 |
 | [告警分级 / 风险评分](#告警分级--风险评分) | 3 | alert_levels 全项目唯一、Top 10 D7 vs F1.1 口径澄清、rising 修复 |
 | [数据补齐地基 P0](#数据补齐地基-p0) | 1 | F9/F10/F11、parent_id 模型对齐、后端冷启动 8s+ |
-| [采集器 / 僵尸进程 / 凭证](#采集器--僵尸进程--凭证) | 3 | tplink asyncio.run 循环错位、wazuh yaml 不展开 ${VAR}、healthcheck 刷数据源、wazuh TypeError 凭据读取失败 |
+| [采集器 / 僵尸进程 / 凭证](#采集器--僵尸进程--凭证) | 4 | tplink asyncio.run 循环错位、wazuh yaml 不展开 ${VAR}、healthcheck 刷数据源、wazuh TypeError 凭据读取失败、WazuhClient 全量审计+异常分级 |
 | [生产库迁移](#生产库迁移) | 1 | 102 本机 PG、49 表逐表 count 比对、回滚素材 |
 | [早期 session 笔记](#早期-session-笔记) | 1 | 2026-06-07 早期 Python 升级、采集器架构等 |
 
@@ -120,6 +120,7 @@
 - **2026-08-23：采集器 unhealthy / 僵尸进程 → CI/CD 缺口** (L1344–1480) — tplink `__main__.py` 的 `--test` 分支连开 3 个 asyncio.run 导致 RuntimeError；`TPLinkCollector` 补 close()；compose `init: true`；wazuh `yaml.safe_load` 不展开 `${VAR}` → 401
 - **2026-10-12：tplink 401 风暴 + 容器 healthcheck 刷数据源（同源问题 4 天后修复）**（[`2026-10-12-collector-healthcheck-data-source-storm.md`](2026-10-12-collector-healthcheck-data-source-storm.md)）— tplink `Dockerfile` HEALTHCHECK 每 60s 调 `tplink_collector --test` 走 `test_connection()` 登录路由器，wazuh compose `healthcheck` 段每 30s 调 `WazuhCollector.test_connection()` 登录 Wazuh API；前者被 TP-Link 防爆破节流刷出 4 天误报(FailingStreak=4349)，后者静默刷无告警。修：删 `tplink/Dockerfile` HEALTHCHECK + compose 两段 healthcheck 统一改成 `urllib.request` 打 `/api/v1/health`（不刷数据源）+ 加 `TPLinkCollector.collect_session([ASSET, NAT_MAPPING])` 1 个 cycle 1 次登录（原 2 次）。102 验证：5 分钟 2 cycle × 1 login/cycle = 2 次，与原 2 cycle × 2 login/cycle = 4 次相比减半。CLAUDE.md §4.13 同步加教训
 - **2026-10-13：资产稽核报 "Wazuh API 不可达" 实际是 TypeError**（[`2026-10-13-asset-reconciliation-wazuh-typeerror.md`](2026-10-13-asset-reconciliation-wazuh-typeerror.md)）— 根因不是数据源不可达：`WazuhClient()` 不传 db → DataSourceResolver 读不到 soc_data_sources 表（已有 wazuh-prod 记录 id=1）→ 回落 settings 兜底 → 102 后端 .env 没配 WAZUH_API_USERNAME/PASSWORD（配置中心 v1 上线时删了）→ httpx auth=(None, None) → TypeError "sequence item 0: expected a bytes-like object, NoneType found"。修：(1) `WazuhClient(db=self.db)` 透传 db 走配置中心 v1 路径（commit 590daf1）；(2) 102 端 .env 补 WAZUH_API_USERNAME/PASSWORD 兜底（不入库，defense-in-depth）。教训：TypeError 字符串能定位 bug 边界（httpx 构造请求缺字段）；"数据源不可达"错误信息歧义大（网络/凭据/凭据读取三类）；配置中心 v1 上线删 .env 兜底 = 高风险（DB 写入未验证时 silent fail）
+- **2026-10-13：WazuhClient() 全后端审计 + 异常分级 + lazy 工厂**（[`2026-10-13-wazuh-client-audit.md`](2026-10-13-wazuh-client-audit.md)）— `grep WazuhClient(` 扫出 3 个实例化点 + 11+ 共用全局单例。修：(1) `wazuh_client.py` 加 `WazuhConfigError/WazuhAuthError/WazuhNetworkError` 三类异常，`_get_token` 内部精确抛错不再让 httpx 内部拼 TypeError；(2) `asset_reconciliation` 按异常类型给前端不同提示文案；(3) `graph/builders.py:1199` 透传 db=self.db 走配置中心 v1；(4) 加 `get_wazuh_client(db=None)` lazy 工厂，11+ 调用点保留旧 `wazuh_client` 单例向后兼容，迁移路径就位但本次不全量改（架构债 1+ 人天，留给后续 PR）。教训：全局单例在 import 时创建 = db 永远传不进去，必须 lazy 或 factory；异常分类是错误处理第一性原理；审计同类问题不要只修一处
 
 ## 生产库迁移
 
