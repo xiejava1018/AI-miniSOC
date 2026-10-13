@@ -9,7 +9,7 @@ from app.models import Asset
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
 from app.models.asset_source import AssetSource
-from app.services.wazuh_client import wazuh_client
+from app.services.wazuh_client import get_wazuh_client
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class AssetSyncService:
         """从 Wazuh 同步资产"""
         try:
             # 获取 Wazuh agents
-            agents = wazuh_client.get_agents()
+            agents = get_wazuh_client(db=self.db).get_agents()
 
             stats = {
                 "total": len(agents),
@@ -222,7 +222,7 @@ class AssetSyncService:
     def sync_single_asset(self, agent_id: str) -> Asset:
         """同步单个资产"""
         try:
-            agent = wazuh_client.get_agent_info(agent_id)
+            agent = get_wazuh_client(db=self.db).get_agent_info(agent_id)
             asset_data = self._map_agent_to_asset(agent)
             asset, _ = self._create_or_update_asset(asset_data)
             self.db.commit()
@@ -344,7 +344,7 @@ class AssetSyncService:
 
     def _sync_single_agent_webhook_inner(self, agent_id: str) -> Asset:
         """Webhook 同步内部实现（不含 source_health 上报）"""
-        agent = wazuh_client.get_agent_info(agent_id)
+        agent = get_wazuh_client(db=self.db).get_agent_info(agent_id)
         asset_data = self._map_agent_to_asset(agent)
 
         # 提取来源信息（不写入 asset 主表）

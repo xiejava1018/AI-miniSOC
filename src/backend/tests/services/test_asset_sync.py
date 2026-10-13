@@ -2,7 +2,7 @@
 测试资产同步服务
 """
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 from app.services.asset_sync import AssetSyncService
 from app.models.sync_task import SyncTask
 from app.models.asset_change_log import AssetChangeLog
@@ -11,9 +11,12 @@ from app.models.asset import Asset
 
 @pytest.fixture
 def mock_wazuh_client():
-    """Mock Wazuh客户端"""
-    with patch('app.services.asset_sync.wazuh_client') as mock:
-        yield mock
+    """Mock Wazuh客户端（2026-10-13 迁移：服务改用 get_wazuh_client 工厂，
+    patch 工厂函数本身，yield 工厂返回的 client mock）"""
+    with patch('app.services.asset_sync.get_wazuh_client') as factory:
+        client = MagicMock()
+        factory.return_value = client
+        yield client
 
 
 @pytest.fixture
@@ -95,7 +98,7 @@ def test_webhook_sync_new_agent(db_session, mock_wazuh_client):
     assert asset.last_synced_at is not None
     assert asset.name == "new-server"
     assert asset.asset_ip == "192.168.1.30"
-    assert asset.asset_status == "在线"
+    assert asset.asset_status == "online"
 
     # 检查是否创建了变更日志
     change_log = db_session.query(AssetChangeLog).filter(
@@ -109,7 +112,7 @@ def test_webhook_sync_existing_agent_status_change(db_session, mock_wazuh_client
     """测试Webhook同步现有agent - 状态变更"""
     # 先创建一个已存在的资产
     test_asset.wazuh_agent_id = "004"
-    test_asset.asset_status = "在线"
+    test_asset.asset_status = "online"
     test_asset.data_source = "wazuh"
     db_session.commit()
 
@@ -127,7 +130,7 @@ def test_webhook_sync_existing_agent_status_change(db_session, mock_wazuh_client
 
     # 验证资产更新
     assert asset.id == test_asset.id
-    assert asset.asset_status == "离线"  # 状态已更新
+    assert asset.asset_status == "offline"  # 状态已更新
     assert asset.last_synced_at is not None
 
     # 检查是否创建了状态变更日志
@@ -137,15 +140,15 @@ def test_webhook_sync_existing_agent_status_change(db_session, mock_wazuh_client
     assert len(change_logs) == 1
     assert change_logs[0].change_type == "status_changed"
     assert change_logs[0].field_name == "asset_status"
-    assert change_logs[0].old_value == "在线"
-    assert change_logs[0].new_value == "离线"
+    assert change_logs[0].old_value == "online"
+    assert change_logs[0].new_value == "offline"
 
 
 def test_webhook_sync_existing_agent_no_status_change(db_session, mock_wazuh_client, test_asset):
     """测试Webhook同步现有agent - 状态未变更"""
     # 先创建一个已存在的资产
     test_asset.wazuh_agent_id = "005"
-    test_asset.asset_status = "在线"
+    test_asset.asset_status = "online"
     test_asset.data_source = "wazuh"
     db_session.commit()
 
@@ -163,7 +166,7 @@ def test_webhook_sync_existing_agent_no_status_change(db_session, mock_wazuh_cli
 
     # 验证资产更新（但没有状态变更日志）
     assert asset.id == test_asset.id
-    assert asset.asset_status == "在线"
+    assert asset.asset_status == "online"
 
     # 检查没有创建状态变更日志
     change_logs = db_session.query(AssetChangeLog).filter(

@@ -68,8 +68,8 @@ async def sync_agent_sca_checks(
         logger.info(f"开始同步Agent {agent_id}的SCA检查数据...")
 
         # 获取agent信息
-        from app.services.wazuh_client import wazuh_client
-        agents = wazuh_client.get_agents()
+        from app.services.wazuh_client import get_wazuh_client
+        agents = get_wazuh_client(db=db).get_agents()
         agent = next((a for a in agents if a.get("id") == agent_id), None)
 
         if not agent:

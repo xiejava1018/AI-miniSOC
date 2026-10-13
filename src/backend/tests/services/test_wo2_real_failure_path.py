@@ -67,9 +67,12 @@ def test_wazuh_sync_agents_failure_records_source_health(db):
     from app.services.wazuh_agent_sync import WazuhAgentSyncService
 
     with patch(
-        "app.services.wazuh_client.wazuh_client.get_agents",
-        side_effect=ConnectionError("Wazuh API timeout"),
-    ):
+        # patch 使用方模块的本地绑定（from-import 后源模块属性不影响它）
+        "app.services.wazuh_agent_sync.get_wazuh_client",
+    ) as _factory:
+        _factory.return_value.get_agents.side_effect = ConnectionError(
+            "Wazuh API timeout"
+        )
         svc = WazuhAgentSyncService(db)
         with pytest.raises(ConnectionError):
             svc.sync_agents()
@@ -109,9 +112,10 @@ def test_wazuh_sync_agents_success_records_source_health(db):
         "failed": 0, "dead_letter_batch_id": None,
     }
     with patch(
-        "app.services.wazuh_client.wazuh_client.get_agents",
-        return_value=fake_agents,
-    ), patch(
+        "app.services.wazuh_agent_sync.get_wazuh_client",
+    ) as _factory:
+        _factory.return_value.get_agents.return_value = fake_agents
+    with patch(
         # mock BaseSyncHandler.handle 返成功 stats——避免真实 DB 写 asset/sync_task
         "app.services.sync_handlers.base.BaseSyncHandler.handle",
         return_value=success_stats,
@@ -198,9 +202,11 @@ def test_wazuh_webhook_failure_records_source_health(db):
     from app.services.asset_sync import AssetSyncService
 
     with patch(
-        "app.services.wazuh_client.wazuh_client.get_agent_info",
-        side_effect=ConnectionError("Wazuh unreachable"),
-    ):
+        "app.services.asset_sync.get_wazuh_client",
+    ) as _factory:
+        _factory.return_value.get_agent_info.side_effect = ConnectionError(
+            "Wazuh unreachable"
+        )
         svc = AssetSyncService(db)
         with pytest.raises(ConnectionError):
             svc.sync_single_agent_webhook("001")

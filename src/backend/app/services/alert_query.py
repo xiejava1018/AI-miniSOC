@@ -438,9 +438,9 @@ class AlertQueryService:
 
     def get_agent_list(self) -> List[Dict[str, Any]]:
         """从 Wazuh API 获取 agent 列表(补充资产信息)"""
-        from app.services.wazuh_client import wazuh_client
+        from app.services.wazuh_client import get_wazuh_client
 
-        return wazuh_client.get_agents()
+        return get_wazuh_client(db=self.db).get_agents()
 
     # ── 告警指纹聚合（去重为"告警簇"）────────────────
 

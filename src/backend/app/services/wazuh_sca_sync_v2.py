@@ -12,7 +12,7 @@ from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.services.wazuh_client import wazuh_client
+from app.services.wazuh_client import get_wazuh_client
 from app.models.sca import ScaCheck, AssetScaCheck
 from app.models.asset import Asset
 
@@ -49,7 +49,7 @@ class WazuhSCASyncServiceV2:
 
         try:
             # 获取所有agents
-            agents = wazuh_client.get_agents()
+            agents = get_wazuh_client(db=db).get_agents()
             stats["total_agents"] = len(agents)
 
             for agent in agents:
@@ -124,7 +124,7 @@ class WazuhSCASyncServiceV2:
                 return stats
 
             # 获取SCA策略列表
-            policies_data = wazuh_client._request(
+            policies_data = get_wazuh_client(db=db)._request(
                 "GET",
                 f"/sca/{agent_id}",
                 params={"limit": 100}
@@ -195,7 +195,7 @@ class WazuhSCASyncServiceV2:
 
         try:
             # 获取检查结果
-            checks_data = wazuh_client._request(
+            checks_data = get_wazuh_client(db=db)._request(
                 "GET",
                 f"/sca/{agent_id}/checks/{policy_id}",
                 params={"limit": 1000}

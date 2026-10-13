@@ -11,7 +11,7 @@ import logging
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 
-from app.services.wazuh_client import wazuh_client
+from app.services.wazuh_client import get_wazuh_client
 from app.services.sync_handlers.asset_sync_handler import AssetSyncHandler
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class WazuhAgentSyncService:
         """
         try:
             # 获取所有 Wazuh agents
-            agents = wazuh_client.get_agents()
+            agents = get_wazuh_client(db=self.db).get_agents()
             logger.info(f"从 Wazuh 获取到 {len(agents)} 个 agents")
 
             # 转换为资产数据格式
@@ -167,7 +167,7 @@ class WazuhAgentSyncService:
         """
         try:
             # 获取 agent 详细信息
-            agent_info = wazuh_client.get_agent_info(agent_id)
+            agent_info = get_wazuh_client(db=self.db).get_agent_info(agent_id)
             logger.info(f"获取 agent {agent_id} 信息: {agent_info}")
 
             # 转换为资产格式

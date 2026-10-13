@@ -25,11 +25,16 @@ def _procs(names):
 
 
 class _FakeWazuhClient:
-    """替身类：构造无参；_request 按 agent 返回固定进程清单；'bad' 抛错。"""
+    """替身类：构造无参（2026-10-13 起接受 db 等任意 kwargs——真实调用方
+    透传 db=self.db 走配置中心，替身不能因签名拒收）；_request 按 agent
+    返回固定进程清单；'bad' 抛错。"""
 
     pages = {
         "001": _procs(["sshd", "nginx", "sshd"]),  # 重复名聚合
     }
+
+    def __init__(self, *args, **kwargs):
+        pass
 
     def get_processes(self, agent_id: str, limit: int = 500):
         if agent_id == "bad":

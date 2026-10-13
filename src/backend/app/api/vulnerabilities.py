@@ -1070,11 +1070,11 @@ async def sync_agent_sca_checks(
 ):
     """同步单个Agent的SCA配置检查数据"""
     from app.services.wazuh_sca_sync import WazuhSCASyncService
-    from app.services.wazuh_client import wazuh_client
+    from app.services.wazuh_client import get_wazuh_client
 
     try:
         # 获取agent信息
-        agent_info = wazuh_client.get_agent_info(agent_id)
+        agent_info = get_wazuh_client(db=db).get_agent_info(agent_id)
         agent_name = agent_info.get("name", agent_id)
         agent_ip = agent_info.get("ip", "")
 

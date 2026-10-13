@@ -396,41 +396,81 @@ wazuh_client = WazuhClient()
 # 应当用 get_wazuh_client(db=...) 走配置中心 v1。
 # ──────────────────────────────────────────────────────────────────
 import threading
+import time
 
 _wazuh_client_singleton: Optional["WazuhClient"] = None
 _wazuh_client_lock = threading.Lock()
+_wazuh_client_created_with_db: bool = False
+_wazuh_client_created_at: float = 0.0
+
+# 与 DataSourceResolver._CACHE_TTL 对齐：单例超过该时长且调用方带 db 时
+# 重建，让 soc_data_sources 的配置变更（改密码/换 endpoint）在 ≤60s 内
+# 生效；不重建的场景（无 db 调用）继续用旧单例，避免每请求 new
+# httpx.Client 的连接池抖动。
+_WAZUH_CLIENT_TTL_SECONDS = 60.0
 
 
 def get_wazuh_client(
     db: Optional[object] = None,
     use_mock_data: bool = False,
 ) -> "WazuhClient":
-    """获取 WazuhClient 单例，支持 db 透传。
+    """获取 WazuhClient 单例，支持 db 透传走配置中心 v1。
 
-    第一次调用时创建单例并用传入的 db 初始化；后续调用复用同—实例。
-    如果多次调用传入不同 db，第一次的 db 胜出（以第一次为准避免中间状态
-    产生不同的 token 缓存）。
+    语义（2026-10-13 v2，修 "首次固化" 雷）：
+    - 单例不存在 → 用当前参数创建
+    - 调用方传 db 但现有单例是 "无 db" 创建的 → 关旧建新（升级到配置中心路径）
+    - 调用方传 db 且单例存活超过 _WAZUH_CLIENT_TTL_SECONDS → 关旧建新
+      （让 soc_data_sources 配置变更 ≤ 60s 生效；resolver 自身也有 60s
+      缓存，两层对齐）
+    - 其余情况 → 复用现有单例（无 db 调用方不触发重建，避免降级）
+
+    线程注意：不要在 asyncio.to_thread 的工作线程里首次传 db 建单例并
+    把外层 session 带进 resolver 查询——SQLAlchemy session 非线程安全。
+    调用方应在事件循环线程先 get_wazuh_client(db=...)，再把 client 方法
+    丢进 to_thread（参考 asset_enrichment 的用法）。
 
     调用方迁移路径：
       旧：from app.services.wazuh_client import wazuh_client
           wazuh_client.get_agents()
       新：from app.services.wazuh_client import get_wazuh_client
           get_wazuh_client(db=db).get_agents()
-
-    追阶：未来 PR 可以全面迁移调用点后去掉旧的 wazuh_client 名字。
     """
-    global _wazuh_client_singleton
+    global _wazuh_client_singleton, _wazuh_client_created_with_db, _wazuh_client_created_at
     with _wazuh_client_lock:
+        need_create = False
         if _wazuh_client_singleton is None:
-            _wazuh_client_singleton = WazuhClient(
-                db=db, use_mock_data=use_mock_data
-            )
+            need_create = True
+        elif db is not None and not _wazuh_client_created_with_db:
+            # 升级路径：旧单例是 env 兑底建的，现在有 db 了 → 重建走配置中心
+            need_create = True
+        elif db is not None and (time.monotonic() - _wazuh_client_created_at) > _WAZUH_CLIENT_TTL_SECONDS:
+            # TTL 路径：让配置中心变更 <=60s 生效
+            need_create = True
+
+        if need_create:
+            old = _wazuh_client_singleton
+            _wazuh_client_singleton = WazuhClient(db=db, use_mock_data=use_mock_data)
+            _wazuh_client_created_with_db = db is not None
+            _wazuh_client_created_at = time.monotonic()
+            if old is not None:
+                try:
+                    old.close()
+                except Exception:  # noqa: BLE001 — 关旧实例失败不影响新单例
+                    pass
         return _wazuh_client_singleton
 
 
 def _reset_wazuh_client_singleton_for_tests() -> None:
     """仅供单测调用：重置 lazy 单例。生产代码不应调用。"""
-    global _wazuh_client_singleton
+    global _wazuh_client_singleton, _wazuh_client_created_with_db, _wazuh_client_created_at
     with _wazuh_client_lock:
+        old = _wazuh_client_singleton
         _wazuh_client_singleton = None
+        _wazuh_client_created_with_db = False
+        _wazuh_client_created_at = 0.0
+        if old is not None:
+            try:
+                old.close()
+            except Exception:
+                pass
 

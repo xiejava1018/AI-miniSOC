@@ -7,7 +7,7 @@ import asyncio
 import logging
 from sqlalchemy.orm import Session
 from app.models import Asset
-from app.services.wazuh_client import wazuh_client
+from app.services.wazuh_client import get_wazuh_client
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,14 @@ class AssetEnrichmentService:
             return
 
         try:
-            # 异步获取系统信息
+            # 异步获取系统信息。
+            # 线程边界注意（2026-10-13）：get_wazuh_client(db=self.db) 必须在
+            # 事件循环线程里先调——resolver 会用 self.db 查 soc_data_sources，
+            # 而 SQLAlchemy session 非线程安全；拿到 client 后只把同步的
+            # get_agent_sysinfo 丢进 to_thread。
+            client = get_wazuh_client(db=self.db)
             sysinfo = await asyncio.to_thread(
-                wazuh_client.get_agent_sysinfo,
+                client.get_agent_sysinfo,
                 asset.wazuh_agent_id
             )
 

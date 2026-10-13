@@ -129,9 +129,9 @@ async def get_wazuh_agents(
     用于在同步前预览将要同步的数据。
     """
     try:
-        from app.services.wazuh_client import wazuh_client
+        from app.services.wazuh_client import get_wazuh_client
 
-        agents = wazuh_client.get_agents()
+        agents = get_wazuh_client(db=db).get_agents()
         logger.info(f"获取到 {len(agents)} 个 Wazuh agents")
 
         # 简化返回数据

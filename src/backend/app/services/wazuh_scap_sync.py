@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.services.wazuh_client import wazuh_client
+from app.services.wazuh_client import get_wazuh_client
 from app.models.vulnerability import Vulnerability, AssetVulnerability
 from app.models.asset import Asset
 from app.schemas.vulnerability import SeverityEnum, ScannerEnum, VulnerabilityStatusEnum
@@ -71,7 +71,7 @@ class WazuhSCAPSyncService:
 
         try:
             # 获取所有agents
-            agents = wazuh_client.get_agents()
+            agents = get_wazuh_client(db=db).get_agents()
             stats["total_agents"] = len(agents)
 
             for agent in agents:
@@ -146,7 +146,7 @@ class WazuhSCAPSyncService:
                 return stats
 
             # 获取agent的漏洞数据
-            vulnerabilities = wazuh_client.get_vulnerabilities(
+            vulnerabilities = get_wazuh_client(db=db).get_vulnerabilities(
                 agent_id=agent_id,
                 limit=limit
             )
