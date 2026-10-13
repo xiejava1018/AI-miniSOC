@@ -221,13 +221,20 @@ class AssetReconciliationService:
 
         agents 传 None 时实时调 Wazuh API。Wazuh 不可达直接抛
         ReconciliationError——绝不退化成"无差异"。
+
+        必须把 self.db 透传给 WazuhClient（2026-10-13 修复）：不传 db
+        时，DataSourceResolver._resolve_config 立刻 return None，凭据
+        走 settings 兜底；如果 settings.WAZUH_API_USERNAME/PASSWORD
+        也为 None，httpx auth=(None, None) 会抛 TypeError: sequence item
+        0: expected a bytes-like object, NoneType found，表现为
+        "Wazuh 不可达"——这是配置读取错误，不是数据源不可达。
         """
         wazuh_error: Optional[str] = None
         if agents is None:
             try:
                 from app.services.wazuh_client import WazuhClient
 
-                client = WazuhClient()
+                client = WazuhClient(db=self.db)
                 try:
                     agents = client.get_agents()
                 finally:
