@@ -220,3 +220,27 @@ def test_upsert_unique_index_protects_db(db_session: Session):
     r1 = _make_pending(db_session, asset.id, TYPE_OFFLINE, run_id=rid)
     db_session.flush()
     # 不重复 add r2（避免与 _upsert_diff 语义冲突）
+
+
+# ============================================================================
+# 回归保护：ORM 模型必须包含迁移新增的 4 列
+#
+# 2026-10-15 dedup 第一次部署时漏改了 app/models/asset_reconciliation.py
+# 的 4 个 Column 定义，导致 alembic 升级了 DB 但 ORM 实例没这些属性，
+# 102 上跑 POST /reconcile 立刻 500 "object has no attribute
+# 'occurrence_count'"。pytest 默认库 create_all 临时建表不建这些列
+# 也走不到这路径，所以单测没拦下来。
+#
+# 本测试直接检查模型类定义——任何回归会立刻失败。
+# ============================================================================
+def test_recon_model_defines_dedup_columns():
+    """回归保护：AssetReconciliation 必须有 4 个 dedup 列定义"""
+    from app.models.asset_reconciliation import AssetReconciliation
+    required = ("first_seen_at", "last_seen_at", "last_seen_run_id", "occurrence_count")
+    table_cols = set(AssetReconciliation.__table__.columns.keys())
+    missing = [c for c in required if c not in table_cols]
+    assert not missing, (
+        f"AssetReconciliation 模型缺 dedup 列定义: {missing}\n"
+        "2026-10-15 教训：迁移加列必须同步改 ORM 模型类，否则 102 上\n"
+        "AttributeError。详情见 docs/sessions/2026-10-15-asset-recon-dedup.md。"
+    )
