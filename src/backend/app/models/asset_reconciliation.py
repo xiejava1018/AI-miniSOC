@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     func,
@@ -75,6 +76,14 @@ class AssetReconciliation(Base):
     resolve_note = Column(Text)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    # 2026-10-15 按资产维度去重（迁移 g3h4i5j6k7l8）：
+    # pending 不再每 run 复制一行，而是同一 (asset_id, type) 保留 1 条代表行，
+    # 累加以下 4 个老化指标供 UI 展示和 SQL 量化使用。
+    first_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_run_id = Column(UUID(as_uuid=True), nullable=True)
+    occurrence_count = Column(Integer, nullable=False, server_default="1")
 
     __table_args__ = (
         # 列表页主查询：按批次 + 状态过滤
