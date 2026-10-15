@@ -193,10 +193,13 @@ async def data_health(
         .order_by(SyncTask.completed_at.desc().nullslast(), SyncTask.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
-    # 只展示最近 7 天内的失败任务：陈年失败（历史 bug 已修、任务表仅存档）
-    # 不应永远占据"最近失败"位——否则页面长期显示一条早已不相关的旧错误。
+    # 只展示最近 24 小时内的失败任务：操作员日常巡检（每日一/两次）不需要看
+    # 超过一天前的失败——那大概率是历史 bug 残留，task 表本身保留全量做审计。
+    # 2026-10-15 由 7 天缩到 24h：操作员反馈"老失败长期占位"；7 天前那段 Wazuh
+    # 凭据 None bug（6 条 manual task）已被 supersede（见 _backup_sync_tasks_superseded_20261015），
+    # 即使保留 7 天窗口也看不到——但仍要缩短窗口以防下次类似历史失败再次占位。
     # DB 里的历史行不删，保留审计价值；仅展示层加时间窗。
-    failure_display_window = timedelta(days=7)
+    failure_display_window = timedelta(hours=24)
     last_failed_task = db.execute(
         select(SyncTask)
         .where(SyncTask.status == "failed", SyncTask.created_at > _utcnow() - failure_display_window)
