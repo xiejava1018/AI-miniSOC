@@ -76,11 +76,29 @@ async def data_health(
     current_user: User = Depends(get_current_user),
 ):
     # ---------- 第 1 层：源健康 ----------
+    # 7 天窗口：失败/成功计数都按 last_*_at >= now-7d 过滤——避免历史累计噪音
+    # 长期占据"故障"位（例如 2026-10-08 wazuh:baseline/vulnerability 修复前 6 周
+    # 假绿期间累计的 2119 次失败）。数据库保留全量审计，前端只展示窗口内。
+    display_window = timedelta(days=7)
+    display_window_start = _utcnow() - display_window
     sources = []
     counter = {"healthy": 0, "degraded": 0, "down": 0, "unknown": 0}
     for sh in db.execute(select(SourceHealth).order_by(SourceHealth.source_key)).scalars():
         status, reason = _source_status(sh)
         counter[status] += 1
+        # 窗口内"最近"计数：仅 last_*_at 在窗口内的事件计入；
+        # 这是与 reason 字段一致的语义——reason 已经基于 last_*_at，
+        # 因此 counter 也应保持同步口径，避免"显示 0 失败但 reason 仍说'最近失败'"
+        # 之类的内部矛盾。
+        in_window_failure = bool(
+            sh.last_failure_at and sh.last_failure_at >= display_window_start
+        )
+        in_window_success = bool(
+            sh.last_success_at and sh.last_success_at >= display_window_start
+        )
+        # 累计计数：来自原始字段（保留审计价值）
+        # 窗口计数：基于最近一次 last_*_at 推算（不是真"窗口聚合"，但与 reason 一致）
+        # 真窗口聚合需要新表或事件流，按"最小改动 + 语义一致"原则选后者
         sources.append(
             {
                 "source_key": sh.source_key,
@@ -91,8 +109,18 @@ async def data_health(
                 "last_success_at": _iso(sh.last_success_at),
                 "last_failure_at": _iso(sh.last_failure_at),
                 "last_failure_message": (sh.last_failure_message or None),
+                # 累计（lifetime）—— 保留供审计/排障深挖
                 "success_count": int(sh.success_count or 0),
                 "failure_count": int(sh.failure_count or 0),
+                # 窗口（recent, 7d）—— 展示层用，避免历史噪音
+                # 语义："窗口内最近一次是否有成功/失败事件"
+                #   failure_count_recent=1 → 7 天内有失败
+                #   failure_count_recent=0 → 7 天内无失败（无论累计多少）
+                # 含义与 reason 字段保持一致——避免"显示 0 失败但 reason 说'最近失败'"
+                # 这种内部矛盾。要做真正的"窗口内事件计数"需要事件表或日志流，
+                # 当前是 P2 仪表板，按"最小可信改动"原则做 boolean 化。
+                "success_count_recent": 1 if in_window_success else 0,
+                "failure_count_recent": 1 if in_window_failure else 0,
                 "expected_interval_seconds": sh.expected_interval_seconds,
                 "last_records_count": sh.last_records_count,
                 "updated_at": _iso(sh.updated_at),
