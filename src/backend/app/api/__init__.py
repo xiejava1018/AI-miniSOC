@@ -21,7 +21,7 @@ from app.api import (
     notification_dispatch_logs,
     ws, data_sync, internal, browsing, alert_digests, vulnerabilities, dashboard,
     task_observability, asset_risk, asset_query, ai_feedback, knowledge, asset_lifecycle,
-    compliance, asset_reconciliation, data_health, reports, impact_analysis, graph, exposure,
+    compliance, asset_reconciliation, data_health, dead_letter, reports, impact_analysis, graph, exposure,
     scan_agents, scan_human_agents, scan_tasks,
     data_sources, config_schemas, ai_providers, business_systems, asset_timeline,
     ai_assets,
@@ -206,6 +206,8 @@ include_human_router(
 
 # 数据健康 / 行为画像 / 报告
 include_human_router(api_router, data_health.router, tags=["数据健康"])
+# 死信管理（与 data_health 同级，写操作 admin-only；详见 dead_letter.py 顶部设计）
+include_human_router(api_router, dead_letter.router, tags=["死信管理"])
 include_human_router(api_router, behavior_profile.router, tags=["行为画像"])
 include_human_router(api_router, reports.router, tags=["AI安全报告"])
 # 上网行为异常检测（browsing 模块 endpoint 形如 /events /blacklist /baseline 等，

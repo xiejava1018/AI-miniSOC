@@ -424,8 +424,16 @@ class AssetReconciliationService:
                 )
             )
 
+        # ---- 按资产维度 UPSERT（2026-10-15 dedup）----
+        # 同一 (asset_id, type) 的 pending 只保留 1 条代表行，累加
+        # occurrence_count / last_seen_at。shadow 类型 asset_id IS NULL，
+        # 用 details.agent.id 去重。
+        # 决策（与产品 2026-10-15 对齐）：
+        #   1) 不自动转 ignored——pending 永远是 pending，由人工处理
+        #   2) 代表行 = 首次 created_at（first_seen_at 指向首次发现时间）
+        #   3) occurrence_count 累加反映"该问题被对账命中的总次数"
         for r in rows:
-            self.db.add(r)
+            self._upsert_diff(r, now, run_id)
 
         # ---- P3/F-S1 扫描器发现 → 影子资产（final.md §9.1）
         scanner_shadow_count = self.reconcile_scanner_findings(
@@ -597,6 +605,84 @@ class AssetReconciliationService:
         }
 
     # ------------------------------------------------------------------ 查询
+
+    def _upsert_diff(
+        self,
+        new_row: AssetReconciliation,
+        now: datetime,
+        run_id: uuid.UUID,
+    ) -> None:
+        """按资产维度去重插入 pending。
+
+        逻辑：
+          - offline / mismatch: 按 (asset_id, reconciliation_type) 查现有 pending
+            - 存在 → UPDATE last_seen_at / occurrence_count++ / last_seen_run_id
+              + 刷新 details（保留最新事实）
+            - 不存在 → INSERT 新行，first_seen_at = last_seen_at = now，count=1
+          - shadow: asset_id IS NULL，用 details.agent.id（wazuh agent id）
+            做次级 key 去重。
+
+        不自动转 ignored——pending 永远是 pending（决策 2026-10-15）。
+
+        UNIQUE partial index uq_soc_asset_recon_pending_asset_type 强约束
+        保证不会有重复行；shadow 因为 asset_id IS NULL 不被该 index 覆盖，
+        靠这里显式查重。
+        """
+        if new_row.asset_id is not None:
+            # offline / mismatch：直接靠 UNIQUE index 保证唯一，这里 add() 即可
+            existing = self.db.execute(
+                select(AssetReconciliation).where(
+                    AssetReconciliation.asset_id == new_row.asset_id,
+                    AssetReconciliation.reconciliation_type
+                    == new_row.reconciliation_type,
+                    AssetReconciliation.status == STATUS_PENDING,
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                # UPSERT：累加计数 + 刷 last_seen，first_seen 保持首次
+                existing.occurrence_count = (existing.occurrence_count or 1) + 1
+                existing.last_seen_at = now
+                existing.last_seen_run_id = run_id
+                # details 保留最近一次的事实快照（便于 UI 看最新状态）
+                existing.details = new_row.details
+                # run_id / created_at 仍指向首次（“这台资产多久前开始有问题”）
+                return
+            # 不存在：首次发现
+            new_row.first_seen_at = now
+            new_row.last_seen_at = now
+            new_row.last_seen_run_id = run_id
+            new_row.occurrence_count = 1
+            self.db.add(new_row)
+            return
+
+        # shadow 类型：asset_id IS NULL，靠 details.agent.id 去重
+        shadow_key = None
+        if isinstance(new_row.details, dict):
+            agent = new_row.details.get("agent") or {}
+            shadow_key = str(agent.get("id") or "").strip() or None
+        if not shadow_key:
+            # 没 agent id 的 shadow 走老逻辑（不查重）
+            self.db.add(new_row)
+            return
+        existing = self.db.execute(
+            select(AssetReconciliation).where(
+                AssetReconciliation.asset_id.is_(None),
+                AssetReconciliation.reconciliation_type == TYPE_SHADOW,
+                AssetReconciliation.status == STATUS_PENDING,
+                AssetReconciliation.details["agent"]["id"].astext == shadow_key,
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.occurrence_count = (existing.occurrence_count or 1) + 1
+            existing.last_seen_at = now
+            existing.last_seen_run_id = run_id
+            existing.details = new_row.details
+            return
+        new_row.first_seen_at = now
+        new_row.last_seen_at = now
+        new_row.last_seen_run_id = run_id
+        new_row.occurrence_count = 1
+        self.db.add(new_row)
 
     def latest_run_id(self) -> Optional[uuid.UUID]:
         return self.db.execute(

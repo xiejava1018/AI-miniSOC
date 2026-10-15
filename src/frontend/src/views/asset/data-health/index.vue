@@ -79,7 +79,14 @@
               <template v-if="s.last_records_count != null">
                 · {{ s.last_records_count }} 条
               </template>
-              · 成功 {{ s.success_count }} / 失败 {{ s.failure_count }}
+              · 7 天内 成功 {{ s.success_count_recent }} / 失败 {{ s.failure_count_recent }}
+              <el-tooltip
+                v-if="(s.failure_count || 0) > (s.failure_count_recent || 0)"
+                content="累计失败次数包含已修复的历史问题；7 天内无新增失败视为健康"
+                placement="top"
+              >
+                <span class="src-hist">（累计 {{ s.failure_count }}）</span>
+              </el-tooltip>
             </div>
             <div v-if="s.last_failure_message" class="src-err">
               {{ s.last_failure_message }}

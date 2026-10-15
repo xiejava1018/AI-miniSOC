@@ -206,6 +206,21 @@
           </template>
         </ElTableColumn>
 
+        <ElTableColumn label="老化" width="110" v-if="allRuns">
+          <template #default="{ row }">
+            <ElTooltip
+              v-if="row.last_seen_at"
+              :content="`首次发现：${formatTime(row.first_seen_at)}\n最近发现：${formatTime(row.last_seen_at)}\n出现次数：${row.occurrence_count || 1}`"
+              placement="top"
+            >
+              <ElTag size="small" :type="agingBadgeType(row)" effect="dark">
+                {{ agingBadgeText(row) }}
+              </ElTag>
+            </ElTooltip>
+            <span v-else class="muted">—</span>
+          </template>
+        </ElTableColumn>
+
         <ElTableColumn label="状态" width="150">
           <template #default="{ row }">
             <ElTag size="small" :type="statusTag(row.status)" effect="plain">
@@ -352,6 +367,39 @@
     row.details?.ledger?.name || row.details?.agent?.name || '（未命名）'
   const objIp = (row: ReconciliationItem) =>
     row.details?.ledger?.asset_ip || row.details?.agent?.ip || ''
+
+  /**
+   * 2026-10-15 dedup：老化 badge
+   *   - > 90 天 → danger（红）
+   *   - > 30 天 → warning（黄）
+   *   - >  7 天 → info（蓝）
+   *   - ≤ 7 天 → success（绿）表示"新近"
+   *   - 无 last_seen_at → 不显示（不适用，老 run 记录）
+   */
+  const _agingDays = (row: ReconciliationItem): number | null => {
+    if (!row.last_seen_at) return null
+    const t = new Date(row.last_seen_at).getTime()
+    if (Number.isNaN(t)) return null
+    return Math.floor((Date.now() - t) / 86400_000)
+  }
+  const agingBadgeType = (
+    row: ReconciliationItem
+  ): 'danger' | 'warning' | 'info' | 'success' => {
+    const d = _agingDays(row)
+    if (d === null) return 'info'
+    if (d > 90) return 'danger'
+    if (d > 30) return 'warning'
+    if (d > 7) return 'info'
+    return 'success'
+  }
+  const agingBadgeText = (row: ReconciliationItem): string => {
+    const d = _agingDays(row)
+    if (d === null) return ''
+    if (d > 90) return `90+ 天 (${d})`
+    if (d > 30) return `30+ 天 (${d})`
+    if (d > 7) return `7+ 天 (${d})`
+    return `${d} 天`
+  }
 
   // 数据健康菜单已在 /ops 菜单重组（迁移 j1k2l3m4n5o6）中从 /assets 移到 /ops 下，
   // URL 是 /ops/data-health —— 不是 /assets/data-health。

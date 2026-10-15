@@ -61,6 +61,11 @@ def _out(row: AssetReconciliation) -> dict:
         "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
         "resolve_note": row.resolve_note,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        # 2026-10-15 dedup：按资产维度去重后的老化指标
+        "first_seen_at": row.first_seen_at.isoformat() if row.first_seen_at else None,
+        "last_seen_at": row.last_seen_at.isoformat() if row.last_seen_at else None,
+        "last_seen_run_id": str(row.last_seen_run_id) if row.last_seen_run_id else None,
+        "occurrence_count": row.occurrence_count or 1,
     }
 
 
