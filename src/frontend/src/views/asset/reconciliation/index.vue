@@ -358,7 +358,9 @@
   const rows = ref<ReconciliationItem[]>([])
   const listLoading = ref(false)
   const filterType = ref<'' | ReconciliationType>('')
-  const filterStatus = ref<string>('')
+  // 待处理队列默认只看 pending（2026-10-16：否则 ignored/confirmed 混进来，
+  // 同资产 pending+ignored 并存看起来像"重复"；要看已处置的手动切状态过滤）
+  const filterStatus = ref<string>('pending')
   // 2026-10-15 二期：资产维度队列固定全表口径（dedup 后 run 维度过滤无意义），
   // 历史批次视角拆到“历史报告” tab（run 维度只读）。
   const allRuns = ref(true)
