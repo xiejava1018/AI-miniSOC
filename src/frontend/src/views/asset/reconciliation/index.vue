@@ -130,6 +130,8 @@
 
     <!-- 差异列表 -->
     <ElCard shadow="never" class="list-card">
+      <ElTabs v-model="activeTab">
+        <ElTabPane label="待处理队列" name="queue">
       <div class="list-toolbar">
         <ElRadioGroup v-model="filterType" size="small" @change="() => loadList(1)">
           <ElRadioButton value="">全部类型</ElRadioButton>
@@ -150,9 +152,6 @@
           <ElOption label="已忽略" value="ignored" />
           <ElOption label="已处理" value="resolved" />
         </ElSelect>
-        <ElCheckbox v-model="allRuns" size="small" @change="() => loadList(1)">
-          含历史批次
-        </ElCheckbox>
       </div>
 
       <ElTable v-loading="listLoading" :data="rows" stripe row-key="id">
@@ -206,7 +205,7 @@
           </template>
         </ElTableColumn>
 
-        <ElTableColumn label="老化" width="110" v-if="allRuns">
+        <ElTableColumn label="老化" width="110">
           <template #default="{ row }">
             <ElTooltip
               v-if="row.last_seen_at"
@@ -260,6 +259,51 @@
           @size-change="() => loadList(1)"
         />
       </div>
+        </ElTabPane>
+
+        <ElTabPane label="历史报告" name="runs" lazy>
+          <div class="list-toolbar muted" style="margin-bottom: 10px">
+            每轮对账看到的差异分布（只读审计；待办处置请回“待处理队列”tab）
+          </div>
+          <ElTable v-loading="runsLoading" :data="runs" stripe>
+            <ElTableColumn label="对账时间" width="180">
+              <template #default="{ row }">{{ formatTime(row.seen_at) }}</template>
+            </ElTableColumn>
+            <ElTableColumn label="本轮命中" width="100" prop="diff_total" />
+            <ElTableColumn label="仍待处理" width="100" prop="pending_total" />
+            <ElTableColumn label="分布" min-width="240">
+              <template #default="{ row }">
+                <ElTag
+                  v-for="(c, t) in row.by_type"
+                  :key="t"
+                  size="small"
+                  :type="typeTag(String(t))"
+                  effect="plain"
+                  style="margin-right: 6px"
+                >
+                  {{ typeLabel(String(t)) }} × {{ c }}
+                </ElTag>
+              </template>
+            </ElTableColumn>
+            <ElTableColumn label="run_id" min-width="260">
+              <template #default="{ row }">
+                <span class="muted" style="font-size: 12px">{{ row.run_id }}</span>
+              </template>
+            </ElTableColumn>
+          </ElTable>
+          <div class="pager">
+            <ElPagination
+              v-model:current-page="runsPage"
+              v-model:page-size="runsPageSize"
+              :total="runsTotal"
+              :page-sizes="[10, 20, 50]"
+              layout="total, sizes, prev, pager, next"
+              @current-change="loadRuns"
+              @size-change="() => loadRuns(1)"
+            />
+          </div>
+        </ElTabPane>
+      </ElTabs>
     </ElCard>
 
     <!-- 处理弹窗 -->
@@ -292,6 +336,7 @@
     getReconcileSummary,
     getReconcileReport,
     getReconciliations,
+    getReconciliationRuns,
     resolveReconciliation,
     type ReconciliationItem,
     type ReconciliationType,
@@ -314,12 +359,17 @@
   const listLoading = ref(false)
   const filterType = ref<'' | ReconciliationType>('')
   const filterStatus = ref<string>('')
-  // 2026-10-15：默认 true 跨批次显示
-  // 原因：UPSERT 后代表行 run_id 是首次的（ce2f77c1, 8-21），latest_run_id
-  // 取到的是 8-22 的孤儿 run 94175f9d，过滤后只剩 1 条；用户会误以为
-  // "刚才 run 出来的 diff 没显示"。开 allRuns 看全表 5-6 条更直观。
-  // 想看单次 run 详情时手动取消勾选。
+  // 2026-10-15 二期：资产维度队列固定全表口径（dedup 后 run 维度过滤无意义），
+  // 历史批次视角拆到“历史报告” tab（run 维度只读）。
   const allRuns = ref(true)
+  const activeTab = ref<'queue' | 'runs'>('queue')
+
+  // 历史报告（run 维度只读）
+  const runs = ref<any[]>([])
+  const runsLoading = ref(false)
+  const runsPage = ref(1)
+  const runsPageSize = ref(20)
+  const runsTotal = ref(0)
   const page = ref(1)
   const pageSize = ref(20)
   const total = ref(0)
@@ -445,6 +495,24 @@
     }
   }
 
+  /** 历史报告：按 run 维度聚合（只读） */
+  const loadRuns = async (toPage?: number) => {
+    if (toPage) runsPage.value = toPage
+    runsLoading.value = true
+    try {
+      const res = await getReconciliationRuns({
+        page: runsPage.value,
+        page_size: runsPageSize.value
+      })
+      runs.value = res?.data?.runs || []
+      runsTotal.value = res?.data?.total || 0
+    } catch (e: any) {
+      ElMessage.error(e?.message || '加载历史报告失败')
+    } finally {
+      runsLoading.value = false
+    }
+  }
+
   const handleRun = async () => {
     running.value = true
     try {
@@ -455,7 +523,7 @@
         `稽核完成：影子 ${by.shadow || 0}、疑似下线 ${by.offline || 0}、不一致 ${by.mismatch || 0}`
       )
       report.value = null
-      await Promise.all([loadSummary(), loadList(1)])
+      await Promise.all([loadSummary(), loadList(1), loadRuns()])
     } catch (e: any) {
       // Wazuh 不可达时后端返回 503 且带明确原因，必须原样告知用户，
       // 否则会误以为"稽核失败=没差异"

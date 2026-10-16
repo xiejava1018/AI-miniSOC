@@ -106,6 +106,23 @@ async def reconcile_report(
     return ReconciliationReportService(db).report(rid, force=force)
 
 
+@router.get("/reconciliations/runs", summary="历史报告：按 run 维度聚合差异分布")
+async def list_reconciliation_runs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """历史报告（只读）：每轮对账看到什么。dedup 后口径 = last_seen_run_id。
+
+    待办处置请走 /reconciliations（资产维度队列）。
+    """
+    result = AssetReconciliationService(db).list_runs(
+        page=page, page_size=page_size,
+    )
+    return result
+
+
 @router.get("/reconciliations", summary="对账差异列表")
 async def list_reconciliations(
     run_id: Optional[str] = Query(None, description="缺省取最近一次对账批次"),

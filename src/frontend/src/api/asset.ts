@@ -694,6 +694,18 @@ export const getReconciliations = (params: {
   })
 }
 
+/** 历史报告：按 run 维度聚合差异分布（只读） */
+export const getReconciliationRuns = (params: {
+  page?: number
+  page_size?: number
+}): Promise<any> => {
+  return httpClient.get({
+    url: `${API_PREFIX}/reconciliations/runs`,
+    params,
+    keepFullResponse: true
+  })
+}
+
 /** 处理差异。重复处理后端返回 409 */
 export const resolveReconciliation = (
   id: string,

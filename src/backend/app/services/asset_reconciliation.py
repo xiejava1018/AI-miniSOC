@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.models.asset import Asset
 from app.models.asset_reconciliation import (
+    STATUS_IGNORED,
     STATUS_PENDING,
     TERMINAL_STATUSES,
     TYPE_MISMATCH,
@@ -606,6 +607,54 @@ class AssetReconciliationService:
 
     # ------------------------------------------------------------------ 查询
 
+    # 处置记忆抑制窗口：ignored 后这么多天内同 key diff 不重报
+    IGNORE_SUPPRESS_DAYS = 30
+
+    def _suppressed_by_disposition(
+        self,
+        new_row: AssetReconciliation,
+        now: datetime,
+        shadow_key: Optional[str] = None,
+    ) -> bool:
+        """处置记忆：同 key 最近一条行若是 ignored 且在窗口内 → 抑制本次 diff。
+
+        只看最近一条（ORDER BY resolved_at/created_at DESC LIMIT 1）：
+          - ignored + resolved_at < IGNORE_SUPPRESS_DAYS 天前 → True（抑制）
+          - ignored 但已过期 / resolved / confirmed / 无历史 → False（不抑制）
+
+        suppressed 不落表、不计数——用户已明确表态"别烦我"，重启提醒要等窗口过。
+        """
+        stmt = (
+            select(AssetReconciliation)
+            .where(AssetReconciliation.reconciliation_type
+                   == new_row.reconciliation_type)
+            .order_by(
+                AssetReconciliation.resolved_at.desc().nullslast(),
+                AssetReconciliation.created_at.desc(),
+            )
+            .limit(1)
+        )
+        if new_row.asset_id is not None:
+            stmt = stmt.where(AssetReconciliation.asset_id == new_row.asset_id)
+        else:
+            if not shadow_key:
+                return False
+            stmt = stmt.where(
+                AssetReconciliation.asset_id.is_(None),
+                AssetReconciliation.details["agent"]["id"].astext == shadow_key,
+            )
+
+        last = self.db.execute(stmt).scalar_one_or_none()
+        if last is None or last.status != STATUS_IGNORED:
+            return False
+
+        # 基准时间：优先 resolved_at，没有（历史数据）退 created_at
+        base = last.resolved_at or last.created_at
+        if base is None:
+            return False
+        age_days = (now - base).total_seconds() / 86400
+        return age_days < self.IGNORE_SUPPRESS_DAYS
+
     def _upsert_diff(
         self,
         new_row: AssetReconciliation,
@@ -624,11 +673,20 @@ class AssetReconciliationService:
 
         不自动转 ignored——pending 永远是 pending（决策 2026-10-15）。
 
+        处置记忆（2026-10-15 二期，与产品对齐）：
+          - 最近一条同 key 行为 ignored 且距 resolved_at < 30 天 → 跳过不产新
+            pending（"我知道了，别再烦我"），只别新 diff 被抑制的事实不落表。
+          - ignored 满 30 天后恢复重报（长期下线主机可能真退役了，需重新提醒）。
+          - resolved / confirmed 不抑制：问题若再现应立刻重报。
+
         UNIQUE partial index uq_soc_asset_recon_pending_asset_type 强约束
         保证不会有重复行；shadow 因为 asset_id IS NULL 不被该 index 覆盖，
         靠这里显式查重。
         """
         if new_row.asset_id is not None:
+            # 处置记忆：最近一条任意状态的同 key 行（不跟 pending）
+            if self._suppressed_by_disposition(new_row, now):
+                return
             # offline / mismatch：直接靠 UNIQUE index 保证唯一，这里 add() 即可
             existing = self.db.execute(
                 select(AssetReconciliation).where(
@@ -664,6 +722,9 @@ class AssetReconciliationService:
             # 没 agent id 的 shadow 走老逻辑（不查重）
             self.db.add(new_row)
             return
+        # 处置记忆：shadow 也查（同 agent.id 最近一条任意状态）
+        if self._suppressed_by_disposition(new_row, now, shadow_key=shadow_key):
+            return
         existing = self.db.execute(
             select(AssetReconciliation).where(
                 AssetReconciliation.asset_id.is_(None),
@@ -690,6 +751,61 @@ class AssetReconciliationService:
             .order_by(AssetReconciliation.created_at.desc())
             .limit(1)
         ).scalar_one_or_none()
+
+    def list_runs(self, page: int = 1, page_size: int = 20) -> dict:
+        """历史报告：按 run 维度聚合差异分布（dedup 后的口径）。
+
+        dedup 后代表行的 run_id 固定在首次，"某轮 run 看到了什么" 的正确
+        口径是 last_seen_run_id（该轮对账时仍被命中的代表行）。
+        每轮报告行：
+          run_id        该轮对账 id
+          seen_at       该轮时间（max(last_seen_at) 同 run 内一致，取 max 保险）
+          by_type       {shadow: n, offline: n, mismatch: n}（命中未处置的）
+          pending_total 该轮命中且仍 pending 的行数
+          suppressed_note 如实反映处置记忆不落表，这里看不到被抑制数
+        """
+        # 先分页拿 run 粒度（distinct last_seen_run_id + 时间），再逐 run 聚合
+        runs_q = (
+            select(
+                AssetReconciliation.last_seen_run_id.label("rid"),
+                func.max(AssetReconciliation.last_seen_at).label("seen_at"),
+                func.count().label("hits"),
+            )
+            .where(AssetReconciliation.last_seen_run_id.isnot(None))
+            .group_by(AssetReconciliation.last_seen_run_id)
+            .order_by(func.max(AssetReconciliation.last_seen_at).desc())
+        )
+        total = self.db.execute(
+            select(func.count()).select_from(runs_q.subquery())
+        ).scalar() or 0
+        run_rows = self.db.execute(
+            runs_q.offset((max(page, 1) - 1) * page_size).limit(page_size)
+        ).fetchall()
+
+        runs: list[dict] = []
+        for rid, seen_at, hits in run_rows:
+            by_type_rows = self.db.execute(
+                select(
+                    AssetReconciliation.reconciliation_type,
+                    func.count(),
+                ).where(
+                    AssetReconciliation.last_seen_run_id == rid
+                ).group_by(AssetReconciliation.reconciliation_type)
+            ).fetchall()
+            pending_total = self.db.execute(
+                select(func.count()).where(
+                    AssetReconciliation.last_seen_run_id == rid,
+                    AssetReconciliation.status == STATUS_PENDING,
+                )
+            ).scalar() or 0
+            runs.append({
+                "run_id": str(rid),
+                "seen_at": seen_at.isoformat() if seen_at else None,
+                "diff_total": hits,
+                "pending_total": pending_total,
+                "by_type": {t: c for t, c in by_type_rows},
+            })
+        return {"total": total, "page": page, "page_size": page_size, "runs": runs}
 
     def list_diffs(
         self,
