@@ -433,8 +433,14 @@ class AssetReconciliationService:
         #   1) 不自动转 ignored——pending 永远是 pending，由人工处理
         #   2) 代表行 = 首次 created_at（first_seen_at 指向首次发现时间）
         #   3) occurrence_count 累加反映"该问题被对账命中的总次数"
+        # 统计实际入队结果（inserted/updated），被处置记忆抑制的不算——
+        # 2026-10-16：之前 by_type 按 len(rows) 算，含被抑制的，toast 数字
+        # 与待处理队列对不齐
+        upsert_results: list[tuple[AssetReconciliation, str]] = []
         for r in rows:
-            self._upsert_diff(r, now, run_id)
+            upsert_results.append((r, self._upsert_diff(r, now, run_id)))
+        active = [r for r, res in upsert_results if res in ("inserted", "updated")]
+        suppressed_count = sum(1 for _, res in upsert_results if res == "suppressed")
 
         # ---- P3/F-S1 扫描器发现 → 影子资产（final.md §9.1）
         scanner_shadow_count = self.reconcile_scanner_findings(
@@ -449,21 +455,23 @@ class AssetReconciliationService:
             "agent_count": len(agents),
             "asset_count": len(assets),
             "linked_count": len(matched_agent_ids),
-            "diff_total": len(rows) + scanner_shadow_count,
+            "diff_total": len(active) + scanner_shadow_count,
             "by_type": {
-                TYPE_SHADOW: sum(1 for r in rows if r.reconciliation_type == TYPE_SHADOW) + scanner_shadow_count,
-                TYPE_OFFLINE: sum(1 for r in rows if r.reconciliation_type == TYPE_OFFLINE),
-                TYPE_MISMATCH: sum(1 for r in rows if r.reconciliation_type == TYPE_MISMATCH),
+                TYPE_SHADOW: sum(1 for r in active if r.reconciliation_type == TYPE_SHADOW) + scanner_shadow_count,
+                TYPE_OFFLINE: sum(1 for r in active if r.reconciliation_type == TYPE_OFFLINE),
+                TYPE_MISMATCH: sum(1 for r in active if r.reconciliation_type == TYPE_MISMATCH),
             },
+            "suppressed_count": suppressed_count,
             "scanner_shadow_count": scanner_shadow_count,
             "freshness": fr_snapshot,
         }
         logger.info(
-            "对账完成 run_id=%s agents=%d assets=%d diffs=%d degraded=%s",
+            "对账完成 run_id=%s agents=%d assets=%d diffs=%d suppressed=%d degraded=%s",
             run_id,
             len(agents),
             len(assets),
-            len(rows),
+            len(active),
+            suppressed_count,
             freshness.degraded,
         )
         return summary
@@ -660,8 +668,8 @@ class AssetReconciliationService:
         new_row: AssetReconciliation,
         now: datetime,
         run_id: uuid.UUID,
-    ) -> None:
-        """按资产维度去重插入 pending。
+    ) -> str:
+        """按资产维度去重插入 pending。返回 "inserted" | "updated" | "suppressed"。
 
         逻辑：
           - offline / mismatch: 按 (asset_id, reconciliation_type) 查现有 pending
@@ -686,7 +694,7 @@ class AssetReconciliationService:
         if new_row.asset_id is not None:
             # 处置记忆：最近一条任意状态的同 key 行（不跟 pending）
             if self._suppressed_by_disposition(new_row, now):
-                return
+                return "suppressed"
             # offline / mismatch：直接靠 UNIQUE index 保证唯一，这里 add() 即可
             existing = self.db.execute(
                 select(AssetReconciliation).where(
@@ -704,14 +712,14 @@ class AssetReconciliationService:
                 # details 保留最近一次的事实快照（便于 UI 看最新状态）
                 existing.details = new_row.details
                 # run_id / created_at 仍指向首次（“这台资产多久前开始有问题”）
-                return
+                return "updated"
             # 不存在：首次发现
             new_row.first_seen_at = now
             new_row.last_seen_at = now
             new_row.last_seen_run_id = run_id
             new_row.occurrence_count = 1
             self.db.add(new_row)
-            return
+            return "inserted"
 
         # shadow 类型：asset_id IS NULL，靠 details.agent.id 去重
         shadow_key = None
@@ -721,10 +729,10 @@ class AssetReconciliationService:
         if not shadow_key:
             # 没 agent id 的 shadow 走老逻辑（不查重）
             self.db.add(new_row)
-            return
+            return "inserted"
         # 处置记忆：shadow 也查（同 agent.id 最近一条任意状态）
         if self._suppressed_by_disposition(new_row, now, shadow_key=shadow_key):
-            return
+            return "suppressed"
         existing = self.db.execute(
             select(AssetReconciliation).where(
                 AssetReconciliation.asset_id.is_(None),
@@ -738,12 +746,13 @@ class AssetReconciliationService:
             existing.last_seen_at = now
             existing.last_seen_run_id = run_id
             existing.details = new_row.details
-            return
+            return "updated"
         new_row.first_seen_at = now
         new_row.last_seen_at = now
         new_row.last_seen_run_id = run_id
         new_row.occurrence_count = 1
         self.db.add(new_row)
+        return "inserted"
 
     def latest_run_id(self) -> Optional[uuid.UUID]:
         return self.db.execute(
@@ -836,9 +845,20 @@ class AssetReconciliationService:
         return {"total": total, "page": page, "page_size": page_size, "records": rows}
 
     def summary(self, run_id: Optional[uuid.UUID] = None) -> dict:
-        """某批次（默认最近一次）的差异分布 + 新鲜度。"""
-        rid = run_id or self.latest_run_id()
-        if rid is None:
+        """当前待处理队列概览（资产维度全表口径）。
+
+        2026-10-16 改版：不再按 latest_run_id 过滤——dedup 后代表行 run_id 固定在
+        首次，按 run 过滤会取到恰好新 INSERT 的孤行，卡片显示"1"与列表 9-12 条
+        对不齐。现在口径 = 待处理队列 tab 一致：
+          by_type / by_status / pending_total 全部按全表 status 分组
+          checked_at = max(last_seen_at)（最近一轮命中时间）
+          freshness 取最近命中行的 details.freshness
+        run_id 参数保留兼容但忽略（指定时同样全表口径）。
+        """
+        exists = self.db.execute(
+            select(func.count()).select_from(AssetReconciliation)
+        ).scalar()
+        if not exists:
             return {
                 "run_id": None,
                 "has_data": False,
@@ -852,28 +872,30 @@ class AssetReconciliationService:
         by_type: dict[str, int] = {}
         for t, c in self.db.execute(
             select(AssetReconciliation.reconciliation_type, func.count())
-            .where(AssetReconciliation.run_id == rid)
+            .where(AssetReconciliation.status == STATUS_PENDING)
             .group_by(AssetReconciliation.reconciliation_type)
         ):
             by_type[t] = c
         by_status: dict[str, int] = {}
         for s, c in self.db.execute(
             select(AssetReconciliation.status, func.count())
-            .where(AssetReconciliation.run_id == rid)
             .group_by(AssetReconciliation.status)
         ):
             by_status[s] = c
 
-        first = self.db.execute(
+        latest = self.db.execute(
             select(AssetReconciliation)
-            .where(AssetReconciliation.run_id == rid)
+            .where(AssetReconciliation.last_seen_at.isnot(None))
+            .order_by(AssetReconciliation.last_seen_at.desc())
             .limit(1)
         ).scalar_one_or_none()
-        freshness = (first.details or {}).get("freshness") if first else None
-        checked_at = first.created_at.isoformat() if first else None
+        freshness = (latest.details or {}).get("freshness") if latest else None
+        checked_at = (
+            latest.last_seen_at.isoformat() if latest and latest.last_seen_at else None
+        )
 
         return {
-            "run_id": str(rid),
+            "run_id": str(latest.last_seen_run_id) if latest and latest.last_seen_run_id else None,
             "has_data": True,
             "checked_at": checked_at,
             "by_type": by_type,
