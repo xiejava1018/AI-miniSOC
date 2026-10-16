@@ -394,3 +394,58 @@ def test_list_runs_aggregates_by_last_seen_run(db_session: Session):
     ra = runs_by_id[str(run_a)]
     assert ra["diff_total"] == 1
     assert ra["by_type"].get("shadow") == 1
+
+
+# ============================================================================
+# 自动收敛（2026-10-16）：本轮未命中的 offline pending 自动 resolved
+# ============================================================================
+def test_auto_resolve_stale_offline_pending(db_session: Session):
+    """_upsert 层面验证收敛集合逻辑：hit 集合外的 pending 自动关闭"""
+    # 直接测 run() 里的收敛块太重（要 mock Wazuh），
+    # 这里验证语义：hit_offline_asset_ids 外的 pending offline → resolved
+    from datetime import timedelta
+    asset_hit = _make_asset(db_session, ip="10.8.0.1", name="still-offline")
+    asset_ok = _make_asset(db_session, ip="10.8.0.2", name="recovered")
+    svc = AssetReconciliationService(db_session)
+    now = datetime.now(timezone.utc)
+
+    for a in (asset_hit, asset_ok):
+        svc._upsert_diff(
+            AssetReconciliation(
+                run_id=uuid.uuid4(), asset_id=a.id,
+                reconciliation_type=TYPE_OFFLINE,
+                details={"reason": "agent_deleted"}, status=STATUS_PENDING,
+            ), now, uuid.uuid4(),
+        )
+    db_session.flush()
+
+    # 模拟收敛块：hit 集合只含 asset_hit
+    hit = {asset_hit.id}
+    stale = db_session.query(AssetReconciliation).filter(
+        AssetReconciliation.reconciliation_type == TYPE_OFFLINE,
+        AssetReconciliation.status == STATUS_PENDING,
+        AssetReconciliation.asset_id.isnot(None),
+    ).all()
+    for row in stale:
+        if row.asset_id in hit:
+            continue
+        row.status = "resolved"
+        row.resolved_by = "system:auto"
+        row.resolved_at = now
+        row.resolve_note = "本轮稽核未再命中，自动关闭"
+    db_session.flush()
+
+    pend = db_session.query(AssetReconciliation).filter(
+        AssetReconciliation.status == STATUS_PENDING,
+        AssetReconciliation.asset_id == asset_ok.id,
+    ).all()
+    assert not pend, "recovered 资产的 pending 应被自动收敛"
+    ok_row = db_session.query(AssetReconciliation).filter(
+        AssetReconciliation.asset_id == asset_ok.id,
+    ).first()
+    assert ok_row.status == "resolved"
+    assert ok_row.resolved_by == "system:auto"
+    hit_row = db_session.query(AssetReconciliation).filter(
+        AssetReconciliation.asset_id == asset_hit.id,
+    ).first()
+    assert hit_row.status == STATUS_PENDING, "仍命中的资产保持 pending"

@@ -362,6 +362,8 @@ class AssetReconciliationService:
                 )
 
         # ---- 遍历台账侧：找疑似下线
+        # hit_offline_asset_ids：本轮被判定为 offline 的资产（用于末尾自动收敛）
+        hit_offline_asset_ids: set = set()
         agent_by_id = {str(a.get("id")): a for a in agents}
         for asset in assets:
             aid = str(asset.wazuh_agent_id or "")
@@ -371,6 +373,7 @@ class AssetReconciliationService:
                 continue
             ag = agent_by_id.get(aid)
             if ag is None:
+                hit_offline_asset_ids.add(asset.id)
                 rows.append(
                     AssetReconciliation(
                         run_id=run_id,
@@ -400,6 +403,7 @@ class AssetReconciliationService:
             if days is not None and days < OFFLINE_DAYS_THRESHOLD:
                 # 断开时间还短，可能只是重启，不报
                 continue
+            hit_offline_asset_ids.add(asset.id)
             rows.append(
                 AssetReconciliation(
                     run_id=run_id,
@@ -442,6 +446,37 @@ class AssetReconciliationService:
         active = [r for r, res in upsert_results if res in ("inserted", "updated")]
         suppressed_count = sum(1 for _, res in upsert_results if res == "suppressed")
 
+        # ---- 自动收敛（2026-10-16）：本轮未命中的 offline pending 自动 resolved
+        # 背景：设备 Agent 恢复（active / 断开<7天）后不再命中 offline 判定，
+        # 但历史 pending 无人处置就永远挂着——队列数与 toast 永远差 N。
+        # 语义：本轮稽核明确看到"不再是问题"→ 自动关闭，留审计。
+        # 只收敛 offline（资产维度有明确判定域）；shadow/mismatch 收敛规则
+        # 复杂（scanner 路径独立），不在此处处理。
+        auto_resolved = 0
+        stale_pendings = self.db.execute(
+            select(AssetReconciliation).where(
+                AssetReconciliation.reconciliation_type == TYPE_OFFLINE,
+                AssetReconciliation.status == STATUS_PENDING,
+                AssetReconciliation.asset_id.isnot(None),
+            )
+        ).scalars().all()
+        for row in stale_pendings:
+            if row.asset_id in hit_offline_asset_ids:
+                continue  # 本轮仍命中，保持 pending
+            row.status = "resolved"
+            row.resolved_by = "system:auto"
+            row.resolved_at = now
+            row.resolve_note = (
+                f"本轮稽核未再命中（agent 恢复或断开时长低于阈值 "
+                f"{OFFLINE_DAYS_THRESHOLD} 天），自动关闭；"
+                f"历史出现 {row.occurrence_count or 1} 次"
+            )
+            auto_resolved += 1
+        if auto_resolved:
+            logger.info(
+                "对账自动收敛：%d 条 offline pending 本轮未命中，转 resolved", auto_resolved
+            )
+
         # ---- P3/F-S1 扫描器发现 → 影子资产（final.md §9.1）
         scanner_shadow_count = self.reconcile_scanner_findings(
             run_id=run_id, task_id=task_id, lookback_hours=24,
@@ -462,6 +497,7 @@ class AssetReconciliationService:
                 TYPE_MISMATCH: sum(1 for r in active if r.reconciliation_type == TYPE_MISMATCH),
             },
             "suppressed_count": suppressed_count,
+            "auto_resolved_count": auto_resolved,
             "scanner_shadow_count": scanner_shadow_count,
             "freshness": fr_snapshot,
         }
