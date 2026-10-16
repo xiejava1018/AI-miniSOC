@@ -314,7 +314,12 @@
   const listLoading = ref(false)
   const filterType = ref<'' | ReconciliationType>('')
   const filterStatus = ref<string>('')
-  const allRuns = ref(false)
+  // 2026-10-15：默认 true 跨批次显示
+  // 原因：UPSERT 后代表行 run_id 是首次的（ce2f77c1, 8-21），latest_run_id
+  // 取到的是 8-22 的孤儿 run 94175f9d，过滤后只剩 1 条；用户会误以为
+  // "刚才 run 出来的 diff 没显示"。开 allRuns 看全表 5-6 条更直观。
+  // 想看单次 run 详情时手动取消勾选。
+  const allRuns = ref(true)
   const page = ref(1)
   const pageSize = ref(20)
   const total = ref(0)
