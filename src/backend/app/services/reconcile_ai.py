@@ -19,6 +19,7 @@ from typing import Optional
 
 from app.core.config import settings
 from app.models.asset_reconciliation import (
+    STATUS_PENDING,
     TYPE_MISMATCH,
     TYPE_OFFLINE,
     TYPE_SHADOW,
@@ -53,8 +54,13 @@ class ReconciliationReportService:
                 "prompt_version": PROMPT_VERSION,
             }
 
-        rid = uuid.UUID(summary["run_id"])
-        items = self.svc.list_diffs(run_id=rid, page=1, page_size=_MAX_ITEMS_IN_PROMPT)
+        # 2026-10-18 修 rid 错位：summary["run_id"] 是最近命中轮（last_seen_run_id），
+        # 而 list_diffs 按首次批次列（run_id）过滤——dedup 后两者几乎永不相等，
+        # 明细永远查到 0 行 → AI 拿空明细幻觉编数字（"2 信息不一致"实为 0）。
+        # 改为与 summary 同口径：当前 pending 代表行（资产维度）。
+        items = self.svc.list_diffs(
+            status=STATUS_PENDING, page=1, page_size=_MAX_ITEMS_IN_PROMPT
+        )
         facts = self._facts(summary, items["records"])
 
         text, source, degrade_reason = None, "template", None
@@ -90,11 +96,21 @@ class ReconciliationReportService:
 
     def _facts(self, summary: dict, rows: list) -> str:
         fr = summary.get("freshness") or {}
+        # 2026-10-18：by_type 翻译成中文 + 显式三类齐全（含 0），
+        # 防止 AI 拿到 {'offline': 2} 这类部分字典时幻觉编造未提供的类型数量
+        raw_by_type = summary.get("by_type") or {}
+        by_type_cn = "、".join(
+            f"{label} {raw_by_type.get(t, 0)} 项"
+            for t, label in (
+                (TYPE_SHADOW, "影子资产"), (TYPE_OFFLINE, "疑似下线"), (TYPE_MISMATCH, "信息不一致"),
+            )
+        )
         lines = [
-            f"对账批次: {summary['run_id']}",
+            # 2026-10-18：不再向 AI/报告塞裸 run_id UUID（用户界面对不上，
+            # 报告引导去"历史报告"tab 看批次详情）
             f"对账时间: {summary.get('checked_at')}",
             f"差异总数: {summary.get('diff_total', 0)}",
-            f"差异分布: {summary.get('by_type')}",
+            f"差异分布: {by_type_cn}",
             f"数据可信度: {'降级（源异常，结果可能不全）' if fr.get('degraded') else '正常'}",
             f"台账最近成功同步: {fr.get('last_sync_at') or '无记录'}",
         ]
@@ -155,6 +171,7 @@ class ReconciliationReportService:
                 system=(
                     "你是资产管理运维助手。基于给定的对账事实撰写简报，要求："
                     "1) 只使用给定事实，不得推测未提供的信息；"
+                    "1.1) 差异分布中数量为 0 的类型必须写 0 或不提，严禁编造数字；"
                     "2) 如数据可信度为降级，开头必须先提示结果可能不全；"
                     "3) 按影子资产、疑似下线、信息不一致分组，各给出可执行建议；"
                     "4) 中文，200-350 字，不用 Markdown 标题，可用短横线列表。"
