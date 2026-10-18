@@ -10,7 +10,12 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-def convert_agent_to_asset(agent: dict) -> dict:
+# 回环地址：Wazuh Manager 本机 agent(000) 的注册 IP 固定是 127.0.0.1，
+# 语义上应归位到 Manager 真实主机 IP（从 wazuh.url 提取，非写死）。
+_LOOPBACK_IPS = {"127.0.0.1", "localhost", "::1"}
+
+
+def convert_agent_to_asset(agent: dict, manager_ip: str = None) -> dict:
     """
     将 Wazuh agent 转换为资产格式
 
@@ -28,6 +33,16 @@ def convert_agent_to_asset(agent: dict) -> dict:
     name = agent.get("name")
     agent_id = agent.get("id")
     status = agent.get("status", "")
+
+    # agent 000 = Wazuh Manager 本机 agent，注册 IP 固定 127.0.0.1（Wazuh 标准行为）。
+    # 用 manager_ip（调用方从 wazuh endpoint 提取）替代回环，否则台账会出现
+    # 127.0.0.1 资产 → 网段归属错 + 稽核长期误报“疑似下线”。
+    if agent_id == "000" and ip in _LOOPBACK_IPS and manager_ip:
+        logger.info(
+            "agent 000（Manager 本机）注册 IP=%s 为回环，替代为 Manager 地址 %s",
+            ip, manager_ip,
+        )
+        ip = manager_ip
 
     if not ip or ip == "any":
         logger.debug(f"Agent {name} IP 无效，跳过: {ip}")

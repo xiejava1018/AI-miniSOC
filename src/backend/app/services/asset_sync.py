@@ -99,6 +99,23 @@ class AssetSyncService:
         status = agent.get("status")
         os_data = agent.get("os", {}) or {}
 
+        # agent 000 = Wazuh Manager 本机 agent，注册 IP 固定 127.0.0.1（Wazuh 标准行为）。
+        # 用 Manager 真实地址（本服务连接的 wazuh endpoint host，非写死）替代，
+        # 否则台账会出现 127.0.0.1 资产 → 网段错 + 稽核长期误报疑似下线。
+        if agent_id == "000" and str(ip) in ("127.0.0.1", "localhost", "::1"):
+            try:
+                from urllib.parse import urlparse
+                client = get_wazuh_client(db=self.db)
+                manager_ip = urlparse(client.base_url).hostname
+                if manager_ip:
+                    logger.info(
+                        "agent 000（Manager 本机）注册 IP=%s 为回环，替代为 Manager 地址 %s",
+                        ip, manager_ip,
+                    )
+                    ip = manager_ip
+            except Exception:
+                logger.debug("agent 000 回环替代失败，保持原 IP", exc_info=True)
+
         # 映射状态 - 写入英文 dict_code，字典类型: asset_status
         # 字典值: online(在线), offline(离线), never_connected(从未连接), decommissioned(已下线), unknown(未知)
         status_map = {

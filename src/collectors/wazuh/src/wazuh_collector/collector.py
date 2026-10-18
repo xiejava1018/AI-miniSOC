@@ -8,6 +8,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse
 
 from collector_framework.base import BaseCollector, CollectResult, DataType
 from collector_framework.sync_client import MiniSOCClient
@@ -117,9 +118,17 @@ class WazuhCollector(BaseCollector):
         agents = await self.wazuh_client.get_agents()
         logger.info(f"获取到 {len(agents)} 个 agents")
 
+        # agent 000（Manager 本机）注册 IP 固定 127.0.0.1，用 Manager 真实地址
+        # （即本采集器连接的 wazuh endpoint host）替代——非写死，换部署自动跟随
+        manager_ip = None
+        try:
+            manager_ip = urlparse(self.wazuh_url).hostname
+        except Exception:
+            logger.debug("解析 wazuh_url host 失败，agent 000 保持原 IP")
+
         assets = []
         for agent in agents:
-            asset = convert_agent_to_asset(agent)
+            asset = convert_agent_to_asset(agent, manager_ip=manager_ip)
             if asset:
                 assets.append(asset)
 
