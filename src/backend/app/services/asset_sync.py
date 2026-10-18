@@ -164,11 +164,33 @@ class AssetSyncService:
         # 移除标记字段
         is_new = asset_data.pop("is_new", False)
 
-        # 查找现有资产（通过 wazuh_agent_id 或 IP）
+        # 查找现有资产：IP 优先（本次观测的 IP 比 agent_id 旧绑定更可信——
+        # agent 000 换 IP 场景：旧行 agent_id 匹配但 IP 已过期）
         asset = self.db.query(Asset).filter(
-            (Asset.wazuh_agent_id == asset_data.get("wazuh_agent_id")) |
-            (Asset.asset_ip == asset_data.get("asset_ip"))
+            Asset.asset_ip == asset_data.get("asset_ip")
         ).first()
+        if asset is None:
+            asset = self.db.query(Asset).filter(
+                Asset.wazuh_agent_id == asset_data.get("wazuh_agent_id")
+            ).first()
+
+        # 2026-10-18：wazuh_agent_id 冲突释放（与 sync_handlers 的 OH-4.1 同款）。
+        # 场景：agent 000 曾以 127.0.0.1 入台账（5a242914），IP 修正后同步指向
+        # 新行（ea2b1414），但旧行还占着 agent_id → UPDATE 撞 uq_soc_assets_agent_id。
+        # 释放规则：占用者不是本次目标行时，将其 wazuh_agent_id 置 NULL（旧行
+        # 保留供审计，状态由后续稽核/人工处置）。
+        new_agent_id = asset_data.get("wazuh_agent_id")
+        if new_agent_id:
+            holder = self.db.query(Asset).filter(
+                Asset.wazuh_agent_id == new_agent_id
+            ).first()
+            if holder is not None and (asset is None or holder.id != asset.id):
+                logger.info(
+                    "wazuh_agent_id %s 被旧资产 %s (ip=%s) 占用，释放以便挂到本次目标",
+                    new_agent_id, holder.id, holder.asset_ip,
+                )
+                holder.wazuh_agent_id = None
+                self.db.flush()
 
         if asset:
             # 更新现有资产
