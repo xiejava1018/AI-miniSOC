@@ -117,7 +117,9 @@
         <ElTag v-if="report.source === 'glm'" size="small" type="success" effect="plain">
           AI 生成
         </ElTag>
-        <ElTag v-else size="small" type="info" effect="plain">规则模板（AI 未启用/降级）</ElTag>
+        <ElTag v-else size="small" type="info" effect="plain">
+          规则模板（{{ report.degrade_reason || 'AI 未启用/降级' }}）
+        </ElTag>
         <span class="report-meta">
           数据窗口：{{ formatTime(report.provenance?.checked_at) }} · 基于
           {{ report.provenance?.diff_total }} 项差异

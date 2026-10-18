@@ -69,6 +69,7 @@ def ai_chat(
     json_mode: bool = False,
     db: Optional[Any] = None,
     _budget: bool = True,
+    wait: bool = False,
 ) -> str:
     """调 LLM 返回文本。失败抛 AIClientError（含 401/429 等）。
 
@@ -103,8 +104,12 @@ def ai_chat(
     if _budget:
         from app.services.ai_budget import ai_budget
 
-        if not ai_budget.allow():
-            raise AIClientError("AI 调用已达今日配额或熔断中，请稍后重试", status_code=429)
+        if not ai_budget.allow(wait=wait):
+            # 2026-10-18：透传真实拒绝原因（QPS/配额/熔断），
+            # 不再统一报"已达配额或熔断"误导排查（CLAUDE.md §7 实锤）
+            reason = getattr(ai_budget, "last_reject_reason", None) or \
+                "AI 预算/限流拦截"
+            raise AIClientError(reason, status_code=429)
 
     started = time.time()
     try:

@@ -35,22 +35,38 @@ class AIBudget:
         self._daily_count = 0
         self._failures = []  # [(ts, ...)] 最近失败时间戳
         self._circuit_opened_at = None
+        self.last_reject_reason = None
         self.total_allowed = 0
         self.total_rejected = 0
 
     # ---------- 主入口 ----------
 
-    def allow(self) -> bool:
-        """调用前检查；True=允许调用，False=预算/限流/熔断拒绝（走降级）"""
+    def allow(self, wait: bool = False) -> bool:
+        """调用前检查；True=允许调用，False=预算/限流/熔断拒绝（走降级）。
+
+        wait=True：QPS 违例时等待剩余间隔后重试（适用用户主动点击场景，
+        等 0.5s 远好于直接降级）；熔断/日配额仍立即拒绝（那是真预算约束）。
+        拒绝原因写入 self.last_reject_reason 供调用方透传给用户
+        （2026-10-18：此前统一报"已达配额或熔断"误导排查，见 CLAUDE.md §7）。
+        """
+        self.last_reject_reason = None
+        # QPS 违例时的等待重试（最多等 1 个间隔，避免多请求排队雪刷）
+        if wait:
+            now = time.time()
+            gap = now - self._last_call_ts
+            if 0 < MIN_INTERVAL_SECONDS - gap <= MIN_INTERVAL_SECONDS:
+                time.sleep(MIN_INTERVAL_SECONDS - gap)
         now = time.time()
         with self._lock:
             # 1) 熔断检查
             if self._circuit_opened_at is not None:
                 if now - self._circuit_opened_at < CIRCUIT_OPEN_SECONDS:
                     self.total_rejected += 1
+                    remaining = int(CIRCUIT_OPEN_SECONDS - (now - self._circuit_opened_at))
+                    self.last_reject_reason = f"AI 熔断中，还剩 {remaining}s 恢复"
                     logger.warning(
                         "AI 调用被熔断拦截：circuit 还剩 %ds (10min 窗口)",
-                        int(CIRCUIT_OPEN_SECONDS - (now - self._circuit_opened_at)),
+                        remaining,
                     )
                     return False
                 # 熔断恢复
@@ -60,6 +76,9 @@ class AIBudget:
             # 2) QPS（最小间隔）
             if now - self._last_call_ts < MIN_INTERVAL_SECONDS:
                 self.total_rejected += 1
+                self.last_reject_reason = (
+                    f"AI 调用过于频繁（限流间隔 {MIN_INTERVAL_SECONDS:.1f}s），请稍候重试"
+                )
                 logger.warning("AI 调用被 QPS 拦截：间隔 %.2fs < %.2fs",
                                now - self._last_call_ts, MIN_INTERVAL_SECONDS)
                 return False
@@ -70,6 +89,9 @@ class AIBudget:
                 self._daily_count = 0
             if self._daily_count >= DAILY_CAP:
                 self.total_rejected += 1
+                self.last_reject_reason = (
+                    f"AI 今日配额已用尽（{DAILY_CAP} 次/天），明日恢复"
+                )
                 logger.warning(
                     "AI 调用被 DAILY_CAP=%d 拦截：今日已用 %d 次",
                     DAILY_CAP, self._daily_count,

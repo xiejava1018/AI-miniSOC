@@ -57,11 +57,13 @@ class ReconciliationReportService:
         items = self.svc.list_diffs(run_id=rid, page=1, page_size=_MAX_ITEMS_IN_PROMPT)
         facts = self._facts(summary, items["records"])
 
-        text, source = None, "template"
+        text, source, degrade_reason = None, "template", None
         if force or self._worth_ai(summary):
             text = self._glm_report(facts)
             if text:
                 source = "glm"
+            else:
+                degrade_reason = getattr(self, "last_degrade_reason", None)
         if not text:
             text = self._template_report(summary, items["records"])
 
@@ -69,6 +71,7 @@ class ReconciliationReportService:
             **summary,
             "report": text,
             "source": source,
+            "degrade_reason": degrade_reason,
             "prompt_version": PROMPT_VERSION,
             # X2 可追溯性：这份报告基于哪个批次、多少条差异、数据是否可信
             "provenance": {
@@ -134,9 +137,10 @@ class ReconciliationReportService:
         return "\n".join(lines)
 
     def _glm_report(self, facts: str) -> Optional[str]:
-        if not ai_budget.allow():
-            logger.info("对账报告降级为模板：AI 预算/限流不允许")
-            return None
+        # 2026-10-18 修双重限流：之前这里先 ai_budget.allow() 消耗掉间隔，
+        # ai_chat 内部又 allow() → 第二次必然间隔 0s 被 QPS 拒——稽核报告
+        # 几乎每次都降级的结构性根因。现在去掉外层，由 ai_chat(wait=True)
+        # 统一限流（QPS 违例等 0.5s 重试而非拒绝）。
         if not getattr(settings, "GLM_API_KEY", None):
             from app.services.ai_client import ai_provider_available
             if not ai_provider_available():
@@ -147,6 +151,7 @@ class ReconciliationReportService:
             text = ai_chat(
                 facts,
                 scene="reconcile",
+                wait=True,   # 用户主动点击场景：等限流间隔，不直接降级
                 system=(
                     "你是资产管理运维助手。基于给定的对账事实撰写简报，要求："
                     "1) 只使用给定事实，不得推测未提供的信息；"
@@ -161,6 +166,7 @@ class ReconciliationReportService:
             return text or None
         except Exception as exc:  # noqa: BLE001 — AI 失败绝不能影响对账结论的可用性
             ai_budget.record_failure()
+            self.last_degrade_reason = str(exc)
             logger.warning("对账报告 GLM 调用失败，降级模板: %s", exc)
             return None
 
