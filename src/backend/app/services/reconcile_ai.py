@@ -105,14 +105,26 @@ class ReconciliationReportService:
                 (TYPE_SHADOW, "影子资产"), (TYPE_OFFLINE, "疑似下线"), (TYPE_MISMATCH, "信息不一致"),
             )
         )
+        # 时间友好格式（2026-10-18 用户反馈：ISO 带毫秒时区的时间戳不可读；
+        # 直接在 facts 层格式化，AI 复读出来也是人话）
+        def _fmt(ts) -> str:
+            if not ts:
+                return "无记录"
+            try:
+                from datetime import datetime
+                dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                return dt.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                return str(ts)
+
         lines = [
             # 2026-10-18：不再向 AI/报告塞裸 run_id UUID（用户界面对不上，
             # 报告引导去"历史报告"tab 看批次详情）
-            f"对账时间: {summary.get('checked_at')}",
+            f"对账时间: {_fmt(summary.get('checked_at'))}",
             f"差异总数: {summary.get('diff_total', 0)}",
             f"差异分布: {by_type_cn}",
             f"数据可信度: {'降级（源异常，结果可能不全）' if fr.get('degraded') else '正常'}",
-            f"台账最近成功同步: {fr.get('last_sync_at') or '无记录'}",
+            f"台账最近成功同步: {_fmt(fr.get('last_sync_at'))}",
         ]
         if fr.get("unhealthy_sources"):
             lines.append(
