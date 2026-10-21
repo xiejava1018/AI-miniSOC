@@ -66,6 +66,8 @@
 
 - **2026-09-06：行为画像全量落地 + 入口跳转** (L1644–1735) — 9 commit 速查；§9 验收核对；S6 traffic_type 自动判定修复（`compute_traffic_type` 加双辅助判据）
 - **2026-09-06 续：行为画像两层结构改造实施** (L1736–1770) — L1 群体概览 + L2 单 IP 详情；D2 关系 Tab ECharts graph 力导向拓扑；方案 S1-S7 全落地
+- **2026-10-20：行为画像全空根因定位** — Loki 可达（§0"不可达"结论过期）；采集链路是 Grafana Alloy（systemd，非 Promtail）：`otelcol.receiver.syslog` UDP:514 只有 1 台机在发；`ip` label 是 syslog 发送方 IP 非客户端 IP；syslog 解析器配 rfc5424 在解 rfc3164 报文 → 大量日志被丢弃。下游两处缺陷：`RE_DOM=网址:` 正则不匹配当时 iStoreOS `dst:` 格式、77 个空壳画像 `total=0` 但 `status=ok`（假绿）
+- **2026-10-21：PTR 反查噪声过滤**（承上）— 修完 Alloy 后 `cat_share` 被 `*.in-addr.arpa` 污染（某主体 98% 域名是 PTR、「其他」100%）。两层防御：`loki_source.fetch_day_events` 入库前丢弃（带 dropped 计数日志防新假绿）+ `classifier.classify` 二次防御归入「系统背景」。实测「其他」45.4%→27.2%，残留 PTR 域名 0。**踩坑：`run_snapshot` 幂等保护会挡住同日重跑，必须先回退 `watermark.last_completed_date`**
 - （L1 首屏不可见见"菜单 / UI / icon"）
 
 ## 资产扫描 / scanner

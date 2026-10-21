@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
+from app.services.behavior_profile.loki_source import is_ptr_lookup
+
 # ─────────────────────────────────────────────────────────────
 # 时段定义（7 段）
 # ─────────────────────────────────────────────────────────────
@@ -251,6 +253,11 @@ def classify(domain: str) -> tuple[str, dict]:
         return "其他", _OTHER
     if _IP_RE.match(d):
         return "IP 直连", _IP_DIRECT
+    # DNS 反查（PTR）域名的二次防御：正常路径已在 loki_source.fetch_day_events
+    # 入库前丢弃，这里挡住历史脏数据 / 其他写入方（如 browsing_detection）。
+    # 归入"系统背景"而非"其他"——它确实是机器行为而非人的兴趣。
+    if is_ptr_lookup(d):
+        return "系统背景", CATEGORIES["系统背景"]
     # 1) 运营覆盖词典优先（键序即优先级）
     override = _load_dict_override()
     if override:

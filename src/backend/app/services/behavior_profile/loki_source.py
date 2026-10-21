@@ -26,6 +26,28 @@ MIN_WINDOW = dt.timedelta(minutes=15)
 # 日志行: 网址:host[:port] —— TP-Link 上网行为日志的域名载体
 RE_DOM = re.compile(r"网址:([^\s:：]+)")
 
+# ── DNS 反查（PTR）噪声过滤 ────────────────────────────────
+# TP-Link behavior_ctl 会把客户端每次 DNS 反查（即使失败、即使无人使用其结果）
+# 也记成一条上网行为，域名载体形如 `1.0.168.192.in-addr.arpa`。
+# 这类记录不代表任何人的上网意图，却会：
+#   1) 把cat_share 的"其他"类撑到接近 100%（实测 .42 主体 98% 域名是 PTR）；
+#   2) 挤占 top_domains 前 N 名（实测 PTR 域名排到第 2~5 位）；
+#   3) 虚增 total / by_hour，让"夜猫子"等作息标签失真。
+# 必须在**入库前**丢弃，事后无法从聚合结果里还原。
+#
+# 覆盖 IPv4 反查（in-addr.arpa）与 IPv6 反查（ip6.arpa）。
+# 刻意不做"解析成功才保留"——反查结果是否有意义无从判断，
+# 且 PTR 域名不携带用户意图，一律丢弃语义最干净。
+RE_PTR_ARPA = re.compile(r"\.(?:in-addr\.arpa|ip6\.arpa)\.?$")
+
+
+def is_ptr_lookup(domain: str) -> bool:
+    """判断是否为 DNS 反查域名（PTR），应在入库前丢弃。
+
+    独立成函数便于 classifier 侧做二次防御，也便于单测直接覆盖。
+    """
+    return bool(RE_PTR_ARPA.search((domain or "").lower().strip()))
+
 
 def _loki_base() -> str:
     # 配置中心 v1（X1E-11）：从 data_source_resolver 读 loki
@@ -83,15 +105,26 @@ def fetch_day_events(ip: str, day: dt.date) -> Tuple[List[Tuple[dt.datetime, str
     """拉取指定 IP 某天（本地时区一整天）的全部上网行为事件。
 
     返回 ([(本地datetime, 域名), ...], stats)
+
+    DNS 反查（PTR）记录在此处**入库前**丢弃——见RE_PTR_ARPA 处的说明。
     """
     start = dt.datetime.combine(day, dt.time.min, tzinfo=TZ)
     end = start + dt.timedelta(days=1)
     events: List[Tuple[dt.datetime, str]] = []
     stats = [0, 0]
+    ptr_dropped = 0
     for ts, line in pull_window(ip, start, end, stats=stats):
         m = RE_DOM.search(line)
         if not m:
             continue
+        domain = m.group(1).lower()
+        if is_ptr_lookup(domain):
+            ptr_dropped += 1
+            continue
         d = dt.datetime.fromtimestamp(ts / 1e9, TZ)
-        events.append((d, m.group(1).lower()))
+        events.append((d, domain))
+    if ptr_dropped:
+        # 逐日计数而非总量，避免高频主体刷屏；与 total=0 一样值得被看见（§4.1 假绿防护）
+        logger.info("过滤 DNS 反查噪声 ip=%s day=%s dropped=%d kept=%d",
+                    ip, day, ptr_dropped, len(events))
     return events, stats
