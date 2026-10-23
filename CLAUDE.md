@@ -14,9 +14,9 @@
 
 | 事实 | 当前值 | 来源 |
 |---|---|---|
-| 业务表数 | 66（全部 `soc_` 前缀） | `Base.metadata` |
-| alembic 迁移文件 | 63 | `alembic/versions/` |
-| **alembic heads** | **1 个**（`628109e83308`，2026-XX-XX 由 network_zone 改造合并双 head） | `alembic heads` |
+| 业务表数 | 81（库中实际；ORM `Base.metadata` 声明 79，多出的 2 张 `soc_*_cleanup_audit` 审计表不在 ORM） | `information_schema` |
+| alembic 迁移文件 | 94 | `alembic/versions/` |
+| **alembic heads** | **1 个**（`n0b1c2d3e4f5`，issue #12 补基线后仍线性） | `alembic heads` |
 | 顶级菜单 | 11 个 | `soc_menus WHERE parent_id IS NULL` |
 | X1 角色 | admin / operator / viewer / auditor（+ 历史 user/readonly/test_role） | `soc_roles` |
 | Wazuh URL | https://192.168.0.40:55000 | `.env` |
@@ -242,6 +242,18 @@ sudo systemctl status actions.runner.*
 3. **`op.execute(text, params)` 双位置参数不兼容**——用 `bind = op.get_bind(); bind.execute(...)`
 4. **JSONB 用 `CAST(:x AS jsonb)`**——`:perms::jsonb` 会被当绑定参数
 5. `soc_role_menus` 只有 `role_id/menu_id/permissions` 三列——**没有 created_at/updated_at**（老坑，9/14 还中招一次）
+6. **空库 `upgrade head` 必须能跑通**（issue #12 的血泪）。生产库能用只因
+   schema 是手工建的，**不代表迁移链完整**。新增表/菜单/角色种子时，必须
+   拿一个真·空库跑一次：
+   ```bash
+   # 造空库 → upgrade head → 逐项核对
+   pytest src/backend/tests/test_fresh_install_bootstrap.py
+   ```
+   该测试会拦截：单 head、ORM 表无迁移创建、菜单/角色硬编码 id、
+   菜单树完整性、默认 admin 可登录。
+7. **op.execute 会把 `:id` 当绑定参数**——菜单 path 含路由参数时
+   （`detail/:id`），字面量里的冒号必须转义成 `\:`，否则报
+   `A value is required for bind parameter 'id'`
 
 ### 4.4 菜单 / icon 的静默失败模式
 

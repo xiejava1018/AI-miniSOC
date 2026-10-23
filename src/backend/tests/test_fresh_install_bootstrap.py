@@ -238,6 +238,82 @@ def test_every_orm_table_is_created_by_some_migration():
     )
 
 
+def test_admin_password_resolves_from_root_env_file():
+    """DEFAULT_ADMIN_PASSWORD must be read from the REPO ROOT .env.
+
+    Regression: alembic/env.py does a bare load_dotenv(), whose find_dotenv()
+    walks up from the cwd and stops at src/backend/.env. A deployment that
+    follows the README and puts DEFAULT_ADMIN_PASSWORD in the root .env
+    therefore silently got the factory password instead.
+
+    We assert the migration's resolver picks up a value that exists ONLY in a
+    root .env, with src/backend/.env shadowing it.
+    """
+    import ast
+    import textwrap
+
+    mig = os.path.join(
+        VERSIONS, "u0a1b2c3d4e5_bootstrap_roles_and_admin.py"
+    )
+    assert os.path.exists(mig), "admin bootstrap migration missing"
+    src = open(mig, encoding="utf-8").read()
+
+    tree = ast.parse(src)
+    fn = next(
+        (n for n in tree.body
+         if isinstance(n, ast.FunctionDef) and n.name == "_admin_password"),
+        None,
+    )
+    assert fn is not None, "_admin_password() resolver not found"
+
+    # Exercise the resolver in isolation against a synthetic repo layout.
+    import subprocess
+    import tempfile
+
+    snippet = textwrap.dedent(
+        """
+        import os, sys
+        from pathlib import Path
+
+        def _admin_password():
+            for candidate in (
+                Path(sys.argv[1]).resolve() / ".env",
+                Path(sys.argv[2]).resolve() / ".env",
+            ):
+                if candidate.is_file():
+                    try:
+                        from dotenv import load_dotenv
+                        load_dotenv(candidate, override=False)
+                    except Exception:
+                        pass
+            return os.getenv("DEFAULT_ADMIN_PASSWORD") or "Admin@123456"
+        print(_admin_password())
+        """
+    )
+    with tempfile.TemporaryDirectory() as td:
+        root = os.path.join(td, "repo")
+        backend = os.path.join(root, "src", "backend")
+        os.makedirs(backend)
+        # Root .env carries the password; src/backend/.env shadows it and does not.
+        with open(os.path.join(root, ".env"), "w") as fh:
+            fh.write("DEFAULT_ADMIN_PASSWORD=FromRootEnv@777\n")
+        with open(os.path.join(backend, ".env"), "w") as fh:
+            fh.write("DB_NAME=whatever\n")
+
+        out = subprocess.run(
+            [sys.executable, "-c", snippet, root, backend],
+            capture_output=True, text=True,
+            # ensure a stray ambient value cannot mask a failure
+            env={"PATH": os.environ.get("PATH", ""),
+                 "PYTHONPATH": os.path.dirname(os.path.dirname(mig))},
+        )
+        assert out.returncode == 0, out.stderr
+        assert out.stdout.strip() == "FromRootEnv@777", (
+            "root .env DEFAULT_ADMIN_PASSWORD was ignored; got %r"
+            % out.stdout.strip()
+        )
+
+
 def test_bootstrap_migrations_are_present():
     """The three baselines issue #12 added must not be deleted.
 

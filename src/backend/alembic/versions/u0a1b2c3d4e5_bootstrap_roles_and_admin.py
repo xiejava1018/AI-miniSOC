@@ -47,6 +47,30 @@ FALLBACK_ADMIN_PASSWORD = "Admin@123456"
 
 
 def _admin_password() -> str:
+    """读 DEFAULT_ADMIN_PASSWORD，回落到出厂默认。
+
+    不能只看 os.environ：alembic/env.py 的裸 load_dotenv() 用 find_dotenv()
+    从 cwd 向上找，**src/backend/.env 会遮蔽仓库根 .env**。而部署者按
+    README 指引把 DEFAULT_ADMIN_PASSWORD 写在【根 .env】里，就会被静默忽略，
+    结果拿到出厂默认密码（实测踩过）。
+
+    所以这里显式把根 .env 也加载进来，且不覆盖已有环境变量
+    （override=False，shell 里显式export 的优先级最高）。
+    """
+    from pathlib import Path
+
+    for candidate in (
+        Path(__file__).resolve().parents[4] / ".env",   # 仓库根 .env
+        Path(__file__).resolve().parents[2] / ".env",   # src/backend/.env
+    ):
+        if candidate.is_file():
+            try:
+                from dotenv import load_dotenv
+
+                load_dotenv(candidate, override=False)
+            except Exception:  # 缺 python-dotenv 时静默跳过，不阻断迁移
+                pass
+
     return os.getenv("DEFAULT_ADMIN_PASSWORD") or FALLBACK_ADMIN_PASSWORD
 
 

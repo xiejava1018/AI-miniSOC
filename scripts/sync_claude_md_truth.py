@@ -206,7 +206,8 @@ def render_snapshot(
         "",
         "## 数据库",
         "",
-        f"- **业务表总数**: `{tables}`（全部 `soc_` 前缀）",
+        f"- **ORM 声明表数**（`Base.metadata`）: `{tables}`",
+        "  （库中实际可能更多：如 `soc_*_cleanup_audit` 审计表只在迁移里建、不在 ORM）",
     ]
     if non_soc_tables:
         lines.append(f"- **非 soc_ 前缀的表**: {', '.join(f'`{t}`' for t in non_soc_tables)}")
