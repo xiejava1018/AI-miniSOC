@@ -13,8 +13,12 @@ P3/F-S3 增强：soc_scanner_tasks 加 affected_ports / affected_findings JSONB 
 - 幂等：IF NOT EXISTS
 
 Revision ID: r1s2t3u4v5w6
-Revises: q1r2s3t4u5v6
+Revises: s1a2b3c4d5e6
 Create Date: 2026-08-27
+
+2026-10（issue #12）：down_revision 由 q1r2s3t4u5v6 改为 s1a2b3c4d5e6，
+让新建 soc_scanner_tasks 的 s1a2b3c4d5e6 排在前面。q1r2s3t4u5v6 由
+s1a2b3c4d5e6 承接，链序不变，仅保证空库首跑时本迁移执行时表已存在。
 """
 from typing import Sequence, Union
 
@@ -22,7 +26,7 @@ from alembic import op
 
 
 revision: str = "r1s2t3u4v5w6"
-down_revision: Union[str, Sequence[str], None] = "q1r2s3t4u5v6"
+down_revision: Union[str, Sequence[str], None] = "s1a2b3c4d5e6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -47,11 +47,12 @@ def upgrade() -> None:
     bind.execute(sa.text(
         "INSERT INTO soc_menus (parent_id, name, title, path, icon, sort_order, "
         "  is_visible, component, permissions) "
-        "SELECT 2, '图谱性能看板', '图谱性能看板', 'graph/perf-dashboard', "
+        "SELECT p.id, '图谱性能看板', '图谱性能看板', 'graph/perf-dashboard', "
         "       'ri:dashboard-2-line', 9, "
         "       TRUE, '/asset/graph/perf-dashboard/index', CAST(:perms AS jsonb) "
-        "WHERE NOT EXISTS ("
-        "  SELECT 1 FROM soc_menus WHERE parent_id = 2 AND path = 'graph/perf-dashboard')"),
+        "FROM soc_menus p WHERE p.path = '/assets' AND p.parent_id IS NULL "
+        "  AND NOT EXISTS ("
+        "  SELECT 1 FROM soc_menus WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'graph/perf-dashboard')"),
         {"perms": _MENU_PERMS},
     )
 
@@ -65,7 +66,8 @@ def upgrade() -> None:
         bind.execute(sa.text(
             "INSERT INTO soc_role_menus (role_id, menu_id, permissions) "
             "SELECT r.id, m.id, CAST(:perms AS jsonb) "
-            "FROM soc_roles r JOIN soc_menus m ON m.parent_id = 2 AND m.path = 'graph/perf-dashboard' "
+            "FROM soc_roles r JOIN soc_menus p ON p.path = '/assets' AND p.parent_id IS NULL "
+            "        JOIN soc_menus m ON m.parent_id = p.id AND m.path = 'graph/perf-dashboard' "
             "WHERE r.code = :code "
             "  AND NOT EXISTS (SELECT 1 FROM soc_role_menus rm "
             "                  WHERE rm.role_id = r.id AND rm.menu_id = m.id)"),
@@ -79,8 +81,8 @@ def downgrade() -> None:
     bind.execute(sa.text(
         "DELETE FROM soc_role_menus "
         "WHERE menu_id IN (SELECT id FROM soc_menus "
-        "                  WHERE parent_id = 2 AND path = 'graph/perf-dashboard')"
+        "                  WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'graph/perf-dashboard')"
     ))
     bind.execute(sa.text(
-        "DELETE FROM soc_menus WHERE parent_id = 2 AND path = 'graph/perf-dashboard'"
+        "DELETE FROM soc_menus WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'graph/perf-dashboard'"
     ))

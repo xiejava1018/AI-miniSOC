@@ -426,6 +426,40 @@ psql -U postgres -c 'CREATE DATABASE "AI-miniSOC-db_test";'     # pytest 专用
 > 💡 `DB_NAME` 环境变量可覆盖 `.env` 的 `DB_NAME`（pydantic-settings env 优先）：
 > `DB_NAME=AI-miniSOC-db_test ../../venv/bin/python -m alembic -c alembic.ini upgrade head`
 
+### 2. 执行数据库迁移（必做）
+
+```bash
+cd src/backend
+
+# 建表 + 种菜单 + 种角色 + 建默认管理员，一步到位
+../../venv/bin/python -m alembic -c alembic.ini upgrade head
+
+# 校验：应输出单一 head，且库里有 61 行菜单 / 6 个角色 / 1 个 admin
+../../venv/bin/python -m alembic -c alembic.ini heads
+psql "$DATABASE_URL" -c "select count(*) from soc_menus" -c "select username from soc_users"
+```
+
+> ⚠️ 迁移必须在 `src/backend/` 下执行（`alembic.ini` 用 `%(here)s` 定位）。
+> 首次部署若报 `relation "soc_scanner_tasks" does not exist`，说明代码版本过旧，
+> 请先 `git pull` —— 该表由 `s1a2b3c4d5e6` 基线迁移补齐。
+
+#### 🔑 默认登录账号
+
+迁移完成后**自动**创建以下账号（无需手工 INSERT）：
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `admin` | `Admin@123456` | admin（超管） |
+
+> 🚨 **首次登录后请立即修改密码**：系统管理 → 用户管理 → 编辑。
+> 想在部署时直接指定密码（推荐生产），执行迁移前设置环境变量：
+> ```bash
+> DEFAULT_ADMIN_PASSWORD='你的强密码' ../../venv/bin/python -m alembic -c alembic.ini upgrade head
+> ```
+> 该迁移幂等：**已存在 admin 账号时不会覆盖其密码**，重跑安全。
+> 迁移同时在 `soc_system_config` 写入 `security.default_admin_password=true`
+> 标记，可用它在部署脚本里检测“是否还在用出厂密码”。
+
 ### 2. 启动后端
 
 ```bash
@@ -450,6 +484,10 @@ npx vite build
 ### 4. 启动采集器（Docker Compose）
 
 ```bash
+# 方式 A：一键脚本（自动探测 compose 插件 / 定位 compose 文件 / 轮询健康）
+./scripts/install/install.sh
+
+# 方式 B：手动
 cd src/collectors
 # 三个 service：tplink-collector / wazuh-collector / scanner-collector
 docker compose up -d
@@ -457,13 +495,11 @@ docker compose ps
 docker compose logs -f scanner-collector
 ```
 
+> 📌 compose 文件在 `src/collectors/docker-compose.yaml`，**不在仓库根目录**。
+> 在根目录直接跑 `docker compose up -d` 会报 `no such file: docker-compose.yaml`
+> —— 这正是 issue #12 反馈的问题。`install.sh` 已自行定位路径，任意 cwd 均可执行。
+
 `.env` 必须注入：`MINISOC_API_KEY` / `WAZUH_PASSWORD` / `ROUTER_PASSWORD` / `SCANNER_ID`（注册后由控制面下发）。
-
-### 5. 一键安装（可选）
-
-```bash
-./scripts/install/install.sh          # 自动部署 Wazuh / Loki / Grafana
-```
 
 ### 访问入口
 

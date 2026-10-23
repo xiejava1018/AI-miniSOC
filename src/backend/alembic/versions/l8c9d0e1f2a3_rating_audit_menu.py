@@ -27,17 +27,19 @@ def upgrade() -> None:
     bind.execute(sa.text(
         "INSERT INTO soc_menus (parent_id, name, title, path, icon, sort_order, "
         "  is_visible, component, permissions) "
-        "SELECT 2, '定级稽核', '定级稽核', 'rating-audit', 'ri:file-shield-2-line', "
+        "SELECT p.id, '定级稽核', '定级稽核', 'rating-audit', 'ri:file-shield-2-line', "
         "  12, TRUE, '/asset/rating-audit/index', CAST(:perms AS jsonb) "
-        "WHERE NOT EXISTS ("
-        "  SELECT 1 FROM soc_menus WHERE parent_id = 2 AND path = 'rating-audit')"),
+        "FROM soc_menus p WHERE p.path = '/assets' AND p.parent_id IS NULL "
+        "  AND NOT EXISTS ("
+        "  SELECT 1 FROM soc_menus WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'rating-audit')"),
         {"perms": _MENU_PERMS},
     )
 
     bind.execute(sa.text(
         "INSERT INTO soc_role_menus (role_id, menu_id, permissions) "
         "SELECT r.id, m.id, CAST('[\"view\"]' AS jsonb) "
-        "FROM soc_roles r JOIN soc_menus m ON m.parent_id = 2 AND m.path = 'rating-audit' "
+        "FROM soc_roles r JOIN soc_menus p ON p.path = '/assets' AND p.parent_id IS NULL "
+        "        JOIN soc_menus m ON m.parent_id = p.id AND m.path = 'rating-audit' "
         "WHERE r.code IN ('admin', 'operator', 'viewer', 'auditor') "
         "  AND NOT EXISTS (SELECT 1 FROM soc_role_menus rm "
         "                  WHERE rm.role_id = r.id AND rm.menu_id = m.id)"))
@@ -47,6 +49,6 @@ def downgrade() -> None:
     bind = op.get_bind()
     bind.execute(sa.text(
         "DELETE FROM soc_role_menus rm USING soc_menus m "
-        "WHERE rm.menu_id = m.id AND m.parent_id = 2 AND m.path = 'rating-audit'"))
+        "WHERE rm.menu_id = m.id AND m.parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND m.path = 'rating-audit'"))
     bind.execute(sa.text(
-        "DELETE FROM soc_menus WHERE parent_id = 2 AND path = 'rating-audit'"))
+        "DELETE FROM soc_menus WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'rating-audit'"))

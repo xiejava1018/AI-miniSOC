@@ -1,195 +1,244 @@
 #!/bin/bash
 ###############################################################################
-# AI-miniSOC 安装脚本
+# AI-miniSOC 采集器安装脚本
 # 作者: xiejava
-# 描述: 自动安装AI-miniSOC平台及其依赖
+# 描述: 自动安装 AI-miniSOC 采集器（TP-Link 路由器 / Wazuh / 扫描器）
+#
+# 2026-10（issue #12）修复：
+#   1. **compose 文件路径**：原脚本在仓库根目录跑 `docker-compose`，
+#      但 compose 文件在 src/collectors/docker-compose.yaml，直接跑必然
+#      "no such file: docker-compose.yaml"。现统一定位 COMPOSE_FILE 并
+#      所有 docker compose 调用都带 -f。
+#   2. **docker compose vs docker-compose**：新版 Docker 只有插件式
+#      `docker compose`，没有独立的 `docker-compose` 可执行文件。
+#      自动探测，优先用插件式。
+#   3. **默认账号密码**：安装完成后明确打印 AI-miniSOC 后台登录凭据
+#      （admin / 出厂密码），此前脚本只打印 Grafana/Wazuh 凭据，
+#      部署者根本不知道 AI-miniSOC 自己怎么登录。
+#   4. **健康检查**：sleep 10 改为轮询 /health（后端冷启动 8s+，
+#      CLAUDE.md §4.10），避免误报失败。
 ###############################################################################
 
-set -e  # 遇到错误立即退出
+set -euo pipefail
 
 # 颜色定义
 RED='\033[0;31m'
-GREEN='\033[0;32m'
+GREEN='\033[0m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# 日志函数
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+# ---------- 路径解析（脚本可能在任意 cwd 被调用） ----------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+COLLECTORS_DIR="${REPO_ROOT}/src/collectors"
+COMPOSE_FILE="${COLLECTORS_DIR}/docker-compose.yaml"
+ENV_FILE="${REPO_ROOT}/.env"
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+# docker compose 调用前缀（探测插件式 vs 独立可执行文件）
+COMPOSE_CMD=()
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+log_info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# 检查系统要求
+# ---------- 检查系统要求 ----------
 check_requirements() {
     log_info "检查系统要求..."
 
-    # 检查操作系统
     if [[ ! "$OSTYPE" == "linux-gnu"* ]]; then
-        log_error "不支持的操作系统: $OSTYPE"
+        log_error "不支持的操作系统: $OSTYPE（采集器需要 Linux + Docker）"
         exit 1
     fi
 
-    # 检查内存
+    local total_mem
     total_mem=$(free -g | awk '/^Mem:/{print $2}')
-    if [ "$total_mem" -lt 8 ]; then
-        log_warn "建议至少8GB内存，当前: ${total_mem}GB"
+    if [ "$total_mem" -lt 4 ]; then
+        log_warn "建议至少 4GB 内存，当前: ${total_mem}GB"
     fi
 
-    # 检查磁盘空间
-    disk_space=$(df -BG . | awk 'NR==2 {print $4}' | sed 's/G//')
-    if [ "$disk_space" -lt 50 ]; then
-        log_error "磁盘空间不足，至少需要50GB，当前: ${disk_space}GB"
+    local disk_space
+    disk_space=$(df -BG "${REPO_ROOT}" | awk 'NR==2 {print $4}' | sed 's/G//')
+    if [ "${disk_space}" -lt 20 ]; then
+        log_error "磁盘空间不足，至少需要 20GB，当前: ${disk_space}GB"
         exit 1
     fi
 
     log_info "系统要求检查通过 ✓"
 }
 
-# 检查并安装Docker
+# ---------- 检查并安装 Docker ----------
 install_docker() {
     if command -v docker &> /dev/null; then
-        log_info "Docker已安装: $(docker --version)"
-        return
+        log_info "Docker 已安装: $(docker --version)"
+    else
+        log_info "安装 Docker..."
+        curl -fsSL https://get.docker.com | sh
+        sudo usermod -aG docker "$USER"
+        log_warn "已把 ${USER} 加入 docker 组，需重新登录后生效"
     fi
-
-    log_info "安装Docker..."
-    curl -fsSL https://get.docker.com | sh
-    sudo usermod -aG docker $USER
-
-    log_info "Docker安装完成 ✓"
 }
 
-# 检查并安装Docker Compose
-install_docker_compose() {
-    if command -v docker-compose &> /dev/null; then
-        log_info "Docker Compose已安装: $(docker-compose --version)"
+# ---------- 探测 docker compose ----------
+setup_compose_cmd() {
+    log_info "检查 Docker Compose..."
+
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD=(docker compose)
+        log_info "使用插件式: $(docker compose version --short 2>/dev/null || echo 'docker compose')"
         return
     fi
 
-    log_info "安装Docker Compose..."
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+    if command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD=(docker-compose)
+        log_info "使用独立命令: $(docker-compose --version)"
+        return
+    fi
+
+    log_info "安装 Docker Compose 插件..."
+    sudo apt-get update -qq || true
+    sudo apt-get install -y docker-compose-plugin || \
+        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 
-    log_info "Docker Compose安装完成 ✓"
+    if docker compose version &> /dev/null; then
+        COMPOSE_CMD=(docker compose)
+    elif command -v docker-compose &> /dev/null; then
+        COMPOSE_CMD=(docker-compose)
+    else
+        log_error "Docker Compose 安装失败"
+        exit 1
+    fi
 }
 
-# 创建必要的目录
-create_directories() {
-    log_info "创建目录结构..."
-
-    mkdir -p data/{loki,grafana,wazuh,prometheus,redis,postgres}
-    mkdir -p logs
-    mkdir -p configs/{wazuh,loki,grafana,alert}
-    mkdir -p backups
-
-    log_info "目录创建完成 ✓"
+# ---------- 校验 compose 文件存在 ----------
+check_compose_file() {
+    if [ ! -f "${COMPOSE_FILE}" ]; then
+        log_error "找不到 compose 文件: ${COMPOSE_FILE}"
+        log_error "请确认克隆的是完整仓库（该文件在 src/collectors/ 下）"
+        exit 1
+    fi
+    log_info "compose 文件: ${COMPOSE_FILE}"
 }
 
-# 配置环境变量
+# ---------- 配置环境变量 ----------
 setup_env() {
     log_info "配置环境变量..."
 
-    if [ ! -f .env ]; then
-        cp .env.example .env
-        log_warn "请编辑 .env 文件配置必要的环境变量"
-        log_warn "特别是 API keys 和密码配置"
+    if [ ! -f "${ENV_FILE}" ]; then
+        local example="${REPO_ROOT}/.env.example"
+        if [ -f "${example}" ]; then
+            cp "${example}" "${ENV_FILE}"
+            log_warn "已从 .env.example 生成 .env"
+        else
+            log_warn "未找到 .env.example，跳过 .env 生成"
+        fi
     else
-        log_info ".env 文件已存在"
+        log_info ".env 已存在"
     fi
 
-    log_info "环境变量配置完成 ✓"
+    if [ -f "${ENV_FILE}" ]; then
+        # shellcheck disable=SC1090
+        set -a; source "${ENV_FILE}"; set +a
+        log_info "已加载 .env"
+    fi
+
+    if [ -z "${MINISOC_API_KEY:-}" ]; then
+        log_warn "MINISOC_API_KEY 未配置——采集器将无法上报数据"
+        log_warn "请在 .env 里填入后端「扫描器/MCP Key」页面签发的 Key"
+    fi
 }
 
-# 拉取Docker镜像
+# ---------- 拉取镜像 ----------
 pull_images() {
-    log_info "拉取Docker镜像（这可能需要一些时间）..."
-
-    docker-compose pull
-
-    log_info "Docker镜像拉取完成 ✓"
+    log_info "拉取/构建镜像（首次会现场 build，可能需要几分钟）..."
+    "${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" pull || \
+        log_warn "部分镜像拉取失败，将改为本地构建"
+    "${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" build
+    log_info "镜像准备完成 ✓"
 }
 
-# 启动服务
+# ---------- 启动服务 ----------
 start_services() {
-    log_info "启动AI-miniSOC服务..."
-
-    docker-compose up -d
-
-    log_info "等待服务启动..."
-    sleep 10
-
-    log_info "服务启动完成 ✓"
+    log_info "启动采集器服务..."
+    "${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" up -d
+    log_info "服务已启动，等待健康检查..."
 }
 
-# 检查服务状态
-check_services() {
-    log_info "检查服务状态..."
-
-    services=$(docker-compose ps --services)
-    for service in $services; do
-        status=$(docker-compose ps -q $service | xargs docker inspect --format='{{.State.Status}}' 2>/dev/null)
-        if [ "$status" == "running" ]; then
-            log_info "$service: 运行中 ✓"
-        else
-            log_warn "$service: 未运行 (状态: $status)"
+# ---------- 轮询健康检查（不用固定 sleep） ----------
+wait_healthy() {
+    local timeout="${1:-120}"
+    local waited=0
+    while [ "${waited}" -lt "${timeout}" ]; do
+        local unhealthy
+        unhealthy=$("${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" ps \
+            --format '{{.Service}} {{.Health}}' 2>/dev/null | grep -c 'unhealthy\|starting' || true)
+        if [ "${unhealthy}" -eq 0 ]; then
+            log_info "全部服务健康 ✓"
+            return 0
         fi
+        sleep 5
+        waited=$((waited + 5))
     done
+    log_warn "等待 ${timeout}s 后仍有服务未就绪，继续（可用 docker compose ps 查看）"
+    return 0
 }
 
-# 显示访问信息
+# ---------- 检查服务状态 ----------
+check_services() {
+    log_info "服务状态："
+    "${COMPOSE_CMD[@]}" -f "${COMPOSE_FILE}" ps || true
+}
+
+# ---------- 显示访问信息 ----------
 show_access_info() {
+    local admin_password="${DEFAULT_ADMIN_PASSWORD:-Admin@123456}"
+
     echo ""
     log_info "========================================"
-    log_info "AI-miniSOC 安装完成！"
+    log_info "AI-miniSOC 采集器安装完成！"
     log_info "========================================"
     echo ""
-    log_info "服务访问地址:"
-    echo "  • Grafana:      http://localhost:3000"
-    echo "  • Wazuh:        https://localhost:55000"
-    echo "  • Loki:         http://localhost:3100"
-    echo "  • Prometheus:   http://localhost:9090"
+    log_info "【AI-miniSOC 后台登录】"
+    echo "  • 地址:     http://<后端地址>:8000  （前端见 nginx 配置）"
+    echo "  • 用户名:   admin"
+    echo "  • 密码:     ${admin_password}"
     echo ""
-    log_info "默认凭据:"
-    echo "  • Grafana用户名: admin"
-    echo "  • Grafana密码:   admin"
-    echo "  • Wazuh用户名:   admin"
-    echo "  • Wazuh密码:     请查看 .env 文件"
+    log_warn "以上为出厂默认密码，首次登录后请立即在「系统管理 → 用户管理」修改！"
     echo ""
-    log_warn "请修改默认密码！"
+    log_info "【可选依赖服务】（compose 文件里默认不含，按需单独部署）"
+    echo "  • Grafana:    http://localhost:3000   admin/admin"
+    echo "  • Wazuh:      https://localhost:55000 admin / 见 .env"
+    echo "  • Loki:       http://localhost:3100"
+    echo "  • Prometheus: http://localhost:9090"
     echo ""
-    log_info "查看日志:"
-    echo "  docker-compose logs -f [service_name]"
+    log_info "常用命令（在 ${COLLECTORS_DIR} 下执行，或加 -f ${COMPOSE_FILE}）:"
+    echo "  查看日志:   ${COMPOSE_CMD[*]} -f ${COMPOSE_FILE} logs -f [service]"
+    echo "  重启:       ${COMPOSE_CMD[*]} -f ${COMPOSE_FILE} restart"
+    echo "  停止:       ${COMPOSE_CMD[*]} -f ${COMPOSE_FILE} down"
     echo ""
-    log_info "停止服务:"
-    echo "  docker-compose down"
+    echo "提示：采集器需要后端已启动并已配置 DB，数据库初始化见 README「快速开始」。"
     echo ""
 }
 
-# 主安装流程
+# ---------- 主流程 ----------
 main() {
-    log_info "开始安装AI-miniSOC..."
+    log_info "开始安装 AI-miniSOC 采集器..."
+    echo "  仓库根目录: ${REPO_ROOT}"
     echo ""
 
     check_requirements
     install_docker
-    install_docker_compose
-    create_directories
+    setup_compose_cmd
+    check_compose_file
     setup_env
     pull_images
     start_services
+    wait_healthy "${WAIT_TIMEOUT:-120}"
     check_services
     show_access_info
 
     log_info "安装脚本执行完成！"
 }
 
-# 执行主函数
 main "$@"

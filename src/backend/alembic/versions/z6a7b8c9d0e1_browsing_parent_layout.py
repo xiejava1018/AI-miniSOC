@@ -6,12 +6,15 @@
 
 修法（沿用 /assets 同款 UPDATE … WHERE）：把 component 改成 /index/index。
 
-幂等：WHERE id=22 AND component IS NULL → 已修过的库跳过。
+幂等：WHERE path='/browsing' AND parent_id IS NULL AND component IS NULL → 已修过的库跳过。
 
 不改：
   - parent name='行为检测' → '上网行为'（CLAUDE.md 既有遗留；UI 标题走 meta.title='上网行为'）
   - 子菜单 7 项保持不变
   - 父菜单 sort_order/icon/path 不动
+
+2026-10（issue #12）：原写 `WHERE id = 22`（硬编码生产库 id）。空库上 22 号是别的
+菜单，这条 UPDATE 会去改无关菜单的 component。改为按 path 定位（红线②）。
 
 Revision ID: z6a7b8c9d0e1
 Revises: y4z5a6b7c8d9
@@ -27,13 +30,15 @@ down_revision: Union[str, Sequence[str], None] = "a6b7c8d9e0f1"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_ROOT = "path = '/browsing' AND parent_id IS NULL"
+
 
 def upgrade() -> None:
     bind = op.get_bind()
     # 沿用 /assets / /system 同款：父菜单 component = /index/index（Layout 包裹）
     bind.execute(sa.text(
         "UPDATE soc_menus SET component = '/index/index', updated_at = NOW() "
-        "WHERE id = 22 AND component IS NULL"
+        "WHERE " + _ROOT + " AND component IS NULL"
     ))
 
 
@@ -41,5 +46,5 @@ def downgrade() -> None:
     bind = op.get_bind()
     bind.execute(sa.text(
         "UPDATE soc_menus SET component = NULL, updated_at = NOW() "
-        "WHERE id = 22 AND component = '/index/index'"
+        "WHERE " + _ROOT + " AND component = '/index/index'"
     ))

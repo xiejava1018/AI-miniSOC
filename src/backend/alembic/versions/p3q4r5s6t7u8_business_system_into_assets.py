@@ -81,6 +81,10 @@ def upgrade() -> None:
     # ------------------------------------------------------------------------
     # 2. 业务系统菜单：移到 /assets 下 + 改名「业务系统」+ component 路径调整
     # ------------------------------------------------------------------------
+    # 2026-10（issue #12）：原写 `parent_id = 5`（硬编码生产库 /system 的 id）。
+    # 空库上 /system 并非 id=5，这条 UPDATE 静默 0 行 → 菜单留在 /system 下，
+    # 而 k0m1n2o3p4q5 基线已在 /assets 下种了同名菜单 → 出现重复菜单。
+    # 改为按 path 反查父菜单（不硬编码 id）。
     bind.execute(sa.text("""
         UPDATE soc_menus
         SET parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL),
@@ -88,7 +92,37 @@ def upgrade() -> None:
             title = '业务系统',
             component = '/asset/business-system/index',
             sort_order = 3
-        WHERE path = 'business-system' AND parent_id = 5
+        WHERE path = 'business-system'
+          AND parent_id = (SELECT id FROM soc_menus WHERE path = '/system' AND parent_id IS NULL)
+    """))
+
+    # 若 /assets 下已经有同名菜单（k0m1n2o3p4q5 基线已种），刚移过来的这份就是
+    # 重复行 —— 同 path 同 component 会让前端生成两条一模一样的路由。
+    # 同 (parent_id, path) 只保留最早插入的一行，其余删掉（连带其授权）。
+    bind.execute(sa.text("""
+        DELETE FROM soc_role_menus
+        WHERE menu_id IN (
+            SELECT id FROM soc_menus
+            WHERE path = 'business-system'
+              AND parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL)
+              AND id NOT IN (
+                  SELECT min(id) FROM soc_menus
+                  WHERE path = 'business-system'
+                    AND parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL)
+                  GROUP BY parent_id, path
+              )
+        )
+    """))
+    bind.execute(sa.text("""
+        DELETE FROM soc_menus
+        WHERE path = 'business-system'
+          AND parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL)
+          AND id NOT IN (
+              SELECT min(id) FROM soc_menus
+              WHERE path = 'business-system'
+                AND parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL)
+              GROUP BY parent_id, path
+          )
     """))
 
 
@@ -98,12 +132,13 @@ def downgrade() -> None:
     # 1. 业务系统移回 /system
     bind.execute(sa.text("""
         UPDATE soc_menus
-        SET parent_id = 5,
+        SET parent_id = (SELECT id FROM soc_menus WHERE path = '/system' AND parent_id IS NULL),
             name = 'business-system',
             title = '业务系统管理',
             component = '/system/business-system/index',
             sort_order = 8
-        WHERE path = 'business-system' AND parent_id = 2
+        WHERE path = 'business-system'
+          AND parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL)
     """))
 
     # 2. /assets 子菜单 sort 回原状

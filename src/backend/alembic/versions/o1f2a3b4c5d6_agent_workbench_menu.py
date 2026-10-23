@@ -27,11 +27,12 @@ def upgrade() -> None:
     bind.execute(sa.text(
         "INSERT INTO soc_menus (parent_id, name, title, path, icon, sort_order, "
         "  is_visible, component, permissions) "
-        "SELECT 2, '资产数字员工', '资产数字员工', 'agent-workbench', "
+        "SELECT p.id, '资产数字员工', '资产数字员工', 'agent-workbench', "
         "  'ri:robot-2-line', 14, TRUE, '/asset/agent-workbench/index', "
         "  CAST(:perms AS jsonb) "
-        "WHERE NOT EXISTS ("
-        "  SELECT 1 FROM soc_menus WHERE parent_id = 2 "
+        "FROM soc_menus p WHERE p.path = '/assets' AND p.parent_id IS NULL "
+        "  AND NOT EXISTS ("
+        "  SELECT 1 FROM soc_menus WHERE parent_id = p.id "
         "    AND path = 'agent-workbench')"),
         {"perms": _MENU_PERMS},
     )
@@ -39,7 +40,8 @@ def upgrade() -> None:
     bind.execute(sa.text(
         "INSERT INTO soc_role_menus (role_id, menu_id, permissions) "
         "SELECT r.id, m.id, CAST('[\"view\"]' AS jsonb) "
-        "FROM soc_roles r JOIN soc_menus m ON m.parent_id = 2 "
+        "FROM soc_roles r JOIN soc_menus p ON p.path = '/assets' AND p.parent_id IS NULL "
+        "        JOIN soc_menus m ON m.parent_id = p.id "
         "  AND m.path = 'agent-workbench' "
         "WHERE r.code IN ('admin', 'operator', 'viewer', 'auditor') "
         "  AND NOT EXISTS (SELECT 1 FROM soc_role_menus rm "
@@ -50,7 +52,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     bind.execute(sa.text(
         "DELETE FROM soc_role_menus rm USING soc_menus m "
-        "WHERE rm.menu_id = m.id AND m.parent_id = 2 "
+        "WHERE rm.menu_id = m.id AND m.parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) "
         "  AND m.path = 'agent-workbench'"))
     bind.execute(sa.text(
-        "DELETE FROM soc_menus WHERE parent_id = 2 AND path = 'agent-workbench'"))
+        "DELETE FROM soc_menus WHERE parent_id = (SELECT id FROM soc_menus WHERE path = '/assets' AND parent_id IS NULL) AND path = 'agent-workbench'"))
