@@ -519,8 +519,10 @@ class ImpactAnalysisService:
     # ---------- 内部：GLM / 模板 ----------
 
     def _glm_report(self, facts: dict, description: str, window_hours: int) -> tuple[Optional[dict], str]:
-        if not ai_budget.allow():
-            return None, "template"
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 / report_generator 同日修法）：
+        # 之前这里先 ai_budget.allow() 消耗掉限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然间隔 0s 被 QPS 拒 → 变更影响分析永远降级模板。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         if not getattr(settings, "GLM_API_KEY", None):
             from app.services.ai_client import ai_provider_available
             if not ai_provider_available():
@@ -556,6 +558,7 @@ class ImpactAnalysisService:
                 system=sys_prompt,
                 temperature=0.3,
                 max_tokens=900,
+                wait=True,   # 用户主动触发：等限流间隔重试，不直接降级
             )
             parsed = self._parse_glm_json(text)
             return parsed, "glm"

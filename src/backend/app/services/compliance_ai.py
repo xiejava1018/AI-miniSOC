@@ -148,8 +148,10 @@ class ComplianceAIService:
         return "\n".join(parts)
 
     def _glm_remediation(self, f: ComplianceFinding, rule: dict) -> Optional[str]:
-        if not ai_budget.allow():
-            return None
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 修法）：
+        # 之前先 ai_budget.allow() 消耗限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然被 QPS 拒 → 合规 AI 解读永远降级。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         asset = self.db.query(Asset).filter(Asset.id == f.asset_id).first()
         if not asset:
             return None
@@ -177,7 +179,7 @@ class ComplianceAIService:
                 f"类型 {asset.asset_type}，重要度 {asset.criticality}，"
                 f"暴露面 {asset.exposure_level}，系统 {os_label}）"
             )
-            text = ai_chat(prompt, scene="compliance", temperature=0.3)
+            text = ai_chat(prompt, scene="compliance", temperature=0.3, wait=True)
             ai_budget.record_success()
             if len(text) < 20:
                 return None

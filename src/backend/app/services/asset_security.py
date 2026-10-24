@@ -135,8 +135,10 @@ class AssetSecurityService:
         return "。".join(parts) + "。（统计口径生成，AI 摘要暂不可用）"
 
     def _generate_glm(self, stats: dict) -> Optional[str]:
-        if not ai_budget.allow():
-            return None
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 修法）：
+        # 之前先 ai_budget.allow() 消耗限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然被 QPS 拒 → 资产安全摘要永远降级。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         try:
             from app.services.ai_client import ai_chat
             compact = {
@@ -152,7 +154,7 @@ class AssetSecurityService:
                 "引用具体数字；若告警为 0 且无事件，如实说明并给一条加固建议；不要寒暄、不要罗列全部数据。\n"
                 f"统计数据(JSON): {json.dumps(compact, ensure_ascii=False)}"
             )
-            text = ai_chat(prompt, scene="ai_analysis", temperature=0.3)
+            text = ai_chat(prompt, scene="ai_analysis", temperature=0.3, wait=True)
             ai_budget.record_success()
             return text or None
         except Exception as e:

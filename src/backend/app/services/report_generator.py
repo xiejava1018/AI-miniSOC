@@ -200,6 +200,8 @@ class SecurityReportService:
         self.db = db
         self.alert_svc = AlertQueryService(db)
         self.risk_svc = AssetRiskService(db)
+        # 最近一次 AI 降级原因（写入 data_coverage.ai_degrade_reason）
+        self._last_ai_error: Optional[str] = None
 
     # ---------- 主入口 ----------
 
@@ -229,6 +231,7 @@ class SecurityReportService:
         content = self._build_content(facts, coverage)
 
         # 5. AI 三段
+        ai_reason: Optional[str] = None
         if force_glm:
             text, source = self._glm_report(facts, coverage)
             if text is None:
@@ -237,6 +240,21 @@ class SecurityReportService:
         else:
             text = self._template_report(facts, coverage)
             source = "template"
+            ai_reason = "未启用 AI 解读（请求参数 force_glm=false）"
+
+        # 2026-10-24：把「本次到底是 AI 生成还是模板降级 + 降级原因」写进
+        # data_coverage。之前 source 变量算完就丢，报告里没有任何字段能说明
+        # 「我明明开了 AI 解读，为什么显示未启用」——用户只能看到模板文案，
+        # 无从判断是熔断/配额/限流/模型返回格式不对。
+        coverage = dict(coverage or {})
+        coverage["ai_source"] = source
+        coverage["ai_degraded"] = source != "glm"
+        if ai_reason:
+            coverage["ai_degrade_reason"] = ai_reason
+        elif self._last_ai_error:
+            coverage["ai_degrade_reason"] = self._last_ai_error
+        else:
+            coverage.pop("ai_degrade_reason", None)
 
         # 6. 落库
         title = self._build_title(report_type, start, end, facts)
@@ -493,12 +511,19 @@ class SecurityReportService:
     # ---------- AI 报告 / 模板降级 ----------
 
     def _glm_report(self, facts: dict, coverage: dict) -> tuple[Optional[dict], str]:
-        if not ai_budget.allow():
-            logger.info("安全报告降级为模板：AI 预算/限流不允许")
-            return None, "template"
+        # 降级原因暂存，供 generate() 写入 data_coverage.ai_degrade_reason
+        self._last_ai_error = None
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 的修法）：
+        # 之前这里先 ai_budget.allow() 消耗掉限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然间隔 0s 被 QPS 拒 → 报告「AI 解读未启用」100% 复现。
+        # 生产日志实证：2026-10-24 4 次报告生成全部报
+        #   「安全报告 GLM 调用失败，降级模板: AI 调用过于频繁（限流间隔 0.5s）」
+        # 现在去掉外层 allow()，由 ai_chat(wait=True) 统一限流：
+        # QPS 违例等 0.5s 重试，而不是直接降级（用户主动点「生成」的场景）。
         if not getattr(settings, "GLM_API_KEY", None):
             from app.services.ai_client import ai_provider_available
             if not ai_provider_available():
+                self._last_ai_error = "未配置可用的 AI Provider（配置中心与 .env 均无）"
                 return None, "template"
         try:
             from app.services.ai_client import ai_chat
@@ -529,12 +554,20 @@ class SecurityReportService:
                 system=sys_prompt,
                 temperature=0.3,
                 max_tokens=900,
+                # 用户主动点「生成」：QPS 违例等限流间隔重试，而不是直接降级
+                wait=True,
+                # AI Provider 配在配置中心（soc_ai_providers），不传 db 就只能
+                # 回落 env GLM_*；传 db 才能按 scene 路由到正确的 provider。
+                db=self.db,
             )
             parsed = self._parse_glm_json(text)
             if parsed:
                 return parsed, "glm"
+            # 模型返回了但不是预期 JSON 格式：也算降级，得说清楚
+            self._last_ai_error = "AI 返回内容不是预期 JSON 格式，已降级为规则模板"
         except Exception as exc:  # noqa: BLE001 — AI 失败绝不阻塞报告生成
             ai_budget.record_failure()
+            self._last_ai_error = str(exc)
             logger.warning("安全报告 GLM 调用失败，降级模板: %s", exc)
         return None, "template"
 

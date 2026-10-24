@@ -164,8 +164,10 @@ class KnowledgeService:
         }
 
     def _glm_extract(self, inc: Incident) -> Optional[dict]:
-        if not ai_budget.allow():
-            return None
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 修法）：
+        # 之前先 ai_budget.allow() 消耗限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然被 QPS 拒 → 知识抽取永远降级。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         try:
             from app.services.ai_client import ai_chat
             ai_part = ""
@@ -187,7 +189,7 @@ class KnowledgeService:
                 f"处理备注: {(inc.resolution_notes or '')[:600]}"
                 f"{ai_part}"
             )
-            content = ai_chat(prompt, scene="knowledge", temperature=0.2)
+            content = ai_chat(prompt, scene="knowledge", temperature=0.2, wait=True)
             ai_budget.record_success()
             m = re.search(r"\{.*\}", content or "", re.S)
             if not m:
@@ -299,8 +301,7 @@ class KnowledgeService:
 
     def _rerank(self, question: str, candidates: list) -> Optional[list]:
         """GLM rerank：返回按相关性排序的 id 列表；不可用返回 None。"""
-        if not ai_budget.allow():
-            return None
+        # 2026-10-24 同上：去掉外层 allow()，避免与 ai_chat 内部二次限流冲突。
         try:
             from app.services.ai_client import ai_chat
             docs = [{"id": str(k.id), "title": k.title,
@@ -310,7 +311,7 @@ class KnowledgeService:
                 "只输出 JSON 数组（按相关性降序的 id 列表），不要其他文字。\n"
                 f"用户问题: {question}\n候选知识: {json.dumps(docs, ensure_ascii=False)}"
             )
-            content = ai_chat(prompt, scene="knowledge", temperature=0.1)
+            content = ai_chat(prompt, scene="knowledge", temperature=0.1, wait=True)
             ai_budget.record_success()
             m = re.search(r"\[.*\]", content or "", re.S)
             if not m:

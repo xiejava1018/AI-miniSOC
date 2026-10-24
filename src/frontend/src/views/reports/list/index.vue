@@ -64,6 +64,8 @@
           <div class="ri-meta">
             <span>{{ r.triggered_by }}</span>
             <span v-if="r.data_coverage?.data_degraded" class="warn">数据降级</span>
+            <span v-if="r.data_coverage?.ai_degraded" class="warn">未用 AI</span>
+            <span v-else-if="r.data_coverage?.ai_source === 'glm'" class="ai-ok">AI 解读</span>
           </div>
         </div>
         <div class="pager">
@@ -129,6 +131,34 @@
           </ElAlert>
           <ElAlert v-else type="success" :closable="false" show-icon class="coverage-alert">
             <template #title>数据完整，本次报告覆盖窗口无缺口</template>
+          </ElAlert>
+
+          <!-- AI 解读状态：降级时必须说清楚原因，否则用户只看到「AI 解读未启用」无从排查 -->
+          <ElAlert
+            v-if="selected.data_coverage?.ai_degraded"
+            type="info"
+            :closable="false"
+            show-icon
+            class="coverage-alert"
+          >
+            <template #title> 本次报告为规则模板输出，未使用 AI 解读 </template>
+            <div class="coverage-body">
+              <div class="gap-reason">
+                {{
+                  selected.data_coverage.ai_degrade_reason ||
+                  '未开启 AI 解读，或 AI 调用未成功返回。'
+                }}
+              </div>
+            </div>
+          </ElAlert>
+          <ElAlert
+            v-else-if="selected.data_coverage?.ai_source === 'glm'"
+            type="success"
+            :closable="false"
+            show-icon
+            class="coverage-alert"
+          >
+            <template #title>本次报告由 AI 解读生成</template>
           </ElAlert>
 
           <!-- 执行摘要（AI） -->
@@ -503,6 +533,9 @@
 
           .warn {
             color: var(--el-color-warning);
+          }
+          .ai-ok {
+            color: var(--el-color-success);
           }
         }
       }

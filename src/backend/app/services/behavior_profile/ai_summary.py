@@ -113,9 +113,11 @@ class ProfileAIService:
     def _glm_summary(self, facts: dict) -> tuple[Optional[dict], str]:
         if not getattr(settings, "GLM_API_KEY", None):
             return None, "template"
-        if not ai_budget.allow():
-            logger.info("画像 AI：预算熔断中，走模板")
-            return None, "template"
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 修法）：
+        # 之前先 ai_budget.allow() 消耗限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然被 QPS 拒 → 画像 AI 永远走模板
+        # （生产日志 2026-10-20 实锤「AI 调用过于频繁（限流间隔 0.5s）」）。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         try:
             from app.services.ai_client import ai_chat
 
@@ -125,6 +127,7 @@ class ProfileAIService:
                 scene="behavior",
                 system="你是企业内网安全审计助手，只基于给定事实输出，不编造。",
                 temperature=0.3,
+                wait=True,   # 用户主动触发：等限流间隔重试，不直接降级
             )
             ai_budget.record_success()
             parsed = self._parse_json(text)

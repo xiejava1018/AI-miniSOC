@@ -465,9 +465,10 @@ class AssetRiskService:
         ):
             return asset.risk_summary, "cached"
 
-        if not ai_budget.allow():
-            return self._fallback_summary(asset, breakdown), "rule"
-
+        # 2026-10-24 修双重限流（同 reconcile_ai 10-18 修法）：
+        # 之前先 ai_budget.allow() 消耗限流间隔，ai_chat 内部又 allow()
+        # → 第二次必然被 QPS 拒 → 风险摘要永远降级规则模板。
+        # 去掉外层 allow()，由 ai_chat(wait=True) 统一限流。
         try:
             from app.services.ai_client import ai_chat
             compact = {
@@ -484,7 +485,7 @@ class AssetRiskService:
                 f"OS: {(asset.os_name or '')} {(asset.os_version or '')}".strip() + "\n"
                 f"评分明细(JSON): {json.dumps(compact, ensure_ascii=False)}"
             )
-            text = ai_chat(prompt, scene="risk", temperature=0.3)
+            text = ai_chat(prompt, scene="risk", temperature=0.3, wait=True)
             ai_budget.record_success()
             if text:
                 return text, "glm"
