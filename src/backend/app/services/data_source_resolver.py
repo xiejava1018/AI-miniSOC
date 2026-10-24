@@ -260,16 +260,23 @@ class DataSourceResolver:
     def _resolve_ai_uncached(
         self, scene: Optional[str], db: Optional[Session]
     ) -> ResolvedConfig:
-        """查 soc_ai_providers（AI 配置独立表，2026-09-13 拆分）。"""
+        """查 soc_ai_providers（AI 配置独立表，2026-09-13 拆分）。
+
+        2026-10-24 修「停用模型后 AI 照旧能用」：
+        旧逻辑只筛 `enabled=True`，全部停用时 rows 为空 → 直接跳到 env 回落
+        → 停用操作完全无效，用户在配置中心看到「停用」但 AI 应用照常工作。
+        现在区分两种情况：
+          - 表里**没有任何实例**（从未配置）→ 回落 env GLM_*（迁移期零中断，
+            设计规格 §3.4.2 G4 约定，老部署不受影响）；
+          - 有实例但**全部停用**（用户明确关掉了）→ 不回落 env，直接返回
+            无配置，AI 功能降级为不可用。这是用户表达的明确意图，必须尊重。
+        """
         if db is not None:
             try:
                 from app.models.ai_provider import AIProvider
 
-                rows = (
-                    db.query(AIProvider)
-                    .filter(AIProvider.enabled.is_(True))
-                    .all()
-                )
+                all_rows = db.query(AIProvider).all()
+                rows = [p for p in all_rows if p.enabled]
                 if rows:
                     # 1) 精确场景路由
                     for p in rows:
@@ -286,6 +293,15 @@ class DataSourceResolver:
                         rows[0].provider_code,
                     )
                     return self._ai_provider_to_config(rows[0])
+
+                if all_rows:
+                    # 有实例但全部停用 → 用户明确关闭，不回落 env
+                    logger.warning(
+                        "全部 AI Provider 均已停用（%d 个），AI 功能不可用，"
+                        "不回落 env GLM_*",
+                        len(all_rows),
+                    )
+                    return ResolvedConfig(config={}, origin="none", source_code=None)
             except Exception as e:
                 logger.warning("resolve_ai 读 DB 失败（fallback env）：err=%s", e)
         return self.resolve("ai", db)

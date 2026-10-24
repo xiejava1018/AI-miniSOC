@@ -12,6 +12,11 @@ export function getAIScenes() {
   return request.get({ url: `${BASE}/scenes` })
 }
 
+/** AI 当前生效状态（用于页面顶部提示：用的是配置中心实例 / env 回落 / 全部停用） */
+export function getAIProviderStatus() {
+  return request.get({ url: `${BASE}/status`, keepFullResponse: true })
+}
+
 export function getAIProvider(id: number) {
   return request.get({ url: `${BASE}/${id}` })
 }

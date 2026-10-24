@@ -27,9 +27,11 @@
         <ElButton type="primary" @click="showDialog()">+ 新增模型</ElButton>
       </div>
 
-      <!-- 回落状态提示：无实例时显式声明 env 回落生效中（防“看不到数据以为没配”的困惑） -->
+      <!-- 生效状态提示：显式告诉用户「AI 现在到底能不能用、用的是哪个」
+           2026-10-24：旧版只在「一条实例都没有」时提示，导致用户停用模型后
+           看到的是「停用」标签，但 AI 照旧能用（回落 .env）而完全不知情。 -->
       <ElAlert
-        v-if="!loading && rows.length === 0 && !searchKeyword"
+        v-if="!loading && aiStatus?.state === 'env'"
         type="info"
         :closable="false"
         show-icon
@@ -37,6 +39,33 @@
       >
         <template #title>当前未配置 AI 模型实例，全部 AI 功能回落 <b>.env GLM 环境变量</b>（glm-4-flash）生效中</template>
         新增实例并测试通过后，勾选场景即可让对应功能（报告/查询/画像等）切换到该模型，60 秒内生效、无需重启；未勾选场景继续用默认实例或环境变量回落。
+      </ElAlert>
+
+      <ElAlert
+        v-else-if="!loading && aiStatus?.state === 'disabled'"
+        type="error"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      >
+        <template #title>全部 AI 模型实例已停用，AI 功能当前不可用</template>
+        停用后<b>不会</b>回落 .env GLM 环境变量——这是为了让你能真正关掉 AI。
+        报告解读 / 资产查询 / 画像解读等 AI 功能会降级为规则模板或直接报错。
+        需要恢复请把对应实例重新启用。
+      </ElAlert>
+
+      <ElAlert
+        v-else-if="!loading && aiStatus?.state === 'db'"
+        type="success"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 12px"
+      >
+        <template #title>
+          AI 功能生效中，当前使用配置中心的模型实例
+          <template v-if="aiStatus.source_code">（{{ aiStatus.source_code }}）</template>
+        </template>
+        停用某个实例后，若它仍是该场景的唯一可用实例，对应 AI 功能将不可用（不会回落 .env）。
       </ElAlert>
 
       <ArtTable
@@ -170,6 +199,7 @@ const activeTab = ref('providers')
 import {
   getAIProviderList,
   getAIScenes,
+  getAIProviderStatus,
   addAIProvider,
   updateAIProvider,
   deleteAIProvider,
@@ -185,6 +215,19 @@ const rows = ref<any[]>([])
 const searchKeyword = ref('')
 const sceneOptions = ref<{ value: string; label: string }[]>([])
 const paginationState = reactive({ current: 1, size: 20, total: 0 })
+
+// AI 当前生效状态（2026-10-24）：
+//   db       —— 用配置中心的模型实例
+//   env      —— 没有任何实例，全部回落 .env GLM_*
+//   disabled —— 有实例但全部停用，AI 不可用（不会回落 .env）
+const aiStatus = ref<{
+  state: string
+  detail: string
+  instance_count: number
+  enabled_count: number
+  origin?: string
+  source_code?: string
+} | null>(null)
 
 const drawerVisible = ref(false)
 const isEdit = ref(false)
@@ -342,6 +385,16 @@ async function getData() {
   } finally {
     loading.value = false
   }
+  await loadStatus()
+}
+
+async function loadStatus() {
+  try {
+    const res: any = await getAIProviderStatus()
+    aiStatus.value = (res?.data || res) || null
+  } catch {
+    aiStatus.value = null
+  }
 }
 
 async function loadScenes() {
@@ -443,6 +496,17 @@ async function onSetDefault(row: any) {
 }
 
 async function onToggle(row: any) {
+  // 2026-10-24：停用前说清楚后果——停用后不再回落 .env，AI 会真的不可用。
+  if (row.enabled) {
+    const remaining = rows.value.filter((r) => r.enabled && r.id !== row.id).length
+    if (remaining === 0) {
+      await ElMessageBox.confirm(
+        '停用后若无其他启用实例，AI 功能将直接不可用（不会回落 .env GLM 环境变量）。确定停用？',
+        '停用确认',
+        { type: 'warning' }
+      )
+    }
+  }
   await updateAIProvider(row.id, { enabled: !row.enabled })
   await getData()
 }

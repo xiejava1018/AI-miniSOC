@@ -45,6 +45,13 @@ def _resolve_provider(scene: Optional[str], db: Optional[Any] = None) -> Dict[st
     resolved = data_source_resolver.resolve_ai(scene, db)
     cfg = resolved.config or {}
     if not cfg.get("endpoint") or not cfg.get("password"):
+        # 区分两种「不可用」，否则用户看到的提示会误导排查方向：
+        #   - origin="none" 且 DB 里有实例 → 实例被停用（用户主动关的）
+        #   - 其他 → 从未配置过（迁移期回落 env 也没有）
+        if resolved.origin == "none":
+            raise AIClientError(
+                "AI 模型已在配置中心全部停用，AI 功能不可用（请启用实例或改用 .env GLM_*）"
+            )
         raise AIClientError("AI Provider 未配置（数据源管理与 .env 均无可用配置）")
     return cfg
 

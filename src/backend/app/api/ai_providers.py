@@ -54,6 +54,47 @@ async def list_scenes(
     return AISceneCatalog(scenes=SCENES)
 
 
+@router.get("/status", summary="AI 当前生效状态")
+async def ai_status(
+    current_user: UserResponseSchema = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回 AI 的实际生效来源，供配置中心显式展示。
+
+    2026-10-24：此前页面无法区分「没配实例 → 回落 .env」与
+    「配了但全停用 → 现在不可用」，用户看到「停用」却不知道 AI 还能不能用。
+    """
+    from app.models.ai_provider import AIProvider
+    from app.services.data_source_resolver import data_source_resolver
+
+    all_rows = db.query(AIProvider).all()
+    enabled_rows = [p for p in all_rows if p.enabled]
+
+    if enabled_rows:
+        state = "db"
+        detail = "使用配置中心的模型实例"
+    elif all_rows:
+        state = "disabled"
+        detail = "全部模型实例已停用，AI 功能当前不可用（不会回落 .env）"
+    else:
+        state = "env"
+        detail = "未配置模型实例，全部 AI 功能回落 .env GLM 环境变量"
+
+    resolved = data_source_resolver.resolve_ai(None, db)
+    return {
+        "code": 200,
+        "msg": "success",
+        "data": {
+            "state": state,
+            "detail": detail,
+            "instance_count": len(all_rows),
+            "enabled_count": len(enabled_rows),
+            "origin": resolved.origin,
+            "source_code": resolved.source_code,
+        },
+    }
+
+
 @router.get("/{provider_id}", response_model=AIProviderResponse)
 async def get_provider(
     provider_id: int,
