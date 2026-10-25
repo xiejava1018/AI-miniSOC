@@ -125,6 +125,18 @@ class Settings(BaseSettings):
     PUSH_SCHEDULER_ENABLED: bool = True
     PUSH_SCHEDULER_INTERVAL_MINUTES: int = 30  # 巡检周期（最小 5 分钟）
 
+    # F2.2 安全报告自动生成（weekly / monthly）
+    # 补齐「报告自动出」：此前只有 on_demand（用户点）与 incident_driven
+    # （外部 cron 调端点），weekly/monthly 无调度器，只能手动点。
+    # 运行时开关/时刻可用 soc_system_config[reports] 覆盖
+    # （auto_weekly_enabled / auto_weekly_weekday / auto_weekly_hour /
+    #  auto_monthly_enabled / auto_monthly_day / auto_monthly_hour）。
+    REPORT_SCHEDULER_ENABLED: bool = True
+    REPORT_SCHEDULER_WEEKLY_WEEKDAY: int = 0  # 周报生成日（0=周一 … 6=周日，同 Python weekday()）
+    REPORT_SCHEDULER_WEEKLY_HOUR: int = 8  # 周报生成整点小时（0-23）
+    REPORT_SCHEDULER_MONTHLY_DAY: int = 1  # 月报生成日（1-28；避免月末不存在）
+    REPORT_SCHEDULER_MONTHLY_HOUR: int = 8  # 月报生成整点小时（0-23）
+
     # OH-3.7 图谱慢查询告警（Session #11）
     GRAPH_PERF_MONITOR_ENABLED: bool = True  # 是否启动后台告警监控
     GRAPH_PERF_MONITOR_INTERVAL_SECONDS: int = 60  # 巡检周期（秒；最小 30s）

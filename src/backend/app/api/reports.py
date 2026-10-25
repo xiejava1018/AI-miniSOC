@@ -6,6 +6,7 @@ PRD 端点：
   GET  /api/v1/reports/latest              # 按类型取最新一份
   GET  /api/v1/reports/{report_id}         # 详情
   POST /api/v1/reports/check-incident-trigger   # 事件驱动触发检查（供 cron / 前端按钮）
+  POST /api/v1/reports/run-scheduler           # 手动跑一轮自动生成（weekly/monthly，admin only）
 
 错误约定：
   业务错误走响应中间件（body.code 非 200），HTTP 状态恒为 200。
@@ -22,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.core.permissions import require_button_permission
+from app.core.permissions import require_button_permission, require_role
 from app.models import User
 from app.models.security_report import REPORT_TYPES
 from app.services.report_generator import (
@@ -182,3 +183,29 @@ async def check_incident_trigger(
         payload["triggered"] = True
         payload["report"] = SecurityReportService._serialize(report)
     return {"code": 200, "msg": "ok", "data": payload}
+
+@router.post("/reports/run-scheduler", summary="手动跑一轮报告自动生成（weekly/monthly）")
+async def run_report_scheduler(
+    current_user: User = Depends(require_role("admin")),
+):
+    """手动触发一轮 weekly / monthly 自动生成。
+
+    用途：验证调度器行为（不必等到下一个定点）、补生成漏掉的报告。
+    与调度器走同一套「到期判定 + 周期幂等」逻辑——
+    该出的周期已生成过则跳过，不会重复出报告。
+
+    admin only：会真实生成报告（含 AI 调用），不是只读操作。
+    """
+    from app.services.report_scheduler import run_report_once
+
+    result = run_report_once()
+    return {
+        "code": 200,
+        "msg": "ok",
+        "data": {
+            "generated": [v for v in result.values() if v],
+            "weekly": result.get("weekly"),
+            "monthly": result.get("monthly"),
+            "note": "非到期周期会被跳过（幂等）",
+        },
+    }

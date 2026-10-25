@@ -91,6 +91,7 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 | 自然语言资产查询 L2（受限模板） | 同上（自动路由） | ✅ |
 | 风险摘要 | `GET /risk/overview` AI 解读 | ✅ |
 | AI 安全报告（F2.2） | `POST /reports/generate` | ✅ |
+| 报告定时生成（weekly/monthly） | `POST /reports/run-scheduler`（admin，手动跑一轮） | ✅ |
 | 变更影响分析（F3.1） | `POST /assets/impact-analysis` | ✅ |
 | 对账 AI 解读 | `GET /assets/reconciliation/{id}/ai-report` | ✅ |
 | 合规 AI 解读 | `POST /compliance/{id}/interpret` | ✅ |
@@ -102,6 +103,11 @@ AI-miniSOC 是一个**面向中小企业的轻量级 AI 安全运营中心**，�
 
 ### 6. 📋 安全报告与合规
 - **AI 安全报告** —— weekly / monthly / on_demand / incident_driven 四种触发
+  - `weekly` / `monthly`：**定时自动生成**（默认周一 08:00 / 每月 1 号 08:00，
+    可用 `soc_system_config[reports]` 或环境变量调整），生成后由主动推送场景 5
+    推「【报告就绪】」站内信
+  - `on_demand`：用户点按钮（自定义起止时间）
+  - `incident_driven`：critical+high 告警 ≥ 阈值自动触发（默认 3 条，阈值可配）
 - **合规基线** —— 内置 compliance_rules.yaml，AI 解读 + 规则模板降级
 - **脆弱性管理** —— CISA KEV 自动同步 + SCA + SCAP 多源接入
 - **资产详情 EOL** —— 生命周期管理 + operator 可手动覆盖

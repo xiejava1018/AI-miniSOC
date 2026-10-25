@@ -41,6 +41,11 @@ from app.services.push_scheduler import (
     start_push_scheduler,
     stop_push_scheduler,
 )
+# F2.2 安全报告自动生成调度器（weekly / monthly）
+from app.services.report_scheduler import (
+    start_report_scheduler,
+    stop_report_scheduler,
+)
 # OH-NOT-F2 Phase 2: 邮件投递 worker
 from app.services.email_notifier_worker import (
     start_email_notifier_worker,
@@ -114,6 +119,9 @@ async def lifespan(app: FastAPI):
     from app.services.asset_component_sync import start_asset_component_scheduler
     start_asset_component_scheduler()
     start_push_scheduler()
+    # F2.2 报告自动生成（weekly/monthly）：补齐「报告自动出」，
+    # 生成后由 push_scheduler 场景5 推站内信给用户。
+    start_report_scheduler()
     # OH-NOT-F2 Phase 2: 邮件投递 worker (60s tick 扫 pending dispatch_logs)
     if os.environ.get("EMAIL_NOTIFIER_ENABLED", "true").lower() == "true":
         start_email_notifier_worker()
@@ -148,7 +156,13 @@ async def lifespan(app: FastAPI):
         await stop_cisa_kev_scheduler()
         from app.services.asset_component_sync import stop_asset_component_scheduler
         await stop_asset_component_scheduler()
-        await stop_push_scheduler()
+        # stop_push_scheduler 是同步函数（返回 None）——不能 await，
+        # 否则 `await None` 抛 TypeError，会连带跳过后面 7 个 shutdown 步骤
+        # （邮件 worker / 图谱监控 / 容量巡检 / 中央扫描 / watchdog /
+        #  graph builders / task_observability）。
+        stop_push_scheduler()
+        # F2.2 报告调度器停机（同步函数，不能 await）
+        stop_report_scheduler()
         # OH-NOT-F2 Phase 2: 邮件 worker shutdown
         await stop_email_notifier_worker()
         await stop_graph_perf_monitor()
