@@ -75,8 +75,22 @@ class NotificationDispatcher:
         type = notification.type
         notif_id = notification.id  # UUID
 
+        # 2026-10-25：提前筛出「有邮箱」的用户。
+        # 邮件只发给有邮箱地址的人（用户明确要求）——没有邮箱的人建一条
+        # pending log 也没意义，worker 只会把它标成 skipped_pref
+        # 「user X has no email」，产生一堆噪音日志。
+        # 这里直接不建 log：没邮箱 ≠ 用户拒收，是「没渠道可用」。
+        email_user_ids: Optional[set[int]] = None
+        if any(ch.code == EMAIL_CHANNEL_CODE for ch in channels):
+            email_user_ids = self._users_with_email(user_ids)
+
         for user_id in user_ids:
             for ch in channels:
+                # 邮件通道：收件人无邮箱 → 跳过（不建 log）
+                if ch.code == EMAIL_CHANNEL_CODE and (
+                    email_user_ids is not None and user_id not in email_user_ids
+                ):
+                    continue
                 # 用户偏好筛选（CLAUDE.md §0 默认全收）
                 if not self.channel_service.is_user_channel_enabled(user_id, type, ch.code):
                     self._log_skipped_pref(user_id, ch.code, notif_id, correlation_id)
@@ -188,6 +202,22 @@ class NotificationDispatcher:
 
         rows = self.db.query(User.id).filter(User.status == UserStatus.ACTIVE).all()
         return [r[0] for r in rows]
+
+    def _users_with_email(self, user_ids: list[int]) -> set[int]:
+        """筛出有邮箱地址的用户 id 集合。
+
+        邮件通道只对这些人生成 dispatch_log；没有邮箱的用户直接跳过
+        （不是拒收，是没渠道可用——建 pending log 只会被 worker 标
+        skipped_pref，徒增噪音）。
+        """
+        from app.models.user import User
+
+        rows = (
+            self.db.query(User.id)
+            .filter(User.id.in_(user_ids), User.email.isnot(None), User.email != "")
+            .all()
+        )
+        return {r[0] for r in rows}
 
     def _log_skipped_pref(
         self,

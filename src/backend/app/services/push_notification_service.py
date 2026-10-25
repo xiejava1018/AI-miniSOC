@@ -162,24 +162,38 @@ class PushNotificationService:
 
     async def _push(self, dedup_title: str, severity: str, title: str, content: str,
                     link_path: Optional[str] = None) -> int:
-        """去重通过后给全部活跃用户发通知（title=去重键，需稳定不变）。返回发送人数。"""
+        """去重通过后给全部活跃用户发通知（title=去重键，需稳定不变）。返回发送人数。
+
+        2026-10-25 改走 create_multi()（多通道分发）：
+        之前走 create()（单用户 inbox）——而 inbox 之外的一切通道
+        （email）只有 create_multi 会触发 dispatcher。结果：邮件通道
+        配置齐全、worker 每次启动都在轮询，却因为零调用方从未发过
+        一封邮件（生产 soc_notification_dispatch_logs = 0 行）。
+
+        现在站内信 + WebSocket + 邮件三通道齐发：
+        - inbox：全员（与之前一致，去重/前端展示不受影响）
+        - email：仅配置了邮箱地址的用户（dispatcher 内部过滤，
+          无邮箱者不建 log，先避免 skipped_pref 噪音）
+        """
         rules = self.load_rules()
         dedup = rules["critical_dedup_hours"] if severity == "critical" else rules["dedup_hours"]
         if self._already_notified(dedup_title, dedup):
             return 0
         svc = NotificationService(self.db)
-        sent = 0
-        for uid in self._recipients():
-            try:
-                await svc.create(
-                    user_id=uid, type="push",
-                    title=title, content=content,
-                    link=link_path,
-                    push_ws=True,
-                )
-                sent += 1
-            except Exception as e:  # noqa: BLE001
-                logger.warning("推送通知失败 user=%s: %s", uid, e)
+        recipients = self._recipients()
+        if not recipients:
+            return 0
+        try:
+            notifications = await svc.create_multi(
+                user_ids=recipients, type="push",
+                title=title, content=content,
+                link=link_path,
+                push_ws=True,
+            )
+            sent = len(notifications)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("推送通知失败: %s", e)
+            return 0
         logger.info("主动推送: %s severity=%s 发送 %d 人", dedup_title, severity, sent)
         return sent
 

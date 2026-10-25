@@ -188,6 +188,54 @@ TEMPLATE_TASK_ALERT = EmailTemplate(
     ),
 )
 
+# 主动推送邮件模板（2026-10-25）
+#
+# 背景：邮件通道此前配置齐全但零调用方（详见 push_notification_service._push
+# 的接线说明），7 个推送场景只走站内信 + WebSocket。接线后 type='push' 的
+# 通知需要专属模板——否则回落 DEFAULT_TEMPLATE，邮件全是通用样式，
+# 丢失「主动巡检发现异常」的语境。
+#
+# ★ 只用 render_and_send 恒定提供的 ctx 键（user/notification/type/unsubscribe_url）。
+# 不依赖场景化字段（source_code/down_hours 等）——那些键在通知上下文里不存在，
+# 引用了会 KeyError（render 用 str.format，缺键直接抛）。旧的场景模板
+# （push:source_down 等）仍是孤儿：type='push' 查不到它们，且它们的 ctx
+# 键从没被任何调用方提供过。通知 title 自带【场景名】前缀，邮件主题里
+# 场景信息不丢。
+TEMPLATE_PUSH = EmailTemplate(
+    type="push",
+    subject_tmpl="[AI-miniSOC] {notification[title]}",
+    text_tmpl=(
+        "你好 {user[username]},\n\n"
+        "主动巡检发现以下情况，需要你关注：\n"
+        "--------------------\n"
+        "{notification[title]}\n\n"
+        "{notification[content]}\n"
+        "--------------------\n"
+        "此邮件由 AI-miniSOC 主动推送场景发出（数据链路/风险异动/EOL/"
+        "影子资产/报告就绪/扫描器/行为异常）。\n"
+        "--\n"
+        "AI-miniSOC 通知中心\n"
+        "如不再需要此类邮件，可直接退订：{unsubscribe_url}"
+    ),
+    html_tmpl=(
+        "<!DOCTYPE html><html><body style=\"font-family:Arial,sans-serif;max-width:640px;margin:0 auto\">"
+        "<p>你好 {user[username]},</p>"
+        "<p style=\"color:#6b7280;font-size:13px\">主动巡检发现以下情况，需要你关注：</p>"
+        "<h2 style=\"color:#dc2626;margin:8px 0\">{notification[title]}</h2>"
+        "<div style=\"padding:16px;border-left:4px solid #dc2626;background:#fef2f2;"
+        "border-radius:0 4px 4px 0\">"
+        "<p style=\"margin:0\">{notification[content]}</p>"
+        "</div>"
+        "<p style=\"margin-top:16px\">"
+        "<a href=\"{notification[link]}\" style=\"background:#dc2626;color:#fff;"
+        "padding:8px 16px;border-radius:4px;text-decoration:none\">查看详情</a>"
+        "</p>"
+        "<hr><small style=\"color:#999\">此邮件由 AI-miniSOC 主动推送场景发出 · "
+        "<a href=\"{unsubscribe_url}\" style=\"color:#999\">退订此类邮件</a></small>"
+        "</body></html>"
+    ),
+)
+
 # 测试模板（admin /test 端点用）
 TEMPLATE_TEST = EmailTemplate(
     type="test",
@@ -234,6 +282,7 @@ class EmailTemplateRegistry:
         """注册 Phase 2 内置模板（CLAUDE.md §0 模板来源单一）。"""
         for tpl in (
             DEFAULT_TEMPLATE,
+            TEMPLATE_PUSH,
             TEMPLATE_EOL_WARNING,
             TEMPLATE_SOURCE_DOWN,
             TEMPLATE_RISK_SPIKE,

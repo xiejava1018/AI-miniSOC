@@ -188,13 +188,19 @@ async def render_and_send(
     app_base_url = str(cfg.get("app_base_url", "http://localhost:8000"))
     unsubscribe_url = build_unsubscribe_url(app_base_url, user.id, type)
 
+    # link 可能为 None（如数据链路异常场景无详情页）——直接进模板会被
+    # str.format 渲染成 "None"，邮件里出现 <a href="None">。归一成空串，
+    # 模板端表现为可点击链接消失而不是死链（对 html 链接用空 href 也不理想，
+    # 但比 "None" 好；场景模板大多自带文案引导，不依赖这个链接）。
+    safe_link = (notification.link or "").strip() or ""
+
     ctx: Dict[str, Any] = {
         "user": {"id": user.id, "username": user.username, "email": user.email},
         "notification": {
             "id": str(notification.id),
             "title": notification.title,
             "content": notification.content,
-            "link": notification.link,
+            "link": safe_link,
             "created_at": notification.created_at.isoformat() if notification.created_at else None,
         },
         "type": type,
