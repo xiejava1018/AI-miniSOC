@@ -229,8 +229,11 @@
     type McpKeyItem,
     type McpKeyCreated
   } from '@/api/user-center'
+  import { useSystemStore } from '@/store/modules/system'
 
   defineOptions({ name: 'McpKeyTab' })
+
+  const systemStore = useSystemStore()
 
   const props = defineProps<{
     /** viewer/auditor/readonly 不可自助管理（后端同样校验 403） */
@@ -313,7 +316,30 @@
     key: null
   })
 
-  const mcpServiceUrl = computed(() => `http://${window.location.hostname}:8100/mcp`)
+  /**
+   * MCP 客户端接入地址
+   *
+   * 解析优先级：
+   * 1. 运维在配置中心「general → mcp_public_url」显式配置的对外地址（最准）
+   * 2. 当前访问的 origin + /mcp（兜底）
+   *
+   * 历史 bug：曾硬编码 `http://{hostname}:8100/mcp`。
+   * 8100 是 MCP 独立进程的**内网**监听端口，公网并不通
+   * （公网链路是 Cloudflare Tunnel → nginx:8080 → 反代 127.0.0.1:8100），
+   * 用户把带 8100 的地址粘进客户端必然「连接超时」。
+   * 因此这里绝不能再拼 8100 端口，也不再强制 http。
+   */
+  const mcpServiceUrl = computed(() => {
+    // 1. 后端下发（运维显式配置）
+    const configured = systemStore.mcpPublicUrl
+    if (configured) return configured.replace(/\/+$/, '')
+
+    // 2. 兜底：按当前访问 origin 推导
+    //    origin 已含协议与端口（http/https + 实际端口），不额外拼 8100。
+    //    前端是 SPA，pathname 形如 /user-center/xxx —— MCP 端点挂在站点根路径下，
+    //    所以这里只用 origin。
+    return `${window.location.origin}/mcp`
+  })
 
   const buildWorkbuddyJson = (key: string) =>
     JSON.stringify(

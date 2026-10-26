@@ -1,7 +1,7 @@
 """
 公共系统信息 API（不需要鉴权）
 
-返回前台展示用系统元信息（应用名称 / Logo / 版权 / 描述）。
+返回前台展示用系统元信息（应用名称 / Logo / 版权 / 描述 / MCP 公共接入地址）。
 数据来源：soc_system_config 表 category='general' 的几条白名单 key。
 
 **白名单机制**：只暴露指定 key，其它配置（如 SMTP、GLM_API_KEY 等）绝不返回，
@@ -24,6 +24,10 @@ PUBLIC_SYSTEM_KEYS = {
     "system_copyright": "© 2026 AI-miniSOC",
     "system_description": "AI-driven mini Security Operation Center",
     "allowed_hosts": "all",  # 默认允许所有主机，可在系统配置中修改为逗号分隔的域名列表
+    # MCP 公共接入地址（客户端配置里给出的 url）
+    # 默认空 = 由前端按当前访问 origin 兜底推导（含协议/端口）；
+    # 运维可在此显式配置反代后的对外地址，例如 https://aisoc.example.com/mcp
+    "mcp_public_url": "",
 }
 
 
@@ -43,5 +47,8 @@ async def get_public_system_info(db: Session = Depends(get_db)) -> Dict[str, str
     for item in db_items:
         if item.key in PUBLIC_SYSTEM_KEYS:
             result[item.key] = item.value or PUBLIC_SYSTEM_KEYS[item.key]
+
+    # MCP 接入地址允许为空（前端按当前 origin 兜底推导）
+    result["mcp_public_url"] = (result.get("mcp_public_url") or "").strip()
 
     return result

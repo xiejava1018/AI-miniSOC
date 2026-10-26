@@ -1,8 +1,8 @@
 /**
  * 系统全局信息 store
  *
- * 从后端 /api/v1/public/system-info 拉取应用名称 / Logo / 版权 / 描述，
- * 给顶栏 / 登录页 / 浏览器 title / 关于弹窗 等使用。
+ * 从后端 /api/v1/public/system-info 拉取应用名称 / Logo / 版权 / 描述 / MCP 公共接入地址，
+ * 给顶栏 / 登录页 / 浏览器 title / 关于弹窗 / 个人中心 MCP 接入页 等使用。
  *
  * ## 加载时机
  * main.ts 在 app.mount() 之前同步 await fetchSystemInfo()，
@@ -22,6 +22,7 @@ const FALLBACK = {
   system_logo: '',
   system_copyright: '© 2026 AI-miniSOC',
   system_description: 'AI-driven mini Security Operation Center',
+  mcp_public_url: '',
 } as const
 
 export const useSystemStore = defineStore('systemStore', () => {
@@ -33,6 +34,11 @@ export const useSystemStore = defineStore('systemStore', () => {
   const copyright = ref<string>(FALLBACK.system_copyright)
   /** 描述（关于弹窗） */
   const description = ref<string>(FALLBACK.system_description)
+  /**
+   * MCP 客户端接入地址（个人中心「MCP 接入」页给用户复制用的 url）
+   * 空 = 运维未配置，由调用方按当前访问 origin 兜底推导
+   */
+  const mcpPublicUrl = ref<string>(FALLBACK.mcp_public_url)
   /** 是否已成功拉取过一次 */
   const loaded = ref(false)
 
@@ -49,6 +55,9 @@ export const useSystemStore = defineStore('systemStore', () => {
         if (data.system_logo !== undefined) logo.value = data.system_logo
         if (data.system_copyright) copyright.value = data.system_copyright
         if (data.system_description) description.value = data.system_description
+        if (data.mcp_public_url !== undefined) {
+          mcpPublicUrl.value = (data.mcp_public_url || '').trim()
+        }
         loaded.value = true
       }
     } catch (e) {
@@ -63,6 +72,7 @@ export const useSystemStore = defineStore('systemStore', () => {
     logo,
     copyright,
     description,
+    mcpPublicUrl,
     loaded,
     fetchSystemInfo,
   }

@@ -14,7 +14,12 @@ export interface PublicSystemInfo {
   system_logo: string
   system_copyright: string
   system_description: string
-  allowed_hosts: string  // 允许的主机列表，"all" 表示允许所有，否则为逗号分隔的域名列表
+  allowed_hosts: string // 允许的主机列表，"all" 表示允许所有，否则为逗号分隔的域名列表
+  /**
+   * MCP 客户端接入地址（含协议与路径），运维在配置中心 general.mcp_public_url 配置。
+   * 空字符串 = 未配置，由调用方按当前访问 origin 兜底推导。
+   */
+  mcp_public_url: string
 }
 
 /**
