@@ -165,11 +165,16 @@ async def render_and_send(
     type: str,
     extra_context: Optional[Dict[str, Any]] = None,
     db=None,
+    unsub_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """根据 notification.type 选模板 + 渲染 + 投递。
 
     Phase 3：DB 覆盖模板优先（传 db 时自动 ensure）；邮件 footer 注入
     退订链接（unsubscribe_url，HMAC 签名，点击即关该类型邮件投递）。
+
+    unsub_type（2026-10-25）：退订链接的键。默认与 type 一致；当 type 是
+    场景模板键（如 'push:shadow_asset'）时应传 notif.type（如 'push'），
+    使退订写入的偏好与 dispatcher 检查的 (notif.type, channel) 对齐。
     """
     from app.services.email_template_registry import get_template_registry
     from app.services.unsubscribe_token import build_unsubscribe_url
@@ -186,7 +191,11 @@ async def render_and_send(
         template = registry.get_default()
 
     app_base_url = str(cfg.get("app_base_url", "http://localhost:8000"))
-    unsubscribe_url = build_unsubscribe_url(app_base_url, user.id, type)
+    # 退订键固定用真实通知 type（如 'push'）——dispatcher 的偏好检查用的就是
+    # (notif.type, channel)，若退订链接改用场景模板键（如 'push:shadow_asset'），
+    # 用户点退订后写入的偏好在分发时永远查不到，退订会失效。
+    unsub_key = unsub_type or type
+    unsubscribe_url = build_unsubscribe_url(app_base_url, user.id, unsub_key)
 
     # link 可能为 None（如数据链路异常场景无详情页）——直接进模板会被
     # str.format 渲染成 "None"，邮件里出现 <a href="None">。归一成空串，

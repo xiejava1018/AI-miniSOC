@@ -78,11 +78,18 @@ class NotificationService:
         content: Optional[str] = None,
         link: Optional[str] = None,
         push_ws: bool = True,
+        email_type: Optional[str] = None,
+        email_ctx: Optional[dict] = None,
     ) -> list[Notification]:
         """Phase 1 (OH-NOT-F2)：多用户 + 多通道分发。
 
         入库 1 条 soc_notifications (user_id=第一个用户)，然后调
         NotificationDispatcher 给所有 user_ids × 所有 enabled channels 写 dispatch_logs。
+
+        email_type / email_ctx（2026-10-25）：邮件场景模板支持——
+        email_type 指定模板键（如 'push:shadow_asset'），email_ctx 携带该模板
+        需要的额外上下文。两者落库在每条 Notification 上，worker 异步投递时
+        读取；站内信/WS 不受影响。
 
         Returns: 创建的 Notification 列表（每个 user_id 一条）
         """
@@ -100,6 +107,8 @@ class NotificationService:
                 title=title,
                 content=content,
                 link=link,
+                email_type=email_type,
+                email_ctx=email_ctx,
             )
             self.db.add(notif)
             self.db.flush()  # 取 notif.id

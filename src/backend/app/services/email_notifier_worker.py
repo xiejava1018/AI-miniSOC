@@ -132,14 +132,22 @@ def _tick_once() -> dict:
                 # render_and_send 是 async — 同步 wrapper 用 asyncio.run
                 # 注意: 在线程里跑 asyncio.run 会创建新 event loop
                 extra_ctx = _extract_extra_context(notif)
+                # 场景模板支持（2026-10-25）：Notification 落库的 email_type/
+                # email_ctx 由 push 场景函数写入——worker 异步投递时从这里取。
+                # email_type 指定模板键（如 'push:shadow_asset'）；
+                # email_ctx 提供模板键（source_code/count 等），覆盖通用 fallback。
+                email_type = (notif.email_type or "").strip() or None
+                if notif.email_ctx:
+                    extra_ctx.update(notif.email_ctx)
                 result = asyncio.run(
                     render_and_send(
                         email_cfg,
                         user=user,
                         notification=notif,
-                        type=notif.type or "_default",
+                        type=email_type or notif.type or "_default",
                         extra_context=extra_ctx,
                         db=db,
+                        unsub_type=notif.type or "_default",
                     )
                 )
                 # 成功

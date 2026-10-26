@@ -19,6 +19,7 @@ email log（用户要求：邮件只发给有邮箱的人）。
 """
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -182,3 +183,104 @@ def test_push_email_template_renders_with_generic_ctx():
     assert "3.2h" in text
     assert "数据链路异常" in html
     assert "None" not in html, "link=None 归一失败，邮件出现字面 None"
+
+
+# ---------------------------------------------------------------------------
+# 场景模板接线（2026-10-25 第二批：push:<scenario> 模板接入真实推送流）
+# ---------------------------------------------------------------------------
+
+def test_shadow_scenario_uses_scenario_template(db_session):
+    """影子资产场景：通知落库 email_type='push:shadow_asset' + ctx，且邮件 log 生成。"""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    from app.models.asset_reconciliation import AssetReconciliation
+    from app.services.push_notification_service import (
+        PushNotificationService, _rules_cache,
+    )
+
+    _rules_cache["value"] = None
+    _run(_make_channels(db_session))
+    u1, u2 = _make_users(db_session)
+
+    db_session.add(AssetReconciliation(
+        run_id=_uuid.uuid4(),
+        reconciliation_type="shadow",
+        status="pending",
+        details={"agent": {"id": "042", "name": "dev-box",
+                            "ip": "192.168.0.99", "os_name": "Debian 12"}},
+    ))
+    db_session.commit()
+
+    sent = _run(PushNotificationService(db_session).check_shadow_assets())
+    assert sent >= 1
+
+    notif = db_session.query(Notification).filter(
+        Notification.type == "push",
+        Notification.title.like("【影子资产】Agent 042%"),
+    ).first()
+    assert notif is not None, "影子资产通知未生成"
+    assert notif.email_type == "push:shadow_asset", \
+        f"email_type 应为场景模板键，实际 {notif.email_type!r}"
+    assert notif.email_ctx["count"] == 1
+    assert "042" in notif.email_ctx["shadow_list"]
+
+    # 邮件 log 世给有邮箱者，且场景模板键可渲染（用同一 ctx 验证不 KeyError）
+    from app.services.email_template_registry import get_template_registry
+    tpl = get_template_registry().get(notif.email_type)
+    assert tpl is not None, "push:shadow_asset 模板未注册"
+
+
+def test_source_health_scenario_uses_scenario_template(db_session):
+    """数据链路异常场景：email_type='push:source_down'，down_hours 为数值。"""
+    from app.models.source_health import SourceHealth
+    from app.services.push_notification_service import (
+        PushNotificationService, _rules_cache,
+    )
+
+    _rules_cache["value"] = None
+    _run(_make_channels(db_session))
+    _make_users(db_session)
+
+    db_session.add(SourceHealth(
+        source_key="loki:probe", source_type="loki", display_name="Loki 探针",
+        last_success_at=datetime.now(timezone.utc) - timedelta(hours=5),
+        failure_count=3))
+    db_session.commit()
+
+    sent = _run(PushNotificationService(db_session).check_source_health())
+    assert sent >= 1
+
+    notif = db_session.query(Notification).filter(
+        Notification.title.like("【数据链路异常】Loki 探针%")).first()
+    assert notif is not None
+    assert notif.email_type == "push:source_down"
+    # 主题模板「已中断 {down_hours} 小时」要求数值
+    assert isinstance(notif.email_ctx["down_hours"], (int, float))
+    assert notif.email_ctx["down_hours"] == 5
+
+
+def test_scenario_template_renders_end_to_end(db_session):
+    """用真实落库的 email_ctx 渲染场景模板——不 KeyError、主题正确。"""
+    from app.services.email_template_registry import get_template_registry
+
+    registry = get_template_registry()
+    ctx = {
+        "user": {"id": 1, "username": "ops", "email": "o@x.y"},
+        "notification": {
+            "id": "n-2", "title": "【影子资产】Agent 042 新增",
+            "content": "...", "link": "/assets/reconciliation",
+            "created_at": "2026-10-25T00:00:00",
+        },
+        "type": "push:shadow_asset",
+        "unsubscribe_url": "http://x/u",
+        # 与场景函数写入 email_ctx 的键一致
+        "count": 1,
+        "shadow_list": "Agent 042  dev-box  192.168.0.99  Debian 12",
+    }
+    tpl = registry.get("push:shadow_asset")
+    subject = tpl.render_subject(ctx)
+    html = tpl.render_html(ctx)
+    assert subject == "[影子资产] 1 台新影子资产待确认"
+    assert "dev-box" in html
+    assert "None" not in html

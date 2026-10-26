@@ -161,7 +161,9 @@ class PushNotificationService:
         )
 
     async def _push(self, dedup_title: str, severity: str, title: str, content: str,
-                    link_path: Optional[str] = None) -> int:
+                    link_path: Optional[str] = None,
+                    email_type: Optional[str] = None,
+                    email_ctx: Optional[dict] = None) -> int:
         """去重通过后给全部活跃用户发通知（title=去重键，需稳定不变）。返回发送人数。
 
         2026-10-25 改走 create_multi()（多通道分发）：
@@ -174,6 +176,11 @@ class PushNotificationService:
         - inbox：全员（与之前一致，去重/前端展示不受影响）
         - email：仅配置了邮箱地址的用户（dispatcher 内部过滤，
           无邮箱者不建 log，先避免 skipped_pref 噪音）
+
+        email_type / email_ctx（同日第二批）：场景专属邮件模板。
+        场景函数传 email_type='push:source_down' 等模板键 + 模板所需
+        ctx（source_code/down_hours/...）。不传则邮件走 type='push'
+        通用模板。两者随 Notification 落库，worker 异步投递时读取。
         """
         rules = self.load_rules()
         dedup = rules["critical_dedup_hours"] if severity == "critical" else rules["dedup_hours"]
@@ -189,12 +196,15 @@ class PushNotificationService:
                 title=title, content=content,
                 link=link_path,
                 push_ws=True,
+                email_type=email_type,
+                email_ctx=email_ctx,
             )
             sent = len(notifications)
         except Exception as e:  # noqa: BLE001
             logger.warning("推送通知失败: %s", e)
             return 0
-        logger.info("主动推送: %s severity=%s 发送 %d 人", dedup_title, severity, sent)
+        logger.info("主动推送: %s severity=%s 发送 %d 人 email_type=%s",
+                    dedup_title, severity, sent, email_type)
         return sent
 
     # ---------- 场景 1：数据链路异常（critical，§八-B 源健康的运营化消费） ----------
@@ -241,6 +251,16 @@ class PushNotificationService:
                     + " 对账与报告的数据可能不完整，请检查采集链路。"
                 ),
                 link_path=None,  # 纯告警，无详情页；link 即 dedup key
+                # 邮件走场景模板（红色中断样式，含阈值/影响）
+                email_type="push:source_down",
+                email_ctx={
+                    "source_code": name,
+                    # 模板主题是「已中断 {down_hours} 小时」——须传数值；
+                    # 从未成功过的源传 0，「从未成功」语义已在 impact 里说明
+                    "down_hours": item["down_hours"] or 0,
+                    "down_threshold": item["threshold_hours"],
+                    "impact": "对账与报告的数据可能不完整（告警趋势可能用零值填充）",
+                },
             )
             sent_total += sent
         return sent_total
@@ -286,16 +306,25 @@ class PushNotificationService:
         sent_total = 0
         for item in self._find_risk_jumps(rules)[:10]:  # 单轮最多 10 条，防刷屏
             a = item["asset"]
+            name = a.name or a.asset_ip
             sent = await self._push(
-                dedup_title=f"【风险异动】{a.name or a.asset_ip}",
+                dedup_title=f"【风险异动】{name}",
                 severity="warn",
-                title=f"【风险异动】{a.name or a.asset_ip} 评分上升 {item['delta']} 分",
+                title=f"【风险异动】{name} 评分上升 {item['delta']} 分",
                 content=(
-                    f"资产 {a.name or a.asset_ip}（{a.asset_ip}）近 "
+                    f"资产 {name}（{a.asset_ip}）近 "
                     f"{rules['risk_jump']['window_days']} 天风险评分从 {item['from']} 升至 "
                     f"{a.risk_score}（+{item['delta']}），建议查看风险明细确认新增暴露。"
                 ),
                 link_path=f"/assets/detail/{a.id}",
+                email_type="push:risk_spike",
+                email_ctx={
+                    "asset_count": 1,
+                    "asset_list": (
+                        f"{name} ({a.asset_ip})：{item['from']} → {a.risk_score} "
+                        f"(+{item['delta']} / {rules['risk_jump']['window_days']}天)"
+                    ),
+                },
             )
             sent_total += sent
         return sent_total
@@ -338,6 +367,14 @@ class PushNotificationService:
                     + ("（EOL 日期为人工指定）" if a.expected_eol_source == "manual" else "")
                 ),
                 link_path=f"/assets/detail/{a.id}",
+                email_type="push:eol_warning",
+                email_ctx={
+                    "eol_count": 1,  # 逐资产推送（去重键锁定单资产）；模板为聚合样式，count=1
+                    "days_until_eol": max(days, 0),
+                    "sample_count": 1,
+                    "eol_list": f"{name} ({a.asset_ip}){(' · ' + os_label) if os_label else ''}"
+                                 f" → EOL {a.expected_eol.isoformat()}",
+                },
             )
             sent_total += sent
         return sent_total
@@ -397,6 +434,14 @@ class PushNotificationService:
                     f"建议确认是否需补录入台账，或在 Wazuh 侧确认 Agent 合法。"
                 ),
                 link_path="/assets/reconciliation",
+                email_type="push:shadow_asset",
+                email_ctx={
+                    "count": 1,  # 逐 Agent 推送（去重键锁定单 Agent）；模板为聚合样式，count=1
+                    "shadow_list": (
+                        f"Agent {item['agent_id']}  {item['agent_name']}  "
+                        f"{ip or 'IP 未知'}  {os_part}"
+                    ),
+                },
             )
             sent_total += sent
         return sent_total
