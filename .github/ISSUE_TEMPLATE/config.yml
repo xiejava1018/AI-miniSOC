@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 安全漏洞（私密上报）
+    url: https://github.com/xiejava1018/AI-miniSOC/blob/master/SECURITY.md
+    about: 安全漏洞请勿公开披露——按 SECURITY.md 流程邮件上报
+  - name: 💬 交流讨论（部署交流/公众号）
+    url: https://xiejava.ishareread.com
+    about: 使用交流、非缺陷类话题请到博客或公众号
