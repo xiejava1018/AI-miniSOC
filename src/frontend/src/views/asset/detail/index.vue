@@ -1645,6 +1645,7 @@
   const sourceLabelMap: Record<string, string> = {
     'wazuh': 'Wazuh',
     'tplink-router': 'TP-Link 路由器',
+    'scanner': '网络扫描',
     'nmap': 'Nmap',
     'manual': '手动录入'
   }

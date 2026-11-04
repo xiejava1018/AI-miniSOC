@@ -1100,7 +1100,8 @@
       options: [
         { label: '手动', value: 'manual' },
         { label: 'Wazuh', value: 'wazuh' },
-        { label: 'TP-Link', value: 'tplink-router' }
+        { label: 'TP-Link', value: 'tplink-router' },
+        { label: '网络扫描', value: 'scanner' }
       ]
     }
   ])

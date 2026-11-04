@@ -227,6 +227,11 @@ class PortSyncHandler(BaseSyncHandler):
         if asset is not None:
             from app.services.asset_presence import record_observation
             record_observation(db, asset.id, "scanner", "active_scan")
+            from app.services.sync_handlers.discovery_sync_handler import upsert_scanner_source
+            upsert_scanner_source(
+                db, asset.id,
+                exposure="internal" if item["asset_ip"] == str(asset.asset_ip) else "public",
+            )
         port = AssetPort(
             asset_id=asset.id if asset else None,
             asset_ip=item["asset_ip"],

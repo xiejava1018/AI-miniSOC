@@ -638,6 +638,15 @@ async def adopt_finding(
     f.matched_asset_id = asset.id
     f.finding_status = "adopted"
 
+    # 纳管即登记 scanner 来源（详情页“数据来源”Tab）
+    from app.services.sync_handlers.discovery_sync_handler import upsert_scanner_source
+    from app.services.asset_presence import record_observation
+    upsert_scanner_source(
+        db, asset.id,
+        os_guess=f.os_guess, mac_address=f.mac_address, exposure=f.exposure,
+    )
+    record_observation(db, asset.id, "scanner", "active_scan")
+
     # 审计日志（CLAUDE.md 教训：adopt 属于「关键动作」必须留痕）
     from app.models.audit_log import AuditLog
     audit = AuditLog(

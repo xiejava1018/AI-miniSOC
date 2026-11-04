@@ -25,6 +25,58 @@ from app.services.sync_handlers.base import BaseSyncHandler
 logger = logging.getLogger(__name__)
 
 
+def upsert_scanner_source(
+    db,
+    asset_id,
+    *,
+    scanner_id=None,
+    os_guess=None,
+    mac_address=None,
+    exposure=None,
+    now=None,
+):
+    """upsert 一条 source='scanner' 的 soc_asset_sources 记录。
+
+    ADR-6 当年规定 scanner 不碰资产表，但后续演进（端口回写/存在性观测）已实质
+    成为数据源，唯独来源记录漏写——详情页“数据来源”Tab 因此永远看不到 scanner。
+    """
+    from datetime import datetime, timezone
+
+    from app.models.asset_source import AssetSource
+
+    ts = now or datetime.now(timezone.utc)
+    row = (
+        db.query(AssetSource)
+        .filter(AssetSource.asset_id == asset_id, AssetSource.source == "scanner")
+        .first()
+    )
+    metadata = {}
+    if os_guess:
+        metadata["os_guess"] = os_guess
+    if mac_address:
+        metadata["mac_address"] = mac_address
+    if exposure:
+        metadata["exposure"] = exposure
+    if row is None:
+        db.add(
+            AssetSource(
+                asset_id=asset_id,
+                source="scanner",
+                source_id=scanner_id,
+                source_status="discovered",
+                last_seen_at=ts,
+                source_metadata=metadata or None,
+            )
+        )
+    else:
+        row.last_seen_at = ts
+        row.source_status = "discovered"
+        if scanner_id:
+            row.source_id = scanner_id
+        if metadata:
+            row.source_metadata = metadata
+
+
 class DiscoverySyncHandler(BaseSyncHandler):
     """发现数据同步（数据来源：scanner 内网/外网发现扫描）。
 
@@ -195,6 +247,15 @@ class DiscoverySyncHandler(BaseSyncHandler):
         if matched_asset is not None:
             from app.services.asset_presence import record_observation
             record_observation(db, matched_asset.id, "scanner", "active_scan", now)
+            # 同步登记为 scanner 来源（详情页“数据来源”Tab）
+            upsert_scanner_source(
+                db, matched_asset.id,
+                scanner_id=item.get("scanner_id"),
+                os_guess=item.get("os_guess"),
+                mac_address=item.get("mac_address"),
+                exposure=item.get("exposure"),
+                now=now,
+            )
         if existing is not None:
             # 已存在 → 刷新字段（finding_status 不动——保护人工处置结果）
             existing.last_seen = now

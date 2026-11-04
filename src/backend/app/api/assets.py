@@ -369,9 +369,15 @@ async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(asset)
 
-    # P3 观测：人工录入即一次 manual 观测（last_seen 起算点）
+    # P3 观测：人工录入即一次 manual 观测（last_seen 起算点）+ 登记来源
     from app.services.asset_presence import record_observation
     record_observation(db, asset.id, "manual", "manual")
+    from app.models.asset_source import AssetSource
+    if not db.query(AssetSource).filter_by(asset_id=asset.id, source="manual").first():
+        db.add(AssetSource(
+            asset_id=asset.id, source="manual",
+            source_status="registered", last_seen_at=asset.created_at,
+        ))
     db.commit()
 
     # 记录审计日志
