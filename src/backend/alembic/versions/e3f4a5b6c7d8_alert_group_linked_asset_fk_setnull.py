@@ -36,7 +36,7 @@ def _existing_fks(bind, table, column):
             """
         SELECT conname FROM pg_constraint
         WHERE contype = 'f'
-          AND conrelid = :table::regclass
+          AND conrelid = CAST(:table AS regclass)
           AND confrelid = 'soc_assets'::regclass
           AND pg_get_constraintdef(oid) ILIKE '%' || :column || '%'
         """
