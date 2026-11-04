@@ -73,6 +73,7 @@
 ## 资产扫描 / scanner
 
 - **2026-08-26：P3+ 资产发现与攻击面扫描采集器 Phase 1+2** (L1535–1643) — 4 张表 + 15 个新端点；**`ScanTask` 类名被 vulnerability.py 占用 → 用 `ScannerTask`**；`ScanFinding.matched_asset_id` 类型必须是 UUID；alembic 迁移三连坑（op.execute 双参数/:perms::jsonb/soc_role_menus 无 created_at）
+- **2026-11-04：资产存在性治理 P1/P2/P3 + 扫描排障** — [`2026-11-04-asset-presence-lifecycle.md`](2026-11-04-asset-presence-lifecycle.md)：观测/覆盖凭证/生命周期状态机（last_seen/miss_streak/lifecycle_state + 2 新表）；内网定时扫描 18 天 nmap 超时无人知晓（/16 目标拖死）；资产删除 FK 500 修复；**alembic SQLAlchemy 2.x 裸字符串 execute + bind 参数 ::cast 两个新坑（各回滚部署一次）**
 
 ## AI / LLM / F2.x
 
