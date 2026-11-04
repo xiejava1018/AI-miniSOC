@@ -15,6 +15,7 @@ NO ACTION，删除被告警分组关联的资产时触发 ForeignKeyViolation �
 """
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "e3f4a5b6c7d8"
@@ -31,13 +32,15 @@ _TARGETS = [
 
 def _existing_fks(bind, table, column):
     rows = bind.execute(
-        """
+        sa.text(
+            """
         SELECT conname FROM pg_constraint
         WHERE contype = 'f'
           AND conrelid = :table::regclass
           AND confrelid = 'soc_assets'::regclass
           AND pg_get_constraintdef(oid) ILIKE '%' || :column || '%'
-        """,
+        """
+        ),
         {"table": table, "column": column},
     ).fetchall()
     return [r[0] for r in rows]
@@ -47,18 +50,26 @@ def upgrade() -> None:
     bind = op.get_bind()
     for table, column in _TARGETS:
         for conname in _existing_fks(bind, table, column):
-            bind.execute(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS "{conname}"')
+            bind.execute(
+                sa.text(f'ALTER TABLE {table} DROP CONSTRAINT IF EXISTS "{conname}"')
+            )
         bind.execute(
-            f"ALTER TABLE {table} ADD CONSTRAINT {table}_{column}_fkey "
-            f"FOREIGN KEY ({column}) REFERENCES soc_assets(id) ON DELETE SET NULL"
+            sa.text(
+                f"ALTER TABLE {table} ADD CONSTRAINT {table}_{column}_fkey "
+                f"FOREIGN KEY ({column}) REFERENCES soc_assets(id) ON DELETE SET NULL"
+            )
         )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     for table, column in _TARGETS:
-        bind.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_{column}_fkey")
         bind.execute(
-            f"ALTER TABLE {table} ADD CONSTRAINT {table}_{column}_fkey "
-            f"FOREIGN KEY ({column}) REFERENCES soc_assets(id)"
+            sa.text(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_{column}_fkey")
+        )
+        bind.execute(
+            sa.text(
+                f"ALTER TABLE {table} ADD CONSTRAINT {table}_{column}_fkey "
+                f"FOREIGN KEY ({column}) REFERENCES soc_assets(id)"
+            )
         )
