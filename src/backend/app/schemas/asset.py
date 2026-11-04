@@ -214,6 +214,11 @@ class AssetResponse(AssetBase):
     # 等保等级来源（设计 §4.1 · T4）：inherited=跟随业务系统就高 / manual=人工设定。
     # 只读——source 只能由传播引擎或资产 PUT 的值变化检测写，不开放前端直写。
     protection_level_source: Optional[str] = None
+    # P1/P2/P3 存在性证据（与 asset_status 正交：last_seen=观测，updated_at=编辑）
+    last_seen_at: Optional[datetime] = None
+    miss_streak: Optional[int] = None
+    last_scan_missed_at: Optional[datetime] = None
+    lifecycle_state: Optional[str] = None
     # criticality：DEPRECATED 兼容垫片（API 序列化时由 to_response 钩子从 data_sensitivity 派生，
     # 6 个月内外部脚本可继续读；前端建议改用三维度字段）
 

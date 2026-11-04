@@ -69,6 +69,56 @@ def _source_status(sh: SourceHealth) -> tuple[str, Optional[str]]:
     return "healthy", None
 
 
+def _build_scan_coverage(db: Session) -> dict:
+    """P1 扫描覆盖健康：scheduled 内网扫描连续失败 + 最近覆盖凭证。
+
+    背景：2026-10-17~11-04 内网定时扫描连续 18 天 nmap 超时无人知晓——
+    覆盖凭证（含失败）落库后这里必须可见（假阴性比失败危险）。
+    """
+    from app.services.asset_presence import consecutive_scan_failures
+
+    streak, last_success = consecutive_scan_failures(db)
+    thresholds = {}
+    try:
+        from app.models.system_config import SystemConfig
+        rows = db.query(SystemConfig).filter(SystemConfig.category == "asset_lifecycle").all()
+        thresholds = {r.key: r.value for r in rows}
+    except Exception:
+        pass
+    fail_alert = int(thresholds.get("fail_alert_threshold", 3))
+
+    recent: list[dict] = []
+    try:
+        from app.models.asset_presence import ScanCoverage
+        for c in (
+            db.query(ScanCoverage)
+            .filter(ScanCoverage.scope == "scheduled")
+            .order_by(ScanCoverage.scanned_at.desc())
+            .limit(10)
+            .all()
+        ):
+            recent.append({
+                "task_uuid": str(c.task_uuid),
+                "mode": c.mode,
+                "target_value": c.target_value,
+                "status": c.status,
+                "hosts_found": c.hosts_found,
+                "scanned_at": _iso(c.scanned_at),
+                "settled": c.settled,
+                "miss_marked": c.miss_marked,
+            })
+    except Exception:
+        logger.warning("scan_coverage recent query failed", exc_info=True)
+
+    return {
+        "internal_consecutive_failures": streak,
+        "internal_last_success_at": _iso(last_success),
+        "fail_alert_threshold": fail_alert,
+        "alerting": streak >= fail_alert,
+        "recent_scheduled": recent,
+    }
+
+
 @router.get("/data-health", summary="数据健康总览（源健康 + 同步死信 + 对账差异）")
 async def data_health(
     dead_letter_limit: int = Query(5, ge=0, le=50, description="死信样本条数"),
@@ -313,6 +363,7 @@ async def data_health(
             "total": len(sources),
             "sources": sources,
         },
+        "scan_coverage": _build_scan_coverage(db),
         "dead_letter": {
             "pending": dl_pending,
             "total": dl_total,

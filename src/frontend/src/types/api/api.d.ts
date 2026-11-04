@@ -314,6 +314,8 @@ declare namespace Api {
       high_risk_assets: number
       alerts_24h: number
       open_incidents: number
+      /** P1/P2/P3 存在性：失联资产数（unverified+presumed_offline） */
+      unverified_assets: number
     }
 
     /** 资产概览 - 分布图统一项 */

@@ -223,6 +223,10 @@ class PortSyncHandler(BaseSyncHandler):
         asset = db.query(Asset).filter(
             (Asset.asset_ip == item["asset_ip"]) | (Asset.public_ip == item["asset_ip"])
         ).first()
+        # P3 观测：扫到开端口 = 看到了这台资产（新建与更新两条路径都要）
+        if asset is not None:
+            from app.services.asset_presence import record_observation
+            record_observation(db, asset.id, "scanner", "active_scan")
         port = AssetPort(
             asset_id=asset.id if asset else None,
             asset_ip=item["asset_ip"],

@@ -132,6 +132,9 @@ async def lifespan(app: FastAPI):
     # P3 资产扫描：L1+L2 在线检测（每 60s）+ 每天 03:00/04:00 自动建任务
     start_scanner_watchdog()
     start_central_scan_scheduler()
+    # P1/P2/P3 资产存在性：覆盖凭证结算（每 15min，线程内跑）
+    from app.services.presence_scheduler import start_presence_scheduler
+    start_presence_scheduler()
     # P5 资产知识图谱：5 个 builder + 过期边清理（@track_task 包装，框架接管调度）
     # v1.5 补上环境变量开关：设为 "false" 可在主 event loop 不被同步 builder
     # 阻塞的场景下启动后端（例如没数据、调试 API、手动跑 builder）。
@@ -171,6 +174,9 @@ async def lifespan(app: FastAPI):
         # P3 资产扫描：shutdown
         await stop_central_scan_scheduler()
         await stop_scanner_watchdog()
+        # P1/P2/P3 资产存在性 scheduler shutdown
+        from app.services.presence_scheduler import stop_presence_scheduler
+        await stop_presence_scheduler()
         # P5 资产知识图谱 builder 循环停止
         from app.services.graph.scheduler import stop_graph_builders
         await stop_graph_builders()

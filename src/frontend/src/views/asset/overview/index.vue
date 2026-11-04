@@ -488,6 +488,14 @@
         type: 'warning' as const,
         subLabel: '需 SOC 跟进',
         mutedWhenZero: true
+      },
+      {
+        label: '失联资产',
+        value: k?.unverified_assets ?? 0,
+        suffix: '个',
+        type: 'warning' as const,
+        subLabel: '扫描覆盖但缺席，待确认',
+        mutedWhenZero: true
       }
     ]
   })

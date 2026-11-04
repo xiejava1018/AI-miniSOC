@@ -104,11 +104,22 @@ class AssetOverviewService:
         # 高危资产:独立基于 D6 计算,不走 topN
         high_risk_assets = self._count_high_risk_assets()
 
+        # P1/P2/P3 存在性 KPI：失联资产数（unverified+presumed_offline，不含人工已确认的 retired）
+        try:
+            from sqlalchemy import func as _f
+            unverified = self.db.query(Asset).filter(
+                Asset.lifecycle_state.in_(["unverified", "presumed_offline"])
+            ).count()
+        except Exception:
+            logger.warning("lifecycle KPI count failed", exc_info=True)
+            unverified = 0
+
         return {
             "total_assets": total_assets,
             "high_risk_assets": high_risk_assets,
             "alerts_24h": alerts_24h,
             "open_incidents": open_incidents,
+            "unverified_assets": unverified,
         }
 
     def _count_high_risk_assets(self) -> int:

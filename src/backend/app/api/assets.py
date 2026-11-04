@@ -47,6 +47,7 @@ async def list_assets(
     data_sensitivity: Optional[str] = Query(None, description="数据敏感度 5 档 extreme/high/medium/low/negligible"),
     protection_level: Optional[str] = Query(None, description="等保等级 5 档 level_5~level_1"),
     asset_status: Optional[str] = None,
+    lifecycle_state: Optional[str] = Query(None, description="存在性状态 active/unverified/presumed_offline/retired（与 asset_status 正交）"),
     network_zone: Optional[str] = None,
     data_source: Optional[str] = None,
     has_public_ip: Optional[bool] = Query(None, description="只返回登记了公网IP的资产（公网暴露面扫描目标选择用）"),
@@ -82,6 +83,8 @@ async def list_assets(
         query = query.filter(Asset.protection_level == protection_level)
     if asset_status:
         query = query.filter(Asset.asset_status == asset_status)
+    if lifecycle_state:
+        query = query.filter(Asset.lifecycle_state == lifecycle_state)
     if network_zone:
         query = query.filter(Asset.network_zone == network_zone)
     if data_source:
@@ -148,6 +151,11 @@ async def list_assets(
             business_system_ids=sys_ids or None,
             # 等级来源徽标（设计 §4.1）
             protection_level_source=asset.protection_level_source or "manual",
+            # P1/P2/P3 存在性证据
+            last_seen_at=asset.last_seen_at,
+            miss_streak=asset.miss_streak,
+            last_scan_missed_at=asset.last_scan_missed_at,
+            lifecycle_state=asset.lifecycle_state,
         ))
 
     return AssetListResponse(
@@ -360,6 +368,11 @@ async def create_asset(asset_data: AssetCreate, db: Session = Depends(get_db)):
     db.add(asset)
     db.commit()
     db.refresh(asset)
+
+    # P3 观测：人工录入即一次 manual 观测（last_seen 起算点）
+    from app.services.asset_presence import record_observation
+    record_observation(db, asset.id, "manual", "manual")
+    db.commit()
 
     # 记录审计日志
     audit_service = AuditLogService(db)

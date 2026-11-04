@@ -205,6 +205,10 @@ class AssetSyncService:
 
         self.db.flush()  # 确保 asset.id 可用
 
+        # P3 观测：wazuh 同步路径
+        from app.services.asset_presence import record_observation
+        record_observation(self.db, asset.id, "wazuh", "sync")
+
         # 写入/更新 soc_asset_sources 记录
         if source_status or source_id:
             self._upsert_asset_source(
@@ -436,6 +440,10 @@ class AssetSyncService:
                 source_status=source_status,
                 source_metadata=source_metadata,
             )
+
+        # P3 观测：webhook 同步路径
+        from app.services.asset_presence import record_observation
+        record_observation(self.db, existing.id, "wazuh", "sync")
 
         self.db.commit()
         self.db.refresh(existing)

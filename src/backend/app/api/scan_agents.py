@@ -244,6 +244,9 @@ async def report_status(
             setattr(task, field, int(body[field]))
     if body.get("error_message"):
         task.error_message = str(body["error_message"])[:1000]
+    # P1 覆盖凭证：任务完成即落"我看过了"的证据（含失败凭证，供告警/结算）
+    from app.services.asset_presence import record_task_coverage
+    record_task_coverage(db, task)
     db.commit()
     logger.info(
         "scanner %s 回报 task %s status=%s items=%d/%d/%d/%d",

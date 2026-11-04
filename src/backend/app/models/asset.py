@@ -134,6 +134,15 @@ class Asset(Base):
     risk_scored_at = Column(DateTime(timezone=True))
     score_breakdown = Column(JSONB)  # 各维度得分/权重/命中规则（可解释性，PRD §八-C）
 
+    # —— 存在性证据（P1/P2/P3 资产失联治理，见 asset_presence.py） ——
+    # last_seen_at：任何源最后一次实际观测到（与 updated_at 语义不同：后者任何编辑都刷新）
+    last_seen_at = Column(DateTime(timezone=True))
+    miss_streak = Column(Integer, nullable=False, default=0, server_default="0")
+    last_scan_missed_at = Column(DateTime(timezone=True))
+    # lifecycle_state：active / unverified（疑似失联）/ presumed_offline（疑似下线）/ retired（人工确认下线）
+    # 与 asset_status（Wazuh agent 在线状态）是两个正交维度，互不覆盖
+    lifecycle_state = Column(String(20), nullable=False, default="active", server_default="active", index=True)
+
     # P3/F3.2（2026-08-21，PRD v1.2.1）：资产生命周期
     purchase_date = Column(Date)                       # 采购日期
     warranty_end = Column(Date)                        # 保修到期

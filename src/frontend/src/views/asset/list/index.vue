@@ -603,6 +603,22 @@
   const assetTypeOptions = computed(() => dictStore.getOptions('asset_type'))
   const criticalityOptions = computed(() => dictStore.getOptions('asset_criticality'))
   const assetStatusOptions = computed(() => dictStore.getOptions('asset_status'))
+  // P1/P2/P3 存在性状态（与 asset_status 正交，硬编码四态，不入字典表）
+  const lifecycleOptions = [
+    { value: 'active', label: '正常' },
+    { value: 'unverified', label: '疑似失联' },
+    { value: 'presumed_offline', label: '疑似下线' },
+    { value: 'retired', label: '已下线' }
+  ]
+  const lifecycleLabelMap: Record<string, string> = Object.fromEntries(
+    lifecycleOptions.map((o) => [o.value, o.label])
+  )
+  const lifecycleColorMap: Record<string, string> = {
+    active: 'success',
+    unverified: 'warning',
+    presumed_offline: 'danger',
+    retired: 'info'
+  }
   const networkZoneOptions = computed(() => dictStore.getOptions('network_zone'))
 
   // useTable
@@ -615,6 +631,7 @@
         asset_type: '',
         criticality: '',
         asset_status: '',
+        lifecycle_state: '',
         network_zone: ''
       },
       columnsFactory: () => [
@@ -846,6 +863,24 @@
           }
         },
         {
+          prop: 'lifecycle_state',
+          label: '存在性',
+          align: 'center',
+          width: 100,
+          formatter: (row: any) => {
+            const state = row.lifecycle_state || 'active'
+            const label = lifecycleLabelMap[state] || state
+            return h(
+              resolveComponent('ElTag'),
+              {
+                type: (lifecycleColorMap[state] as any) || 'info',
+                effect: state === 'active' ? 'light' : 'plain'
+              },
+              { default: () => label }
+            )
+          }
+        },
+        {
           prop: 'os_name',
           label: '操作系统',
           align: 'center',
@@ -1044,6 +1079,16 @@
       clearable: true,
       placeholder: '请选择状态',
       options: assetStatusOptions.value
+    },
+    {
+      // P1/P2/P3 存在性（与 asset_status 正交：它还在不在，不是 agent 连没连）
+      label: '存在性',
+      key: 'lifecycle_state',
+      type: 'select',
+      span: 6,
+      clearable: true,
+      placeholder: '是否仍被观测到',
+      options: lifecycleOptions
     },
     {
       label: '数据来源',

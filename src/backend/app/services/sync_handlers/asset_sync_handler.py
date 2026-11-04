@@ -443,6 +443,10 @@ class AssetSyncHandler(BaseSyncHandler):
         db.add(asset)
         db.flush()
 
+        # P3 观测：新建即首次观测
+        from app.services.asset_presence import record_observation
+        record_observation(db, asset.id, source, "sync", now)
+
         # 写入来源记录
         self._upsert_source_record(asset.id, source, item, now, db)
 
@@ -474,6 +478,10 @@ class AssetSyncHandler(BaseSyncHandler):
                 changed_fields.append((field, old_str, new_str))
 
         asset.last_synced_at = now
+
+        # P3 观测：同步到 = 该源看到了它
+        from app.services.asset_presence import record_observation
+        record_observation(db, asset.id, source, "sync", now)
 
         # 更新来源记录（无论字段是否变化）
         self._upsert_source_record(asset.id, source, item, now, db)

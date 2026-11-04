@@ -191,6 +191,10 @@ class DiscoverySyncHandler(BaseSyncHandler):
 
         now = datetime.now(timezone.utc)
         if existing is not None:
+            # P3 观测：IP 命中台账 = 本次扫描看到了它
+            from app.services.asset_presence import record_observation
+            if matched_asset is not None:
+                record_observation(db, matched_asset.id, "scanner", "active_scan", now)
             # 已存在 → 刷新字段（finding_status 不动——保护人工处置结果）
             existing.last_seen = now
             existing.mac_address = item.get("mac_address") or existing.mac_address

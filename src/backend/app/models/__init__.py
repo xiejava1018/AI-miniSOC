@@ -172,3 +172,4 @@ __all__ = [
     # 用户中心重构 + MCP Key 管理（PR1）
     "SOCMCPKey",
 ]
+from .asset_presence import AssetObservation, ScanCoverage
