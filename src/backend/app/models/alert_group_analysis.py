@@ -37,7 +37,7 @@ class AlertGroupAnalysis(Base):
     model_name = Column(String(50), nullable=True)
     window_hours = Column(Integer, nullable=True)
     linked_asset_id = Column(
-        UUID(as_uuid=True), ForeignKey("soc_assets.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("soc_assets.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

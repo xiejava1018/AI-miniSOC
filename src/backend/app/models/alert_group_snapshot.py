@@ -38,7 +38,7 @@ class AlertGroupSnapshot(Base):
 
     # IP → 资产关联（落库时按 agent_ip 匹配 soc_assets.asset_ip）
     linked_asset_id = Column(
-        UUID(as_uuid=True), ForeignKey("soc_assets.id"), nullable=True, index=True
+        UUID(as_uuid=True), ForeignKey("soc_assets.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # —— Phase 1：历史快照回填的 AI verdict（落库时按 fingerprint 查缓存，不重新调 AI）——

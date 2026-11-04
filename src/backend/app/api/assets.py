@@ -492,8 +492,16 @@ async def delete_asset(asset_id: str, db: Session = Depends(get_db)):
         "asset_type": asset.asset_type
     }
 
-    db.delete(asset)
-    db.commit()
+    from sqlalchemy.exc import IntegrityError
+    try:
+        db.delete(asset)
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"资产被其他记录引用，无法删除：{e.orig}".split("\n")[0][:300],
+        )
 
     # 记录审计日志
     audit_service = AuditLogService(db)
