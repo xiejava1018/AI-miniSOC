@@ -219,12 +219,25 @@ class AssetResponse(AssetBase):
     miss_streak: Optional[int] = None
     last_scan_missed_at: Optional[datetime] = None
     lifecycle_state: Optional[str] = None
+    # 展示层派生：失联（unverified/presumed_offline/retired）时一律报 offline。
+    # 数据层不回写 asset_status（所有权归数据源），只在这里统一口径。
+    effective_status: Optional[str] = None
     # criticality：DEPRECATED 兼容垫片（API 序列化时由 to_response 钩子从 data_sensitivity 派生，
     # 6 个月内外部脚本可继续读；前端建议改用三维度字段）
 
     model_config = {
         "from_attributes": True
     }
+
+    @model_validator(mode="after")
+    def _derive_effective_status(self):
+        # 展示层统一口径：存在性失联时状态一律 offline，不管源快照说什么
+        if self.effective_status is None:
+            if self.lifecycle_state in ("unverified", "presumed_offline", "retired"):
+                self.effective_status = "offline"
+            else:
+                self.effective_status = self.asset_status or "unknown"
+        return self
 
     @field_validator('id', mode='before')
     @classmethod

@@ -849,12 +849,15 @@
           align: 'center',
           width: 80,
           formatter: (row: any) => {
-            const label = statusLabelMap.value[row.asset_status]
+            // effective_status：后端派生——失联（存在性非 active）一律显示离线，
+            // 避免"状态在线但疑似失联"的自相矛盾；源快照 asset_status 仍在详情可查
+            const st = row.effective_status || row.asset_status
+            const label = statusLabelMap.value[st]
             return label
               ? h(
                   resolveComponent('ElTag'),
                   {
-                    type: (statusColorMap.value[row.asset_status] as any) || 'info',
+                    type: (statusColorMap.value[st] as any) || 'info',
                     effect: 'light'
                   },
                   { default: () => label }

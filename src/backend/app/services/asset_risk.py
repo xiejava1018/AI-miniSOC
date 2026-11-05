@@ -333,8 +333,12 @@ class AssetRiskService:
 
     def _score_alerts(self, asset: Asset, rules: dict, now: datetime, alert_rows=None) -> dict:
         cfg = rules["alerts"]
-        # 离线资产不参与告警密度计分（§4.5：无告警 ≠ 安全）→ 半权
-        if (asset.asset_status or "").lower() == "offline":
+        # 离线/失联资产不参与告警密度计分（§4.5：无告警 ≠ 安全）→ 半权
+        # 2026-11-04：失联（lifecycle 非活）与 offline 同待遇——存在性状态比源快照更准
+        lifecycle_missing = (getattr(asset, "lifecycle_state", None) or "active") in (
+            "unverified", "presumed_offline",
+        )
+        if (asset.asset_status or "").lower() == "offline" or lifecycle_missing:
             return {"score": 0, "data_gap": True,
                     "reasons": ["资产离线，告警密度不参与计分（无告警 ≠ 安全，按 50% 权重计入）"], "inputs": {}}
         if alert_rows is None:

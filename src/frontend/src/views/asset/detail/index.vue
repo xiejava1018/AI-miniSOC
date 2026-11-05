@@ -11,8 +11,8 @@
         <div class="card-header">
           <span class="title">{{ assetDetail.name || assetDetail.asset_ip || '资产详情' }}</span>
           <div class="header-tags">
-            <ElTag v-if="assetDetail.asset_status" :type="statusTagType" effect="dark" size="small">
-              {{ statusLabelMap[assetDetail.asset_status] || assetDetail.asset_status || '--' }}
+            <ElTag v-if="assetDetail.effective_status || assetDetail.asset_status" :type="statusTagType" effect="dark" size="small">
+              {{ statusLabelMap[assetDetail.effective_status || assetDetail.asset_status] || assetDetail.effective_status || '--' }}
             </ElTag>
             <!-- === 治本方案 2026-09-14：重要性头部标签改三维度 === -->
             <ElTag v-if="assetDetail.business_impact" type="danger" effect="plain" size="small">
@@ -917,7 +917,9 @@
   // 资产详情
   const detailLoading = ref(false)
   const assetDetail = ref<any>({})
-  const statusTagType = computed(() => statusColorMap.value[assetDetail.value.asset_status] as any || 'info')
+  const statusTagType = computed(
+    () => statusColorMap.value[assetDetail.value.effective_status || assetDetail.value.asset_status] as any || 'info'
+  )
   const criticalityTagType = computed(() => criticalityColorMap.value[assetDetail.value.criticality] as any || 'info')
 
   const loadDetail = async () => {

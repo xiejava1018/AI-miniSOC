@@ -41,6 +41,9 @@ STATE_UNVERIFIED = "unverified"
 STATE_PRESUMED_OFFLINE = "presumed_offline"
 STATE_RETIRED = "retired"
 
+# 展示/筛选统一口径：这些存在性状态下 effective_status 视为 offline
+MISSING_STATES = (STATE_UNVERIFIED, STATE_PRESUMED_OFFLINE, STATE_RETIRED)
+
 # 结算延迟：report 后至少等这么久才结算（等 /sync 数据落地）
 SETTLE_DELAY_SECONDS = 600
 

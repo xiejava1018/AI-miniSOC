@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.core.database import get_db
@@ -82,7 +83,22 @@ async def list_assets(
     if protection_level:
         query = query.filter(Asset.protection_level == protection_level)
     if asset_status:
-        query = query.filter(Asset.asset_status == asset_status)
+        s = asset_status.strip().lower()
+        if s == "offline":
+            # 与 effective_status 同口径：源报 offline 或存在性失联都算离线
+            from app.services.asset_presence import MISSING_STATES
+            query = query.filter(or_(
+                Asset.asset_status == "offline",
+                Asset.lifecycle_state.in_(MISSING_STATES),
+            ))
+        elif s == "online":
+            from app.services.asset_presence import MISSING_STATES
+            query = query.filter(
+                Asset.asset_status == "online",
+                Asset.lifecycle_state.notin_(MISSING_STATES),
+            )
+        else:
+            query = query.filter(Asset.asset_status == asset_status)
     if lifecycle_state:
         query = query.filter(Asset.lifecycle_state == lifecycle_state)
     if network_zone:

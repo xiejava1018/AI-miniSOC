@@ -191,7 +191,18 @@ class AssetQueryService:
         status = (p.get("asset_status") or "").lower()
         for key, variants in _STATUS_MAP.items():
             if status in variants:
-                q = q.filter(Asset.asset_status.in_(variants))
+                # 与 effective_status 同口径：失联（存在性非 active）计入 offline
+                from app.services.asset_presence import MISSING_STATES
+                if key == "offline":
+                    q = q.filter(or_(
+                        Asset.asset_status.in_(variants),
+                        Asset.lifecycle_state.in_(MISSING_STATES),
+                    ))
+                else:  # online
+                    q = q.filter(
+                        Asset.asset_status.in_(variants),
+                        Asset.lifecycle_state.notin_(MISSING_STATES),
+                    )
                 break
         seg = (p.get("network_segment") or "").strip()
         if seg:
@@ -221,7 +232,10 @@ class AssetQueryService:
             "os_name": a.os_name,
             "os_version": a.os_version,
             "criticality": a.criticality,
-            "asset_status": a.asset_status,
+            "asset_status": (
+                "offline" if (a.lifecycle_state or "active") in ("unverified", "presumed_offline", "retired")
+                else (a.asset_status or "unknown")
+            ),
             "owner": a.owner,
             "network_segment": a.network_segment,
             "risk_score": a.risk_score,
