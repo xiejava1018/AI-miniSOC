@@ -344,7 +344,62 @@ LLM 只选模板填参数，**不生成 SQL**。模板清单在 `configs/query_t
 
 `npm ci` 会清 node_modules，紧接着 build 在 8GB 主机上偶发三种假错（SASS `@use 'config'` / `ERR_MODULE_NOT_FOUND` / rollup externalized）。**手动跑 `npx vite build` 全成功**。判定为竞态，`deploy.sh` 改成"lock 变了才 npm ci"（2026-09-12 ee3871a）。**注意**：修改 deploy.sh 的那次部署跑的还是旧脚本，需跑两次。
 
-### 4.16 登录验证码可绕过（**未修安全洞**）
+### 4.16 CI 全绿 ≠ 已部署（**2026-11-07 事件**）
+
+**现象**：push 后 CI 三个 job 全 success，但 CD run 永远 `pending`、`jobs=0`，部署没发生。
+
+**根因**：self-hosted runner 卡在**自更新循环** —— 102→GitHub 慢网（§4.14）导致
+`actions-runner-linux-x64-2.338.2.tar.gz` 下载 3 次超时，runner 停在 2.336.0，
+进入「重启 → 再收更新指令 → 再超时」的循环，**Worker 从此再没起来过**。
+
+**排查判据（两个是不同的"没跑起来"）**：
+- `jobs=0` + `status=pending` → GitHub **压根没创建 job**，runner 永远领不走
+- `jobs=1` + `status=queued` + `runner_name` 为空 → 排队等 runner（可能是 stale job 堵着）
+
+**处置**：
+```bash
+# 1. 重启 runner（sudoers 没放行它的 systemctl，但进程跑在 xiejava 用户下）
+ssh xiejava@192.168.0.102 'kill <Runner.Listener PID>'   # RunnerService.js 会自动拉起
+# 2. 手动部署（§2.3 文档路径）
+ssh xiejava@192.168.0.102 'cd /home/xiejava/AIproject/AI-miniSOC && \
+  nohup bash deploy/deploy.sh <sha> "说明" > /tmp/deploy-manual.log 2>&1 &'
+```
+
+**验证部署真的发生了**（不要只看 CI）：
+```bash
+ssh xiejava@192.168.0.102 'cd /home/xiejava/AIproject/AI-miniSOC && git rev-parse HEAD'
+ssh xiejava@192.168.0.102 'grep "部署成功" /tmp/aisoc-deploy.log | tail -1'
+```
+
+**待修**：① runner 关掉自更新（升级改成显式人工动作）② sudoers 放行
+`systemctl restart actions.runner.*` ③ CD pending 超时告警。
+
+### 4.17 同一业务概念的 `details` 有多条来源路径时，前端必须分型
+
+**现象（2026-11-07）**：资产稽核页显示"影子 2"，表格里却是「（未命名）」+ 空 IP +
+「Agent undefined · 系统未知 · 状态 undefined」。数据一直在库里，API 也正常返回。
+
+**根因**：shadow 有两条来源路径，`details` 结构完全不同：
+
+| 来源 | `details` 形状 | 产出位置 |
+|---|---|---|
+| Wazuh 主路 | `agent.{id,name,ip,status,os_name}` + `ledger.*` | `AssetReconciliationService.run()` |
+| scanner 路径 | `asset_ip,mac_address,os_guess,exposure,finding_id` | `reconcile_scanner_findings()` |
+
+前端只写了一条路径的取值，另一个落到 `|| '（未命名）'` 兜底。
+**统计卡片按行数计数 → 数字对、内容空 = §4.1「假绿」形态。**
+
+**规则**：
+- 取值前先判来源（`details.source === 'scanner'`），**不要靠"取不到就兜底"**
+  —— 兜底会静默产生空白内容，比报错更危险
+- 新增来源时，模板分支 + TS 类型 + 后端产出三处同步改
+- 计数类卡片正确 ≠ 内容正确；两者的口径要分别验
+
+**附带**：scanner 路径以前只写 `created_at`，`first_seen_at`/`last_seen_at` 为 NULL →
+「老化」列显示 `—`，且 dedup 口径（`last_seen_run_id`）拿不到。多来源路径的
+产出要保证**字段口径一致**。
+
+### 4.18 登录验证码可绕过（**未修安全洞**）
 
 POST `/auth/login` 不带 `captcha_key`/`captcha_code` 即跳过验证。前端表单必填挡了个寂寞。建议后端对启用配置强制校验。
 
