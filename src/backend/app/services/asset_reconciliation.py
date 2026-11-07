@@ -371,6 +371,11 @@ class AssetReconciliationService:
                 # 台账里压根没关联 Wazuh 的资产（如路由器采集来的）不参与下线判定，
                 # 否则 51 台非 Agent 资产会全被误报下线。
                 continue
+            if aid == MANAGER_AGENT_ID:
+                # manager 本机（哨兵 agent 000）恒在线（lastKeepAlive=9999-12-31），
+                # 且 agent 列表已默认排除 000——若不跳过，manager 宿主资产会被
+                # 误报“Wazuh 中已无此 Agent”（2026-11-07 pve-ubuntu01 案例）。
+                continue
             ag = agent_by_id.get(aid)
             if ag is None:
                 hit_offline_asset_ids.add(asset.id)
