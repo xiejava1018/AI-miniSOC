@@ -197,6 +197,24 @@
                 </span>
               </template>
             </div>
+            <!--
+              shadow 有两条来源路径，details 结构完全不同：
+                1. Wazuh 主路  → details.agent.{id,name,ip,status,os_name}
+                2. scanner 路径 → details.{asset_ip,mac_address,os_guess,exposure,finding_id}
+              2026-11-07 修复：原来只有 v-else 兜底分支打 details.agent，
+              scanner 来源的影子资产渲染成 "Agent undefined · 系统未知 · 状态 undefined"，
+              IP/MAC/纳管入口全部丢失 —— 用户只看到"有 2 条影子资产"却看不到是哪两条。
+            -->
+            <div v-else-if="row.details?.source === 'scanner'" class="detail-text">
+              扫描发现（未纳管）
+              <span class="detail-sub">
+                MAC {{ row.details?.mac_address || '未知' }}
+                <template v-if="row.details?.os_guess">· 系统 {{ row.details.os_guess }}</template>
+                <template v-if="row.details?.exposure">
+                  · 暴露面 {{ row.details.exposure === 'public' ? '公网' : '内网' }}
+                </template>
+              </span>
+            </div>
             <div v-else class="detail-text">
               Agent {{ row.details?.agent?.id }} · {{ row.details?.agent?.os_name || '系统未知' }} ·
               状态 {{ row.details?.agent?.status }}
@@ -233,9 +251,24 @@
           </template>
         </ElTableColumn>
 
-        <ElTableColumn label="操作" width="150" fixed="right">
+        <ElTableColumn label="操作" width="210" fixed="right">
           <template #default="{ row }">
             <div class="op-cell">
+              <!--
+                2026-11-07：scanner 来源的影子资产补「一键纳管」入口。
+                之前 shadow 只有 已处理/确认/忽略 —— 用户想纳管却只能去
+                /scan/findings 页面手动找 finding，路径断在这里。
+              -->
+              <ElButton
+                v-if="row.status === 'pending' && isAdoptable(row) && hasAuth('resolve')"
+                text
+                type="success"
+                size="small"
+                :loading="adoptingId === row.id"
+                @click="openAdopt(row)"
+              >
+                纳管
+              </ElButton>
               <template v-if="row.status === 'pending' && hasAuth('resolve')">
                 <ElButton text type="primary" size="small" @click="openResolve(row, 'resolved')">
                   已处理
@@ -326,6 +359,39 @@
         <ElButton type="primary" :loading="resolving" @click="submitResolve">确定</ElButton>
       </template>
     </ElDialog>
+    <!-- 一键纳管弹窗（scanner 来源的影子资产） -->
+    <ElDialog v-model="adoptVisible" title="一键纳管为资产" width="520px">
+      <ElAlert
+        class="adopt-alert"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="`将把 ${adoptTarget ? objName(adoptTarget) : ''} 写入资产台账`"
+      />
+      <ElForm :model="adoptForm" label-width="100px">
+        <ElFormItem label="资产名称">
+          <ElInput v-model="adoptForm.asset_name" placeholder="留空则使用 IP" />
+        </ElFormItem>
+        <ElFormItem label="重要级别">
+          <ElSelect v-model="adoptForm.criticality" style="width: 100%">
+            <ElOption label="低" value="low" />
+            <ElOption label="中" value="medium" />
+            <ElOption label="高" value="high" />
+            <ElOption label="严重" value="critical" />
+          </ElSelect>
+        </ElFormItem>
+        <ElFormItem label="责任人">
+          <ElInput v-model="adoptForm.owner" placeholder="如 ops-team" />
+        </ElFormItem>
+        <ElFormItem label="业务单元">
+          <ElInput v-model="adoptForm.business_unit" placeholder="如 ops" />
+        </ElFormItem>
+      </ElForm>
+      <template #footer>
+        <ElButton @click="adoptVisible = false">取消</ElButton>
+        <ElButton type="primary" :loading="adopting" @click="submitAdopt">确认纳管</ElButton>
+      </template>
+    </ElDialog>
   </div>
 </template>
 
@@ -344,6 +410,7 @@
     type ReconciliationType,
     type ReconFreshness
   } from '@/api/asset'
+  import { adoptFinding } from '@/api/scan'
   import { useAuth } from '@/hooks/core/useAuth'
   import AiFeedback from '@/components/business/ai-feedback/index.vue'
 
@@ -384,6 +451,18 @@
   const resolveTarget = ref<ReconciliationItem | null>(null)
   const resolveStatus = ref<'confirmed' | 'ignored' | 'resolved'>('resolved')
 
+  // 一键纳管（scanner 来源的影子资产）
+  const adoptVisible = ref(false)
+  const adopting = ref(false)
+  const adoptingId = ref<string>('')
+  const adoptTarget = ref<ReconciliationItem | null>(null)
+  const adoptForm = ref({
+    asset_name: '',
+    criticality: 'medium',
+    owner: '',
+    business_unit: ''
+  })
+
   const freshness = computed<ReconFreshness | null>(() => summary.value?.freshness || null)
   const resolveTitle = computed(
     () =>
@@ -421,11 +500,30 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
   }
 
-  /** 影子资产没有台账记录，对象名要取 agent 侧 */
-  const objName = (row: ReconciliationItem) =>
-    row.details?.ledger?.name || row.details?.agent?.name || '（未命名）'
-  const objIp = (row: ReconciliationItem) =>
-    row.details?.ledger?.asset_ip || row.details?.agent?.ip || ''
+  /**
+   * 影子资产没有台账记录，对象名要取 agent 侧。
+   * 2026-11-07 修复：scanner 来源的影子资产 details 里没有 agent/ledger，
+   * 原来一律落到兜底「（未命名）」+ 空 IP —— 列表看起来是空的。
+   * 现在按来源分支：
+   *   scanner → details.asset_ip（IP 本身就是最有辨识度的名字）
+   *   wazuh   → details.agent.name
+   */
+  const isScannerShadow = (row: ReconciliationItem) =>
+    row.reconciliation_type === 'shadow' && row.details?.source === 'scanner'
+
+  const objName = (row: ReconciliationItem) => {
+    if (isScannerShadow(row)) return row.details?.asset_ip || '（未知 IP）'
+    return row.details?.ledger?.name || row.details?.agent?.name || '（未命名）'
+  }
+
+  const objIp = (row: ReconciliationItem) => {
+    if (isScannerShadow(row)) return row.details?.asset_ip || ''
+    return row.details?.ledger?.asset_ip || row.details?.agent?.ip || ''
+  }
+
+  /** scanner 来源且有 finding_id → 可一键纳管 */
+  const isAdoptable = (row: ReconciliationItem) =>
+    isScannerShadow(row) && !!row.details?.finding_id
 
   /**
    * 2026-10-15 dedup：老化 badge
@@ -573,6 +671,51 @@
     }
   }
 
+  /**
+   * 一键纳管：scanner 发现的影子资产 → 写正式台账。
+   * 调 POST /scan/findings/{finding_id}/adopt（后端会写审计日志 + 把 finding
+   * 标为 adopted），成功后把这条差异标记为 resolved，队列自动收敛。
+   */
+  const openAdopt = (row: ReconciliationItem) => {
+    adoptTarget.value = row
+    adoptForm.value = {
+      asset_name: '',
+      criticality: 'medium',
+      owner: '',
+      business_unit: ''
+    }
+    adoptVisible.value = true
+  }
+
+  const submitAdopt = async () => {
+    if (!adoptTarget.value) return
+    const findingId = Number(adoptTarget.value.details?.finding_id)
+    if (!findingId) {
+      ElMessage.error('该影子资产缺少 finding_id，无法纳管')
+      return
+    }
+    adopting.value = true
+    adoptingId.value = adoptTarget.value.id
+    try {
+      await adoptFinding(findingId, {
+        asset_name: adoptForm.value.asset_name.trim() || undefined,
+        criticality: adoptForm.value.criticality,
+        owner: adoptForm.value.owner.trim() || undefined,
+        business_unit: adoptForm.value.business_unit.trim() || undefined
+      })
+      // 纳管成功后把差异置为已处理，否则它会一直挂在 pending 队列里
+      await resolveReconciliation(adoptTarget.value.id, 'resolved', '已一键纳管为正式资产')
+      ElMessage.success('已纳管，资产已写入台账')
+      adoptVisible.value = false
+      await Promise.all([loadSummary(), loadList()])
+    } catch (e: any) {
+      ElMessage.error(e?.message || '纳管失败')
+    } finally {
+      adopting.value = false
+      adoptingId.value = ''
+    }
+  }
+
   onMounted(async () => {
     await loadSummary()
     if (summary.value?.has_data) await loadList(1)
@@ -614,6 +757,10 @@
     .report-card,
     .list-card {
       margin-bottom: 12px;
+    }
+
+    .adopt-alert {
+      margin-bottom: 14px;
     }
 
     .summary-head {

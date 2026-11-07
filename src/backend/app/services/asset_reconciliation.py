@@ -586,6 +586,14 @@ class AssetReconciliationService:
                     },
                     status=STATUS_PENDING,
                     created_at=_utcnow(),
+                    # 2026-11-07：scanner 产出的 shadow 以前只写 created_at，
+                    # first_seen_at / last_seen_at 为 NULL → 前端「老化」列显示 "—",
+                    # 且 _upsert_diff 的 dedup 口径（last_seen_run_id）也拿不到。
+                    # 与 Wazuh 主路保持一致：三个时间戳都写。
+                    first_seen_at=_utcnow(),
+                    last_seen_at=_utcnow(),
+                    last_seen_run_id=run_id,
+                    occurrence_count=1,
                 )
             )
             recent_ips.add(ip)  # 同一 IP 在本次 run 内也只产一次

@@ -642,12 +642,29 @@ export interface ReconciliationItem {
     last_keep_alive?: string | null
     suggestion?: string
     linked_by?: string
+    /**
+     * scanner 来源的影子资产（2026-11-07）。
+     * 这类 details 里没有 agent/ledger，用 asset_ip/mac_address/finding_id 定位，
+     * finding_id 用来调 POST /scan/findings/{id}/adopt 做一键纳管。
+     */
+    source?: 'scanner' | 'wazuh'
+    asset_ip?: string
+    mac_address?: string | null
+    os_guess?: string | null
+    exposure?: 'internal' | 'public' | null
+    finding_id?: number
+    scanner_id?: string
+    scan_task_uuid?: string
   }
   status: ReconciliationStatus
   resolved_by?: string | null
   resolved_at?: string | null
   resolve_note?: string | null
   created_at: string
+  first_seen_at?: string | null
+  last_seen_at?: string | null
+  last_seen_run_id?: string | null
+  occurrence_count?: number
 }
 
 /** 触发稽核。Wazuh 不可达时后端返回 503，不会伪装成「无差异」 */
