@@ -21,15 +21,33 @@
 
     <!-- 1. KPI 区 -->
     <ElRow :gutter="16" class="kpi-row">
-      <ElCol :sm="12" :md="6" v-for="kpi in kpiCards" :key="kpi.label">
+      <ElCol
+        v-for="kpi in kpiCards"
+        :key="kpi.label"
+        :sm="12"
+        :md="kpi.span || 6"
+      >
         <div
           class="metric-card"
           :class="[`metric-card--${kpi.type}`, { 'metric-card--muted': kpi.value === 0 && kpi.mutedWhenZero }]"
         >
           <div class="metric-card__label">{{ kpi.label }}</div>
           <div class="metric-card__value">
-            <span class="metric-card__number">{{ kpi.value }}</span>
-            <span v-if="kpi.suffix" class="metric-card__suffix">{{ kpi.suffix }}</span>
+            <!-- 合并卡：失联/资产总量 -->
+            <template v-if="kpi.primary !== undefined">
+              <span class="metric-card__number" :class="{ 'text-danger': kpi.primary > 0 }">
+                {{ kpi.primary }}
+              </span>
+              <span class="metric-card__sep">/</span>
+              <span class="metric-card__number metric-card__number--secondary">
+                {{ kpi.secondary }}
+              </span>
+              <span v-if="kpi.suffix" class="metric-card__suffix">{{ kpi.suffix }}</span>
+            </template>
+            <template v-else>
+              <span class="metric-card__number">{{ kpi.value }}</span>
+              <span v-if="kpi.suffix" class="metric-card__suffix">{{ kpi.suffix }}</span>
+            </template>
           </div>
           <div v-if="kpi.subLabel" class="metric-card__sub">{{ kpi.subLabel }}</div>
         </div>
@@ -456,14 +474,19 @@
 
   const kpiCards = computed(() => {
     const k = overview.value?.kpi
+    const total = k?.total_assets ?? 0
+    const unverified = k?.unverified_assets ?? 0
     return [
       {
-        label: '总资产',
-        value: k?.total_assets ?? 0,
+        // 「总资产」与「失联资产」合并为一张卡：失联/资产总量
+        label: '失联/资产总量',
+        primary: unverified,
+        secondary: total,
         suffix: '个',
         type: 'info' as const,
-        subLabel: '纳管资产总数',
-        mutedWhenZero: false
+        subLabel: `失联 ${unverified} / 纳管 ${total}`,
+        mutedWhenZero: false,
+        span: 6
       },
       {
         label: '高危资产',
@@ -487,14 +510,6 @@
         suffix: '个',
         type: 'warning' as const,
         subLabel: '需 SOC 跟进',
-        mutedWhenZero: true
-      },
-      {
-        label: '失联资产',
-        value: k?.unverified_assets ?? 0,
-        suffix: '个',
-        type: 'warning' as const,
-        subLabel: '扫描覆盖但缺席，待确认',
         mutedWhenZero: true
       }
     ]
@@ -791,6 +806,18 @@
       font-weight: 600;
       line-height: 1.1;
       font-variant-numeric: tabular-nums;
+
+      // 合并卡的分母（总资产），视觉上弱于分子（失联资产）
+      &--secondary {
+        font-size: 20px;
+        color: var(--el-text-color-primary, #303133);
+      }
+    }
+
+    &__sep {
+      font-size: 20px;
+      color: var(--el-text-color-secondary, #909399);
+      margin: 0 2px;
     }
 
     &__suffix {
