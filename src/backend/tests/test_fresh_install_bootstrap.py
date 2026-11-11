@@ -492,3 +492,145 @@ def test_menu_tree_is_complete_and_admin_has_full_access():
         assert not missing, "admin cannot reach menus: %s" % missing[:10]
     finally:
         db.close()
+
+
+# --------------------------------------------------------------------------
+# 2026-11-10 生产事故回归：三个菜单种子曾被静默跳过
+# --------------------------------------------------------------------------
+
+# 事故：b6c7d8e9f0a1 / e9f0a1b2c3d4 / g3b4c5d6e7f8 三个菜单种子迁移用
+# ``INSERT ... SELECT ... FROM soc_menus p WHERE p.path = '/assets'``，
+# 在生产库上因为 INSERT...SELECT 源查询为空而**静默插入 0 行**（不报错），
+# 但 alembic_version 却已 stamp 到 head —— 表现为「表建了、菜单没有」。
+# 本组用例锁定「/assets 子菜单清单完整 + X1 角色授权齐全」。
+
+_ASSET_SUBS = [
+    # (path, 期望的 X1 角色 code 集合)
+    ("overview", {"admin", "operator", "viewer", "auditor"}),
+    ("list", {"admin", "operator", "viewer", "auditor"}),
+    ("business-system", {"admin", "operator"}),
+    ("compliance", {"admin", "operator", "viewer", "auditor"}),
+    ("reconciliation", {"admin", "operator", "viewer", "auditor"}),
+    ("graph", {"admin", "operator", "viewer", "auditor"}),
+    ("exposure", {"admin", "operator", "viewer", "auditor"}),
+    # ↓↓↓ 本次事故的三个缺失菜单 ↓↓↓
+    ("graph/perf-dashboard", {"admin", "operator", "viewer", "auditor"}),
+    ("attribution", {"admin", "operator", "viewer", "auditor"}),
+    ("remediation", {"admin", "operator", "viewer", "auditor"}),
+    # ↑↑↑ 本次事故的三个缺失菜单 ↑↑↑
+    ("rating-audit", {"admin", "operator", "viewer", "auditor"}),
+    ("governance-loop", {"admin", "operator", "viewer", "auditor"}),
+    ("agent-workbench", {"admin", "operator", "viewer", "auditor"}),
+    ("ontology-view", {"admin", "operator", "viewer", "auditor"}),
+]
+
+
+def test_asset_submenus_all_present():
+    """每个 /assets 子菜单都必须真实存在于 soc_menus —— 缺一个就是事故复发。"""
+    sys.path.insert(0, BACKEND)
+    from sqlalchemy.orm import Session
+
+    from app.core.database import engine
+    from app.models import Menu
+
+    db = Session(engine)
+    try:
+        parent = (
+            db.query(Menu)
+            .filter(Menu.path == "/assets", Menu.parent_id.is_(None))
+            .first()
+        )
+        assert parent is not None, "顶级菜单 /assets 不存在"
+
+        children = {
+            m.path: m
+            for m in db.query(Menu).filter(Menu.parent_id == parent.id).all()
+        }
+        missing = [path for path, _ in _ASSET_SUBS if path not in children]
+        assert not missing, (
+            "以下 /assets 子菜单缺失（种子迁移被静默跳过）：%s" % missing
+        )
+
+        # 组件路径必须与前端路由对齐，否则菜单点了 404
+        for path, _ in _ASSET_SUBS:
+            comp = children[path].component
+            assert comp and comp.startswith("/asset/"), (
+                "菜单 %r 的 component 非法：%r" % (path, comp)
+            )
+    finally:
+        db.close()
+
+
+def test_asset_submenus_have_x1_role_grants():
+    """X1 四角色对 /assets 子菜单必须有授权行 —— 授权缺失则菜单对角色不可见。"""
+    sys.path.insert(0, BACKEND)
+    from sqlalchemy.orm import Session
+
+    from app.core.database import engine
+    from app.models import Menu, Role, RoleMenu
+
+    db = Session(engine)
+    try:
+        parent = (
+            db.query(Menu)
+            .filter(Menu.path == "/assets", Menu.parent_id.is_(None))
+            .first()
+        )
+        assert parent is not None, "顶级菜单 /assets 不存在"
+
+        children = {
+            m.path: m
+            for m in db.query(Menu).filter(Menu.parent_id == parent.id).all()
+        }
+        role_codes = {r.code for r in db.query(Role).all()}
+
+        problems = []
+        for path, expected_roles in _ASSET_SUBS:
+            menu = children.get(path)
+            if menu is None:
+                problems.append("%s: 菜单不存在" % path)
+                continue
+            granted = {
+                rm.role_id
+                for rm in db.query(RoleMenu).filter(RoleMenu.menu_id == menu.id).all()
+            }
+            role_by_id = {r.id: r.code for r in db.query(Role).all()}
+            actual = {role_by_id[rid] for rid in granted if rid in role_by_id}
+            # 只校验实际存在的角色（历史库可能缺某角色）
+            missing_roles = expected_roles & role_codes - actual
+            if missing_roles:
+                problems.append(
+                    "%s: 缺少角色授权 %s" % (path, sorted(missing_roles))
+                )
+
+        assert not problems, "菜单授权缺失：%s" % problems
+    finally:
+        db.close()
+
+
+def test_menu_backfill_migration_has_rowcount_assertions():
+    """根治迁移 m1n2o3p4q5r7 必须带行数断言 —— 否则下次还是静默 0 行。"""
+    mig = os.path.join(
+        VERSIONS, "m1n2o3p4q5r7_menu_backfill_with_assertions.py"
+    )
+    assert os.path.exists(mig), "根治迁移文件缺失：%s" % mig
+
+    src = open(mig, encoding="utf-8").read()
+
+    # 1) 父菜单缺失必须 raise（不能静默跳过）
+    assert "_assert_parent_menu" in src, "根治迁移缺少父菜单断言"
+    assert "raise RuntimeError" in src, "根治迁移缺少显式异常抛出"
+
+    # 2) 插入行数与目标存在性必须联合断言
+    assert "rowcount" in src, "根治迁移未检查插入行数"
+    assert "inserted == 0 and not exists" in src, (
+        "根治迁移未断言「插入 0 行且菜单不存在」这一危险形态"
+    )
+
+    # 3) 终态断言：清单里每个菜单都必须存在
+    assert "终态断言" in src, "根治迁移缺少终态断言"
+
+    # 4) 不得硬编码菜单 id（CLAUDE.md §4.3 红线 2）
+    assert not re.search(
+        r"parent_id\s*=\s*\d+", src
+    ), "根治迁移硬编码了 parent_id"
