@@ -254,6 +254,11 @@ sudo systemctl status actions.runner.*
 7. **op.execute 会把 `:id` 当绑定参数**——菜单 path 含路由参数时
    （`detail/:id`），字面量里的冒号必须转义成 `\:`，否则报
    `A value is required for bind parameter 'id'`
+8. **裸 SQL `CREATE TABLE IF NOT EXISTS` 的列集必须与 ORM 一致**——老库被
+   `create_all()` 掩盖差异，空库上 CREATE 生效 → 列集缺列 → 下游 FK/查询炸
+   （2026-11-11 `soc_alert_group_analyses` 事故）。同理：**`alembic stamp head`
+   不执行迁移体**，手工建 schema 的库后续 INSERT 类种子迁移全部未跑过——
+   种子迁移要么带行数断言（静默 0 行→raise），要么别依赖它已跑过。
 
 ### 4.4 菜单 / icon 的静默失败模式
 
@@ -336,9 +341,13 @@ LLM 只选模板填参数，**不生成 SQL**。模板清单在 `configs/query_t
   - 数据源连通性由业务采集循环 + 告警覆盖（`_run_daemon` 已做）
   - 例外：`scanner-collector` 走 `nmap --version` 自检无外联，可以保留
 
-### 4.14 Mac 到 GitHub 慢网
+### 4.14 Mac/102 到 GitHub 慢网（分层真相）
 
 现象：TCP 能连、发出本地版本串后即断，**不是** key 问题。应急 HTTPS `git push https://github.com/xiejava1018/AI-miniSOC.git master`（已存 `credential.helper=store`）。Bundle 备用：`git bundle create /tmp/full.bundle master` + 服务器 `git fetch`。
+
+2026-11-14 补正（此前「102 完全断网」是误判）：
+- **主站/API 正常但 TLS 慢（6–14s）**——curl 探测至少给 30–60s 超时再下结论；`git fetch` 实测 1.5s 正常
+- **GitHub Releases CDN（objects.githubusercontent.com）仅 ~8KB/s**——大文件/runner 安装包走代理 `https://ghfast.top/https://github.com/...` 可达 **1MB/s**
 
 ### 4.15 102 部署脚本前端构建竞态
 
@@ -371,7 +380,7 @@ ssh xiejava@192.168.0.102 'cd /home/xiejava/AIproject/AI-miniSOC && git rev-pars
 ssh xiejava@192.168.0.102 'grep "部署成功" /tmp/aisoc-deploy.log | tail -1'
 ```
 
-**待修**：① runner 关掉自更新（升级改成显式人工动作）② sudoers 放行
+**待修**：~~① runner 关掉自更新~~ **2026-11-14 根治**（见 §4.19）② sudoers 放行
 `systemctl restart actions.runner.*` ③ CD pending 超时告警。
 
 ### 4.17 同一业务概念的 `details` 有多条来源路径时，前端必须分型
@@ -403,6 +412,38 @@ ssh xiejava@192.168.0.102 'grep "部署成功" /tmp/aisoc-deploy.log | tail -1'
 
 POST `/auth/login` 不带 `captcha_key`/`captcha_code` 即跳过验证。前端表单必填挡了个寂寞。建议后端对启用配置强制校验。
 
+### 4.19 runner 版本门禁：CD 全 cancelled 无 job（2026-11-14 根治）
+
+**症状组合 = runner 版本过旧，先查这个**：
+
+```
+GitHub 侧：CD run cancelled + jobs total_count=0（job 从未创建）
+runner 侧：进程活着、Session created、"Listening for Jobs"、无报错
+runner log：大量 "Runner update failed: ... failed after 3 download attempts"
+```
+
+GitHub 对过旧版本**静默拒派 job**。根治：升级 2.336.0→2.338.2（积压 job 立即派发）
++ patch `RunnerService.js` 加 `--disableupdate`（自更新走 Releases CDN 8KB/s 必失败，
+见 §4.14；启动时会打一行 "Unrecognized ... disableupdate" 警告，无害）。
+**升级手册**：ghfast.top 代理下载 → scp → 原地解压（状态文件不在包内，安全）→
+kill 进程链 + `nohup ./runsvc.sh &`（sudoers 管不了 runner 服务，unit 无 Restart）。
+详见 `docs/sessions/2026-11-14-cicd-runner-version-gate-and-deploy-v29.md`。
+
+### 4.20 Art Bot/agent-runner：streamFn 契约 + LLM 错误吞错链
+
+- **streamFn 返回值必须带 `.result()` 方法**（返回 Promise），不能是普通 async
+generator——否则 pi-agent-core 调 `response.result()` 报 "response.result is not a
+function"，**且该错误本身又被同一机制吞掉**，现象同为「聊天没响应」。
+runner 内联的 `createEventStream()`（pi-agent-runner.js）实现了该契约，勿删。
+- **pi-agent-core 对 error 事件 resolve(error) 不 reject** → `agent.prompt()` 正常
+返回，LLM 错误（429 额度用尽等）会静默消失。错误传播链：stream push error 事件 →
+event-mapper 识别 message_end 里的错误载荷 → Python 消费循环 error 分支抛
+`PiAgentChatError` → SSE 报给前端。三处任缺一处即退化为「无响应」。
+- **Art Bot 模型统一走配置中心**：`art_bot_model_resolver.py` →
+`resolve_ai(scene="chat")`，禁再硬编码模型名；`timeout_seconds` 是连通性测试
+超时（≈5s），推理用 120s 兜底（`ART_BOT_TIMEOUT_SECONDS` 覆盖）。
+详见 `docs/sessions/2026-11-14-artbot-config-center-and-silent-error-chain.md`。
+
 ---
 
 ## 5. Session 笔记归档
@@ -430,9 +471,15 @@ POST `/auth/login` 不带 `captcha_key`/`captcha_code` 即跳过验证。前端�
 
 详见 [`docs/sessions/CLAUDE-archive-v2.36-2026-09-15.md`](docs/sessions/CLAUDE-archive-v2.36-2026-09-15.md) 各章节「待办（不阻塞）」节，摘要：
 
-- 登录验证码后端强制校验（§4.16 安全洞）
+- 登录验证码后端强制校验（§4.18 安全洞）
 - ~~同步采集器 `sync_client` 不看 `body.code`（§4.13 假绿）~~ **2026-10-08 修复**
 - ~~`AssetSyncHandler` 批内触发 `uq_soc_assets_agent_id` UniqueViolation → wazuh:agents 6 周 60% 成功~~ **2026-10-08 修复**（wazuh_agent_id 漂移识别 + 释放陈旧占位）
+- ~~runner 自更新循环卡死（§4.16 ①）~~ **2026-11-14 根治**（§4.19：升 2.338.2 + 禁自更新）
+- sudoers 放行 `systemctl ... actions.runner.*`（§4.16 ②；现在手动重启只能 kill+nohup）
+- CD run pending 超时告警（§4.16 ③；本次 job 积压 3 天无人知晓）
+- `user_service.lock_user` 写 `locked_until`/`failed_login_attempts` 两列但表和 ORM 都没有 → SQLAlchemy 静默丢弃 → **解锁操作空提交，admin 被锁后无法经 UI 解锁**（2026-11-10 发现；需补迁移+模型列）
+- 生产 admin 密码 `admin123` 强度偏弱（2026-11-10 发现；另：测试库是 `Admin@123`）
+- `alembic check` 持续报模型/迁移不一致噪音（涉及 soc_remediation_tickets 等「ORM 有、迁移链没建」同类问题，待专项清理）
 - Loki 192.168.0.30:3100 不可达（`browsing_detector` 持续降级）
 - F2.1 L2 降级文案说"已达调用限额"实际可能是熔断（措辞略偏）
 - 旧远端生产库 `111.228.57.2:25432` 暂未删（迁回滚素材）
@@ -440,6 +487,7 @@ POST `/auth/login` 不带 `captcha_key`/`captcha_code` 即跳过验证。前端�
 - F1.1 评分权重校准（端口覆盖率 >80% 或接入第二台 Wazuh agent 才触发）
 - 采集器 `run_daemon.py` 守护逻辑与 docker restart 重叠
 - 业务系统归一化字段（description/criticality）批量回填
+- e2e workflow 无 runner（runs-on 需 `e2e` label，102 只有 prod-deployer 一个 runner）
 
 ---
 

@@ -1,18 +1,18 @@
 # 项目硬事实快照
 
-> **自动生成于 2026-10-23 00:58 UTC** by `scripts/sync_claude_md_truth.py`
+> **自动生成于 2026-11-14 12:12 UTC** by `scripts/sync_claude_md_truth.py`
 > 不要手改——下次跑脚本会被覆盖。发现过期请修脚本或修源数据。
 
 ## 数据库
 
-- **ORM 声明表数**（`Base.metadata`）: `75`
+- **ORM 声明表数**（`Base.metadata`）: `77`
   （库中实际可能更多：如 `soc_*_cleanup_audit` 审计表只在迁移里建、不在 ORM）
 - **非 soc_ 前缀的表**: 无
-- **alembic 迁移文件数**: `94`
+- **alembic 迁移文件数**: `100`
 
 ## Alembic heads
 
-- 单 head: `n0b1c2d3e4f5`（线性 OK）
+- 单 head: `n2o3p4q5r6s7`（线性 OK）
 
 ## 顶级菜单（按 sort_order）
 

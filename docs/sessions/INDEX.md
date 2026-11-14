@@ -12,14 +12,14 @@
 
 | 主题 | 条数 | 主要内容 |
 |---|---|---|
-| [CI/CD 与部署](#cicd-与部署) | 2 | 自动化部署、采集器 CD 缺口、102 服务器、迁移 |
+| [CI/CD 与部署](#cicd-与部署) | 3 | 自动化部署、采集器 CD 缺口、runner 版本门禁/慢网代理/deploy v2.9 |
 | [权限矩阵 X1](#权限矩阵-x1) | 4 | require_role/require_button_permission、菜单树粒度 bug、全菜单授权 |
-| [alembic / 数据库迁移](#alembic--数据库迁移) | 2 | 空库 upgrade 跑通、多 head 修复、JSONB 写法 |
+| [alembic / 数据库迁移](#alembic--数据库迁移) | 3 | 空库 upgrade 跑通、多 head 修复、JSONB 写法、菜单种子静默 0 行 |
 | [菜单 / UI / icon](#菜单--ui--icon) | 7 | /ops 容器、iconify ri:* 严格、稽核/对账文案、菜单重排 |
 | [资产知识图谱](#资产知识图谱) | 1 | IdentityGraphBuilder 阻塞根治、asyncio.to_thread + threading.Lock |
 | [行为画像 / 上网行为](#行为画像--上网行为) | 3 | 两层结构、L1 主体列表首屏、入口跳转 |
 | [资产扫描 / scanner](#资产扫描--scanner) | 1 | Phase 1+2 全量落地、ScanFinding UUID、X-API-Key 鉴权 |
-| [AI / LLM / F2.x](#ai--llm--f2x) | 4 | L2 复合查询、变更影响分析、报告生成、W0 评测集 |
+| [AI / LLM / F2.x](#ai--llm--f2x) | 5 | L2 复合查询、变更影响分析、报告生成、W0 评测集、Art Bot 吞错链 |
 | [配置中心](#配置中心) | 4 | 数据源走 DB、配置审计合并、过期文档评审、admin 菜单授权缺失修复 |
 | [通知 / 站内信 / 邮件通道](#通知--站内信--邮件通道) | 1 | OH-NOT-F2 Phase 1+2：通道扩展、dispatcher 框架、SMTP 真实投递+重试、前端双页 |
 | [业务系统管理](#业务系统管理) | 4 | F9 CRUD、菜单、对齐角色页、负责人/部门/电话 |
@@ -36,6 +36,7 @@
 
 - **2026-08-19 CI/CD 上线** (L587–615) — push master → CI 三绿 → self-hosted runner `aisoc-prod-deployer` 自动部署 192.168.0.102，失败全局 trap 回滚；`deploy.sh` 含 fetch depth+timeout/pip/vite build/systemd restart/双探活
 - **2026-08-23 采集器 unhealthy / 僵尸进程 → CI/CD 缺口** (L1344–1480) — `src/collectors/` 完全在 CI/CD 之外的发现与修复；`deploy_collectors.sh` 补上；wazuh `yaml.safe_load` 不展开 `${VAR}` bug + 修复
+- **2026-11-14 CI/CD 恢复：runner 版本门禁 + 自更新失败根治 + deploy.sh v2.9** — [`2026-11-14-cicd-runner-version-gate-and-deploy-v29.md`](2026-11-14-cicd-runner-version-gate-and-deploy-v29.md)：CD 全 cancelled+jobs total_count=0+runner 无报错 = **版本过旧被拒派 job**（升 2.338.2 后立即恢复）；「断网」是 curl 超时太短的误判（TLS 慢 6–14s）；**Releases CDN 仅 8KB/s，走 ghfast.top 代理 1MB/s**；禁自更新=patch RunnerService.js；runner 升级操作手册（代理下载+scp+原地解压+kill/nohup，sudoers 管不了 runner 服务）；deploy.sh v2.9 fetch 策略0（本地有 commit 跳过 fetch，断网省 8 分钟）+ 健康检查 10s→60s 窗口
 
 ## 权限矩阵 X1
 
@@ -47,6 +48,7 @@
 
 - **2026-08-22 续三：todo#4 空库 alembic 跑通 → P3 收官** (L995–1024) — 新迁移 `ab9cd0e1f2a3` 幂等补齐 7 张手工表 + 7 个手工列；空库 upgrade head（27 步 48 表）→ downgrade base → 再 upgrade 干净
 - **2026-09-14：P0 数据补齐地基落地 — F9/F10/F11** (L2053–2162) — F11 Asset.parent_id 模型对齐 DB；F9 业务系统 CRUD API；F10 AssetUpdate 拓归属字段
+- **2026-11-11 菜单种子静默跳过 + 空库 upgrade 断链根治** — [`2026-11-11-menu-seed-silent-skip-and-fresh-db-chain.md`](2026-11-11-menu-seed-silent-skip-and-fresh-db-chain.md)：生产缺 3 菜单但 alembic 同 head——**stamp head 不执行迁移体**，INSERT..SELECT 静默 0 行；空库断链：裸 SQL 建表列集与 ORM 不一致（IF NOT EXISTS 掩盖）；根治=显式清单+行数断言迁移（静默 0 行→响亮 raise）+空库 upgrade EXIT=0；误判澄清：判断迁移链结构用 ScriptDirectory，不要 grep+awk 解析文本输出
 
 ## 菜单 / UI / icon
 
@@ -81,6 +83,7 @@
 - **2026-08-22 P3/F2.1 L2 复合查询 + 告警计数假阴性修复** (L816–901) — **真安全教训**：把 99 条 critical 报成 0 比查询失败更危险；计数类需求一律用服务端聚合，不要取 N 条文档客户端数
 - **2026-08-22 P3/F3.1 变更影响分析** (L762–815) — 关键词提取零 LLM 成本 → 资产定位 → 粗粒度关联 → OpenSearch → GLM；honest 降级；target_count 膨胀 bug
 - **2026-08-22 续：W0 评测集 + LLM-SQL 路径审计** (L902–966) — 50 条评测集基线 49/50=98%；**Go/No-Go 安全项审计通过**：项目无 LLM 生成 SQL 路径（全是 select() 构造体）
+- **2026-11-14 Art Bot 无响应根治：配置中心统一 + 三层吞错链** — [`2026-11-14-artbot-config-center-and-silent-error-chain.md`](2026-11-14-artbot-config-center-and-silent-error-chain.md)：模型硬编码 agnes/* 使配置中心对 Art Bot 无效（Agnes 免费额度 429）；**LLM 错误被 runner/event-mapper/Python 三层静默吞掉**（pi-agent-core 对 error 事件 resolve 不 reject）；⚠️ **streamFn 返回值必须带 .result() 方法**（普通 async generator 会报 "response.result is not a function" 且该错误本身又被吞掉，现象同为「聊天没反应」）；修复=resolve_ai(scene="chat") + 通用 OpenAI 兼容 provider + error 事件贯通到 SSE
 
 ## 通知 / 站内信 / 邮件通道
 
