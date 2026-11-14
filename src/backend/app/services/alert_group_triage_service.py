@@ -10,18 +10,17 @@ top_n 来自系统配置 alert_governance.triage_top_n（默认 20）。
 """
 import asyncio
 import logging
-from typing import List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import AlertGroupAnalysis
-from app.services.alert_query import AlertQueryService
 from app.services.ai_analysis import AIAnalysisService
 from app.services.alert_governance_config import (
-    get_triage_top_n,
-    get_min_group_count,
     filter_noise_groups,
+    get_min_group_count,
+    get_triage_top_n,
 )
+from app.services.alert_query import AlertQueryService
+from app.services.arl_profile_client import get_external_profile
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +39,8 @@ class AlertGroupTriageService:
     # ── 公开方法 ──────────────────────────────────────
 
     async def triage_top_groups(
-        self, hours: int = 24, top_n: Optional[int] = None, force_refresh: bool = False
-    ) -> List[dict]:
+        self, hours: int = 24, top_n: int | None = None, force_refresh: bool = False
+    ) -> list[dict]:
         """对 TopN 告警簇做 AI 研判，返回带 verdict 的簇清单（按优先级排序）。"""
         # P1-T2：_ensure_tables() 已移除，表由迁移 e2f3a4b5c6d7 保障
         if top_n is None:
@@ -111,10 +110,17 @@ class AlertGroupTriageService:
             "sample_full_log": samples[0].get("full_log") if samples else None,
             "window_hours": hours,
         }
+        # OH-ARL.5：同 _build_signature（外部画像实时查，诚实降级）
+        try:
+            sig["external_profile"] = await get_external_profile(
+                detail.get("agent_ip")
+            )
+        except Exception:
+            sig["external_profile"] = {"available": False, "reason": "error"}
         ai = AIAnalysisService(self.db)
         return await ai.triage_alert_group(sig, force_refresh=force_refresh)
 
-    def get_cached_verdict(self, fingerprint: str) -> Optional[dict]:
+    def get_cached_verdict(self, fingerprint: str) -> dict | None:
         """取某簇缓存 verdict；无或已过期返回 None。"""
         ai = AIAnalysisService(self.db)
         obj = ai._get_cached_group_analysis(fingerprint)
@@ -172,6 +178,12 @@ class AlertGroupTriageService:
                     sig["linked_asset_id"] = la.get("asset_id")
             except Exception:
                 pass
+        # OH-ARL.5：外部攻击面画像（ARL-Next 实时只读查，不落库；缓存+熔断，
+        # 未配置/失败时 available=False 诚实标注——C7 禁止静默当「无风险」）
+        try:
+            sig["external_profile"] = await get_external_profile(g.get("agent_ip"))
+        except Exception:
+            sig["external_profile"] = {"available": False, "reason": "error"}
         return sig
 
     @staticmethod

@@ -446,6 +446,34 @@ class AIAnalysisService:
         criticality = linked.get("criticality") or "未知"
         top_srcips = signature.get("top_srcips") or []
         srcip_hint = ", ".join(str(ip) for ip in top_srcips[:5]) or "无"
+        # OH-ARL.5：外部攻击面画像（ARL-Next；available=False 时诚实标注原因，
+        # 禁止静默当「无风险」——design C7 诚实降级）
+        ext = signature.get("external_profile") or {}
+        if ext.get("available"):
+            ports_hint = ", ".join(
+                f"{p.get('port')}/{p.get('service') or '?'}"
+                + (f"({p.get('product')})" if p.get("product") else "")
+                for p in (ext.get("ports") or [])[:10]
+            ) or "无"
+            vuln_lines = "\n".join(
+                f"  - {v.get('plugin_name')} ({v.get('url') or ''})"
+                for v in (ext.get("vulns") or [])[:5]
+            ) or "  - 无"
+            ext_block = f"""
+## 外部攻击面画像（ARL-Next 主动测绘实测，来源: {ext.get('source')}）
+- 目标: {ext.get('target')}（解析 IP: {', '.join(ext.get('resolved_ips') or []) or '未知'}）
+- 操作系统: {ext.get('os') or '未知'}
+- 开放端口（实测 {ext.get('ports_total')} 个，列前 10）: {ports_hint}
+- 已验证漏洞（共 {ext.get('vulns_total')} 个）:
+{vuln_lines}
+"""
+            ext_rule = "若提供了外部攻击面画像：请结合**暴露面大小与已验证漏洞**调整优先级（暴露面大或存在已验证漏洞 → 至少 P1 起评，除非有明确噪声证据）；"
+        else:
+            ext_block = f"""
+## 外部攻击面画像
+- 不可用（原因: {ext.get('reason') or 'unavailable'}）——本研判仅基于本地数据，外部画像缺失不代表资产无暴露风险。
+"""
+            ext_rule = ""
 
         return f"""你是一个网络安全专家。下面是一批**同类安全告警聚合而成的告警簇**（不是单条告警），请综合研判并给出处置优先级。
 
@@ -459,7 +487,7 @@ class AIAnalysisService:
 - 不同攻击源 IP 数: {signature.get('distinct_srcips')}（Top: {srcip_hint}）
 - 关联资产重要度: {criticality}
 - 样本日志: {(signature.get('sample_full_log') or '无')[:800]}
-
+{ext_block}
 ## 研判要求
 请综合 **量级、等级跨度、受影响资产重要度、攻击源多样性、时间持续性** 给出结论，并以**严格 JSON** 返回（不要任何多余文本/解释）：
 {{
@@ -470,7 +498,7 @@ class AIAnalysisService:
   "recommended_action": "处置步骤1\\n处置步骤2\\n处置步骤3",
   "suggest_incident": true|false
 }}
-注：P0=需立即处置的重大事件；P1=高优先级需尽快处理；P2=中优先级可排期；P3=低优先级/观察。is_noise=true 表示可判定为良性噪声，可移出必处理清单。
+注：P0=需立即处置的重大事件；P1=高优先级需尽快处理；P2=中优先级可排期；P3=低优先级/观察。is_noise=true 表示可判定为良性噪声，可移出必处理清单。{ext_rule}
 """
 
     def _parse_verdict_json(self, text: str) -> dict:

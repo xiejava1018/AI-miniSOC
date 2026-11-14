@@ -82,6 +82,16 @@ class Settings(BaseSettings):
     WAZUH_API_USERNAME: Optional[str] = None
     WAZUH_API_PASSWORD: Optional[str] = None
 
+    # ARL-Next 外部画像（OH-ARL.5，design 2026-11-14 §6.2）：告警富化实时只读查。
+    # 未配置 BASE_URL → 功能关闭（外部画像不可用，诚实降级）；凭据 OH-ARL.7 迁配置中心。
+    ARL_PROFILE_BASE_URL: Optional[str] = None
+    ARL_PROFILE_API_KEY: Optional[str] = None
+    ARL_PROFILE_USERNAME: Optional[str] = None
+    ARL_PROFILE_PASSWORD: Optional[str] = None
+    ARL_PROFILE_VERIFY_TLS: bool = False
+    ARL_PROFILE_CACHE_TTL: int = 300      # 本地缓存 ≥5min（方案 §6.2 配额保护）
+    ARL_PROFILE_TIMEOUT: float = 5.0
+
     # OpenSearch 配置（Wazuh Indexer）
     OPENSEARCH_URL: str = "https://192.168.0.40:9200"
     OPENSEARCH_USER: str = "admin"
