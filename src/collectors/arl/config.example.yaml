@@ -1,0 +1,21 @@
+# ARL Collector 配置样例（复制为 config.yaml 后改值；${VAR} 由 src/collectors/.env 注入）
+# 运行：cd src/collectors/arl && PYTHONPATH=../base:. python -m arl_collector
+
+minisoc:
+  url: ${MINISOC_URL}
+  api_key: ${MINISOC_API_KEY}
+
+arl:
+  # ARL-Next 网关（Nginx 5173 反代 /api）；自签证书默认不校验（ARL_VERIFY_TLS=true 开启）
+  base_url: ${ARL_BASE_URL:-https://192.168.0.42:5173}
+  # 凭据二选一：长期 API Key（推荐，按制度轮换）或 username/password（login 换 token，会话 24h）
+  api_key: ${ARL_API_KEY:-}
+  username: ${ARL_USERNAME:-admin}
+  password: ${ARL_PASSWORD}
+  # scope_id 白名单（C1 授权范围；逗号分隔多个；留空 = 拉全部资产组）
+  scope_ids: ${ARL_SCOPE_IDS:-}
+  verify_tls: false
+
+collect:
+  interval: 1800   # 30min（design §6.1）
+  types: [arl_site, arl_vuln]

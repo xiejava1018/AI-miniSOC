@@ -3,9 +3,9 @@
 """
 
 from abc import ABC, abstractmethod
-from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 
 
 class DataType(Enum):
@@ -18,6 +18,11 @@ class DataType(Enum):
     # S2 暴露面归位（AOG-6 / OH-6.1）：TP-Link 虚拟服务器（DNAT 端口映射）
     # 后端路由按字符串 nat_mapping 识别
     NAT_MAPPING = "nat_mapping"
+    # ARL-Next 集成（docs/design/2026-11-14-ARL-Next集成设计方案.md OH-ARL.1）：
+    # 外部攻击面测绘源（Web 站点/指纹/端口观测 + PoC 漏洞发现），
+    # 后端路由按字符串 arl_site / arl_vuln 识别
+    ARL_SITE = "arl_site"
+    ARL_VULN = "arl_vuln"
 
 
 @dataclass

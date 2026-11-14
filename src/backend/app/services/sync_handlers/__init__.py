@@ -5,14 +5,20 @@
 每种 data_type 对应一个 Handler，负责去重、增量更新、变更记录。
 """
 
-from app.services.sync_handlers.base import BaseSyncHandler
+# ARL-Next 集成（OH-ARL.2）：外部攻击面测绘源（站点/指纹观测 + PoC 漏洞发现）
+from app.services.sync_handlers.arl_site_sync_handler import ArlSiteSyncHandler
+from app.services.sync_handlers.arl_vuln_sync_handler import ArlVulnSyncHandler
 from app.services.sync_handlers.asset_sync_handler import AssetSyncHandler
-# P3/F-S2：资产发现扫描器公网暴露面扫描
-from app.services.sync_handlers.port_sync_handler import PortSyncHandler
+from app.services.sync_handlers.base import BaseSyncHandler
+
 # P3/F-S1：资产发现扫描器内网发现（落 soc_scan_findings，不写台账）
 from app.services.sync_handlers.discovery_sync_handler import DiscoverySyncHandler
+
 # S2 暴露面归位（OH-6.1b）：TP-Link NAT 端口映射 → soc_maps_to
 from app.services.sync_handlers.nat_sync_handler import NatSyncHandler
+
+# P3/F-S2：资产发现扫描器公网暴露面扫描
+from app.services.sync_handlers.port_sync_handler import PortSyncHandler
 
 # Handler 注册表：data_type → handler 实例
 SYNC_HANDLERS: dict[str, BaseSyncHandler] = {
@@ -20,13 +26,17 @@ SYNC_HANDLERS: dict[str, BaseSyncHandler] = {
     "port": PortSyncHandler(),
     "discovery": DiscoverySyncHandler(),
     "nat_mapping": NatSyncHandler(),
+    "arl_site": ArlSiteSyncHandler(),
+    "arl_vuln": ArlVulnSyncHandler(),
 }
 
 __all__ = [
-    "BaseSyncHandler",
+    "SYNC_HANDLERS",
+    "ArlSiteSyncHandler",
+    "ArlVulnSyncHandler",
     "AssetSyncHandler",
-    "PortSyncHandler",
+    "BaseSyncHandler",
     "DiscoverySyncHandler",
     "NatSyncHandler",
-    "SYNC_HANDLERS",
+    "PortSyncHandler",
 ]
