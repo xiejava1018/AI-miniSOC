@@ -8,6 +8,7 @@
 # 设计 (v2.2 修复 R5/R7):
 #   1. 备份当前 commit + .env
 #   2. git fetch + reset --hard 到目标 commit
+#      (v2.9: 目标 commit 本地已存在时跳过 fetch，避免断网时空等 8 分钟)
 #   3. 检查无 uncommitted
 #   4. pip install backend deps
 #   5. alembic check（不升级，仅告警）
@@ -15,6 +16,7 @@
 #      v2.8: package-lock.json 有变更才 npm ci，否则复用 node_modules）
 #   7. systemctl restart aisoc-backend
 #   8. 健康检查：HTTP 端点 + DB 探活（v2.2 加）
+#      (v2.9: 5×2s=10s → 20×3s=60s，覆盖后端 ~30s 冷启动)
 #   9. 任何步骤失败 → 全局 trap 自动 git reset 回滚 (R5 修复)
 #
 # 前置条件:
@@ -32,6 +34,13 @@ BACKUP_DIR=/home/xiejava/.aisoc-backups
 BACKUP_SHA_FILE=/tmp/aisoc.previous_sha
 HEALTH_URL_HTTP=http://127.0.0.1:8000/api/v1/public/system-info
 HEALTH_URL_DB_URL_KEY=DB_NAME  # 用于 psql 探活
+
+# 健康检查参数（v2.9 修：后端冷启动要 ~30s，原 5×2s=10s 窗口太短会误报失败）
+# CLAUDE.md §4.10：lifespan 注册 N 个 scheduler + create_all 79 表，冷启动 8s+；
+# 实测 102 上 systemd restart → /health 200 需要 ~30s。
+HEALTH_MAX_RETRY=${HEALTH_MAX_RETRY:-20}   # 最多重试轮数
+HEALTH_RETRY_INTERVAL=${HEALTH_RETRY_INTERVAL:-3}  # 每轮间隔秒数
+# 总窗口 ≈ 20 × 3 = 60s（足够覆盖 30s 冷启动）
 
 mkdir -p "$BACKUP_DIR"
 
@@ -136,19 +145,33 @@ log ".env 已备份到 $BACKUP_DIR"
 
 # ===== 2. 拉取 + reset =====
 log "获取目标 commit: $TARGET_SHA"
-# 三个 fetch 策略 (按优先顺序):
+# fetch 策略 (v2.9 修：本地已有目标 commit 时不再白等 90s+120s+300s 网络超时)
+#
+# 背景：102 → GitHub 经常完全断网（curl https://github.com 零输出），
+# 此时三个 fetch 策略会依次超时 90s + 120s + 300s = 8 分半才开始部署。
+# 而目标 commit 可能**已经在本地**（如 git bundle + scp 手工投递过），
+# 此时完全不需要 fetch。
+#
+# 新策略（按优先顺序）：
+#   0) 本地已有该 commit → 跳过所有 fetch（秒过）
 #   1) git fetch origin <sha>      直接拿这一个 commit (最快, 绕过 shallow 问题)
 #   2) git fetch --depth=N origin  带深度 (易将 repo 变 shallow, 后续 fetch 会丢 commit)
 #   3) git fetch --unshallow origin 兑底取消 shallow (全历史下载, 慢网可能超时但能修复)
 # 注: 服务器到 github 带宽很慢 (~456 B/s), 全历史 fetch 几乎必超时
 cd "$PROJECT_DIR"
-if timeout 90 git fetch origin "$TARGET_SHA" 2>/dev/null; then
-    log "  策略1成功: 直接拉取目标 commit"
-elif timeout 120 git fetch --depth=200 origin master 2>/dev/null; then
-    log "  策略2成功: --depth=200 pull"
+
+if git cat-file -t "$TARGET_SHA" >/dev/null 2>&1; then
+    # 策略 0：本地已有（bundle 投递 / 之前 fetch 过 / 手工 push 到 origin）
+    log "  策略0: 目标 commit 本地已存在，跳过 fetch（网络不可用时省 ~8 分钟）"
 else
-    log "WARN: 前两策略都失败, 尝试 --unshallow (会下载全历史, 慢网可能超时)"
-    timeout 300 git fetch --unshallow origin 2>/dev/null || log "WARN: unshallow 也失败, 仅靠本地 commit"
+    if timeout 90 git fetch origin "$TARGET_SHA" 2>/dev/null; then
+        log "  策略1成功: 直接拉取目标 commit"
+    elif timeout 120 git fetch --depth=200 origin master 2>/dev/null; then
+        log "  策略2成功: --depth=200 pull"
+    else
+        log "WARN: 前两策略都失败, 尝试 --unshallow (会下载全历史, 慢网可能超时)"
+        timeout 300 git fetch --unshallow origin 2>/dev/null || log "WARN: unshallow 也失败, 仅靠本地 commit"
+    fi
 fi
 
 # 验证目标 commit 存在
@@ -222,15 +245,23 @@ log "===== 重启 backend ====="
 sudo -n systemctl restart aisoc-backend 2>&1 || systemctl restart aisoc-backend 2>&1
 
 # ===== 8. 健康检查 (R7 修复：HTTP + DB 双重探活) =====
-log "===== 健康检查 (HTTP + DB 双重) ====="
+# v2.9 修：原 5 轮 × sleep 2 = 10s 窗口，而后端冷启动要 ~30s
+#（systemd restart → lifespan 注册 N 个 scheduler + create_all 79 表，
+#   CLAUDE.md §4.10）。原窗口下必然误报「健康检查失败」→ 触发回滚，
+# 但进程其实好好的起来（实测 102 上 restart 后 /health 200 需 ~30s）。
+# 改为：$HEALTH_MAX_RETRY 轮 × $HEALTH_RETRY_INTERVAL 秒（默认 20×3=60s），
+# 且「HTTP 探活失败」不再刷屏（只在最后汇总）。
+log "===== 健康检查 (HTTP + DB 双重, 最多 ${HEALTH_MAX_RETRY} 轮 × ${HEALTH_RETRY_INTERVAL}s) ====="
 HEALTH_OK=0
-for i in 1 2 3 4 5; do
-    sleep 2
+HEALTH_LAST_ERR=""
+for ((i = 1; i <= HEALTH_MAX_RETRY; i++)); do
+    sleep "$HEALTH_RETRY_INTERVAL"
 
     # 8.1 HTTP 端点（验证进程在）
     HTTP_RESP=$(curl -s --max-time 5 "$HEALTH_URL_HTTP" 2>/dev/null || echo "")
     if ! echo "$HTTP_RESP" | grep -q '"code":200'; then
-        log "  [$i/5] HTTP 探活失败: $HTTP_RESP"
+        HEALTH_LAST_ERR="HTTP 探活失败"
+        # 冷启动期间静默等待（只在最后报错时汇总）
         continue
     fi
 
@@ -243,7 +274,7 @@ for i in 1 2 3 4 5; do
     DB_PASS=$(grep '^DB_PASSWORD=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
 
     if [[ -z "$DB_HOST" || -z "$DB_NAME" ]]; then
-        log "  [$i/5] WARN: .env 缺 DB_HOST/DB_NAME，跳过 DB 探活"
+        log "  [$i/$HEALTH_MAX_RETRY] WARN: .env 缺 DB_HOST/DB_NAME，跳过 DB 探活"
         HEALTH_OK=1
         break
     fi
@@ -252,17 +283,18 @@ for i in 1 2 3 4 5; do
         DB_HOST="$DB_HOST" DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASS="$DB_PASS" \
         src/backend/venv/bin/python deploy/db_healthcheck.py 2>/dev/null || echo "")
     if [[ "$DB_RESP" == "1" ]]; then
-        log "  [$i/5] ✓ HTTP 200 + DB SELECT 1 OK"
+        log "  [$i/$HEALTH_MAX_RETRY] ✓ HTTP 200 + DB SELECT 1 OK"
         HEALTH_OK=1
         break
     else
-        log "  [$i/5] DB 探活失败: $DB_RESP"
+        HEALTH_LAST_ERR="DB 探活失败: $DB_RESP"
     fi
 done
 
 # ===== 9. 失败回滚（健康检查级别失败仍走 trap）=====
 if [[ $HEALTH_OK -ne 1 ]]; then
-    log "ERROR: 健康检查 5 次重试全部失败"
+    log "ERROR: 健康检查 ${HEALTH_MAX_RETRY} 轮重试全部失败（${HEALTH_LAST_ERR:-未知}）"
+    log "      注意：后端冷启动通常需 ~30s；若刚重启过可先确认 systemctl 日志再决定是否回滚"
     exit 5   # trap 会回滚
 fi
 
