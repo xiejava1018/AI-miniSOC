@@ -75,6 +75,10 @@ class ARLClient:
             verify=verify_tls,
             timeout=timeout,
             headers={"Content-Type": "application/json"},
+            # 内网直连场景禁用系统代理（trust_env）：httpx 默认读
+            # HTTP(S)_PROXY/ALL_PROXY，开发机有系统代理时 192.168.x 请求
+            # 会被路由到代理 → TLS 握手失败（2026-11-15 端到端验证实测）。
+            trust_env=False,
         )
         self._token: str | None = None
         self._token_ts: float = 0.0

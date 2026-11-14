@@ -114,6 +114,9 @@ def _upsert_arl_source(db: Session, asset_id, item: dict, now: datetime) -> None
             last_seen_at=now,
             source_metadata=metadata or None,
         ))
+        # autoflush=False：同批多条同 IP item 依赖此 flush 让后续查询可见，
+        # 否则撞 uq_asset_source(asset_id, source)（2026-11-15 真实数据端到端实测）
+        db.flush()
     else:
         row.last_seen_at = now
         row.source_status = "observed"
@@ -157,6 +160,7 @@ def _upsert_port_observation(db: Session, item: dict, now: datetime) -> None:
             last_seen_by_source=last_seen_map,
             last_seen=now,
         ))
+        db.flush()  # 同上：autoflush=False 下同批同端口第二条可见
     else:
         row.sources = sources
         row.last_seen_by_source = last_seen_map

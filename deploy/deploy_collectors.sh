@@ -277,5 +277,61 @@ except Exception:
     esac
 fi
 
+# ===== 8. OH-ARL 集成 · ARL 数据新鲜度门禁（照 NAT 门禁诚实分级语义）=====
+# 背景（OH-ARL.2，design 2026-11-14 §6.1）：arl-collector 30min 推测绘数据，
+# 源健康 key 'arl:sync'。断流不会让容器 unhealthy（容器健康 ≠ 数据在流）。
+# 门禁语义（诚实分级）：
+#   曾有数据但 ARL_STALE_HOURS（默认 6h，30min 节奏 × 12 容忍）未更新 → FAIL
+#   从无数据 → WARN（ARL 集成未启用/从未成功，不拦部署）
+#   DB 查询失败 → WARN（不因门禁自身故障误杀部署）
+log "===== ARL 数据新鲜度门禁 ====="
+ARL_STALE_HOURS="${ARL_STALE_HOURS:-6}"
+if [[ -z "$DB_HOST" || -z "$DB_NAME" ]]; then
+    log "WARN: .env 缺 DB_HOST/DB_NAME，跳过 ARL 门禁"
+else
+    ARL_CHECK=$(cd "$PROJECT_DIR/src/backend" && ../../venv/bin/python -c '
+import sys, psycopg2
+from datetime import datetime, timezone
+h, p, n, u, pw, sh = sys.argv[1:7]
+try:
+    conn = psycopg2.connect(host=h, port=p, dbname=n, user=u, password=pw,
+                            connect_timeout=10)
+    cur = conn.cursor()
+    cur.execute("SELECT last_success_at::text, failure_count FROM soc_source_health WHERE source_key = %s", ("arl:sync",))
+    row = cur.fetchone()
+    conn.close()
+    if row is None or row[0] is None:
+        print("WARN|0|ARL-not-enabled")
+    else:
+        ts = datetime.fromisoformat(row[0])
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age = int((datetime.now(timezone.utc) - ts).total_seconds() // 3600)
+        print(("FAIL" if age >= int(sh) else "OK") + "|" + row[0] + "|" + str(age))
+except Exception:
+    print("PYERR|0|db-query-failed")
+' "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER" "$DB_PASS" "$ARL_STALE_HOURS" 2>/dev/null || echo "PYERR|0|spawn-failed")
+    verdict=${ARL_CHECK%%|*}
+    case "$verdict" in
+        OK)
+            IFS='|' read -r _ latest age <<< "$ARL_CHECK"
+            log "ARL 门禁通过：最新成功同步 ${latest}（${age}h 前）"
+            ;;
+        FAIL)
+            IFS='|' read -r _ latest age <<< "$ARL_CHECK"
+            log "ERROR: ARL 数据已 ${age}h 未更新（阈值 ${ARL_STALE_HOURS}h，采集器 30min 一推）"
+            log "       arl:sync 最新成功 ${latest} —— 同步断流回归，部署判失败"
+            exit 1
+            ;;
+        WARN)
+            IFS='|' read -r _ msg <<< "$ARL_CHECK"
+            log "WARN: $msg —— 不拦部署，人工确认是否应启用"
+            ;;
+        *)
+            log "WARN: ARL 门禁 DB 查询失败（不拦部署，人工核查 soc_source_health.arl:sync）"
+            ;;
+    esac
+fi
+
 log "====== 采集器部署成功: $CURRENT_SHA ======"
 exit 0
