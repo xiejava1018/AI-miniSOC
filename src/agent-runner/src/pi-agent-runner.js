@@ -25,6 +25,223 @@ import {
 import { createEventHandler } from './event-mapper.js';
 
 // ============================================================================
+// Generic OpenAI-compatible Provider (配置中心 → AI 模型管理)
+// ============================================================================
+//
+// 2026-11-10：Art Bot 改为使用「配置中心 → AI 模型管理」里的模型实例，
+// 由 Python 后端通过环境变量传入：
+//   PI_MODEL           = "<provider_code>/<model_name>"
+//   PI_PROVIDER_CODE   = "<provider_code>"
+//   PI_BASE_URL        = "<base_url>"        （OpenAI 兼容 base，不以 / 结尾）
+//   PI_API_KEY         = "<解密后的 api key>"
+//   PI_API             = "openai-completions" | "openai-responses"
+//   PI_MAX_TOKENS      = "<max_tokens>"      （可选）
+//   PI_TIMEOUT_SECONDS = "<timeout_seconds>" （可选）
+//
+// 之前模型名硬编码在 Python 侧（agnes/agnes-2.0-flash），配置中心改了也没用。
+// 现在这一层只负责「拿到配置 → 建 client → 注册 provider」。
+
+const PI_API_TYPE = process.env.PI_API || 'openai-completions';
+const PI_BASE_URL = process.env.PI_BASE_URL || '';
+const PI_API_KEY = process.env.PI_API_KEY || '';
+const PI_MAX_TOKENS = process.env.PI_MAX_TOKENS
+  ? parseInt(process.env.PI_MAX_TOKENS, 10)
+  : undefined;
+const PI_TIMEOUT_SECONDS = process.env.PI_TIMEOUT_SECONDS
+  ? parseInt(process.env.PI_TIMEOUT_SECONDS, 10)
+  : undefined;
+
+/**
+ * 构造 pi-ai 的 model 描述对象。
+ * pi-ai 的 stream 实现会用 model.baseUrl / model.id / model.api，
+ * api key 从 options.apiKey 或 env 拿（我们走 PI_API_KEY 显式传入）。
+ */
+function buildConfigCenterModel(modelId) {
+  const providerCode = process.env.PI_PROVIDER_CODE || 'config-center';
+  return {
+    id: modelId,
+    provider: providerCode,
+    api: PI_API_TYPE,
+    baseUrl: PI_BASE_URL || undefined,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  };
+}
+
+/**
+ * 极简版 AssistantMessageEventStream（不依赖 pi-ai 内部路径）。
+ *
+ * ⚠️ 契约（踩坑记录）：
+ * pi-agent-core 的 streamAssistantResponse 拿到 streamFn 的返回值后，
+ * 会调用 ``response.result()`` 取最终消息 —— 所以返回值**必须**带
+ * ``.result()`` 方法（返回 Promise），不能是普通 async generator
+ * （否则报 "response.result is not a function"，错误又被静默吞掉，
+ *  表现为「聊天没反应」）。
+ *
+ * 语义与 pi-ai 的 AssistantMessageEventStream 一致：
+ *  - push({type:'done', message})  → result() resolve(message)
+ *  - push({type:'error', error})   → result() resolve(error)（**不 reject**）
+ *    这正是 pi-agent-core 吞错的原因：它 case "error" 拿 result() 后
+ *    当成正常 finalMessage 继续走。event-mapper 会识别并转 agent_error。
+ */
+function createEventStream() {
+  const queue = [];
+  const waiting = [];
+  let done = false;
+  let resolveFinalResult;
+  const finalResultPromise = new Promise((resolve) => { resolveFinalResult = resolve; });
+
+  return {
+    push(event) {
+      if (done) return;
+      if (event.type === 'done' || event.type === 'error') {
+        done = true;
+        resolveFinalResult(event.type === 'done' ? event.message : event.error);
+      }
+      const waiter = waiting.shift();
+      if (waiter) waiter({ value: event, done: false });
+      else queue.push(event);
+    },
+    end(result) {
+      done = true;
+      if (result !== undefined) resolveFinalResult(result);
+      while (waiting.length > 0) waiting.shift()({ value: undefined, done: true });
+    },
+    async *[Symbol.asyncIterator]() {
+      for (;;) {
+        if (queue.length > 0) {
+          yield queue.shift();
+        } else if (done) {
+          return;
+        } else {
+          const r = await new Promise((resolve) => waiting.push(resolve));
+          if (r.done) return;
+          yield r.value;
+        }
+      }
+    },
+    result() { return finalResultPromise; }
+  };
+}
+
+/**
+ * 通用 OpenAI 兼容 stream（chat/completions 与 responses 两种协议）。
+ * 详见 createEventStream 上方的契约说明。
+ */
+function configCenterStream(model, context, options) {
+  const stream = createEventStream();
+
+  (async () => {
+    const apiKey = options?.apiKey || PI_API_KEY || process.env.OPENAI_API_KEY;
+    const partialMessage = {
+      role: 'assistant',
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      timestamp: Date.now()
+    };
+
+    if (!apiKey) {
+      stream.push({
+        type: 'error',
+        error: 'No API key for config-center provider (PI_API_KEY 未设置)'
+      });
+      return;
+    }
+
+    const client = new OpenAI({
+      apiKey,
+      baseURL: model.baseUrl,
+      timeout: PI_TIMEOUT_SECONDS ? PI_TIMEOUT_SECONDS * 1000 : undefined,
+      dangerouslyAllowBrowser: false
+    });
+
+    const messages = [];
+    if (context.systemPrompt) {
+      messages.push({ role: 'system', content: context.systemPrompt });
+    }
+    for (const msg of context.messages || []) {
+      const text = typeof msg.content === 'string'
+        ? msg.content
+        : (msg.content || []).map((c) => c.text || '').join('');
+      messages.push({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: text
+      });
+    }
+
+    let fullText = '';
+
+    try {
+      stream.push({ type: 'start', partial: partialMessage });
+
+      if (model.api === 'openai-responses') {
+        const response = await client.responses.create(
+          {
+            model: model.id,
+            input: messages,
+            max_tokens: options?.maxTokens || PI_MAX_TOKENS || 4096
+          },
+          { signal: options?.signal }
+        );
+        for (const item of response.output || []) {
+          if (item.type === 'message' && item.role === 'assistant') {
+            for (const content of item.content || []) {
+              if (content.type === 'output_text') {
+                fullText += content.text;
+                stream.push({ type: 'text_delta', delta: content.text });
+              }
+            }
+          }
+        }
+      } else {
+        const chunkStream = await client.chat.completions.create(
+          {
+            model: model.id,
+            messages,
+            stream: true,
+            max_tokens: options?.maxTokens || PI_MAX_TOKENS
+          },
+          { signal: options?.signal }
+        );
+        for await (const chunk of chunkStream) {
+          const delta = chunk.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullText += delta;
+            stream.push({ type: 'text_delta', delta });
+          }
+        }
+      }
+
+      stream.push({
+        type: 'done',
+        message: {
+          ...partialMessage,
+          content: [{ type: 'text', text: fullText }],
+          stopReason: 'stop',
+          usage: {
+            input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+          }
+        }
+      });
+    } catch (error) {
+      // 关键：把 LLM 错误（429 额度用尽 / 401 key 错 / 5xx）变成 error 事件。
+      // AssistantMessageEventStream 对 error 事件 **resolve(event.error)**
+      // （不 reject），pi-agent-core 会走 case "error" → response.result()
+      // 拿到 error → emit message_end（message 就是那个 error）。
+      // event-mapper 会识别它并转成 agent_error → Python → SSE 报错给前端。
+      stream.push({
+        type: 'error',
+        error: error?.message || String(error)
+      });
+    }
+  })();
+
+  return stream;
+}
+
+// ============================================================================
 // Agnes AI Provider Registration
 // ============================================================================
 
@@ -163,7 +380,20 @@ async function* agnesStream(model, context, options) {
 
     yield { type: 'done', message: finalMessage };
   } catch (error) {
-    yield { type: 'error', error: error.message };
+    // 2026-11-10 修（静默吞错的根因）：
+    // pi-agent-core 的 streamAssistantResponse 对 `error` 事件的处理是
+    //   case "error": const finalMessage = await response.result();
+    // 而 AssistantMessageEventStream 的 extractResult 对 error 事件
+    // **return event.error**（resolve，不是 reject）→ agent.prompt() 正常返回，
+    // 错误就此消失（前端只收到 [DONE]，表现为「聊天没反应」）。
+    //
+    // 正确做法：yield 一个 error 事件（不是 throw）。
+    // pi-agent-core 会走 case "error" → response.result() 拿到 error → emit
+    // message_end；同时我们把原始错误也 yield 出去，让 event-mapper 转成
+    // agent_error 事件 → Python → SSE 报错给前端。
+    yield { type: 'error', error: error.message, errorDetail: error };
+    // 结束流，避免继续往下走
+    return;
   }
 }
 
@@ -175,6 +405,20 @@ if (agnesClient) {
     streamSimple: agnesStream
   }, 'agnes-ai');
   console.log('[AgnesAI] Provider registered');
+}
+
+// Register the generic OpenAI-compatible provider from the config center.
+// PI_API decides which api type is used (openai-completions / openai-responses).
+// Registering a distinct api type avoids conflicting with the built-in ones.
+if (PI_BASE_URL && PI_API_KEY) {
+  registerApiProvider({
+    api: PI_API_TYPE,
+    stream: configCenterStream,
+    streamSimple: configCenterStream
+  }, 'config-center');
+  console.log(
+    `[ConfigCenter] Provider registered: api=${PI_API_TYPE} baseUrl=${PI_BASE_URL} model=${process.env.PI_MODEL}`
+  );
 }
 
 // ============================================================================
@@ -219,6 +463,11 @@ function getOrCreateAgent(sessionId, model = null, systemPrompt = null) {
     if (modelConfig.provider === 'agnes') {
       modelConfig_obj = getAgnesModel(modelConfig.model);
       streamFn = agnesStream;  // Use Agnes stream function
+    } else if (PI_BASE_URL && PI_API_KEY) {
+      // Provider from the config center (AI model management) — baseUrl / api key /
+      // api type all come from env vars passed in by the Python backend.
+      modelConfig_obj = buildConfigCenterModel(modelConfig.model);
+      streamFn = configCenterStream;
     } else {
       modelConfig_obj = getModel(modelConfig.provider, modelConfig.model);
     }

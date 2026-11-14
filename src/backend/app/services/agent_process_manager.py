@@ -148,12 +148,19 @@ class AgentProcess:
             return  # 进程已启动
 
         env: Dict[str, str] = {**os.environ, **{str(k): str(v) for k, v in self._config.get("env", {}).items()}}
-        env["PI_MODEL"] = self._config.get("model", "agnes/agnes-1.5-flash")  # Agnes AI as default
-        # Pass Agnes API key to Node process
+        # 模型配置：优先用 config["env"] 里的「配置中心 → AI 模型管理」解析结果
+        # （PI_MODEL / PI_BASE_URL / PI_API_KEY / PI_API ...），
+        # 其次退回旧的 config["model"]，最后兜底 env 里的 Agnes。
+        env["PI_MODEL"] = self._config.get("model") or env.get("PI_MODEL") or "openai/glm-4-flash"
+        # Pass Agnes API key to Node process (兼容旧 Agnes 链路)
         if self._config.get("api_key"):
             env["AGNES_API_KEY"] = self._config["api_key"]
         elif os.getenv("AGNES_API_KEY"):
             env["AGNES_API_KEY"] = os.getenv("AGNES_API_KEY")
+        # 通用 provider key（PI_API_KEY）：runner 优先用它，
+        # 使 Art Bot 能跑配置中心里任意 OpenAI 兼容模型（GLM / DeepSeek ...）
+        if self._config.get("api_key") and not env.get("PI_API_KEY"):
+            env["PI_API_KEY"] = self._config["api_key"]
         if self._config.get("trace_id"):
             env["PI_TRACE_ID"] = self._config["trace_id"]
 

@@ -140,6 +140,31 @@ export function createEventHandler(sessionId, traceId, abortController = null) {
 
     // Handle message end
     if (event.type === 'message_end') {
+      // 2026-11-10 修（静默吞错的根因）：
+      // pi-agent-core 对 stream 的 error 事件走
+      //   case "error": const finalMessage = await response.result();
+      // 而我们的 EventStream 对 error 事件 resolve(event.error)，
+      // 于是 message_end 的 message 就是那个 error —— 可能是：
+      //   a) 字符串（error.message）
+      //   b) 对象 { error: '...' }（pi-ai 原生实现）
+      // 两种都要识别 → 转成 agent_error 事件 → Python → SSE 报错给前端。
+      // 不做这一步：LLM 报错（429 额度用尽等）被完全静默，
+      // 前端只收到 [DONE]，表现为「聊天没反应」。
+      const msg = event.message;
+      let errText = null;
+      if (typeof msg === 'string' && msg.trim()) {
+        errText = msg;
+      } else if (msg && typeof msg === 'object') {
+        if (typeof msg.error === 'string' && msg.error.trim()) {
+          errText = msg.error;
+        } else if (msg.stopReason === 'error' && typeof msg.errorMessage === 'string') {
+          errText = msg.errorMessage;
+        }
+      }
+      if (errText) {
+        writeErrorEvent(sessionId, errText, traceId);
+        return;
+      }
       writeEvent('agent.event', {
         type: 'message_end',
         sessionId,

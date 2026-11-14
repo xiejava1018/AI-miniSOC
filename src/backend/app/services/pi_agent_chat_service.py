@@ -41,8 +41,9 @@ ART_BOT_SYSTEM_PROMPT = (
     "涉及命令、规则、代码请用 Markdown 代码块包裹。"
 )
 
-# 默认使用 Agnes AI
-DEFAULT_MODEL = "agnes/agnes-2.0-flash"
+# 默认使用配置中心「AI 模型管理」里的模型实例（见 art_bot_model_resolver）
+# 这里的 DEFAULT_MODEL 只是「配置缺失 + 旧会话」时的最后兜底。
+DEFAULT_MODEL = "openai/glm-4-flash"
 
 
 class PiAgentChatError(Exception):
@@ -73,11 +74,21 @@ class PiAgentChatService:
         title: Optional[str] = None,
     ) -> ChatSession:
         """新建会话"""
+        # 模型标识在会话创建时按「配置中心 → AI 模型管理」解析；
+        # 解析失败不阻断建会话（后续 stream_chat 会再次解析并抛出可读错误）。
+        try:
+            from app.services.art_bot_model_resolver import resolve_art_bot_model
+
+            model_name = resolve_art_bot_model(db=self.db).model
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Art Bot 建会话时解析模型失败，用兜底值：%s", e)
+            model_name = DEFAULT_MODEL
+
         session = ChatSession(
             id=uuid.uuid4(),
             user_id=user_id,
             title=title or "新会话",
-            model_name=DEFAULT_MODEL,
+            model_name=model_name,
         )
         self.db.add(session)
         self.db.commit()
@@ -185,15 +196,21 @@ class PiAgentChatService:
         system_prompt = self._build_system_prompt(session)
 
         try:
+            # 解析 Art Bot 应使用的模型（配置中心 → AI 模型管理）
+            from app.services.art_bot_model_resolver import build_agent_config
+
+            agent_config = build_agent_config(
+                db=self.db,
+                model_override=session.model_name or None,
+                trace_id=str(uuid.uuid4()),
+                system_prompt=system_prompt,
+            )
+
             # 获取或创建 Agent 进程
             proc = await manager.get_or_create(
                 session_id=str(session.id),
                 role="art-bot",
-                config={
-                    "model": session.model_name or DEFAULT_MODEL,
-                    "trace_id": str(uuid.uuid4()),
-                    "system_prompt": system_prompt,
-                },
+                config=agent_config,
             )
 
             # 发送 prompt
@@ -202,7 +219,7 @@ class PiAgentChatService:
                 {
                     "sessionId": str(session.id),
                     "userMessage": new_user_message,
-                    "model": session.model_name or DEFAULT_MODEL,
+                    "model": agent_config.get("model") or DEFAULT_MODEL,
                     "trace_id": str(uuid.uuid4()),
                 },
             )
@@ -211,6 +228,20 @@ class PiAgentChatService:
             async for event in proc.stream_events():
                 evt_type = event.get("type", "")
                 delta = event.get("delta", "")
+
+                # runner 上报的 LLM 错误（2026-11-10 修：原先被丢弃，
+                # 导致「AI 额度用尽」静默表现为「聊天没反应」）
+                if evt_type in ("error", "agent_error"):
+                    err_text = (
+                        event.get("error")
+                        or event.get("message")
+                        or event.get("params", {}).get("error")
+                        or "未知错误"
+                    )
+                    logger.error(
+                        "Art Bot runner 上报错误: session=%s err=%s", session_id, err_text
+                    )
+                    raise PiAgentChatError(f"AI 服务异常: {err_text}")
 
                 if delta:
                     yield delta
@@ -221,6 +252,8 @@ class PiAgentChatService:
 
         except asyncio.CancelledError:
             logger.info("client disconnected: session=%s", session_id)
+            raise
+        except PiAgentChatError:
             raise
         except Exception as e:
             logger.exception("Pi Agent error: session=%s: %s", session_id, e)
