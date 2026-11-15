@@ -291,3 +291,51 @@ def test_shadow_details_source_tag_for_push_notification_branch(svc, db_session)
     # 同时验证 asset_ip/mac_address/os_guess/exposure 都在 details（push 内容来源）
     assert shadow.details["asset_ip"] == "192.168.0.66"
     assert "suggestion" in shadow.details
+
+# ============================================================================
+# 8. 台账反查自愈（2026-11-15 误判修复）：资产后入库 / arl 通道
+#    生产实测：4 条 pending shadow（.2/.3/.42/.30）IP 全部台账命中，
+#    但 finding matched=None（资产晚于发现入库，无人回填）→ 误判影子
+# ============================================================================
+def test_ledger_asset_added_later_self_heals(svc, db_session):
+    """发现时台账没有 → finding 'new'；后来资产入库 → 反查自愈，不再产 shadow。"""
+    _make_asset(db_session, "192.168.0.50", name="late-asset")  # 后入库
+    f = _make_finding(db_session, "192.168.0.50", status="new")  # 旧批次 new/None
+    db_session.commit()
+
+    run_id = uuid.uuid4()
+    count = svc.reconcile_scanner_findings(run_id=run_id)
+
+    assert count == 0  # 台账命中 → 不产 shadow
+    db_session.refresh(f)
+    assert f.matched_asset_id is not None  # 自愈：matched 回填
+    assert f.finding_status == "known"     # 自愈：new → known
+    assert (
+        db_session.query(AssetReconciliation)
+        .filter(AssetReconciliation.reconciliation_type == TYPE_SHADOW,
+                AssetReconciliation.status == STATUS_PENDING)
+        .count() == 0
+    )
+
+
+def test_arl_channel_finding_with_ledger_hit_self_heals(svc, db_session):
+    """arl-next 通道（OH-ARL.2 未命中分支不回填 matched）由对账反查兜底自愈。"""
+    _make_asset(db_session, "192.168.0.42", name="arl-self")
+    f = ScanFinding(
+        scan_task_uuid=uuid.uuid4(),
+        asset_ip="192.168.0.42",
+        exposure="internal",
+        discovery_source="arl-next",
+        matched_asset_id=None,
+        finding_status="new",
+    )
+    db_session.add(f)
+    db_session.commit()
+
+    count = svc.reconcile_scanner_findings(run_id=uuid.uuid4())
+
+    assert count == 0
+    db_session.refresh(f)
+    assert f.matched_asset_id is not None
+    assert f.finding_status == "known"
+    assert f.discovery_source == "arl-next"  # 来源不被改写

@@ -555,6 +555,20 @@ class AssetReconciliationService:
         )
 
         new_rows: list[AssetReconciliation] = []
+        # ── 台账反查（2026-11-15 误判修复）──
+        # matched_asset_id 只在「发现推送时台账已存在」才写入；资产**后来**
+        # 入库（TP-Link 建账 / 一键纳管 / 其它来源）不会回填历史 findings
+        # → 旧行永远 new/None → 每轮对账误产 shadow（生产实测 4 条：
+        # .2/.3/.42/.30 全部台账命中却判影子）。
+        # 对 matched=None 的 finding 一次 in 反查台账：命中即自愈
+        # （matched 回填 + new→known）且不产 shadow。
+        unmatched = [f for f in findings if not f.matched_asset_id and (f.asset_ip or "").strip()]
+        ledger_map: dict[str, uuid.UUID] = {}
+        if unmatched:
+            _ips = list({f.asset_ip.strip() for f in unmatched})
+            for a in self.db.query(Asset).filter(Asset.asset_ip.in_(_ips)).all():
+                ledger_map[str(a.asset_ip)] = a.id
+        healed = 0
         for f in findings:
             ip = (f.asset_ip or "").strip()
             if not ip or ip in recent_ips:
@@ -564,6 +578,13 @@ class AssetReconciliationService:
                 # 同步状态：new → known（让前端展示一致）—— 仅内存修改，不 commit
                 if f.finding_status == "new":
                     f.finding_status = "known"
+                continue
+            # 台账反查命中 → 自愈 finding（滞后入库场景），不产 shadow
+            if ip in ledger_map:
+                f.matched_asset_id = ledger_map[ip]
+                if f.finding_status == "new":
+                    f.finding_status = "known"
+                healed += 1
                 continue
             # status=="known"但 matched_asset_id 为空：可能是历史脏数据/异常，
             # 产 shadow 让运维通过「一键纳管」/「忽略」处置（不入死信）
@@ -600,12 +621,17 @@ class AssetReconciliationService:
 
         for r in new_rows:
             self.db.add(r)
-        if new_rows:
+        if new_rows or healed:
             self.db.commit()
         if new_rows:
             logger.info(
                 "scanner findings → shadow: %d new rows (run_id=%s, lookback=%dh)",
                 len(new_rows), run_id, lookback_hours,
+            )
+        if healed:
+            logger.info(
+                "scanner findings 自愈: %d 条滞后入库的 finding 回填 matched/known (run_id=%s)",
+                healed, run_id,
             )
         return len(new_rows)
 
