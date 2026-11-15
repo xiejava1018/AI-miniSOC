@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-  import { ref, computed, nextTick, watchEffect, getCurrentInstance, useAttrs } from 'vue'
+  import { ref, computed, nextTick, watchEffect, getCurrentInstance, useAttrs, onMounted, onBeforeUnmount } from 'vue'
   import type { ElTable, TableProps } from 'element-plus'
   import { storeToRefs } from 'pinia'
   import { ColumnOption } from '@/types'
@@ -390,6 +390,36 @@
     },
     { flush: 'post' }
   )
+
+  // ── ElTable fixed 列错位治本（2026-11-15，ai-provider 页实测）──
+  // 表格初始化后容器被兄弟内容（Alert / 筛选条 / Tab 布局）撑宽时，
+  // fixed='right' 列按旧容器宽定位 → 按钮溢出到表格外；任何重渲染
+  // （loading 翻转 / 数据刷新）触发内部 doLayout 又恢复——典型的
+  // 「初始布局计算早于容器定宽」。监听表格根元素宽度变化主动 doLayout。
+  // 宽度阈值 1px 防抖（高度抖动不触发，避免 doLayout ⇄ Resize 循环）。
+  let fixedColResizeObserver: ResizeObserver | null = null
+  let lastObservedWidth = 0
+  onMounted(() => {
+    const el = (elTableRef.value as any)?.$el as HTMLElement | undefined
+    if (!el || typeof ResizeObserver === 'undefined') return
+    lastObservedWidth = el.getBoundingClientRect().width
+    fixedColResizeObserver = new ResizeObserver(() => {
+      const w = el.getBoundingClientRect().width
+      if (Math.abs(w - lastObservedWidth) > 1) {
+        lastObservedWidth = w
+        try {
+          elTableRef.value?.doLayout()
+        } catch {
+          /* doLayout 在表格卸载竞态下可能抛错，静默 */
+        }
+      }
+    })
+    fixedColResizeObserver.observe(el)
+  })
+  onBeforeUnmount(() => {
+    fixedColResizeObserver?.disconnect()
+    fixedColResizeObserver = null
+  })
 
   defineExpose({
     scrollToTop,
