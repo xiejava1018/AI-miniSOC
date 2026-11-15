@@ -260,6 +260,11 @@
             <div v-if="completeness">
               <!-- 顶部条：计算时间 + 刷新按钮 -->
               <div class="profile-tab__header">
+              <div class="profile-tab__note">
+                八维卡片展示的是各维<b>证据覆盖与可信度</b>（不是评分）；唯一的综合评分是左侧
+                <b>AHS 健康分</b> = 100 − Σ(各风险维扣分 × 权重)：暴露 20% / 脆弱 25% / 威胁 25% /
+                合规 15% / 行为 15%。各维扣分明细 hover 环形图下方构成条可查。
+              </div>
                 <span v-if="completeness.computed_at" class="profile-tab__meta">
                   计算于 {{ formatTime(completeness.computed_at) }}
                 </span>

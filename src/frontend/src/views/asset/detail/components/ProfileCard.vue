@@ -56,9 +56,16 @@
           </ElTag>
           <ElTag v-else size="small" type="info" effect="plain">缺</ElTag>
         </div>
-        <div v-if="dim.confidence > 0" class="profile-dim__conf">
-          置信 {{ Math.round(dim.confidence * 100) }}%
-        </div>
+        <!-- OH-ARL.6a 补充说明修复（2026-11-15 用户反馈）：原「置信 80%」
+             紧贴维度名，被误读为维度评分（八维并无独立评分，唯一分数是 AHS）。
+             改为 hover 说明，卡面只留证据条数与覆盖状态。 -->
+        <ElTooltip
+          v-if="dim.confidence > 0"
+          :content="`该维度证据平均置信度 ${Math.round(dim.confidence * 100)}% —— 这是数据可信度标记，不是维度评分；八维唯一的综合评分是 AHS 健康分（见左侧环形图）`"
+          placement="top"
+        >
+          <div class="profile-dim__conf profile-dim__conf--muted">证据可信</div>
+        </ElTooltip>
       </div>
     </div>
 
