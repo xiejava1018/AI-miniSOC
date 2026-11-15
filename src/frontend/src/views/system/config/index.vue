@@ -46,8 +46,32 @@
             >
               <template #left>
                 <ElButton @click="showDialog('add')" v-ripple>新增配置</ElButton>
+                <ElButton
+                  v-if="activeCategory === 'arl'"
+                  type="success"
+                  :loading="arlTesting"
+                  v-ripple
+                  @click="testArlConnection"
+                >测试 ARL 连接</ElButton>
               </template>
             </ArtTableHeader>
+            <ElAlert
+              v-if="activeCategory === 'arl'"
+              :type="arlTestResult?.ok ? 'success' : arlTestResult ? 'error' : 'info'"
+              :closable="true"
+              show-icon
+              class="arl-test-alert"
+            >
+              <template #title>
+                {{
+                  arlTestResult
+                    ? arlTestResult.ok
+                      ? `ARL 连接正常：${arlTestResult.message}（${arlTestResult.elapsed_ms}ms）`
+                      : `ARL 连接失败：${arlTestResult.message}（${arlTestResult.elapsed_ms}ms）`
+                    : 'ARL 凭据由部署环境变量注入（ARL_PROFILE_API_KEY / ARL_PROFILE_USERNAME+PASSWORD），不存储于配置中心'
+                }}
+              </template>
+            </ElAlert>
 
             <ArtTable
               :data="tableData"
@@ -167,6 +191,23 @@ interface CategoryInfo {
 }
 const categories = ref<CategoryInfo[]>([])
 const activeCategory = ref<string>('')
+
+  // ============ OH-ARL.7：ARL 连通性测试（配置中心 arl 分类） ============
+  const arlTesting = ref(false)
+  const arlTestResult = ref<{ ok: boolean; message: string; elapsed_ms: number } | null>(null)
+  const testArlConnection = async () => {
+    arlTesting.value = true
+    arlTestResult.value = null
+    try {
+      const res = await request.post({ url: '/api/v1/system-configs/arl/test-connection' })
+      const d = (res as any)?.data ?? res
+      arlTestResult.value = d
+    } catch (e: any) {
+      arlTestResult.value = { ok: false, message: e?.message || '请求失败', elapsed_ms: 0 }
+    } finally {
+      arlTesting.value = false
+    }
+  }
 
 const refreshCategories = async () => {
   try {
