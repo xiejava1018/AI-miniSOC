@@ -223,6 +223,15 @@ fi
 #   从无数据 → WARN（NAT 未启用/从未成功，不拦部署）
 #   DB 查询失败 → WARN（不因门禁自身故障误杀部署）
 log "===== NAT 数据新鲜度门禁 ====="
+# venv python 解析（两种布局兼容）：Mac dev venv 在项目根（../../venv），
+# 生产 102 venv 在 src/backend/venv（./venv）——2026-11-15 实测发现生产
+# 此前 venv 路径不存在，NAT/ARL 门禁一直走 PYERR WARN 分支（哑火）。
+VENV_PY=""
+[[ -x ../../venv/bin/python ]] && VENV_PY=../../venv/bin/python
+[[ -x ./venv/bin/python ]] && VENV_PY=./venv/bin/python
+if [[ -z "$VENV_PY" ]]; then
+    log "WARN: 未找到 venv python（../../venv 或 ./venv），数据新鲜度门禁将哑火"
+fi
 DB_HOST=$(grep '^DB_HOST=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
 DB_PORT=$(grep '^DB_PORT=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "5432")
 DB_NAME=$(grep '^DB_NAME=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | tr -d '"' || echo "")
@@ -231,7 +240,7 @@ DB_PASS=$(grep '^DB_PASSWORD=' "$PROJECT_DIR/src/backend/.env" | cut -d= -f2 | t
 if [[ -z "$DB_HOST" || -z "$DB_NAME" ]]; then
     log "WARN: .env 缺 DB_HOST/DB_NAME，跳过 NAT 门禁"
 else
-    NAT_CHECK=$(cd "$PROJECT_DIR/src/backend" && ../../venv/bin/python -c '
+    NAT_CHECK=$(cd "$PROJECT_DIR/src/backend" && ${VENV_PY:-../../venv/bin/python} -c '
 import sys, psycopg2
 from datetime import datetime, timezone
 h, p, n, u, pw, sh = sys.argv[1:7]
@@ -289,7 +298,7 @@ ARL_STALE_HOURS="${ARL_STALE_HOURS:-6}"
 if [[ -z "$DB_HOST" || -z "$DB_NAME" ]]; then
     log "WARN: .env 缺 DB_HOST/DB_NAME，跳过 ARL 门禁"
 else
-    ARL_CHECK=$(cd "$PROJECT_DIR/src/backend" && ../../venv/bin/python -c '
+    ARL_CHECK=$(cd "$PROJECT_DIR/src/backend" && ${VENV_PY:-../../venv/bin/python} -c '
 import sys, psycopg2
 from datetime import datetime, timezone
 h, p, n, u, pw, sh = sys.argv[1:7]
