@@ -12,8 +12,11 @@ class SystemConfigBase(BaseModel):
     category: str = Field(..., min_length=1, max_length=50, description="配置分类")
     key: str = Field(..., min_length=1, max_length=100, description="配置键")
     value: Optional[str] = Field(None, description="配置值")
-    value_type: str = Field(default="string", description="值类型: string/number/boolean/json/password")
-    is_encrypted: bool = Field(default=False, description="是否加密存储")
+    value_type: Optional[str] = Field(default="string", description="值类型: string/number/boolean/json/password")
+    # Optional：裸 SQL 种子迁移（如 arlx1y2z3w4v5）不触发 ORM default，
+    # DB 层无 server_default 会落 NULL——严格 bool 校验曾致分类列表 500
+    # （2026-11-15 生产实测，8 行 NULL 已数据修复；此处置容忍防复发）
+    is_encrypted: Optional[bool] = Field(default=False, description="是否加密存储")
     description: Optional[str] = Field(None, description="说明")
 
 
