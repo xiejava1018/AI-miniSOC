@@ -125,7 +125,12 @@ services:
 
   # ARL-Next 集成采集器（OH-ARL.1，docs/design/2026-11-14-ARL-Next集成设计方案.md §6.1）
   # 拉模型只读：从 ARL-Next 归档态端点拉测绘数据推 AI-miniSOC；不触发任何 ARL 扫描（C3）。
+  # ⚠️ profiles=["arl"]：**默认不启动**。ARL 凭据缺失时容器启动即崩（_build 校验）
+  #    → restart 循环 → 部署健康门禁 FAIL（2026-11-15 生产 CD 实测）。
+  #    启用方式：src/collectors/.env 加 ARL_API_KEY（或 ARL_USERNAME+ARL_PASSWORD）
+  #    并设 COMPOSE_PROFILES=arl（docker compose 原生机制，会自动含入 config --services）。
   arl-collector:
+    profiles: ["arl"]
     build:
       context: .
       dockerfile: arl/Dockerfile

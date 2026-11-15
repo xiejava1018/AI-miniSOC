@@ -2,6 +2,9 @@
 .env
 .env.local
 .env.*
+!.env.example
+!*/.env.example
+!*/__*/.env.example
 
 # 项目本地记忆（不入库）
 .workbuddy/
