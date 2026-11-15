@@ -703,7 +703,47 @@
             </ElTableColumn>
             <ElTableColumn label="来源详情" min-width="280" align="left">
               <template #default="{ row }">
-                <ElPopover v-if="row.source_metadata && Object.keys(row.source_metadata).length > 0" placement="left" :width="320" trigger="click">
+                <!-- OH-ARL.6a：ARL 观测摘要内联（站点标题 / URL / Web 指纹 tags） -->
+                <div v-if="row.source === 'arl-next' && (row.source_metadata?.title || row.source_metadata?.url || row.source_metadata?.fingers?.length)" class="arl-obs-summary">
+                  <div v-if="row.source_metadata?.title" class="arl-obs-title">
+                    {{ row.source_metadata.title }}
+                    <a
+                      v-if="row.source_metadata?.url"
+                      :href="row.source_metadata.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="arl-obs-url"
+                    >{{ row.source_metadata.url }}</a>
+                  </div>
+                  <div v-if="row.source_metadata?.fingers?.length" class="arl-obs-fingers">
+                    <ElTag
+                      v-for="f in (row.source_metadata.fingers || []).slice(0, 8)"
+                      :key="f"
+                      size="small"
+                      effect="plain"
+                      type="warning"
+                      class="arl-finger-tag"
+                    >{{ f }}</ElTag>
+                    <span v-if="(row.source_metadata.fingers || []).length > 8" class="text-placeholder">
+                      +{{ row.source_metadata.fingers.length - 8 }}
+                    </span>
+                  </div>
+                  <ElPopover
+                    v-if="row.source_metadata && Object.keys(row.source_metadata).length > 0"
+                    placement="left" :width="320" trigger="click"
+                  >
+                    <template #reference>
+                      <ElButton size="small" type="info" link>完整元数据</ElButton>
+                    </template>
+                    <div class="source-meta-popover">
+                      <div v-for="(val, key) in row.source_metadata" :key="key" class="source-meta-row">
+                        <span class="source-meta-key">{{ key }}:</span>
+                        <span class="source-meta-value">{{ val ?? '--' }}</span>
+                      </div>
+                    </div>
+                  </ElPopover>
+                </div>
+                <ElPopover v-else-if="row.source_metadata && Object.keys(row.source_metadata).length > 0" placement="left" :width="320" trigger="click">
                   <template #reference>
                     <ElButton size="small" type="info" link>查看详情 ({{ Object.keys(row.source_metadata).length }} 项)</ElButton>
                   </template>
@@ -1649,7 +1689,9 @@
     'tplink-router': 'TP-Link 路由器',
     'scanner': '网络扫描',
     'nmap': 'Nmap',
-    'manual': '手动录入'
+    'manual': '手动录入',
+    // OH-ARL.6a：外部攻击面测绘源（design 2026-11-14 §5.5）
+    'arl-next': 'ARL-Next 攻击面测绘'
   }
 
   const getSourceStatusTagType = (status: string): 'success' | 'danger' | 'warning' | 'info' => {
@@ -2381,6 +2423,38 @@
     }
 
     // 数据来源 popover 样式
+    /* OH-ARL.6a：ARL 观测摘要内联样式 */
+    .arl-obs-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .arl-obs-title {
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .arl-obs-url {
+      font-size: 12px;
+      color: var(--el-color-primary);
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .arl-obs-url:hover {
+      text-decoration: underline;
+    }
+    .arl-obs-fingers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+    }
+    .arl-finger-tag {
+      margin-right: 0;
+    }
     .source-meta-popover {
       max-height: 300px;
       overflow-y: auto;

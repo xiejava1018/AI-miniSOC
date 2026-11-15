@@ -532,6 +532,7 @@ async def list_findings(
     status: Optional[str] = Query(None, description="new/known/adopted/ignored"),
     exposure: Optional[str] = Query(None, description="internal/public"),
     asset_ip: Optional[str] = Query(None),
+    discovery_source: Optional[str] = Query(None, description="来源过滤：scanner/arl-next（OH-ARL.6b）"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     current_user: User = Depends(get_current_user),
@@ -545,6 +546,8 @@ async def list_findings(
         q = q.filter(ScanFinding.exposure == exposure)
     if asset_ip:
         q = q.filter(ScanFinding.asset_ip == asset_ip)
+    if discovery_source:
+        q = q.filter(ScanFinding.discovery_source == discovery_source)
     total = q.count()
     items = q.order_by(ScanFinding.last_seen.desc()).offset(skip).limit(limit).all()
     return {
@@ -560,6 +563,7 @@ async def list_findings(
                     "mac_address": f.mac_address,
                     "os_guess": f.os_guess,
                     "exposure": f.exposure,
+                    "discovery_source": f.discovery_source,
                     "scanner_id": f.scanner_id,
                     "matched_asset_id": str(f.matched_asset_id) if f.matched_asset_id else None,
                     "finding_status": f.finding_status,

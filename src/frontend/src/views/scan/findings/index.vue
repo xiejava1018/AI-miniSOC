@@ -36,6 +36,16 @@
               <ElOption label="内网 internal" value="internal" />
               <ElOption label="公网 public" value="public" />
             </ElSelect>
+            <ElSelect
+              v-model="filterSource"
+              placeholder="全部来源"
+              clearable
+              style="width: 140px"
+              @change="reload"
+            >
+              <ElOption label="Nmap 扫描" value="scanner" />
+              <ElOption label="ARL-Next 测绘" value="arl-next" />
+            </ElSelect>
             <ElInput
               v-model="filterIp"
               placeholder="按 IP 筛选"
@@ -98,6 +108,17 @@
       >
         <ElTableColumn type="selection" width="50" :selectable="row => row.finding_status !== 'adopted'" />
         <ElTableColumn prop="asset_ip" label="IP" min-width="130" />
+        <ElTableColumn label="来源" width="120" align="center">
+          <template #default="{ row }">
+            <ElTag
+              :type="row.discovery_source === 'arl-next' ? 'warning' : 'primary'"
+              effect="plain"
+              size="small"
+            >
+              {{ row.discovery_source === 'arl-next' ? 'ARL-Next 测绘' : 'Nmap 扫描' }}
+            </ElTag>
+          </template>
+        </ElTableColumn>
         <ElTableColumn label="暴露面" width="90">
           <template #default="{ row }">
             <ElTag size="small" :type="row.exposure === 'public' ? 'danger' : 'info'">
@@ -243,6 +264,7 @@
   const total = ref(0)
   const filterStatus = ref('')
   const filterExposure = ref('')
+  const filterSource = ref('')
   const filterIp = ref('')
 
   // 批量选择
@@ -297,6 +319,7 @@
       const res = await getScanFindings({
         status: (filterStatus.value || undefined) as any,
         exposure: (filterExposure.value || undefined) as any,
+        discovery_source: (filterSource.value || undefined) as any,
         asset_ip: filterIp.value.trim() || undefined,
         skip: (page.value - 1) * pageSize.value,
         limit: pageSize.value
