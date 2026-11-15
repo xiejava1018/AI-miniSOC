@@ -5,41 +5,56 @@
 -->
 <template>
   <div class="data-source-page art-full-height">
-    <!-- NAT 采集健康卡（OH-6.9 / S2 暴露面归位）：tplink-collector NAT 同步状态 -->
-    <ElCard shadow="never" class="nat-health-card">
+    <!-- 采集源健康卡组（OH-ARL.8 通用化，替代 tplink:nat 特例卡）：
+         按 soc_source_health 自动渲染，新数据源（如 arl:sync）上线零前端改动；
+         下钻：源 → 批次（任务中心）/ 死信（数据健康页） -->
+    <ElCard shadow="never" class="src-health-card">
       <template #header>
         <div class="nat-card-header">
-          <span class="nat-card-title">NAT 端口映射采集</span>
-          <ElTag :type="natStatusTagType" size="small" effect="plain">{{ natStatusLabel }}</ElTag>
+          <span class="nat-card-title">采集源健康</span>
+          <span class="nat-card-hint">{{ sourceCards.length }} 个源 · 5 分钟自动刷新</span>
           <div class="grow-spacer" />
-          <span class="nat-card-hint">5 分钟自动刷新</span>
-          <ElButton text size="small" :loading="natLoading" @click="loadNatHealth">刷新</ElButton>
+          <ElButton text size="small" @click="goTaskCenter">批次</ElButton>
+          <ElButton text size="small" @click="goDeadLetter">死信</ElButton>
+          <ElButton text size="small" :loading="natLoading" @click="loadSourceHealths">刷新</ElButton>
         </div>
       </template>
 
-      <div v-if="!natHealth" class="nat-empty">暂无 NAT 采集健康记录（采集器可能尚未推送）</div>
-      <div v-else class="nat-card-body">
-        <div class="nat-metric">
-          <span class="nat-metric-label">规则数</span>
-          <span class="nat-metric-value">{{ natHealth.last_records_count ?? '—' }}</span>
-        </div>
-        <div class="nat-metric">
-          <span class="nat-metric-label">累计成功 / 失败</span>
-          <span class="nat-metric-value"
-            >{{ natHealth.success_count }} / {{ natHealth.failure_count }}</span
-          >
-        </div>
-        <div class="nat-metric">
-          <span class="nat-metric-label">上次成功</span>
-          <span class="nat-metric-value">{{ formatTime(natHealth.last_success_at) }}</span>
-        </div>
-        <div class="nat-metric">
-          <span class="nat-metric-label">出口 IP</span>
-          <span class="nat-metric-value">{{ natWanIp || '—' }}</span>
-        </div>
-        <div v-if="natHealth.last_failure_message" class="nat-metric nat-failure">
-          <span class="nat-metric-label">最近失败</span>
-          <span class="nat-metric-value">{{ natHealth.last_failure_message }}</span>
+      <div v-if="!sourceCards.length" class="nat-empty">暂无采集源健康记录（采集器尚未推送）</div>
+      <div v-else class="src-cards-grid">
+        <div
+          v-for="card in sourceCards"
+          :key="card.source_key"
+          class="src-card"
+          :class="'src-' + card.status"
+        >
+          <div class="src-card-head">
+            <span class="src-card-title">{{ card.display_name }}</span>
+            <ElTag :type="card.tagType" size="small" effect="plain">{{ card.statusLabel }}</ElTag>
+          </div>
+          <div v-if="card.reason" class="src-card-reason">{{ card.reason }}</div>
+          <div class="nat-card-body">
+            <div class="nat-metric">
+              <span class="nat-metric-label">最近记录数</span>
+              <span class="nat-metric-value">{{ card.last_records_count ?? '—' }}</span>
+            </div>
+            <div class="nat-metric">
+              <span class="nat-metric-label">累计成功 / 失败</span>
+              <span class="nat-metric-value">{{ card.success_count }} / {{ card.failure_count }}</span>
+            </div>
+            <div class="nat-metric">
+              <span class="nat-metric-label">上次成功</span>
+              <span class="nat-metric-value">{{ formatTime(card.last_success_at) }}</span>
+            </div>
+            <div class="nat-metric">
+              <span class="nat-metric-label">采集间隔</span>
+              <span class="nat-metric-value">{{ card.intervalHint }}</span>
+            </div>
+          </div>
+          <div v-if="card.last_failure_message" class="nat-metric nat-failure">
+            <span class="nat-metric-label">最近失败</span>
+            <span class="nat-metric-value">{{ card.last_failure_message }}</span>
+          </div>
         </div>
       </div>
     </ElCard>
@@ -221,6 +236,7 @@
 
 <script setup lang="ts">
   import { ref, reactive, computed, h, resolveComponent, onMounted, onBeforeUnmount } from 'vue'
+  import { useRouter } from 'vue-router'
   import { ElMessage, ElMessageBox } from 'element-plus'
   import type { FormInstance, FormRules } from 'element-plus'
   import request from '@/utils/http'
@@ -238,62 +254,61 @@
 
   defineOptions({ name: 'DataSourcePage' })
 
-  // ============ NAT 采集健康卡（OH-6.9） ============
+  // ============ 采集源健康卡组（OH-ARL.8 通用化） ============
   const natLoading = ref(false)
-  // tplink:nat 的 source_health 行（/data-health 返回 source_health.sources 内）
-  const natHealth = ref<any>(null)
-
-  const natStatusTagType = computed<'success' | 'info' | 'warning' | 'danger'>(() => {
-    const s = natHealth.value?.status
-    if (s === 'healthy') return 'success'
-    if (s === 'degraded') return 'warning'
-    if (s === 'down') return 'danger'
-    return 'info'
-  })
-  const natStatusLabel = computed(() => {
-    const s = natHealth.value?.status
-    return (
-      ({ healthy: '正常', degraded: '过期', down: '故障' } as Record<string, string>)[s] || '无数据'
-    )
-  })
-  // 出口 IP：从 NAT 规则中取（同轮规则的 wan_ip 一致；取 distinct）
-  const natWanIp = computed(() => {
-    // data-health source 行本身不含 wan_ip；用规则列表接口取一次即可，
-    // 为保持单接口简单，出口 IP 从 soc_maps_to 最近数据推断——
-    // 这里直接由 data-health 中 tplink:nat 同 source 的规则不展开，
-    // 暂显示 expected_interval 关联的采集器名，出口 IP 用 last_failure 之外的来源。
-    return natHealth.value?.wan_ip || ''
-  })
+  // /data-health source_health.sources 全量渲染（按状态优先级排序）
+  const sourceCards = ref<any[]>([])
+  const _STATUS_ORDER: Record<string, number> = { down: 0, degraded: 1, unknown: 2, healthy: 3 }
+  const _STATUS_LABEL: Record<string, string> = {
+    healthy: '正常', degraded: '过期', down: '故障', unknown: '无数据'
+  }
+  const _STATUS_TAG: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
+    healthy: 'success', degraded: 'warning', down: 'danger', unknown: 'info'
+  }
+  const router = useRouter()
 
   function formatTime(iso: string | null | undefined): string {
     if (!iso) return '—'
     return new Date(iso).toLocaleString('zh-CN', { hour12: false })
   }
 
-  async function loadNatHealth() {
+  function _intervalHint(sec: number | null | undefined): string {
+    if (!sec) return '—'
+    if (sec % 3600 === 0) return `${sec / 3600} 小时`
+    if (sec % 60 === 0) return `${sec / 60} 分钟`
+    return `${sec} 秒`
+  }
+
+  async function loadSourceHealths() {
     natLoading.value = true
     try {
       const d = await getDataHealth(5)
       const sources: any[] = d?.source_health?.sources || []
-      // tplink:nat 是 NatSyncHandler 上报的固定 source_key
-      natHealth.value = sources.find((s) => s.source_key === 'tplink:nat') || null
-      // 顺带从规则端点取出口 IP（失败静默——卡上不显示而已）
-      try {
-        const ruleResp = await request.get({
-          url: '/api/v1/exposure/rules',
-          params: { limit: 1 },
-          keepFullResponse: true
-        })
-        const first = ((ruleResp as any)?.data?.items || [])[0]
-        if (first?.wan_ip && natHealth.value) natHealth.value.wan_ip = first.wan_ip
-      } catch {
-        /* 出口 IP 仅展示项，忽略 */
-      }
+      sourceCards.value = sources
+        .map((s) => ({
+          ...s,
+          statusLabel: _STATUS_LABEL[s.status] || '无数据',
+          tagType: _STATUS_TAG[s.status] || 'info',
+          intervalHint: _intervalHint(s.expected_interval_seconds)
+        }))
+        .sort(
+          (a, b) =>
+            (_STATUS_ORDER[a.status] ?? 9) - (_STATUS_ORDER[b.status] ?? 9) ||
+            a.source_key.localeCompare(b.source_key)
+        )
     } catch (e: any) {
-      ElMessage.error(e?.message || 'NAT 健康状态加载失败')
+      ElMessage.error(e?.message || '采集源健康加载失败')
     } finally {
       natLoading.value = false
     }
+  }
+
+  // 三级下钻（O2）：源健康 → 同步批次（任务中心）/ 死信（数据健康页死信层）
+  function goTaskCenter() {
+    router.push('/system/task-center')
+  }
+  function goDeadLetter() {
+    router.push('/assets/data-health')
   }
 
   // 5 分钟自动刷新（与采集节奏对齐；组件卸载靠 SPA 切走自然释放，无定时器泄漏风险面）
@@ -443,9 +458,9 @@
     const res: any = await getDataSourceTypes()
     typeOptions.value = (res?.data || res?.items || res || []) as Api.DataSource.TypeItem[]
     await getData()
-    await loadNatHealth()
-    // NAT 健康卡 5 分钟自动刷新（与采集节奏对齐；组件卸载）
-    _natTimer = setInterval(loadNatHealth, 5 * 60 * 1000)
+    await loadSourceHealths()
+    // 采集源健康卡 5 分钟自动刷新（与采集节奏对齐；组件卸载清理）
+    _natTimer = setInterval(loadSourceHealths, 5 * 60 * 1000)
   })
 
   onBeforeUnmount(() => {
@@ -762,8 +777,44 @@ ArtTable 上而非本页面，scoped 规则永远匹配不到 → 必须用全�
 .data-source-page 前缀防止污染其它页面。
 <style lang="scss">
   .data-source-page {
-    .nat-health-card {
+    .src-health-card {
       margin-bottom: 12px;
+    }
+    .src-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 12px;
+    }
+    .src-card {
+      border: 1px solid var(--el-border-color-lighter);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--el-fill-color-blank);
+    }
+    .src-card.src-down {
+      border-color: var(--el-color-danger-light-5);
+      background: var(--el-color-danger-light-9);
+    }
+    .src-card.src-degraded {
+      border-color: var(--el-color-warning-light-5);
+      background: var(--el-color-warning-light-9);
+    }
+    .src-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .src-card-title {
+      font-weight: 600;
+      font-size: 13px;
+      word-break: break-all;
+    }
+    .src-card-reason {
+      font-size: 12px;
+      color: var(--el-text-color-secondary);
+      margin-bottom: 8px;
     }
     .nat-card-header {
       display: flex;
