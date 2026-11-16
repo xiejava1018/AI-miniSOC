@@ -192,12 +192,26 @@ def _assemble_response(profile, ahs_result, chain) -> dict:
         "timespan_hours": chain.summary.timespan_hours if chain else None,
     }
 
+    # OH-2.2 AHS 扣分明细透传（2026-11-15 修复：此前前端拿不到真实扣分，
+    # 用证据置信度 0.8 伪装 rawScore → 五维恒 80，用户误读为写死评分）
+    ahs_breakdown = []
+    if ahs_result:
+        for d in getattr(ahs_result, "dimensions", []) or []:
+            ahs_breakdown.append({
+                "key": d.name,
+                "raw_score": d.raw_score,
+                "weight": d.weight,
+                "data_gap": bool(d.data_gap),
+                "factors": list(d.contributing_factors or []),
+            })
+
     return {
         "asset_id": profile.asset_id,
         "overall_score": int(overall_score),
         "state": state,
         "ahs_score": ahs_score,
         "ahs_state": ahs_state,
+        "ahs_breakdown": ahs_breakdown,
         "profile_confidence": round(profile_confidence, 4),
         "dimensions": dimensions,
         "coverage": {

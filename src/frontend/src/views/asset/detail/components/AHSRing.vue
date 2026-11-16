@@ -61,14 +61,14 @@
         v-for="d in breakdown"
         :key="d.key"
         class="ahs-dim-row"
-        :title="`${d.label}：${d.rawScore}/100 · 权重 ${(d.weight * 100).toFixed(0)}%${d.dataGap ? '（数据缺失·半权）' : ''}`"
+        :title="`${d.label}：扣 ${d.rawScore} 分（×权重 ${(d.weight * 100).toFixed(0)}%）${d.dataGap ? ' · 数据缺失半权' : ''}${d.factors?.length ? '\n扣分因素：' + d.factors.join('；') : ''}`"
       >
         <span class="ahs-dim-row__label">
           {{ d.label }}
           <ElTag v-if="d.dataGap" size="small" type="warning" effect="plain" class="ahs-dim-row__gap">数据缺失</ElTag>
         </span>
         <span class="ahs-dim-row__score" :style="{ color: dimColor(d.rawScore) }">
-          {{ d.dataGap ? '—' : d.rawScore }}
+          {{ d.dataGap ? '—' : '-' + d.rawScore }}
         </span>
         <ElProgress
           :percentage="d.weight * 100"
@@ -98,6 +98,8 @@ export interface AHSBreakdownItem {
   weight: number
   /** 数据缺失（半权 / 兜底） */
   dataGap?: boolean
+  /** 扣分因素（compute_ahs contributing_factors，2026-11-15 下钻增强） */
+  factors?: string[]
 }
 
 interface AHSRingProps {

@@ -48,12 +48,10 @@
         </svg>
         <div class="profile-dim__name">{{ dim.label }}</div>
         <div class="profile-dim__meta">
-          <ElTag v-if="dim.status === 'covered'" size="small" type="success" effect="plain">
-            {{ dim.evidence_count }} 条
-          </ElTag>
-          <ElTag v-else-if="dim.status === 'partial'" size="small" type="warning" effect="plain">
-            {{ dim.evidence_count }} 条
-          </ElTag>
+          <!-- 2026-11-15：移除恒定「N 条」tag（每维证据条数=loader 数量，
+               所有资产 1-2 条恒定，用户误读为写死数据）——只保留覆盖状态 -->
+          <ElTag v-if="dim.status === 'covered'" size="small" type="success" effect="plain">已覆盖</ElTag>
+          <ElTag v-else-if="dim.status === 'partial'" size="small" type="warning" effect="plain">部分</ElTag>
           <ElTag v-else size="small" type="info" effect="plain">缺</ElTag>
         </div>
         <!-- OH-ARL.6a 补充说明修复（2026-11-15 用户反馈）：原「置信 80%」

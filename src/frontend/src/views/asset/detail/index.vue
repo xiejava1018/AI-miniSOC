@@ -1788,19 +1788,23 @@
   const ahsBreakdown = computed(() => {
     const c = completeness.value
     if (!c) return []
-    // 后端 /completeness 返回的是覆盖度权重。
-    // AHS 真正的扣分推导是以 OH-2.2 AHSResult 为原始信息，此处仅用 coverage confidence 作为粗估提示
-    const dims = c.dimensions || {}
-    return [
-      { key: 'exposure', label: '暴露', rawScore: dimConfidencePct(dims['exposure']), weight: 0.20 },
-      { key: 'vulnerability', label: '脆弱', rawScore: dimConfidencePct(dims['vulnerability']), weight: 0.25 },
-      { key: 'threat', label: '威胁', rawScore: dimConfidencePct(dims['threat']), weight: 0.25 },
-      { key: 'compliance', label: '合规', rawScore: dimConfidencePct(dims['compliance']), weight: 0.15 },
-      { key: 'behavior', label: '行为', rawScore: dimConfidencePct(dims['behavior']), weight: 0.15 }
-    ].map(d => ({
-      ...d,
-      dataGap: d.rawScore === 0 && (!dims[d.key] || (dims[d.key]?.evidence_count ?? 0) === 0)
-    }))
+    // 2026-11-15 修复：旧版用「证据置信度 0.8」伪装 rawScore → 五维恒 80，
+    // 用户误读为写死评分。后端已透传 compute_ahs 的真实扣分明细
+    // （ahs_breakdown：exposure 0 / vulnerability 14 / threat 0 /
+    // compliance 42 / behavior 0，见 _assemble_response）。
+    if (Array.isArray(c.ahs_breakdown) && c.ahs_breakdown.length) {
+      return c.ahs_breakdown.map(d => ({
+        key: d.key as string,
+        label: DIMENSION_LABELS[d.key as string] || d.key,
+        rawScore: d.raw_score ?? 0,
+        weight: d.weight ?? 0,
+        dataGap: !!d.data_gap,
+        factors: (d.factors || []) as string[]
+      }))
+    }
+    // 兜底：无扣分明细（旧响应）→ 空数组诚实隐藏构成条，
+    // 绝不再用置信度伪装成扣分
+    return []
   })
 
   function dimConfidencePct(dim?: Api.AssetCompleteness.DimensionCoverage): number {
