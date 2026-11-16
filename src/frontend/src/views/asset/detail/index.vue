@@ -254,8 +254,12 @@
     <!-- Tab 区域 -->
     <ElCard shadow="never" class="tab-card">
       <ElTabs v-model="activeTab">
-        <!-- 1. OH-UI.5 八维画像 + AHS 健康评分 -->
-        <ElTabPane label="八维画像" name="profile">
+        <!-- 1. OH-UI.5 八维画像 + AHS 健康评分
+             2026-11-16 用户决定屏蔽：显示口径仍有问题（五维恒 80 修复后仍有
+             数据疑问，待 AHS 算法/证据口径梳理后再恢复）。
+             屏蔽方式：整块注释，后端 /completeness 端点与 Tab 结构保留，
+             恢复 = 删除 v-if="false" 并恢复默认 Tab。 -->
+        <ElTabPane v-if="false" label="八维画像" name="profile">
           <div class="profile-tab" v-loading="completenessLoading">
             <div v-if="completeness">
               <!-- 顶部条：计算时间 + 刷新按钮 -->
@@ -1069,7 +1073,8 @@
 
   // Tab - 默认进 ports(Phase 1 唯一有数据的 Tab)
   // Phase 3 接入应用数据后,改回默认 applications(设计文档 §4.2)
-  const activeTab = ref('profile')
+  // 八维画像 Tab 屏蔽后默认落「基础信息」
+  const activeTab = ref('applications')
 
   // ========== 安全摘要 ==========
   const summaryLoading = ref(false)
@@ -1970,7 +1975,9 @@
     loadPorts()
     loadTags()
     loadDataSources()
-    loadCompleteness()
+    // 八维画像 Tab 屏蔽（2026-11-16）：completeness 请求停跑，
+    // 恢复 Tab 时取消注释
+    // loadCompleteness()
   })
 
   onBeforeUnmount(() => {
