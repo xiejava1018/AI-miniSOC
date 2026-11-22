@@ -267,7 +267,8 @@
       value: '',
       type: 'input',
       placeholder: '过滤内网目标 IP',
-      labelWidth: '40px'
+      // 与 ArtSearchBar 默认标签宽度保持一致，避免「内网 IP」被压成两行
+      labelWidth: '70px'
     }
   ]
 
