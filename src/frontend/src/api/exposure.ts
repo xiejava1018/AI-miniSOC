@@ -25,7 +25,11 @@ export function exposureLookup(params: { wan_ip: string; enabled_only?: boolean 
   })
 }
 
-/** 全量 NAT 规则（支持按 internal_ip 过滤；汇总 wan_ip / exposed_asset / unlocated 计数） */
+/** 全量 NAT 规则（服务端分页；支持按 internal_ip 过滤；汇总 wan_ip / exposed_asset / unlocated 计数）
+ *
+ * 分页口径：page 从 1 开始，page_size 默认 10，total 为过滤后总条数。
+ * limit 仅保留给旧/脚本调用（传了就走“取前 N 条”的旧行为）。
+ */
 export function exposureRules(params?: {
   internal_ip?: string
   enabled_only?: boolean
@@ -38,8 +42,8 @@ export function exposureRules(params?: {
     params: {
       internal_ip: params?.internal_ip,
       enabled_only: params?.enabled_only ?? true,
-      page: params?.page,
-      page_size: params?.page_size,
+      page: params?.page ?? 1,
+      page_size: params?.page_size ?? 10,
       limit: params?.limit
     },
     keepFullResponse: true

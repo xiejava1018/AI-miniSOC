@@ -26,7 +26,7 @@
         v-model="searchParams"
         :items="searchItems"
         @search="refresh"
-        @reset="resetSearchParams"
+        @reset="onRulesReset"
       />
 
       <ArtTable
@@ -259,14 +259,16 @@
     }
   ])
 
-  // ============ ② 全量 NAT 规则（useTable） ============
+  // ============ ① 全量 NAT 规则（useTable） ============
+  // 搜索项 key 直接用 internal_ip（与后端过滤参数同名），
+  // 避免此前 wan_ip → internal_ip 的“二次改名”导致查询条件回显与请求参数不一致。
   const searchItems = [
     {
       label: '内网 IP',
-      key: 'wan_ip',
+      key: 'internal_ip',
       value: '',
       type: 'input',
-      placeholder: '过滤内网目标 IP',
+      placeholder: '如 192.168.0.10',
       // 与 ArtSearchBar 默认标签宽度保持一致，避免「内网 IP」被压成两行
       labelWidth: '70px'
     }
@@ -285,10 +287,14 @@
     refreshAll: refreshRules
   } = useTable<any>({
     core: {
+      // 该页三个 Tab 各自独立取数，首次加载统一在 onMounted 里触发，
+      // 关掉 useTable 的自动首次加载，避免同一页请求两次
+      immediate: false,
       apiFn: apiExposureRules as any,
       apiParams: {
         page: 1,
-        page_size: 20
+        // 需求：默认展示 10 条（列表每页 10 条，不再拉 150 条塞进一页）
+        page_size: 10
       },
       paginationKey: { current: 'page', size: 'page_size' },
       columnsFactory: () => [
@@ -331,21 +337,24 @@
     }
   })
 
-  // 把 useTable 的 wan_ip 搜索参数映射到 rules API 参数 internal_ip（搜索项命名为 wan_ip 仅为 UI 直觉）
+  // 查询：把搜索条件里的内网 IP（去空白）写入 searchParams.internal_ip，并从第一页查。
+  // searchParams 本身是响应式的且与 ArtSearchBar 双向绑定，
+  // 所以查询后条件会原样回显在搜索栏，可直接清空或修改后重新查询。
   function refresh() {
     const sp = searchParams as Record<string, any>
-    const ip = sp.wan_ip?.trim()
-    // useTable 调 apiFn 时把 searchParams 平摊到 params；
-    // 这里通过一次性把 wan_ip 改名为 internal_ip 再传。
-    if (ip) sp.internal_ip = ip
+    const ip = String(sp.internal_ip ?? '').trim()
+    if (ip) {
+      sp.internal_ip = ip
+    } else {
+      delete sp.internal_ip
+    }
     getDataByPage()
   }
-  function reset() {
-    resetSearchParams()
-  }
 
-  // 覆盖 useTable 默认 refresh（点一次内容展开时 wan_ip → internal_ip 改名）
-  ;(searchParams as Record<string, any>).wan_ip = ''
+  // 重置：清空搜索条件并回到第一页（resetSearchParams 内部会重新拉数据）
+  async function onRulesReset() {
+    await resetSearchParams()
+  }
 
   // ============ ③ 资产对外暴露面映射 ============
   const assetLookupForm = reactive({ asset_id: '' })

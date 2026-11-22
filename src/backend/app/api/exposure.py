@@ -126,36 +126,50 @@ async def exposure_rules(
     db: Session = Depends(get_db),
     _auth=Depends(get_current_user),
 ):
+    """全量 NAT 规则列表。
+
+    分页口径：前端显式传 page/page_size（默认每页 10 条）；
+    `total` 是**过滤后的总条数**（不再等于本页条数），前端据此渲染分页器；
+    未传 page_size 时回退 limit（默认 200）的旧单页行为，兼容旧调用。
+    """
     q = db.query(NatMapping)
     if internal_ip:
         try:
             ip_address(internal_ip)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"internal_ip 不是合法 IP")
+            raise HTTPException(status_code=400, detail="internal_ip 不是合法 IP")
         q = q.filter(NatMapping.internal_ip == internal_ip)
     if enabled_only:
         q = q.filter(NatMapping.enabled.is_(True))
 
     # 修复暴露面分析页 NAT 规则分页缺陷：此前不分页、limit 截断后 total=len(items)，
     # 导致前端翻页/改每页条数请求始终返回同一份数据（表现为分页失效 + 20条/页出滚动条）。
+    # 排序带 id 保证 OFFSET 分页稳定（避免重复/漏行）。
     total = q.count()
     size = page_size or limit
     offset = (page - 1) * size
-    rows = q.order_by(NatMapping.wan_port).offset(offset).limit(size).all()
+    rows = q.order_by(NatMapping.wan_port, NatMapping.id).offset(offset).limit(size).all()
 
     assets = _assets_by_ip(db, [str(r.internal_ip) for r in rows])
-    items = [_mapping_row(m, assets.get(str(m.internal_ip))) for m in rows]
+    items = [_mapping_row(r, assets.get(str(r.internal_ip))) for r in rows]
 
-    # 汇总口径：多少个 WAN IP、多少资产被暴露、多少映射未命中资产
-    wan_ips = {x["wan_ip"] for x in items if x["wan_ip"]}
-    exposed_assets = {x["asset"]["id"] for x in items if x["asset"]}
-    unlocated = sum(1 for x in items if not x["asset"])
+    # 汇总口径按全量过滤结果统计（与分页无关）：
+    #   - exposed_asset_count = 过滤后能用 internal_ip 命中的资产数（与列表行同一口径，
+    #     不随翻页漂移）；
+    #   - unlocated_count = 过滤后未纳管的内网 IP 数。
+    # 本次已返回全量时直接复用 rows，否则整批重扫（NAT 规则量级很小）。
+    agg_rows = rows if len(rows) >= total else q.all()
+    wan_ips = {str(r.wan_ip) for r in agg_rows if r.wan_ip}
+    agg_assets = _assets_by_ip(db, [str(r.internal_ip) for r in agg_rows])
+    exposed_asset_count = len(agg_assets)
+    unlocated = sum(1 for r in agg_rows if str(r.internal_ip) not in agg_assets)
+
     return {
         "total": total,
         "page": page,
         "page_size": size,
         "wan_ip_count": len(wan_ips),
-        "exposed_asset_count": len(exposed_assets),
+        "exposed_asset_count": exposed_asset_count,
         "unlocated_count": unlocated,
         "items": items,
     }
