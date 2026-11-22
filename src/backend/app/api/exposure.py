@@ -119,7 +119,10 @@ async def exposure_lookup(
 async def exposure_rules(
     internal_ip: Optional[str] = Query(None, description="按内网目标 IP 过滤"),
     enabled_only: bool = Query(True, description="只看启用规则"),
-    limit: int = Query(200, ge=1, le=1000),
+    # 分页参数（前端 useTable 按 page/page_size 请求；未传 page_size 时回退旧 limit 行为）
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: Optional[int] = Query(None, ge=1, le=1000, description="每页条数"),
+    limit: int = Query(200, ge=1, le=1000, description="每页条数（page_size 缺省时生效）"),
     db: Session = Depends(get_db),
     _auth=Depends(get_current_user),
 ):
@@ -132,7 +135,13 @@ async def exposure_rules(
         q = q.filter(NatMapping.internal_ip == internal_ip)
     if enabled_only:
         q = q.filter(NatMapping.enabled.is_(True))
-    rows = q.order_by(NatMapping.wan_port).limit(limit).all()
+
+    # 修复暴露面分析页 NAT 规则分页缺陷：此前不分页、limit 截断后 total=len(items)，
+    # 导致前端翻页/改每页条数请求始终返回同一份数据（表现为分页失效 + 20条/页出滚动条）。
+    total = q.count()
+    size = page_size or limit
+    offset = (page - 1) * size
+    rows = q.order_by(NatMapping.wan_port).offset(offset).limit(size).all()
 
     assets = _assets_by_ip(db, [str(r.internal_ip) for r in rows])
     items = [_mapping_row(m, assets.get(str(m.internal_ip))) for m in rows]
@@ -142,7 +151,9 @@ async def exposure_rules(
     exposed_assets = {x["asset"]["id"] for x in items if x["asset"]}
     unlocated = sum(1 for x in items if not x["asset"])
     return {
-        "total": len(items),
+        "total": total,
+        "page": page,
+        "page_size": size,
         "wan_ip_count": len(wan_ips),
         "exposed_asset_count": len(exposed_assets),
         "unlocated_count": unlocated,

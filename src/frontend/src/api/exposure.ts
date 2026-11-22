@@ -29,6 +29,8 @@ export function exposureLookup(params: { wan_ip: string; enabled_only?: boolean 
 export function exposureRules(params?: {
   internal_ip?: string
   enabled_only?: boolean
+  page?: number
+  page_size?: number
   limit?: number
 }) {
   return request.get<any>({
@@ -36,7 +38,9 @@ export function exposureRules(params?: {
     params: {
       internal_ip: params?.internal_ip,
       enabled_only: params?.enabled_only ?? true,
-      limit: params?.limit ?? 200
+      page: params?.page,
+      page_size: params?.page_size,
+      limit: params?.limit
     },
     keepFullResponse: true
   })
