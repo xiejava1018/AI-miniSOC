@@ -1,9 +1,9 @@
 <!--
   暴露面分析页（OH-UI.9，S2 暴露面归位前端消费）
 
-  三区块：
-    ① 外网 IP→内网反查  （lookup，按 WAN IP 反查所有映射）
-    ② 全量 NAT 规则      （rules，暴露面分析的核心数据源）
+  三区块（Tab 顺序：rules → lookup → asset）：
+    ① 全量 NAT 规则      （rules，暴露面分析的核心数据源，默认 Tab）
+    ② 外网 IP→内网反查  （lookup，按 WAN IP 反查所有映射）
     ③ 资产对外暴露面映射  （assets/{id}/mapping，资产详情页配套）
 
   数据源：src/frontend/src/api/exposure.ts（三个端点 client）
@@ -11,7 +11,40 @@
 -->
 <template>
   <div class="exposure-page art-full-height">
-    <!-- ============ ① 外网 IP→内网反查 ============ -->
+    <ElTabs v-model="activeTab" class="exposure-tabs">
+    <!-- ============ ① 全量 NAT 规则 ============ -->
+    <ElTabPane label="全量 NAT 端口映射规则" name="rules">
+    <ElCard shadow="never" class="art-table-card">
+      <template #header>
+        <div class="card-header">
+          <span class="card-title">全量 NAT 端口映射规则</span>
+          <span class="card-hint">暴露面分析核心数据源</span>
+        </div>
+      </template>
+
+      <ArtSearchBar
+        v-model="searchParams"
+        :items="searchItems"
+        @search="refresh"
+        @reset="resetSearchParams"
+      />
+
+      <ArtTable
+        :loading="loading"
+        :data="data"
+        :columns="columns"
+        :pagination="pagination"
+        table-layout="fixed"
+        :table-config="{ rowKey: 'id' }"
+        :layout="{ marginTop: 12 }"
+        @pagination:size-change="handleSizeChange"
+        @pagination:current-change="handleCurrentChange"
+      />
+    </ElCard>
+    </ElTabPane>
+
+    <!-- ============ ② 外网 IP→内网反查 ============ -->
+    <ElTabPane label="外网 IP → 内网资产反查" name="lookup">
     <ElCard shadow="never" class="art-table-card">
       <template #header>
         <div class="card-header">
@@ -62,37 +95,10 @@
         empty-text="输入 WAN IP 反查，或暂未配置 NAT"
       />
     </ElCard>
-
-    <!-- ============ ② 全量 NAT 规则 ============ -->
-    <ElCard shadow="never" class="art-table-card">
-      <template #header>
-        <div class="card-header">
-          <span class="card-title">全量 NAT 端口映射规则</span>
-          <span class="card-hint">暴露面分析核心数据源</span>
-        </div>
-      </template>
-
-      <ArtSearchBar
-        v-model="searchParams"
-        :items="searchItems"
-        @search="refresh"
-        @reset="resetSearchParams"
-      />
-
-      <ArtTable
-        :loading="loading"
-        :data="data"
-        :columns="columns"
-        :pagination="pagination"
-        table-layout="fixed"
-        :table-config="{ rowKey: 'id' }"
-        :layout="{ marginTop: 12 }"
-        @pagination:size-change="handleSizeChange"
-        @pagination:current-change="handleCurrentChange"
-      />
-    </ElCard>
+    </ElTabPane>
 
     <!-- ============ ③ 资产对外暴露面映射 ============ -->
+    <ElTabPane label="资产对外暴露面映射" name="asset">
     <ElCard shadow="never" class="art-table-card">
       <template #header>
         <div class="card-header">
@@ -145,6 +151,8 @@
         empty-text="输入资产 ID 查询"
       />
     </ElCard>
+    </ElTabPane>
+    </ElTabs>
   </div>
 </template>
 
@@ -161,7 +169,10 @@
 
   defineOptions({ name: 'AssetExposurePage' })
 
-  // ============ ① 外网 IP→内网反查 ============
+  // Tab 切换：rules / lookup / asset（顺序与 Tab 展示一致，默认第一个）
+  const activeTab = ref('rules')
+
+  // ============ ② 外网 IP→内网反查 ============
   const lookupForm = reactive({ wan_ip: '' })
   const activeOnly = ref(true)
   const lookupLoading = ref(false)
@@ -427,6 +438,12 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+
+    .exposure-tabs {
+      :deep(.el-tabs__content) {
+        overflow: visible;
+      }
+    }
 
     .card-header {
       display: flex;
